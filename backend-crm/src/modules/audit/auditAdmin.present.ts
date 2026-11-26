@@ -137,6 +137,8 @@ const ACTION_LABELS: Record<string, string> = {
     PDF_GENERATED: 'PDF generated',
     EXPORT: 'Exported',
     LEDGER_VERIFY: 'Integrity check',
+    PASSWORD_CHANGE: 'Password changed',
+    SESSION_REVOKE: 'Session signed out',
     CONNECT: 'Connected',
     DISCONNECT: 'Disconnected',
 };
@@ -391,6 +393,15 @@ export function summarize(action: string, module: string, changes: unknown, labe
             const rows = count(c.rowCount);
             const format = text(c.format)?.toUpperCase();
             return `Exported ${rows !== undefined ? `${rows.toLocaleString('en-IN')} ` : ''}entr${rows === 1 ? 'y' : 'ies'}${format ? ` to ${format}` : ''}`;
+        }
+        case 'PASSWORD_CHANGE':
+            return 'Changed their password';
+        case 'SESSION_REVOKE': {
+            if (c.scope !== 'others') return 'Signed out one of their other sessions';
+            const signedOut = count(c.signedOutSessions);
+            return signedOut !== undefined
+                ? `Signed out of ${signedOut} other session${signedOut === 1 ? '' : 's'}`
+                : 'Signed out of all other sessions';
         }
         case 'LEDGER_VERIFY':
             if (c.result === 'verified') return `Integrity verified: ${text(c.message) ?? 'no changes found'}`;

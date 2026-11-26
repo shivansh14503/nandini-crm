@@ -1,7 +1,7 @@
 # Nandini CRM — Database Design
 
-> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (80 migrations,
-> latest `20261126220000_integrations`, as of 2026-11-26). Update it in the same change as any schema migration.
+> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (82 migrations,
+> latest `20261126230000_user_profile`, as of 2026-11-26). Update it in the same change as any schema migration.
 > Related: [System design](system-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
 ---
@@ -12,8 +12,8 @@
 | --- | --- |
 | Engine | Microsoft SQL Server / Azure SQL (schema `dbo`) |
 | Access | Prisma 7 ORM through `@prisma/adapter-mssql`; a few raw SQL statements (`MERGE` for counters, `sp_getapplock` for locks, `OPENJSON`) |
-| Tables | **43** application tables + Prisma's `_prisma_migrations` |
-| Owned child tables ("sub tables") | 6: `EntityEmail`, `OpportunityLineItem`, `QuotationLineItem`, `PartnerCompanyContact`, `DropdownOption`, `ActivityAttendee` |
+| Tables | **45** application tables + Prisma's `_prisma_migrations` |
+| Owned child tables ("sub tables") | 7: `EntityEmail`, `OpportunityLineItem`, `QuotationLineItem`, `PartnerCompanyContact`, `DropdownOption`, `ActivityAttendee`, `UserPhoto` |
 | Migrations | `backend-crm/prisma/migrations/` (`npm run db:migrate` in dev, `npm run db:deploy` in prod) |
 | Seed | `backend-crm/prisma/seed.ts` (`npm run seed`) |
 
@@ -21,7 +21,7 @@
 
 | Domain | Tables |
 | --- | --- |
-| Identity | `Users` (model `User`) |
+| Identity | `Users` (model `User`), `UserPhoto` (profile photos) |
 | CRM core | `Organization`, `Contact`, `Lead`, `Opportunity`, `Quotation`, `Ticket`, `Contract`, `Document`, `Product` |
 | Activities & calendar | `Activity`, `ActivityAttendee` |
 | Owned children | `EntityEmail`, `OpportunityLineItem`, `QuotationLineItem` |
@@ -30,6 +30,7 @@
 | Reference masters | `NatureOfCall`, `Country`, `Subdivision`, `City` |
 | Numbering | `DocumentSeriesSettings`, `DocumentSeries`, `SequenceCounter` |
 | Customisation | `DropdownCategory`, `DropdownOption`, `FormFieldDefinition`, `ModuleSetting`, `DrawerLayout`, `DrawerPiece` |
+| Admin lists | `Holiday` (Admin › Holidays, shown on the Calendar) |
 | PDF & files | `PdfTemplate`, `PdfAsset`, `PdfSavedItem`, `RecordFile` |
 | Audit & UI state | `AuditLog`, `AuditExport`, `AuditDigest`, `TableFilter`, `ModuleScorecard` |
 | Notifications & outgoing mail | `Notification` (navbar bell), `EmailLog` (every email the CRM sends) |
@@ -117,6 +118,7 @@ erDiagram
     City ||--o{ PartnerCompany : "billing/shipping city"
     DropdownCategory ||--o{ DropdownOption : options
     DropdownCategory ||--o{ FormFieldDefinition : "feeds select fields"
+    Users ||--o| UserPhoto : "profile photo"
 ```
 
 Not drawn (no foreign keys, linked by convention):
@@ -145,10 +147,34 @@ Pre-existing table kept for compatibility (columns `Id`, `Username`, `Password`,
 | `Username` | NVARCHAR(50) UNIQUE | Used everywhere as the owner/creator identifier |
 | `Password` | NVARCHAR(255) | bcrypt hash; legacy plain-text values are re-hashed on next login |
 | `Role` | NVARCHAR(50) | Default `Sales Executive`; drives admin access and row-level scope |
-| `email`, `fullName`, `phone`, `department` | | `email` is unique in code only (SQL Server allows one NULL in a unique key). Since P2-1 the CRM writes it through `modules/users/userEmail.service.ts` (Admin › API Integrations › People; the later Admin › Users reuses it): trimmed and lower-cased, unique among **active non-group** users (writers serialise on an application lock), a company domain (`activities/calendarSync` `companyDomains`) unless the admin allows another, audited `User UPDATE`. The filtered unique index `UX_Users_email` follows in P2-2 |
+| `email`, `department` | | `email` is unique in code only (SQL Server allows one NULL in a unique key). Since P2-1 the CRM writes it through `modules/users/userEmail.service.ts` (Admin › API Integrations › People; the later Admin › Users reuses it): trimmed and lower-cased, unique among **active non-group** users (writers serialise on an application lock), a company domain (`activities/calendarSync` `companyDomains`) unless the admin allows another, audited `User UPDATE`. The filtered unique index `UX_Users_email` follows in P2-2. Both admin-managed (read-only on My Profile) |
+| `fullName` | NVARCHAR(100), default `''` | Display name read everywhere (lookups, audit log, quotation PDFs). A profile write that changes a name sets it to `trim(firstName + ' ' + lastName)` |
+| `firstName`, `lastName` | NVARCHAR(100) NULL | Edited on My Profile (name-cased like other person names; together ≤ 99 characters so `fullName` fits). NULL or stale for users created or renamed outside the app: the API then shows them split from `fullName` (`resolveNameParts`) |
+| `phone` | NVARCHAR(20) NULL | The **mobile** number (E.164); My Profile calls it Mobile, quotation PDFs print it as the sales person's phone |
+| `officePhone` | NVARCHAR(20) NULL | Desk / landline number (E.164), My Profile |
+| `passwordChangedAt` | DATETIME2 NULL | Set by `POST /api/auth/change-password`; NULL = never changed in this CRM |
 | `isActive`, `isGroupUser`, `onLeave`, `lastLoginAt` | | Inactive users can't sign in or be assigned |
 
 Indexes: `email`, `isActive`.
+
+Migration `20261126230000_user_profile` adds `firstName`, `lastName`, `officePhone` and `passwordChangedAt` (all NULL)
+and splits every existing name once: `firstName` = the text before the first space of `LTRIM(RTRIM(fullName))`,
+`lastName` = the rest, trimmed (NULL when empty); a blank `fullName` leaves both NULL. `fullName` itself is not
+rewritten (`npm run seed` splits the same way, `splitFullName` in `modules/profile/profile.dto.ts`). Writes: the
+user's own profile edit (My Profile, audited as a User `UPDATE` with a diff of first / last / full name, mobile and
+office phone), sign-in (`lastLoginAt`, legacy password re-hash) and the password change (`passwordHash`,
+`passwordChangedAt`, audited as `PASSWORD_CHANGE` with only the timestamp).
+
+### 4.1a `UserPhoto` (profile photos)
+
+Migration `20261126230000_user_profile` (new table). Module `backend-crm/src/modules/profile`. A user's profile photo,
+bytes in the database like `RecordFile` / `PdfAsset`: `id` (uuid), `userId` (INT, **UNIQUE**, FK → `Users.Id`
+**ON DELETE CASCADE**), `mimeType` (≤ 50, detected from the bytes: PNG, JPEG or WebP), `sizeBytes`, `data`
+(VARBINARY(MAX), ≤ 512 KB; the crop dialog sends 256 × 256), `createdAt`. One row per user; a new upload deletes the
+old row and inserts a new one with a **new id** (one transaction, serialized per user with an app lock), so
+`/api/user-photos/:id` never changes content and is cached forever. Photo changes are audited on the user
+(`UPDATE`, `changes.photo: { from: oldId, to: newId }`). User queries never load the bytes (the profile selects only
+`photo.id`).
 
 ### 4.2 `Organization` (customer accounts)
 
@@ -367,7 +393,7 @@ with `@ignore` so schema diffs stay empty.
 
 | Group | Columns |
 | --- | --- |
-| What | `category` (`DATA` / `CONFIG` / `SECURITY`), `action` (`CREATE`, `UPDATE`, `DELETE`, `RESTORE`, `REVERT`, `STATUS_CHANGE`, `CONVERT`, `FOLLOW_UP`, `EMAIL_CHECK` (an email check changed an address's result on a record: `{ verificationStatus: { from, to }, email, reason, runId? }`), `IMPORT`, `LOGIN`, `LOGIN_FAILED`, `LOGOUT`, `ACCESS_DENIED`, `SET_DEFAULT`, `DUPLICATE`, `PDF_GENERATED`, `EXPORT` (an audit log export: `{ format, rowCount, truncated, fileName, filters }`), `LEDGER_VERIFY` (a "Verify integrity" run: `{ result, message, digests, unreadableFiles, upToBlock, durationMs }`)), `severity` (`INFO` / `NOTICE` / `WARNING` / `CRITICAL`), `module` (CRM module key or admin area: `form-customization`, `pdf-templates`, `document-series`, `cities`, `users`) |
+| What | `category` (`DATA` / `CONFIG` / `SECURITY`), `action` (`CREATE`, `UPDATE`, `DELETE`, `RESTORE`, `REVERT`, `STATUS_CHANGE`, `CONVERT`, `FOLLOW_UP`, `EMAIL_CHECK` (an email check changed an address's result on a record: `{ verificationStatus: { from, to }, email, reason, runId? }`), `IMPORT`, `LOGIN`, `LOGIN_FAILED`, `LOGOUT`, `ACCESS_DENIED`, `SET_DEFAULT`, `DUPLICATE`, `PDF_GENERATED`, `EXPORT` (an audit log export: `{ format, rowCount, truncated, fileName, filters }`), `LEDGER_VERIFY` (a "Verify integrity" run: `{ result, message, digests, unreadableFiles, upToBlock, durationMs }`), `PASSWORD_CHANGE` (a user changed their own password: `{ passwordChangedAt: { from, to } }`, never a password), `SESSION_REVOKE` (My Profile sign-out of other sessions: `{ scope: 'one', sessionId }` or `{ scope: 'others', signedOutSessions }`)), `severity` (`INFO` / `NOTICE` / `WARNING` / `CRITICAL`), `module` (CRM module key or admin area: `form-customization`, `pdf-templates`, `document-series`, `cities`, `users`) |
 | Which record | `entityType`, `entityId`, `entityCode` (record number at the time; shown only once the module has a document series), `entityLabel` (record name at the time, so renamed / deleted records stay readable) |
 | Change | `changedFields` (`\|status\|assignedTo\|` for diffs), `changesJson` (`{ field: { from, to } }` for updates, a snapshot or summary otherwise; sensitive keys stored as `[redacted]`) |
 | Who | `changedBy` (username, `system` for jobs), `actorId` (`Users.Id`), `actorRole` (role at the time) |
@@ -641,6 +667,7 @@ Followup Types sync is option meta `calendarSync` on `shared_followup_type` opti
 | City rename | Name written through to every address that references the city id |
 | Option value rename / field key rename | Stored values in records, saved filters and PDF template paths follow (`optionValueRename.ts`, `fieldKeyRename.ts`) |
 | Activity reminder due | One transaction: claim `Activity.reminderSentAt` (matching `remindAt` and `updatedAt`, writing `updatedAt` back unchanged) + insert the missing `Notification` rows |
+| Profile edit / photo (My Profile) | App lock on the user → UPDATE `Users` (or replace the `UserPhoto` row) → `AuditLog` UPDATE; user lookup caches dropped after commit |
 | Nightly retention (00:20) | Hard delete of old `Notification` and `EmailLog` rows (see §4.26) |
 
 ## 7. Migrations and seeding

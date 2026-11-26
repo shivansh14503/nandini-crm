@@ -67,6 +67,9 @@ export const ROUTES = {
     PARTNER_COMPANY_NEW: '/partner-companies/new',
     PARTNER_COMPANY_DETAIL: (id: string | number) => `/partner-companies/${id}`,
     PARTNER_COMPANY_EDIT: (id: string | number) => `/partner-companies/${id}/edit`,
+    /** My Profile (any signed-in user); `?tab=security` opens the Security tab. */
+    PROFILE: '/profile',
+    PROFILE_SECURITY: '/profile?tab=security',
     ADMIN: '/admin',
     FORM_CUSTOMIZATION: '/admin/form-customization',
     DOCUMENT_SERIES: '/admin/document-series',

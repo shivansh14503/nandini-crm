@@ -75,6 +75,10 @@ export type AuditAction =
     | 'EXPORT'
     /** The ledger was checked for tampering ("Verify integrity"); CRITICAL when it failed. */
     | 'LEDGER_VERIFY'
+    /** A user changed their own password (My Profile); `changes` holds only `passwordChangedAt`, never a password. */
+    | 'PASSWORD_CHANGE'
+    /** A user signed out one of their other sessions (`scope: 'one'`, `sessionId`) or all of them (`scope: 'others'`). */
+    | 'SESSION_REVOKE'
     /** A calendar (or, from Phase 3, video) account was connected to a CRM user (Calendar Phase 2 P2-2). */
     | 'CONNECT'
     /** A calendar connection was ended by its user, an admin or the nightly check for inactive users. */
@@ -136,7 +140,18 @@ const CONFIG_ENTITIES: ReadonlySet<AuditEntityType> = new Set([
     'IntegrationProvider',
 ]);
 
-const SECURITY_ACTIONS: ReadonlySet<AuditAction> = new Set(['LOGIN', 'LOGIN_FAILED', 'LOGOUT', 'ACCESS_DENIED', 'EXPORT', 'LEDGER_VERIFY', 'CONNECT', 'DISCONNECT']);
+const SECURITY_ACTIONS: ReadonlySet<AuditAction> = new Set([
+    'LOGIN',
+    'LOGIN_FAILED',
+    'LOGOUT',
+    'ACCESS_DENIED',
+    'EXPORT',
+    'LEDGER_VERIFY',
+    'PASSWORD_CHANGE',
+    'SESSION_REVOKE',
+    'CONNECT',
+    'DISCONNECT',
+]);
 
 /** Actions whose `changes` are a `{ field: { from, to } }` diff. */
 const DIFF_ACTIONS: ReadonlySet<AuditAction> = new Set(['UPDATE', 'STATUS_CHANGE', 'FOLLOW_UP', 'CONVERT', 'REVERT', 'EMAIL_CHECK', 'RSVP']);
@@ -162,12 +177,15 @@ export function categoryFor(entityType: AuditEntityType, action: AuditAction): A
 }
 
 /**
- * INFO: everyday creates, edits, sign-ins. NOTICE: deletes, restores, undo, conversions, imports and any admin setting.
+ * INFO: everyday creates, edits, sign-ins. NOTICE: deletes, restores, undo, conversions, imports, any admin setting,
+ * password changes and sessions signed out from My Profile.
  * WARNING: failed sign-ins and refused access. CRITICAL is reserved for integrity alarms.
  */
 export function severityFor(action: AuditAction, category: AuditCategory): AuditSeverity {
     if (action === 'LOGIN_FAILED' || action === 'ACCESS_DENIED') return 'WARNING';
-    if (['DELETE', 'RESTORE', 'REVERT', 'CONVERT', 'IMPORT', 'EXPORT', 'CONNECT', 'DISCONNECT'].includes(action) || category === 'CONFIG') return 'NOTICE';
+    if (['DELETE', 'RESTORE', 'REVERT', 'CONVERT', 'IMPORT', 'EXPORT', 'PASSWORD_CHANGE', 'SESSION_REVOKE', 'CONNECT', 'DISCONNECT'].includes(action) || category === 'CONFIG') {
+        return 'NOTICE';
+    }
     return 'INFO';
 }
 

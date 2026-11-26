@@ -43,6 +43,7 @@ import { runInTransaction } from '../src/modules/shared/transactions.js';
 import { createTicketRecord } from '../src/modules/tickets/ticket.service.js';
 import { ticketInputSchema } from '../src/modules/tickets/ticket.validator.js';
 import { hashPassword } from '../src/modules/auth/auth.service.js';
+import { splitFullName } from '../src/modules/profile/profile.dto.js';
 import { cacheService } from '../src/services/cache.service.js';
 import type { AuthUser } from '../src/types/user.types.js';
 import type { Prisma } from '../src/generated/prisma/client.js';
@@ -82,7 +83,7 @@ async function seedAdmin(): Promise<AuthUser> {
     if (provided && provided.length < 12) throw new Error('SEED_ADMIN_PASSWORD must be at least 12 characters.');
     const password = provided || randomPassword();
     const admin = await prisma.user.create({
-        data: { username, fullName: 'Administrator', role: 'Admin', department: 'Management', passwordHash: await hashPassword(password) },
+        data: { username, fullName: 'Administrator', ...splitFullName('Administrator'), role: 'Admin', department: 'Management', passwordHash: await hashPassword(password) },
     });
     log(`created admin user "${username}"`);
     if (!provided) log(`  generated password (shown once, store it now): ${password}`);
@@ -318,6 +319,7 @@ async function seedDemoUsers(): Promise<void> {
             data: {
                 username: user.username,
                 fullName: user.name,
+                ...splitFullName(user.name),
                 email: user.email || null,
                 role: user.role,
                 department: user.department,
