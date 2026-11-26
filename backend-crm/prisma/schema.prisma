@@ -1027,7 +1027,7 @@ model Activity {
   externalUpdatedAt DateTime?
 
   // Recurring activities (Calendar Phase 4, Phase 1 R12: one row per occurrence, never an RRULE master). Null on a
-  // single activity. Hand-written filtered unique index (migration 20261128160000_recurring_activities; keep it out of
+  // single activity. Hand-written filtered unique index (migration 20261215110000_recurring_activities; keep it out of
   // this file):
   //   UX_Activity_seriesOccurrence UNIQUE (seriesId, originalStartAt) WHERE seriesId IS NOT NULL
   // soft-deleted rows included, so a deleted occurrence is never created again by the nightly horizon extension.

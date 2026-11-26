@@ -13,8 +13,8 @@
 -- = one row per series slot, soft-deleted rows included, so the horizon extension never re-creates a deleted
 -- occurrence (it pre-reads the slots under the series lock; a race aborts the transaction, D45).
 --
--- New columns are nullable / defaulted: no existing data changes. Must sort after 20261128120000_booking_links and the
--- open P2-5 (20261128140000) / P3-1 (20261128150000) migrations.
+-- New columns are nullable / defaulted: no existing data changes. Must sort after 20261215090000_calendar_watch_channels
+-- (P2-7) and P3-1's 20261215100000 (reserved).
 BEGIN TRY
 
 BEGIN TRAN;

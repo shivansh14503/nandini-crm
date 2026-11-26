@@ -1,7 +1,7 @@
 # Nandini CRM — Database Design
 
 > **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (93 migrations,
-> latest `20261128160000_recurring_activities`, Calendar Phase 4 recurring activities, as of 2026-11-26; before it `20261215090000_calendar_watch_channels`, Calendar Phase 2 P2-7 webhooks; before that `20261128120000_booking_links`, Calendar Phase 4 booking links; before that `20261128100000_activity_calendar_sync`, Calendar Phase 2 P2-3b, whose columns P2-3c (first-sync backfill) and P2-5 (calendar → CRM pull) use without a migration of their own; P2-6 busy times needed no migration: it reads `Activity` through the existing `[isDeleted, startAt]` index and stores nothing). Update it in the same change as any schema migration.
+> latest `20261215110000_recurring_activities`, Calendar Phase 4 recurring activities, as of 2026-11-26; before it `20261215090000_calendar_watch_channels`, Calendar Phase 2 P2-7 webhooks; before that `20261128120000_booking_links`, Calendar Phase 4 booking links; before that `20261128100000_activity_calendar_sync`, Calendar Phase 2 P2-3b, whose columns P2-3c (first-sync backfill) and P2-5 (calendar → CRM pull) use without a migration of their own; P2-6 busy times needed no migration: it reads `Activity` through the existing `[isDeleted, startAt]` index and stores nothing). Update it in the same change as any schema migration.
 > Related: [System design](system-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
 ---
@@ -12,7 +12,7 @@
 | --- | --- |
 | Engine | Microsoft SQL Server / Azure SQL (schema `dbo`) |
 | Access | Prisma 7 ORM through `@prisma/adapter-mssql`; a few raw SQL statements (`MERGE` for counters, `sp_getapplock` for locks, `OPENJSON`) |
-| Tables | **49** application tables + Prisma's `_prisma_migrations` |
+| Tables | **55** application tables + Prisma's `_prisma_migrations` |
 | Owned child tables ("sub tables") | 8: `EntityEmail`, `OpportunityLineItem`, `QuotationLineItem`, `PartnerCompanyContact`, `DropdownOption`, `ActivityAttendee`, `UserPhoto`, `UserPreference` |
 | Migrations | `backend-crm/prisma/migrations/` (`npm run db:migrate` in dev, `npm run db:deploy` in prod) |
 | Seed | `backend-crm/prisma/seed.ts` (`npm run seed`) |
@@ -601,7 +601,7 @@ soft-deleted rows included, so a meeting removed from the CRM is never imported 
 `schema.prisma`, as Prisma can't express a filtered index: `prisma migrate diff` from the schema never shows them, so
 don't drop them in a later migration).
 
-**Recurring activities** (migration `20261128160000_recurring_activities`, as of 2026-11-26, Calendar Phase 4;
+**Recurring activities** (migration `20261215110000_recurring_activities`, as of 2026-11-26, Calendar Phase 4;
 `activities/activity.series.ts`). Phase 1 R12 holds: a series is stored as **one `Activity` row per occurrence**, never
 as an RRULE master, so reminders (`remindAt` / `reminderSentAt` claim), the `startAt`-bounded range queries, busy
 times, the 31-day cap and the calendar push keep working on single rows. `Activity` gains `seriesId` (→
@@ -993,7 +993,7 @@ also on the activity as an attendee and in its remarks).
   `UX_CalendarConnection_account`; `UX_Activity_openFollowUp` of `20261127130000_followup_activities`;
   `UX_ActivityExternalLink_event` and `UX_Activity_syncKey` of `20261128100000_activity_calendar_sync`, the latter
   created through `sp_executesql` because its column is added in the same batch); `UX_Activity_seriesOccurrence` of
-  `20261128160000_recurring_activities` (also through `sp_executesql`). `20261127090000_calendar_connections`
+  `20261215110000_recurring_activities` (also through `sp_executesql`). `20261127090000_calendar_connections`
   also lower-cases `Users.email` and stops (THROW 50001, rolled back) when two active non-group users share an
   address: run `npm run calendar:check-emails` before deploying; after a stop, fix the users, run
   `npx prisma migrate resolve --rolled-back 20261127090000_calendar_connections` and deploy again.
