@@ -5,7 +5,7 @@ import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
 import { activityService } from '../activities/activity.service.js';
 import type { ActivityRow } from '../activities/activity.mapper.js';
-import { blankActivity, blankAttendee, installActivityDouble, restoreActivityDouble, type ActivityDoubleState } from '../activities/testing/activityDouble.js';
+import { blankActivity, blankAttendee, blankLink, installActivityDouble, restoreActivityDouble, type ActivityDoubleState } from '../activities/testing/activityDouble.js';
 import { fakeProviderState, resetFakeProvider } from './providers/fake.js';
 import { resetProviderPauses } from './providers/http.js';
 import { setFakeHealth, setFakeProviderEnabledForTests } from './providers/registry.js';
@@ -38,7 +38,7 @@ const USERS = [
 ];
 
 const conn = (over: Partial<ConnectionRowState> = {}) =>
-    blankConnection({ id: 'c1', username: 'palak', provider: 'fake', accountEmail: 'palak@nandiniinfosys.com', status: 'ok', backfilledAt: new Date(0), ...over });
+    blankConnection({ id: 'c1', username: 'palak', provider: 'fake', accountEmail: 'palak@nandiniinfosys.com', status: 'ok', backfilledAt: new Date(0), backfillCount: 0, ...over });
 
 let state: ActivityDoubleState;
 let woken: string[];
@@ -161,7 +161,7 @@ describe('first-sync backfill (enrolled job)', () => {
         });
         const now = new Date();
         const result = await runBackfill('c1', { now });
-        assert.deepEqual(result, { status: 'done', created: 2, withheld: 1 });
+        assert.deepEqual(result, { status: 'done', created: 2, withheld: 1, copied: 2 });
         assert.deepEqual(state.links.map((l) => l.activityId).sort(), ['a1', 'a2']);
         assert.equal(linkOf('a1').invites, 'send');
         assert.equal(linkOf('a2').invites, 'withhold');
@@ -178,7 +178,7 @@ describe('first-sync backfill (enrolled job)', () => {
     });
 
     it('waits for the first ok, skips inactive users, and leaves activities that already have a link', async () => {
-        install([fresh(), conn({ id: 'c9', username: 'ravi', accountEmail: 'ravi@nandiniinfosys.com', status: 'pending', backfilledAt: null })], { activities: [stored('a1')] });
+        install([fresh(), conn({ id: 'c9', username: 'ravi', accountEmail: 'ravi@nandiniinfosys.com', status: 'pending', backfilledAt: null, backfillCount: null })], { activities: [stored('a1')] });
         assert.deepEqual(await runBackfill('c9'), { status: 'skipped', reason: 'status_pending' });
         state.users.find((u) => u.username === 'palak')!.isActive = false;
         assert.deepEqual(await runBackfill('c1'), { status: 'skipped', reason: 'user_inactive' });
@@ -187,8 +187,26 @@ describe('first-sync backfill (enrolled job)', () => {
         await activityService.update('a1', { subject: 'Renamed' }, PALAK);
         assert.equal(state.links.length, 1);
         const result = await runBackfill('c1');
-        assert.deepEqual(result, { status: 'done', created: 0, withheld: 0 });
+        assert.deepEqual(result, { status: 'done', created: 0, withheld: 0, copied: 0 });
         assert.equal(state.connections[0].backfillCount, 0);
+    });
+
+    it('a run started again keeps the first run stamp: earlier copies stay "connected" and are counted', async () => {
+        const t1 = new Date(Date.now() - 10 * 60_000);
+        // Run 1 claimed t1 and copied a2 (private copy), then crashed before writing its count.
+        install([conn({ backfilledAt: t1, backfillCount: null })], {
+            activities: [stored('a1'), stored('a2')],
+            attendees: [blankAttendee({ activityId: 'a2', kind: 'email', email: 'buyer@acme.com', name: 'Buyer' })],
+        });
+        state.links.push(blankLink({ activityId: 'a2', connectionId: 'c1', provider: 'fake', requestedId: requestedIdFor('a2', 'c1', 0), invites: 'withhold', dirtyAt: t1, createdAt: t1, updatedAt: t1 }));
+        const result = await runBackfill('c1');
+        assert.deepEqual(result, { status: 'done', created: 1, withheld: 0, copied: 2 });
+        assert.equal(linkOf('a1').createdAt.getTime(), t1.getTime(), 'the run stamp is kept');
+        assert.equal(state.connections[0].backfilledAt?.getTime(), t1.getTime());
+        assert.equal(state.connections[0].backfillCount, 2, "both runs' copies are counted");
+        const view = await activityService.getById('a2', PALAK);
+        assert.equal(view.calendar?.copyReason, 'connected');
+        assert.deepEqual(await runBackfill('c1'), { status: 'skipped', reason: 'already_done' });
     });
 
     it('the enrolled job backfills then pushes: a private copy invites nobody and the view says "connected"', async () => {
@@ -216,9 +234,9 @@ describe('first-sync backfill (enrolled job)', () => {
 
     it('rows ok without a backfill for a while are due for recovery (a lost enrolled job)', async () => {
         const long = new Date(Date.now() - 20 * 60_000);
-        install([fresh(), conn({ id: 'c2', username: 'asha', accountEmail: 'asha@nandiniinfosys.com', backfilledAt: null, lastSuccessAt: new Date() }), conn({ id: 'c3', username: 'ravi', backfilledAt: null, lastSuccessAt: long })]);
+        install([fresh(), conn({ id: 'c2', username: 'asha', accountEmail: 'asha@nandiniinfosys.com', backfilledAt: null, backfillCount: null, lastSuccessAt: new Date() }), conn({ id: 'c3', username: 'ravi', backfilledAt: null, backfillCount: null, lastSuccessAt: long }), conn({ id: 'c4', username: 'asha', backfilledAt: new Date(), backfillCount: null, lastSuccessAt: long })]);
         const due = await dueBackfillRows(new Date());
-        assert.deepEqual(due.map((r) => r.id).sort(), ['c1', 'c3']);
+        assert.deepEqual(due.map((r) => r.id).sort(), ['c1', 'c3', 'c4'], 'a run that started (stamp written) but never finished is due too');
     });
 });
 
@@ -327,6 +345,46 @@ describe('retry / add again', () => {
         assert.equal(result.status === 'done' && result.action, 'create');
         assert.notEqual(linkOf(view.id).externalEventId, oldId);
         assert.equal(linkOf(view.id).state, 'synced');
+    });
+
+    it("add again by someone other than the owner makes a private copy: the guests aren't invited again from the owner's mailbox (D41)", async () => {
+        install();
+        const view = await activityService.create(meeting({ attendees: [{ kind: 'email', email: 'buyer@acme.com' }] }), PALAK);
+        await pushLink(linkOf(view.id).id);
+        assert.equal(linkOf(view.id).invites, 'send');
+        Object.assign(linkOf(view.id), { state: 'removed_remote', dirtyAt: null });
+        // While the event is gone there is nothing to send: no invitations box, and the endpoint refuses.
+        const gone = await activityService.getById(view.id, PALAK);
+        assert.equal(gone.calendar?.invitesWaiting, false);
+        assert.equal(gone.calendar?.canSendInvites, false);
+        await expectHttp(calendarSyncActions.sendInvites(view.id, PALAK), 409, 'CALENDAR_SYNC_NOT_RETRYABLE');
+        assert.equal(state.audits.filter((a) => a.action === 'SEND_INVITES').length, 0);
+
+        const calls = fakeProviderState.eventCalls.length;
+        const again = await calendarSyncActions.retry(view.id, ASHA);
+        const link = linkOf(view.id);
+        assert.equal(link.invites, 'withhold');
+        assert.equal(link.heldAttendeesJson, null);
+        assert.equal(again.calendar?.invitesWaiting, true, 'waiting for the owner');
+        const held = state.notifications.filter((n) => n.kind === 'calendar_invites_held');
+        assert.equal(held.length, 1);
+        assert.equal(held[0].username, 'palak');
+        assert.match(held[0].title, /Asha Rao added a meeting with 1 guest/);
+        const result = await pushLink(link.id);
+        assert.equal(result.status === 'done' && result.action, 'create');
+        const create = fakeProviderState.eventCalls.slice(calls).find((c) => c.op === 'create');
+        assert.notEqual(create?.sendUpdates, true, 'nobody mailed');
+        assert.equal(fakeProviderState.events.get(linkOf(view.id).externalEventId as string)?.attendees, undefined, 'no guests on the new copy');
+    });
+
+    it("the owner's own add again keeps the invitations", async () => {
+        install();
+        const view = await activityService.create(meeting({ attendees: [{ kind: 'email', email: 'buyer@acme.com' }] }), PALAK);
+        await pushLink(linkOf(view.id).id);
+        Object.assign(linkOf(view.id), { state: 'removed_remote', dirtyAt: null });
+        await calendarSyncActions.retry(view.id, PALAK);
+        assert.equal(linkOf(view.id).invites, 'send');
+        assert.equal(state.notifications.filter((n) => n.kind === 'calendar_invites_held').length, 0);
     });
 
     it('add again refuses an activity that is no longer upcoming; a repeating series is never retried', async () => {

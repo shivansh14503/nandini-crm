@@ -67,6 +67,8 @@ export function backfillLine(calendar: Pick<OwnCalendar, 'status' | 'backfill'>)
     if (!backfill || calendar.status !== 'ok') return '';
     const sending = backfill.sending > 0 ? ` ${plural(backfill.sending, 'change')} still being sent.` : '';
     if (backfill.state === 'waiting') return `Copying your upcoming CRM meetings to this calendar…${sending}`;
+    // Calendar sync is switched off on the server: nothing is being copied, so the card claims nothing.
+    if (backfill.state === 'off') return sending.trim();
     if (!backfill.copied) return sending.trim();
     return `Copied ${plural(backfill.copied, 'upcoming activity').replace(/activitys$/, 'activities')} when your calendar was connected. Meetings with guests are private copies: nobody was invited until you press Send invitations in the activity.${sending}`;
 }

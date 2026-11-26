@@ -99,7 +99,8 @@ export interface ActivityCalendarView {
     canSendInvites: boolean;
     /**
      * Someone waits for the owner to send invitations (a withheld copy with guests, or held guests), whoever views it:
-     * the owner sees Send invitations, others "Waiting for <owner> to send the invitations" (P2-3c).
+     * the owner sees Send invitations, others "Waiting for <owner> to send the invitations" (P2-3c). False while the event
+     * is gone (`cancelled`, `removed_remote`): nothing can be sent until it's back (send-invites answers 409 then).
      */
     invitesWaiting: boolean;
     /**

@@ -409,13 +409,14 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         real SQL Server, Google or Microsoft.
   - [x] **P2-3c: backfill, send invitations, sync status UI** (2026-11-26, admin-managed model, addendum §8.3) — no
         migration. First-sync backfill (`sync.backfill.ts`): the `enrolled` job of a row that is `ok` with
-        `backfilledAt` null copies the owner's Planned, create-eligible activities that aren't over and start within
+        `backfillCount` null copies the owner's Planned, create-eligible activities that aren't over and start within
         `backfillDays` (keyset pages of 200, short transactions under the activity locks, D45 retry outside the
         transaction), activities with guests as private copies (`invites='withhold'`, D23), then pushes them 100 per
-        round (`ENROLLED_PUSH_BATCH` = the spec's CONNECT_PUSH_BATCH); `backfilledAt` / `backfillCount` written last;
+        round (`ENROLLED_PUSH_BATCH` = the spec's CONNECT_PUSH_BATCH); `backfilledAt` = a run stamp claimed first and reused by a re-run, `backfillCount` (links with the stamp) written last;
         the poll tick re-queues rows `ok` without a backfill after a 10-minute grace, the Redis-down fallback tick
         backfills one per tick. `POST /api/activities/:id/calendar-sync/retry` (owner / editors; Add again = a new
-        generation for an event deleted in the calendar) and `/send-invites` (owner only, D41; audited
+        generation for an event deleted in the calendar; a non-owner's Add again on an activity with guests makes a
+        private copy, D41) and `/send-invites` (owner only, D41; refused while the event is gone; audited
         `SEND_INVITES`). Held guests are kept by identity (`user:` / `contact:` keys), so a contact who gets an email
         later stays held. `ActivityView.calendar.invitesWaiting` / `copyReason`, `CalendarItem.syncState`, own
         calendar `backfill` progress, admin `workerStatus` / `syncEnabled`. UI: `ActivitySyncStatus` in the activity
@@ -424,7 +425,7 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         Attendees hint, the list's hidden Calendar column, server skips in the bulk-delete toast, the calendar's
         error dot, the admin Sync worker fact, the provider switch-on confirmation and the profile card's backfill
         line. Deviations: Add again resets the link to a new generation (no `force` flag in job data); a backfilled
-        copy is told from others by `link.createdAt = connection.backfilledAt` (no column); the `enrolled` job fires
+        copy is told from others by `link.createdAt = connection.backfilledAt` (no column; done = `backfillCount` set); the `enrolled` job fires
         on every recovery (P2-3b's push on recovery kept), the backfill runs only once; no per-activity notification
         for backfilled private copies (the profile card shows the count). Tested with in-memory doubles and the
         fake provider; not run against a real SQL Server, Google or Microsoft.

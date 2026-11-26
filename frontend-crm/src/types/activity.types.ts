@@ -152,7 +152,10 @@ export interface ActivityCalendarState {
     heldCount: number;
     /** The viewer is the owner and there is someone to invite. */
     canSendInvites: boolean;
-    /** Someone waits for the owner to send invitations (whoever views it): others see "Waiting for <owner>". */
+    /**
+     * Someone waits for the owner to send invitations (whoever views it): others see "Waiting for <owner>". False while
+     * the event is gone (`cancelled`, `removed_remote`): there is nothing to send until it's back.
+     */
     invitesWaiting?: boolean;
     /**
      * Why a private copy has no guests: `connected` = copied when the owner's calendar was first connected; `assigned` =

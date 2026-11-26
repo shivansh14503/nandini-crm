@@ -717,6 +717,7 @@ The same list is next to `DB_KEEPALIVE_INTERVAL_MS` in `.env.example`.
 | Every 5 min, 07:00–21:55 | Calendar poll: outbox sweep + due connection checks + backfill recovery (three small indexed reads, as of 2026-11-26, P2-3c; the database is awake then anyway for the reminder sweep and users) |
 | After each activity save | Its calendar push (a `push` job, 2 s later), only for enrolled owners |
 | When a person's calendar row first reaches `ok` | The first-sync backfill (P2-3c): keyset pages of their upcoming activities and the pushes, once per row (not periodic) |
+| Every 15 s, only while a My Profile page is open on a row still copying | `GET /api/calendar-connections` (a connection read and a link count) for the backfill progress line; stops when the copy is done, when sync is switched off (`backfill.state = 'off'`) and at most 5 minutes after the page was opened (as of 2026-11-26, P2-3c) |
 | At each due reminder | Its delayed job |
 | Every minute, **only while Redis is down** | The workers' fallback tick (the calendar worker's only inside 07:00–22:00) |
 
@@ -774,23 +775,26 @@ job and the sweep (connection checks and the nightly connection steps still run)
   try restores the event instead of patching a deleted one. Unique-index errors are never caught inside a transaction
   (D45).
 - **`enrolled`** (`runEnrolled`): a row reached `ok`, first time or after an error (`withCalendarAccess`'s ready
-  listener; a job id per time, `…-r<readyAtMs>`): when the row is `ok` and `backfilledAt` is null the **first-sync
+  listener; a job id per time, `…-r<readyAtMs>`): when the row is `ok` and `backfillCount` is null the **first-sync
   backfill** runs first (as of 2026-11-26, P2-3c, `sync.backfill.ts`; addendum §8.3, D23): the owner's Planned,
   create-eligible activities that aren't over and start within `backfillDays` get an organizer link each, in keyset
   pages of 200 (short transactions under the activities' record locks, re-reading existing links; a unique-index
   race rolls the page back and runs it once more outside the transaction, D45); activities with guests become private
-  copies (`invites = 'withhold'`: no attendees, nobody mailed) until the owner presses **Send invitations**; links
-  get `createdAt = backfilledAt`, which is how the drawer says "copied when your calendar was connected". No activity
-  row, audit entry or notification is written. `backfilledAt` / `backfillCount` are set last, so a crashed run simply
-  runs again. Then the row's dirty links are pushed, 100 at a time (`ENROLLED_PUSH_BATCH`, the spec's
+  copies (`invites = 'withhold'`: no attendees, nobody mailed) until the owner presses **Send invitations**. The first
+  run claims a run stamp in `backfilledAt` (compare-and-set on `IS NULL`) before inserting; a run started again (a
+  crash, the listener's and the poll's jobs at once) reuses that stamp, and every backfilled link gets
+  `createdAt` = the stamp, which is how the drawer says "copied when your calendar was connected". No activity
+  row, audit entry or notification is written. `backfillCount` (the row's links carrying the stamp, every run's) is
+  written last and marks it done, so a crashed run simply runs again with the same stamp. Then the row's dirty links are pushed, 100 at a time (`ENROLLED_PUSH_BATCH`, the spec's
   CONNECT_PUSH_BATCH), one provider call at a time under the lease, stopping at the first gate or rate limit: a large
   backfill is spread over the next jobs and sweeps instead of a burst. Recovery: the poll tick re-queues `ok` rows
   without a backfill whose last success is over 10 minutes old (50 per tick); while Redis is down the fallback tick
   backfills one row per tick in-process.
 - **Drawer actions** (P2-3c, `sync.actions.ts`): `POST /api/activities/:id/calendar-sync/retry` (owner / editors:
   dirty again, attempts reset; Add again for a `removed_remote` copy = a new generation and requested id, so whichever
-  push runs it creates a new event) and `/send-invites` (owner only, D41: `invites = 'send'`, holds released; audited
-  `Activity SEND_INVITES`). Both write only the link, in one short transaction under the activity's record lock, then
+  push runs it creates a new event; pressed by someone other than the owner on an activity with guests, the new copy
+  is private (`withhold`) and the owner gets `calendar_invites_held`, D41) and `/send-invites` (owner only, D41:
+  `invites = 'send'`, holds released; refused with 409 while the event is gone; audited `Activity SEND_INVITES`). Both write only the link, in one short transaction under the activity's record lock, then
   wake the push.
 - **`calendar-poll`** (every 5 minutes, 07:00–21:55): the outbox sweep (links dirty for over 2 minutes and not
   waiting, oldest first, 200 per tick, as `push` jobs) and due connection checks (`pending` rows, `error` rows past

@@ -1851,7 +1851,8 @@ model CalendarConnection {
   syncWindowStart     DateTime?
   syncWindowEnd       DateTime?
   fullSyncAt          DateTime?
-  /// First-sync backfill (P2-3c): when it ran and how many activities it copied.
+  /// First-sync backfill (P2-3c): backfilledAt = its run stamp (claimed when the first run starts, reused by a re-run);
+  /// backfillCount = activities it copied, written last (null = not done).
   backfilledAt        DateTime?
   backfillCount       Int?
   lastPulledAt        DateTime?

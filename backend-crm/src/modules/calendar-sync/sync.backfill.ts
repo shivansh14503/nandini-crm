@@ -25,13 +25,18 @@ import { isCreateEligible } from './sync.outbox.js';
  *   never sends customers a burst of invitations for meetings they already know about; its owner presses
  *   **Send invitations** in the activity drawer when they want the guests invited. An activity without guests gets
  *   `send` (there is nobody to mail; guests the owner adds later are invited, guests someone else adds are held, D41).
- * - No activity row is written (no audit entry, no `updatedAt` change); the links are the engine's own rows. Each
- *   link's `createdAt` is the run's `now`, the same instant written to `backfilledAt`, which is how the drawer tells a
- *   backfilled private copy ("copied when your calendar was connected") from one someone else made (sync.view.ts).
+ * - No activity row is written (no audit entry, no `updatedAt` change); the links are the engine's own rows.
+ * - One run stamp per row, kept across runs: the first run claims it by writing `backfilledAt` (compare-and-set on
+ *   `backfilledAt IS NULL`) before it inserts anything; a run started again (a crash, a failed last write, the
+ *   listener's and the poll's `enrolled` jobs at once) reads the stamp already there and uses it. Every backfilled
+ *   link's `createdAt` is that stamp, which is how the drawer tells a backfilled private copy ("copied when your
+ *   calendar was connected") from one someone else made (sync.view.ts).
+ * - Done = `backfillCount` written (the number of organizer links on the row carrying the stamp, so it counts every
+ *   run's copies, not only the last run's). Until then the row counts as not backfilled: the `enrolled` job and the
+ *   poll tick's recovery (sync.maintenance.ts) run it again, and the profile card says the copy is under way.
  * - Idempotent: links are inserted in short transactions under the activities' record locks, after a re-read of the
  *   links that already exist (D45: a unique-index race aborts the transaction, which is run once more from the start,
- *   and the re-read then finds the row). `backfilledAt` / `backfillCount` are written last, so a crashed run is simply
- *   run again (the poll tick re-queues rows `ok` without a backfill, sync.maintenance.ts).
+ *   and the re-read then finds the row).
  */
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -77,14 +82,20 @@ export function planBackfill(
 export type BackfillResult =
     /** Nothing done: kill switch off, row gone / not `ok` / already backfilled, or the user inactive. */
     | { status: 'skipped'; reason: string }
-    | { status: 'done'; created: number; withheld: number };
+    /** `created` / `withheld`: links this run inserted; `copied`: every link of the row's backfill (all runs). */
+    | { status: 'done'; created: number; withheld: number; copied: number };
 
 export interface BackfillOptions {
     now?: Date;
 }
 
 /** Inserts the planned links of one page (D45: never catches the unique index inside the transaction). */
-async function insertLinks(connection: { id: string; provider: string; username: string }, items: readonly BackfillItem[], now: Date): Promise<BackfillItem[]> {
+async function insertLinks(
+    connection: { id: string; provider: string; username: string },
+    items: readonly BackfillItem[],
+    now: Date,
+    stamp: Date,
+): Promise<BackfillItem[]> {
     const ids = items.map((i) => i.activityId);
     return runInTransaction(async (tx) => {
         await lockRecords(tx, 'activity', ids);
@@ -107,7 +118,7 @@ async function insertLinks(connection: { id: string; provider: string; username:
                     invites: item.invites,
                     requestedId: requestedIdFor(item.activityId, connection.id, 0),
                     dirtyAt: now,
-                    createdAt: now,
+                    createdAt: stamp,
                 },
                 select: { id: true },
             });
@@ -125,15 +136,17 @@ export async function runBackfill(connectionId: string, options: BackfillOptions
     const now = options.now ?? new Date();
     const connection = await prisma.calendarConnection.findUnique({
         where: { id: connectionId },
-        select: { id: true, username: true, provider: true, status: true, backfilledAt: true },
+        select: { id: true, username: true, provider: true, status: true, backfilledAt: true, backfillCount: true },
     });
     if (!connection) return { status: 'skipped', reason: 'gone' };
-    if (connection.backfilledAt) return { status: 'skipped', reason: 'already_done' };
+    if (connection.backfillCount !== null) return { status: 'skipped', reason: 'already_done' };
     if (connection.status !== 'ok') return { status: 'skipped', reason: `status_${connection.status}` };
     const user = await prisma.user.findUnique({ where: { username: connection.username }, select: { isActive: true, isGroupUser: true } });
     if (!user?.isActive || user.isGroupUser) return { status: 'skipped', reason: 'user_inactive' };
 
     const [settings, config] = await Promise.all([loadCalendarSettings(), loadActivityConfig()]);
+    const stamp = await claimStamp(connection.id, connection.backfilledAt, now);
+    if (!stamp) return { status: 'skipped', reason: 'gone' };
     const { to } = backfillWindow(now, settings.backfillDays);
     let created = 0;
     let withheld = 0;
@@ -170,11 +183,11 @@ export async function runBackfill(connectionId: string, options: BackfillOptions
         if (items.length > 0) {
             let inserted: BackfillItem[];
             try {
-                inserted = await insertLinks(connection, items, now);
+                inserted = await insertLinks(connection, items, now, stamp);
             } catch (err) {
                 // D45: an activity saved at the same moment created its link first; the second run's re-read finds it.
                 if (!isUniqueViolation(err)) throw err;
-                inserted = await insertLinks(connection, items, now);
+                inserted = await insertLinks(connection, items, now, stamp);
             }
             created += inserted.length;
             withheld += inserted.filter((i) => i.invites === 'withhold').length;
@@ -184,7 +197,21 @@ export async function runBackfill(connectionId: string, options: BackfillOptions
         after = { startAt: last.startAt as Date, id: last.id };
     }
 
-    await prisma.calendarConnection.updateMany({ where: { id: connection.id, backfilledAt: null }, data: { backfilledAt: now, backfillCount: created } });
-    logger.info({ connectionId, created, withheld, days: settings.backfillDays }, 'Calendar first-sync backfill done');
-    return { status: 'done', created, withheld };
+    // Every run's copies carry the stamp ([connectionId, state] index prefix, then the row's links only).
+    const copied = await prisma.activityExternalLink.count({ where: { connectionId: connection.id, role: 'organizer', createdAt: stamp } });
+    await prisma.calendarConnection.updateMany({ where: { id: connection.id, backfillCount: null }, data: { backfillCount: copied } });
+    logger.info({ connectionId, created, withheld, copied, days: settings.backfillDays }, 'Calendar first-sync backfill done');
+    return { status: 'done', created, withheld, copied };
+}
+
+/**
+ * The row's backfill stamp: the one an earlier (unfinished or concurrent) run wrote, else `now`, claimed with a
+ * compare-and-set so two runs at once end up with the same stamp. Null when the row is gone.
+ */
+async function claimStamp(connectionId: string, existing: Date | null, now: Date): Promise<Date | null> {
+    if (existing) return existing;
+    const claimed = await prisma.calendarConnection.updateMany({ where: { id: connectionId, backfilledAt: null }, data: { backfilledAt: now } });
+    if (claimed.count === 1) return now;
+    const row = await prisma.calendarConnection.findUnique({ where: { id: connectionId }, select: { backfilledAt: true } });
+    return row?.backfilledAt ?? null;
 }

@@ -14,9 +14,9 @@ import { lockRecords, runInTransaction } from '../shared/transactions.js';
 import { LIVE_CONNECTION_STATUSES } from './connection.constants.js';
 import { parseHeld } from './sync.attendees.js';
 import { requestedIdFor } from './sync.keys.js';
-import { isCreateEligible } from './sync.outbox.js';
+import { isCreateEligible, type HeldNotice } from './sync.outbox.js';
 import { loadOwnerCalendarLinks } from './sync.view.js';
-import { wakePushes } from './sync.wake.js';
+import { notifyHeldInvites, wakePushes } from './sync.wake.js';
 
 /**
  * The activity drawer's calendar actions (Calendar Phase 2 P2-3c; spec §6.3, D41, §14.5):
@@ -26,11 +26,17 @@ import { wakePushes } from './sync.wake.js';
  *   refused (`cancelled` with an error) is tried again; **Add again** for an event deleted in the calendar
  *   (`removed_remote`, upcoming planned activities only) starts a new copy (new generation and requested id, the
  *   gone event's id dropped), so it is created again even when the sweep, not this request's wake-up, pushes it.
+ *   The re-created event is a new invitation for its guests (they already got the cancellation), so when someone
+ *   other than the owner presses Add again on an activity with guests the new copy is private (`invites='withhold'`,
+ *   held list cleared) and the owner gets the `calendar_invites_held` notice, as for any copy someone else makes (D41,
+ *   sync.outbox.ts `heldChanges`). The owner's own Add again keeps the link's invitations as they were.
  * - `POST /api/activities/:id/calendar-sync/send-invites` (**owner only**, D41: invitations leave a mailbox only on its
  *   owner's action, managers and admins included): `invites='send'`, held guests released (`heldAttendeesJson`
  *   null), dirty. The push then adds every invitable attendee with Google `sendUpdates=all`, and when any of them is
  *   outside the company the same request clears the internal description (sync.push.ts, D15). Audited
  *   `Activity SEND_INVITES` with counts only. Nothing held → answers the view unchanged (a double click is harmless).
+ *   Refused (409 CALENDAR_SYNC_NOT_RETRYABLE) while the copy's event is gone (`cancelled`, `removed_remote`): the push
+ *   would send nothing, so the copy has to be back in the calendar first (Add again, or the activity planned again).
  *
  * Both answer the activity view (with its fresh `calendar` state), 503 CALENDAR_SYNC_DISABLED when the kill switch is
  * off, 409 CALENDAR_NOT_SYNCED when the activity has no copy in its owner's calendar, 409 CALENDAR_SYNC_NOT_RETRYABLE
@@ -85,7 +91,7 @@ async function viewOf(id: string, user: AuthUser): Promise<ActivityView> {
     return toActivityView(row, user, await loadOwnerCalendarLinks([row]));
 }
 
-async function afterCommit(id: string, link: { id: string; dirtyAt: Date } | null, user: AuthUser): Promise<ActivityView> {
+async function afterCommit(id: string, link: { id: string; dirtyAt: Date } | null, user: AuthUser, notice: HeldNotice | null = null): Promise<ActivityView> {
     if (link) {
         await cacheService.invalidateEntityCaches('activities');
         try {
@@ -94,8 +100,18 @@ async function afterCommit(id: string, link: { id: string; dirtyAt: Date } | nul
             logger.warn({ err: (err as Error).message, linkId: link.id }, 'Could not wake the calendar push; the outbox sweep covers it');
         }
     }
+    if (notice) {
+        try {
+            await notifyHeldInvites([notice]);
+        } catch (err) {
+            logger.warn({ err: (err as Error).message, activityId: id }, 'Could not send the "invitations held" notification');
+        }
+    }
     return viewOf(id, user);
 }
+
+/** Guests of an activity (attendees other than its owner): the people a sent invitation would mail. */
+const guestsOf = (row: ActivityRow) => row.attendees.filter((a) => !(a.kind === 'user' && lc(a.username) === lc(row.assignedTo))).length;
 
 export const calendarSyncActions = {
     async retry(id: string, user: AuthUser): Promise<ActivityView> {
@@ -103,7 +119,9 @@ export const calendarSyncActions = {
         // Loaded before the transaction (Add again checks the activity is still create-eligible).
         const config = await loadActivityConfig();
         const now = new Date();
+        let notice: HeldNotice | null = null;
         const dirty = await runInTransaction(async (tx) => {
+            notice = null;
             const row = await lockedActivity(tx, id, user);
             if (!canEditActivity(user, row)) throw HttpError.forbidden(EDIT_FORBIDDEN_MESSAGE);
             const link = await ownerLinkOf(tx, row);
@@ -132,6 +150,12 @@ export const calendarSyncActions = {
                     lastErrorCode: null,
                     lastErrorMessage: null,
                 };
+                // D41: a new event is a new invitation; only its owner sends those.
+                const guests = guestsOf(row);
+                if (lc(row.assignedTo) !== lc(user.username) && link.invites === 'send' && guests > 0) {
+                    data = { ...data, invites: 'withhold', heldAttendeesJson: null };
+                    notice = { activityId: row.id, owner: row.assignedTo, actor: user.username, subject: row.subject, guests, newCopy: true };
+                }
             } else if (!GONE_STATES.has(link.state)) {
                 data.state = 'pending';
             }
@@ -139,7 +163,7 @@ export const calendarSyncActions = {
             return { id: link.id, dirtyAt: now };
         });
         logger.info({ activityId: id, linkId: dirty.id, by: user.username }, 'Calendar push retried from the activity drawer');
-        return afterCommit(id, dirty, user);
+        return afterCommit(id, dirty, user, notice);
     },
 
     async sendInvites(id: string, user: AuthUser): Promise<ActivityView> {
@@ -156,10 +180,17 @@ export const calendarSyncActions = {
             if (link.state === 'unsupported') {
                 throw notRetryable('This meeting became a repeating event in the calendar, so the CRM no longer updates it. Invite the guests there.');
             }
+            if (GONE_STATES.has(link.state)) {
+                throw notRetryable(
+                    link.state === 'removed_remote'
+                        ? 'This meeting was removed from the calendar. Add it to the calendar again first, then send the invitations.'
+                        : "This meeting isn't in the calendar right now. The invitations can be sent once it's back there.",
+                );
+            }
             const held = parseHeld(link.heldAttendeesJson);
             const privateCopy = link.invites === 'withhold';
             if (!privateCopy && held.length === 0) return null;
-            const guests = row.attendees.filter((a) => !(a.kind === 'user' && lc(a.username) === lc(row.assignedTo))).length;
+            const guests = guestsOf(row);
             await tx.activityExternalLink.update({
                 where: { id: link.id },
                 data: {
@@ -168,7 +199,7 @@ export const calendarSyncActions = {
                     dirtyAt: now,
                     nextAttemptAt: null,
                     attempts: 0,
-                    ...(GONE_STATES.has(link.state) ? {} : { state: 'pending' }),
+                    state: 'pending',
                 },
             });
             await auditService.record(tx, {

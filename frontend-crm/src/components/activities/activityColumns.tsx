@@ -37,11 +37,20 @@ function calendarCell(calendar: ActivityCalendarState | null | undefined): { ico
     if (calendar.pending || calendar.state === 'pending') {
         return { icon: <SyncOutlinedIcon sx={{ ...iconSx, color: 'var(--mui-palette-text-secondary)' }} />, label: 'Sending', title: 'A change is being sent to the calendar.' };
     }
-    if (calendar.invitesWaiting || calendar.heldCount > 0) {
+    if (calendar.invites === 'withhold' && calendar.invitesWaiting) {
         return {
             icon: <LockOutlinedIcon sx={{ ...iconSx, color: 'var(--crm-text-blue-600)' }} />,
             label: 'Private copy',
             title: 'In the calendar without its guests: they are invited when the owner presses Send invitations.',
+        };
+    }
+    if (calendar.heldCount > 0) {
+        // An invited copy with guests someone else added since (D41): the others are invited, these wait.
+        const guests = `${calendar.heldCount} guest${calendar.heldCount === 1 ? '' : 's'}`;
+        return {
+            icon: <LockOutlinedIcon sx={{ ...iconSx, color: 'var(--crm-text-blue-600)' }} />,
+            label: 'Guests waiting',
+            title: `In the calendar; ${guests} added by someone else ${calendar.heldCount === 1 ? "isn't" : "aren't"} invited until the owner presses Send invitations.`,
         };
     }
     return { icon: <EventAvailableOutlinedIcon sx={{ ...iconSx, color: 'var(--mui-palette-success-main)' }} />, label: 'Synced', title: 'In the owner\'s calendar.' };

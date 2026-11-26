@@ -20,7 +20,8 @@ import { formatBusinessInstant } from './activityTime';
  * type never goes to calendars: nothing is shown, the Phase 1 look). One state line, plus:
  * - a private copy (`invites='withhold'`) or guests held for the owner (D41): an info box, with **Send invitations**
  *   for the owner and "Waiting for <owner> to send the invitations" for everyone else;
- * - a refused push: an error box with **Retry**; an event deleted in the calendar: **Add again**;
+ * - a refused push: an error box with **Retry**; an event deleted in the calendar: **Add again** (planned activities
+ *   not over for more than a day, as the API allows);
  * - "Open in Google Calendar / Outlook" (the event's own link, owner and editors only, from the API).
  * While a change is being sent it asks for the activity again every 5 s, for up to a minute.
  */
@@ -84,6 +85,19 @@ function ago(iso: string | null | undefined, timeZone: string): string {
 const lc = (value: string | null | undefined) => (value ?? '').trim().toLowerCase();
 const personName = (username: string | null | undefined) => (username ? findCrmUser(username)?.name || username : '');
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/**
+ * How long after its end a planned activity can still be added to the calendar again (the API's create window,
+ * backend-crm sync.constants.ts CREATE_ELIGIBLE_PAST_MS); an older one would only get "no longer upcoming" back.
+ */
+const ADD_AGAIN_PAST_MS = 24 * 60 * 60 * 1000;
+
+/** Add again would be accepted: planned, and not over for longer than the create window. */
+function canAddAgain(activity: Pick<Activity, 'status' | 'startAt' | 'endAt'>): boolean {
+    if (activity.status !== PLANNED_STATUS) return false;
+    const end = Date.parse(activity.endAt || activity.startAt);
+    return !Number.isFinite(end) || end > Date.now() - ADD_AGAIN_PAST_MS;
+}
 
 /** A sentence for our own error codes; the provider's own text (owner / editors) otherwise. */
 function errorSentence(calendar: ActivityCalendarState): string {
@@ -244,7 +258,9 @@ export function ActivitySyncStatus({ activity, onRefresh, onNotify }: ActivitySy
     // ── Invitations waiting for the owner (D41) ──
     const waiting = calendar.invitesWaiting ?? (calendar.canSendInvites || calendar.heldCount > 0);
     let invitesBox: React.ReactNode = null;
-    if (waiting && calendar.state !== 'unsupported') {
+    // Not while the event is gone (cancelled, removed in the calendar): nothing could be sent (the API refuses).
+    const eventGone = calendar.state === 'cancelled' || calendar.state === 'removed_remote';
+    if (waiting && calendar.state !== 'unsupported' && !eventGone) {
         const privateCopy = calendar.invites === 'withhold';
         const reason =
             calendar.copyReason === 'connected'
@@ -278,9 +294,14 @@ export function ActivitySyncStatus({ activity, onRefresh, onNotify }: ActivitySy
         );
     }
 
+    // Someone else's Add again doesn't invite the guests again from the owner's mailbox (D41): a private copy.
+    const addAgainMessage =
+        !isOwner && calendar.invites === 'send' && guests > 0
+            ? `Adding it to ${theirs} again as a private copy: ${ownerName} sends the invitations.`
+            : `Adding it to ${theirs} again.`;
     const addAgain =
-        calendar.state === 'removed_remote' && canEdit && planned ? (
-            <Button size="small" startIcon={<ReplayIcon sx={{ fontSize: 16 }} />} onClick={() => retry(`Adding it to ${theirs} again.`)} disabled={busy} sx={outlinedSx}>
+        calendar.state === 'removed_remote' && canEdit && canAddAgain(activity) ? (
+            <Button size="small" startIcon={<ReplayIcon sx={{ fontSize: 16 }} />} onClick={() => retry(addAgainMessage)} disabled={busy} sx={outlinedSx}>
                 Add again
             </Button>
         ) : null;
@@ -333,14 +354,15 @@ export function ActivitySyncStatus({ activity, onRefresh, onNotify }: ActivitySy
 
 /**
  * The extra sentence of a delete / cancel confirmation when the activity has a copy in its owner's calendar (spec
- * §14.5): a CRM-made event is cancelled there too (its invited guests get the cancellation); an event brought in from
- * the calendar stays there. '' when the activity isn't in a calendar.
+ * §14.5, §13.2): the event is cancelled there too (its invited guests get the cancellation), also for a meeting brought
+ * in from the calendar that its owner organizes; only deleting such an imported meeting leaves the event there. ''
+ * when there is no event to cancel (not in a calendar, already cancelled or removed there, a repeating series).
  */
 export function calendarRemovalNote(activity: Pick<Activity, 'calendar' | 'origin' | 'assignedTo' | 'attendees'>, viewerUsername: string | null | undefined, verb: 'delete' | 'cancel'): string {
     const calendar = activity.calendar;
-    if (!calendar || calendar.state === 'unsupported' || calendar.state === 'removed_remote') return '';
+    if (!calendar || calendar.state === 'unsupported' || calendar.state === 'removed_remote' || calendar.state === 'cancelled') return '';
     const where = calendarProviderName(calendar.provider);
-    if (activity.origin === 'calendar') return ` ${verb === 'delete' ? 'Removes it from the CRM only' : 'Changes the CRM only'}: the event stays in the ${where}.`;
+    if (activity.origin === 'calendar' && verb === 'delete') return ` Removes it from the CRM only: the event stays in the ${where}.`;
     const whose = lc(activity.assignedTo) === lc(viewerUsername) ? 'your' : `${personName(activity.assignedTo)}'s`;
     const invited = calendar.invites === 'send' && (activity.attendees ?? []).some((a) => !(a.kind === 'user' && lc(a.username) === lc(activity.assignedTo)));
     return ` This also cancels it in ${whose} ${where}${invited ? ' and notifies the attendees' : ''}.`;

@@ -41,10 +41,11 @@ export interface OwnCalendar {
 
 /**
  * `waiting`: not run yet (or under way); `done`: `copied` upcoming activities were copied at `at` (private copies when
- * they have guests: nobody was invited). `sending`: changes of this calendar still waiting to be sent.
+ * they have guests: nobody was invited); `off`: not done and calendar sync is switched off on the server, so nothing is
+ * being copied. `sending`: changes of this calendar still waiting to be sent.
  */
 export interface OwnCalendarBackfill {
-    state: 'waiting' | 'done';
+    state: 'waiting' | 'done' | 'off';
     at: string | null;
     copied: number | null;
     sending: number;

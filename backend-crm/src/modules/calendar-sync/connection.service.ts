@@ -1,3 +1,4 @@
+import { ENV } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
 import { prisma } from '../../config/prisma.js';
 import { secretBox } from '../../services/secretBox.js';
@@ -30,11 +31,13 @@ export interface OwnCalendarDto {
 
 /**
  * `waiting`: not run yet (the row waits for its first check, or the copy is under way); `done`: `copied` activities were
- * copied at `at` (private copies when they have guests: nobody was invited). `sending`: copies (and other changes) of
- * this calendar still waiting to be sent, so the card can say "12 of 40 still being copied".
+ * copied at `at` (private copies when they have guests: nobody was invited); `off`: not done and calendar sync is
+ * switched off on the server (CALENDAR_SYNC_ENABLED=false), so nothing is being copied (the card says nothing and
+ * doesn't poll). `sending`: copies (and other changes) of this calendar still waiting to be sent, so the card can say
+ * "12 of 40 still being copied".
  */
 export interface OwnBackfillDto {
-    state: 'waiting' | 'done';
+    state: 'waiting' | 'done' | 'off';
     at: string | null;
     copied: number | null;
     sending: number;
@@ -74,6 +77,8 @@ export const connectionService = {
                 // [connectionId, state] index: links waiting to be sent.
                 prisma.activityExternalLink.count({ where: { connectionId: live.id, state: 'pending' } }),
             ]);
+            // Done once its count is written (sync.backfill.ts: `backfilledAt` is the run stamp, set when it starts).
+            const done = live.backfillCount !== null;
             const paused = !access.enabled || !access.configured || access.healthStatus === 'error';
             return {
                 ready,
@@ -85,9 +90,9 @@ export const connectionService = {
                     since: live.enrolledAt.toISOString(),
                     lastSyncedAt: latest(live.lastPushedAt, live.lastPulledAt),
                     backfill: {
-                        state: live.backfilledAt ? 'done' : 'waiting',
-                        at: live.backfilledAt ? live.backfilledAt.toISOString() : null,
-                        copied: live.backfilledAt ? (live.backfillCount ?? 0) : null,
+                        state: done ? 'done' : ENV.INTEGRATIONS.SYNC_ENABLED ? 'waiting' : 'off',
+                        at: done && live.backfilledAt ? live.backfilledAt.toISOString() : null,
+                        copied: done ? live.backfillCount : null,
                         sending,
                     },
                 },

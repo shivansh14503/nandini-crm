@@ -620,7 +620,7 @@ sync-made activity changes are audited under route `job:calendar-sync:<provider>
 | `dirtyAt` | DATETIME2 NULL | **Outbox**: set inside the activity write's own transaction, cleared by the push with compare-and-set |
 | `nextAttemptAt`, `attempts` | | Backoff after a failure / gate (null = now) |
 | `lastErrorCode`, `lastErrorMessage` (≤ 300), `lastWarning` (≤ 500), `lastConflictAt`, `lastSyncedAt` | | Status shown in `ActivityView.calendar`; the message to the owner / editors only |
-| `createdAt`, `updatedAt` | | A link made by the first-sync backfill has `createdAt` = its connection's `backfilledAt` (P2-3c: how the drawer says "copied when your calendar was connected") |
+| `createdAt`, `updatedAt` | | A link made by the first-sync backfill has `createdAt` = its connection's `backfilledAt` (the run stamp, the same across runs; P2-3c: how the drawer says "copied when your calendar was connected") |
 
 Indexes: unique `(activityId, connectionId)`, `(connectionId, state)`, `(dirtyAt, nextAttemptAt)` (the outbox sweep:
 `dirtyAt IS NOT NULL AND dirtyAt < now − 2 min AND (nextAttemptAt IS NULL OR nextAttemptAt <= now)`), and the
@@ -736,7 +736,7 @@ to `Users`.
 | `source` | NVARCHAR(10), default `domain` | How the provider was chosen: `domain` \| `override` |
 | `calendarId` | NVARCHAR(200), default `primary` | `primary` (Google) / `''` = default calendar (Graph) |
 | `syncCursor`, `syncWindowStart`, `syncWindowEnd`, `fullSyncAt` | | P2-5 (Google sync token / Graph delta link: never logged) |
-| `backfilledAt`, `backfillCount` | | The first-sync backfill (as of 2026-11-26, P2-3c): when it finished and how many activities it copied; written last (`WHERE backfilledAt IS NULL`), null = not run yet (the poll re-queues it). Never reset, so it runs once per row |
+| `backfilledAt`, `backfillCount` | | The first-sync backfill (as of 2026-11-26, P2-3c): `backfilledAt` = its run stamp, claimed when the first run starts (`WHERE backfilledAt IS NULL`) and reused by a run started again; `backfillCount` = how many activities it copied (links on the row carrying the stamp), written last (`WHERE backfillCount IS NULL`). `backfillCount` null = not done (the `enrolled` job and the poll re-queue it). Never reset, so it runs once per row |
 | `lastPulledAt`, `lastPushedAt`, `lastSuccessAt`, `lastCheckedAt` | | Sync health |
 | `nextCheckAt` | DATETIME2 NULL | Earliest next health check after a user-level error (backoff 15 min → 1 h → 6 h → 24 h) |
 | `lastErrorAt`, `lastErrorCode`, `lastErrorMessage` (≤ 300), `consecutiveFailures` | | `lastErrorMessage`: provider text for admins only (never shown to the employee, never logged at info) |

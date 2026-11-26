@@ -79,7 +79,7 @@ export interface CalendarAccessOptions {
 type ReadyListener = (row: ConnectionRow) => void | Promise<void>;
 /**
  * The row's `enrolled` job (sync.wake.ts, imported on demand: that module sits behind this one's importers): on the
- * first `ok` (`backfilledAt` still null) the first-sync backfill (P2-3c, sync.backfill.ts), then a push of the links
+ * first `ok` (`backfillCount` still null) the first-sync backfill (P2-3c, sync.backfill.ts), then a push of the links
  * saved while the row was pending or in error (a job id per recovery). Without Redis nothing is queued: the worker's
  * fallback tick runs the backfill and pushes those links within a minute (inside 07:00–22:00).
  */

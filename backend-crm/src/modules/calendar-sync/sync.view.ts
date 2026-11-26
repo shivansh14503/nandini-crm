@@ -11,7 +11,10 @@ import { parseHeld } from './sync.attendees.js';
  * only types from the activities module.
  */
 
-/** An organizer link, plus whether the first-sync backfill created it (sync.backfill.ts stamps `createdAt = backfilledAt`). */
+/**
+ * An organizer link, plus whether the first-sync backfill created it (sync.backfill.ts stamps every backfilled link's
+ * `createdAt` with the row's run stamp `backfilledAt`, the same across runs).
+ */
 export type OwnerCalendarLink = ActivityExternalLink & { fromBackfill?: boolean };
 
 /** The owner's organizer link of each activity (by activity id). */
@@ -58,7 +61,10 @@ export function calendarViewOf(
     const privileged = isOwner || viewerCanEdit;
     const heldCount = parseHeld(link.heldAttendeesJson).length;
     const withheld = link.invites === 'withhold';
-    const invitesWaiting = (withheld && guestCount(row) > 0) || heldCount > 0;
+    // Nothing to send while the event is gone (cancelled, deleted in the calendar): the push would plan nothing. The
+    // drawer offers Add again instead; once the copy is back, its guests wait again.
+    const eventGone = link.state === 'cancelled' || link.state === 'removed_remote';
+    const invitesWaiting = !eventGone && ((withheld && guestCount(row) > 0) || heldCount > 0);
     return {
         provider: link.provider,
         state: link.state,

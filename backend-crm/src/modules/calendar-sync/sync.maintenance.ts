@@ -97,18 +97,18 @@ export async function pushDueInline(now: Date = new Date(), limit: number = FALL
 
 /**
  * The `enrolled` job (§8.12, admin-managed: replaces P2-3's per-user `connect`): a row reached `ok`. On its first `ok`
- * (`backfilledAt` still null) the first-sync backfill copies the person's upcoming activities as links (P2-3c,
+ * (`backfillCount` still null) the first-sync backfill copies the person's upcoming activities as links (P2-3c,
  * sync.backfill.ts: private copies when they have guests, D23); then its dirty links (backfilled ones, and activities
  * saved while it was pending or in error) are pushed, in batches of 100, ignoring their `nextAttemptAt`. Stops at the
  * first gate (row in error again, provider off) or rate limit; the outbox sweep does the rest. A failed backfill is
- * logged and left for the poll tick's recovery (the row keeps `backfilledAt` null); the push part still runs.
+ * logged and left for the poll tick's recovery (the row keeps `backfillCount` null); the push part still runs.
  */
 export async function runEnrolled(connectionId: string): Promise<{ pushed: number; stopped: string | null; backfilled?: number } | null> {
     if (!ENV.INTEGRATIONS.SYNC_ENABLED) return null;
-    const connection = await prisma.calendarConnection.findUnique({ where: { id: connectionId }, select: { id: true, status: true, backfilledAt: true } });
+    const connection = await prisma.calendarConnection.findUnique({ where: { id: connectionId }, select: { id: true, status: true, backfillCount: true } });
     if (!connection || !isLiveStatus(connection.status) || connection.status === 'error') return null;
     let backfilled: number | undefined;
-    if (connection.backfilledAt === null && connection.status === 'ok') {
+    if (connection.backfillCount === null && connection.status === 'ok') {
         try {
             const result = await runBackfill(connectionId);
             if (result.status === 'done') backfilled = result.created;
@@ -256,7 +256,7 @@ export async function runCalendarNightly(now: Date = new Date()) {
 export async function dueBackfillRows(now: Date, limit: number = BACKFILL_RECOVERY_LIMIT): Promise<{ id: string; enrolledAt: Date }[]> {
     if (!ENV.INTEGRATIONS.SYNC_ENABLED) return [];
     return prisma.calendarConnection.findMany({
-        where: { status: 'ok', backfilledAt: null, OR: [{ lastSuccessAt: null }, { lastSuccessAt: { lt: new Date(now.getTime() - BACKFILL_RECOVERY_GRACE_MS) } }] },
+        where: { status: 'ok', backfillCount: null, OR: [{ lastSuccessAt: null }, { lastSuccessAt: { lt: new Date(now.getTime() - BACKFILL_RECOVERY_GRACE_MS) } }] },
         select: { id: true, enrolledAt: true },
         orderBy: { enrolledAt: 'asc' },
         take: limit,
