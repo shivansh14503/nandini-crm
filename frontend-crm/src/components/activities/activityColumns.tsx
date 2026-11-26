@@ -9,11 +9,12 @@ import { findCrmUser } from '@/services/masterData.store';
 import { useDropdownOptionLabel } from '@/hooks/queries/useFormConfigs';
 import { CUSTOMER_RESPONSE_CATEGORY } from '@/components/forms/FollowUpDecision';
 import type { Activity } from '@/types/activity.types';
-import { isFollowUpActivity, NOTE_TYPE } from '@/types/activity.types';
+import { isFollowUpActivity, isVideoProvider, NOTE_TYPE, PLANNED_STATUS, VIDEO_PROVIDER_LABELS } from '@/types/activity.types';
 import { ActivityStatusPill, ActivityTypeChip, ActivityTypeIcon, FollowUpChip } from './ActivityBadges';
 import { attendeeLabel } from './RhfAttendeesField';
 import { formatActivityWhen, formatBusinessInstant, formatDayLabel, isActivityOverdue, useBusinessClock } from './activityTime';
 import { relatedModuleLabel, relatedRecordHref } from './activityLinks';
+import { JoinMeetingActions } from './VideoMeeting';
 
 const userName = (username: string | undefined) => (username ? findCrmUser(username)?.name || username : '');
 
@@ -24,7 +25,7 @@ const textCellSx = { fontSize: '0.8rem', fontWeight: 600, color: 'var(--crm-slat
 /**
  * The Activity table's columns (built-in ones; form-field columns are added by the table). Shared by the list page and
  * the related-records table in other records' drawers. Times show in the business timezone. End, All Day, Reminder,
- * Location and Attendees are hidden at first; they carry their `fieldKey` so the table doesn't add a raw copy of
+ * Location, Video meeting and Attendees are hidden at first; they carry their `fieldKey` so the table doesn't add a raw copy of
  * them (an ISO `…Z` End) from the form fields.
  */
 export function useActivityColumns(openRecord: (record: Activity) => void): DataTableColumn<Activity>[] {
@@ -219,6 +220,26 @@ export function useActivityColumns(openRecord: (record: Activity) => void): Data
                         {a.location || '-'}
                     </Typography>
                 ),
+            },
+            {
+                // Video meeting (P3-1): the provider, with Join + copy once the link is ready.
+                id: 'videoMeeting',
+                fieldKey: 'videoMeeting',
+                label: 'VIDEO MEETING',
+                sortable: false,
+                minWidth: 200,
+                defaultHidden: true,
+                render: (a) =>
+                    isVideoProvider(a.videoMeeting) ? (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
+                            <Typography noWrap sx={plainCellSx}>
+                                {VIDEO_PROVIDER_LABELS[a.videoMeeting]}
+                            </Typography>
+                            {a.conferenceJoinUrl && a.status === PLANNED_STATUS && <JoinMeetingActions url={a.conferenceJoinUrl} provider={a.videoMeeting} compact />}
+                        </Box>
+                    ) : (
+                        <Typography sx={plainCellSx}>-</Typography>
+                    ),
             },
             {
                 id: 'attendees',

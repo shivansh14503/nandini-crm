@@ -50,6 +50,7 @@ import {
     type UserEmailRow,
 } from '../users/userEmail.service.js';
 import { CALENDAR_SYNC_META_KEY, calendarSyncFromMeta, type CalendarSyncSettings } from './calendarSyncSettings.js';
+import { VIDEO_MEETING_META_KEY, videoMeetingFromMeta } from '../calendar-sync/conference.rules.js';
 import {
     DOMAIN_PROVIDERS,
     ENABLEABLE_PROVIDERS,
@@ -198,6 +199,8 @@ export interface SyncTypeDto {
     value: string;
     label: string;
     calendarSync: boolean;
+    /** Offers a Video meeting on the activity form (option meta `videoMeeting`; Calendar Phase 3, P3-1). Off for Task / Note. */
+    videoMeeting: boolean;
     locked: boolean;
     lockReason?: string;
 }
@@ -388,8 +391,51 @@ export function syncTypesFrom(configs: Pick<FormConfigsPayload, 'categories'>): 
         .filter((o) => o.isActive)
         .map((o) => {
             const locked = isActivityOnlyFollowupType(o.value);
-            return { value: o.value, label: o.label, calendarSync: calendarSyncFromMeta(o.meta, locked), locked, ...(locked ? { lockReason: TASK_NOTE_LOCK_REASON } : {}) };
+            return {
+                value: o.value,
+                label: o.label,
+                calendarSync: calendarSyncFromMeta(o.meta, locked),
+                videoMeeting: !locked && videoMeetingFromMeta(o.meta),
+                locked,
+                ...(locked ? { lockReason: TASK_NOTE_LOCK_REASON } : {}),
+            };
         });
+}
+
+/**
+ * One on / off switch of Followup Types (option meta `metaKey`), saved through the Form Builder's option update.
+ * Task / Note can't be switched on (400); unknown types 400; options already in that state are left alone.
+ */
+async function saveFollowupTypeSwitch(
+    body: unknown,
+    user: AuthUser,
+    metaKey: string,
+    isOn: (meta: Record<string, unknown> | null | undefined) => boolean,
+): Promise<SyncTypeDto[]> {
+    const input = syncTypesBodySchema.parse(body);
+    const configs = await formConfigService.getAllConfigs(true);
+    const options = configs.categories.find((c) => c.key === FOLLOWUP_TYPE_CATEGORY_KEY)?.options ?? [];
+    const byValue = new Map(options.map((o) => [o.value.trim().toLowerCase(), o]));
+    const issues: { message: string; path: string[] }[] = [];
+    const changes: { id: string; meta: Record<string, unknown> }[] = [];
+    for (const [value, on] of Object.entries(input)) {
+        const option = byValue.get(value.trim().toLowerCase());
+        if (!option) {
+            issues.push({ message: `"${value}" is not a Followup Type.`, path: [value] });
+            continue;
+        }
+        if (isActivityOnlyFollowupType(option.value)) {
+            if (on) issues.push({ message: TASK_NOTE_LOCK_REASON, path: [value] });
+            continue;
+        }
+        // Unchanged in effect (e.g. a missing calendarSync already means on).
+        if (isOn(option.meta) === on) continue;
+        changes.push({ id: option.id, meta: { ...(option.meta ?? {}), [metaKey]: on } });
+    }
+    if (issues.length > 0) throw HttpError.badRequest(issues[0].message, issues);
+    for (const change of changes) await formConfigService.updateOption(change.id, { meta: change.meta }, user);
+    if (changes.length > 0) await invalidateFormConfigCaches();
+    return integrationService.getSyncTypes();
 }
 
 // ── Credentials for calendar sync (tokenSource.ts): in-process cache, dropped on every save ────────────────────
@@ -887,30 +933,15 @@ export const integrationService = {
      * Task / Note can't be switched on (400); unknown types 400.
      */
     async saveSyncTypes(body: unknown, user: AuthUser): Promise<SyncTypeDto[]> {
-        const input = syncTypesBodySchema.parse(body);
-        const configs = await formConfigService.getAllConfigs(true);
-        const options = configs.categories.find((c) => c.key === FOLLOWUP_TYPE_CATEGORY_KEY)?.options ?? [];
-        const byValue = new Map(options.map((o) => [o.value.trim().toLowerCase(), o]));
-        const issues: { message: string; path: string[] }[] = [];
-        const changes: { id: string; meta: Record<string, unknown> }[] = [];
-        for (const [value, on] of Object.entries(input)) {
-            const option = byValue.get(value.trim().toLowerCase());
-            if (!option) {
-                issues.push({ message: `"${value}" is not a Followup Type.`, path: [value] });
-                continue;
-            }
-            if (isActivityOnlyFollowupType(option.value)) {
-                if (on) issues.push({ message: TASK_NOTE_LOCK_REASON, path: [value] });
-                continue;
-            }
-            // Unchanged in effect (a missing switch already means on).
-            if (calendarSyncFromMeta(option.meta, false) === on) continue;
-            changes.push({ id: option.id, meta: { ...(option.meta ?? {}), [CALENDAR_SYNC_META_KEY]: on } });
-        }
-        if (issues.length > 0) throw HttpError.badRequest(issues[0].message, issues);
-        for (const change of changes) await formConfigService.updateOption(change.id, { meta: change.meta }, user);
-        if (changes.length > 0) await invalidateFormConfigCaches();
-        return integrationService.getSyncTypes();
+        return saveFollowupTypeSwitch(body, user, CALENDAR_SYNC_META_KEY, (meta) => calendarSyncFromMeta(meta, false));
+    },
+
+    /**
+     * `{ "<Followup Type>": true | false }` → option meta `videoMeeting` (offers a Video meeting on the activity form;
+     * Calendar Phase 3, P3-1), the same way as saveSyncTypes. Switching a type off keeps existing meetings.
+     */
+    async saveVideoTypes(body: unknown, user: AuthUser): Promise<SyncTypeDto[]> {
+        return saveFollowupTypeSwitch(body, user, VIDEO_MEETING_META_KEY, videoMeetingFromMeta);
     },
 
     /** Active, non-group users (the population of the email rule and of calendar sync) with their email issue and calendar. */

@@ -24,10 +24,11 @@ import { notifyActivityParticipants, scheduleActivityReminder } from '../notific
 import { assertAssigneeValid } from '../shared/accessControl.js';
 import { assertDeletedRow, lockRecords, restoreData, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { activityLocks, activityScopeWhere, canEditActivity, canViewActivity, lockedFieldsFor, myResponseOf, type ActivityAccessRow } from './activity.access.js';
+import { assertOwnerCanHaveVideo, assertVideoMeetingAllowed, conferenceColumnsFor, retryColumnsFor, videoOptionsFor, type VideoOptions } from './activity.conference.js';
 import { normalizeAttendees, planAttendeeSync, syncAttendees } from './activity.attendees.js';
 import { activityRangeWhere, calendarFeed, type CalendarFeed } from './activity.calendar.js';
 import { linkTargets, resolveActivityLinks, type LinkTarget } from './activity.links.js';
-import { toActivityData, toActivityDto, type ActivityDto, type ActivityRow, type ActivityView } from './activity.mapper.js';
+import { conferenceViewOf, toActivityData, toActivityDto, type ActivityDto, type ActivityRow, type ActivityView } from './activity.mapper.js';
 import {
     ACTIVITY_FALLBACK_DURATION_MINUTES,
     ACTIVITY_MAX_DURATION_DAYS,
@@ -88,6 +89,7 @@ export function toActivityView(row: ActivityRow, user: AuthUser, links: Calendar
         viewer: { canEdit, myResponse: myResponseOf(user, row) },
         lockedFields: lockedFieldsFor(row),
         calendar: calendarViewOf(row, links.get(row.id), user.username, canEdit),
+        conference: conferenceViewOf(row, canEdit),
     };
 }
 
@@ -439,6 +441,8 @@ export async function insertActivityRow(tx: TransactionClient, input: ActivityIn
     const row = await tx.activity.create({
         data: {
             ...toActivityData(withOwner, links, schedule),
+            // Video meeting (P3-1): requested with the event when one was picked (activity.conference.ts).
+            ...conferenceColumnsFor(withOwner, null),
             ...(writer.user ? {} : writer.rowData),
             timeZone: ENV.BUSINESS_TIMEZONE,
             remindAt,
@@ -474,6 +478,8 @@ export async function updateActivityRow(tx: TransactionClient, existing: Activit
     const system = writer.user === null;
     const data = {
         ...toActivityData(withOwner, links, schedule),
+        // Video meeting (P3-1): a new choice or a new owner asks for a new link; none clears it.
+        ...conferenceColumnsFor(withOwner, existing),
         ...(system ? writer.rowData : {}),
         ...completionData(input.status, existing, writer.actor, now),
         remindAt,
@@ -615,7 +621,10 @@ export const activityService = {
         const schedule = scheduleOf(input, config);
         const now = new Date();
         throwFieldIssues(activityPastIssues({ ...input, ...schedule }, undefined, now, ENV.BUSINESS_TIMEZONE));
-        const row = await runInTransaction((tx) => insertActivityRow(tx, input, schedule, crmWriter(user, config), now));
+        const row = await runInTransaction(async (tx) => {
+            await assertVideoMeetingAllowed(tx, { ...input, assignedTo: input.assignedTo || user.username }, null, config);
+            return insertActivityRow(tx, input, schedule, crmWriter(user, config), now);
+        });
         await cacheService.invalidateEntityCaches('activities');
         await runActivityPostCommit([{ before: null, after: row }], user);
         return toOneView(row, user);
@@ -640,6 +649,7 @@ export const activityService = {
             const schedule = scheduleOf(input, config);
             const now = new Date();
             throwFieldIssues(activityPastIssues({ ...input, ...schedule }, before, now, ENV.BUSINESS_TIMEZONE));
+            await assertVideoMeetingAllowed(tx, input, existing, config);
 
             const row = await updateActivityRow(tx, existing, input, schedule, crmWriter(user, config, requestedChanges(before, patch)), now);
             return { existing, row };
@@ -769,6 +779,38 @@ export const activityService = {
         // A reply changes no owner or invitation; this only re-arms the reminder (a no-op for a pending one).
         await runActivityPostCommit([{ before: existing, after: row }], user);
         return toOneView(row, user);
+    },
+
+    /**
+     * Retry of a video link the calendar couldn't create (Calendar Phase 3 P3-1, `POST /:id/conference/retry`): a new
+     * request of the same provider, pushed to the owner's calendar like any change. 409 NOTHING_TO_RETRY unless the link
+     * failed; 409 VIDEO_PROVIDER_NOT_CONNECTED when the owner's calendar can't create it any more.
+     */
+    async retryConference(id: string, user: AuthUser): Promise<ActivityView> {
+        const config = await loadActivityConfig();
+        const { existing, row } = await runInTransaction(async (tx) => {
+            await lockRecords(tx, 'activity', [id]);
+            const existing = await tx.activity.findFirst({ where: { id, isDeleted: false }, include: WITH_ATTENDEES });
+            if (!existing) throw notFound();
+            assertCanEdit(user, existing);
+            const columns = retryColumnsFor(existing);
+            // Same owner, same provider: only the owner's calendar is checked (a new choice's type rules don't apply).
+            await assertOwnerCanHaveVideo(tx, existing.assignedTo, existing.conferenceProvider);
+            const now = new Date();
+            const row = await tx.activity.update({ where: { id }, data: { ...columns, updatedBy: user.username }, include: WITH_ATTENDEES });
+            await afterActivityWrite(tx, existing, row, crmWriter(user, config), now);
+            return { existing, row };
+        });
+        await cacheService.invalidateEntityCaches('activities');
+        await runActivityPostCommit([{ before: existing, after: row }], user, { notify: false });
+        return toOneView(row, user);
+    },
+
+    /** `GET /video-options?owner=`: the Video meeting choices the owner's company calendar allows (P3-1). */
+    async videoOptions(query: unknown, user: AuthUser): Promise<VideoOptions> {
+        const raw = (query as Record<string, unknown> | null)?.owner;
+        const owner = typeof raw === 'string' && raw.trim() ? raw.trim().slice(0, 50) : user.username;
+        return videoOptionsFor(prisma, owner);
     },
 
     /** `GET /meta`: what the calendar and the form need before any activity is loaded. */

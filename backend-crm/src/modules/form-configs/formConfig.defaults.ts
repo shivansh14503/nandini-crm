@@ -239,10 +239,11 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
         description: 'How the follow-up or activity happens (Leads, Opportunities, Activities). Task and Note are offered on Activities only.',
         // Option meta: the activity's default length in minutes and its icon (kept on the option, so a rename keeps
         // them). Task and Note are system options: activities give them code-level rules (activity.schedule.ts).
+        // `videoMeeting: true` offers the Video meeting field on that type (Calendar Phase 3, P3-1).
         options: [
             { value: 'Call', meta: { durationMinutes: 15, icon: 'call' } },
-            { value: 'Meeting', meta: { durationMinutes: 60, icon: 'meeting' } },
-            { value: 'Demo / Presentation', meta: { durationMinutes: 60, icon: 'presentation' } },
+            { value: 'Meeting', meta: { durationMinutes: 60, icon: 'meeting', videoMeeting: true } },
+            { value: 'Demo / Presentation', meta: { durationMinutes: 60, icon: 'presentation', videoMeeting: true } },
             { value: 'Email', meta: { durationMinutes: 0, icon: 'email' } },
             { value: 'WhatsApp', meta: { durationMinutes: 0, icon: 'whatsapp' } },
             { value: 'Site Visit', meta: { durationMinutes: 120, icon: 'visit' } },
@@ -1081,6 +1082,9 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         t('allDay', 'All Day', { type: 'checkbox' }),
         sel('reminder', 'Reminder', 'activity_reminder'),
         t('location', 'Location'),
+        // Google Meet / Microsoft Teams link made by the owner's calendar (custom control; Calendar Phase 3, P3-1).
+        // Shown only on types whose Followup Type option has meta `videoMeeting`.
+        t('videoMeeting', 'Video meeting', { type: 'lookup' }),
         // Colleagues, contacts and outside emails (custom control).
         t('attendees', 'Attendees', { type: 'lookup' }),
     ]),

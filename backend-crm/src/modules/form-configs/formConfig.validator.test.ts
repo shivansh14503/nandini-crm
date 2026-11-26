@@ -14,6 +14,18 @@ describe('option meta: calendarSync (Admin › API Integrations › What goes to
     });
 });
 
+describe('option meta: videoMeeting (Video meeting on a Followup Type)', () => {
+    it('accepts on / off', () => {
+        assert.equal(updateOptionSchema.safeParse({ meta: { videoMeeting: true, icon: 'meeting' } }).success, true);
+        assert.equal(updateOptionSchema.safeParse({ meta: { videoMeeting: false } }).success, true);
+    });
+    it('refuses a non-boolean', () => {
+        const parsed = updateOptionSchema.safeParse({ meta: { videoMeeting: 'yes' } });
+        assert.equal(parsed.success, false);
+        assert.equal(parsed.error?.issues[0]?.message, '"Video meeting" must be on or off.');
+    });
+});
+
 describe('module setting activities:calendarSync', () => {
     const schema = MODULE_SETTING_SCHEMAS['activities:calendarSync'];
 

@@ -105,9 +105,19 @@ export const activityLocks = {
     },
 };
 
-/** Fields of the row a CRM update may not change (spec §8.13); `[]` when unlocked. */
-export function lockedFieldsFor(row: ActivityLockRow): string[] {
-    return [...(activityLocks.lockFor(row)?.fields ?? [])];
+/**
+ * A Teams link that exists can't be removed or changed (Calendar Phase 3 P3-1, spec §16.3): the Video meeting field
+ * is locked while `conferenceProvider = 'teams'` and `conferenceState = 'ready'` (activity.conference.ts answers 409
+ * VIDEO_MEETING_LOCKED). Owner changes stay allowed (the new owner's calendar gets a new meeting).
+ */
+export const isVideoMeetingLocked = (row: Partial<Pick<Activity, 'conferenceProvider' | 'conferenceState'>>): boolean =>
+    row.conferenceProvider === 'teams' && row.conferenceState === 'ready';
+
+/** Fields of the row a CRM update may not change (spec §8.13; P3-1 adds a ready Teams link's `videoMeeting`); `[]` when unlocked. */
+export function lockedFieldsFor(row: ActivityLockRow & Partial<Pick<Activity, 'conferenceProvider' | 'conferenceState'>>): string[] {
+    const fields = [...(activityLocks.lockFor(row)?.fields ?? [])];
+    if (isVideoMeetingLocked(row)) fields.push('videoMeeting');
+    return fields;
 }
 
 /** The caller's reply when invited as a colleague, else null. */

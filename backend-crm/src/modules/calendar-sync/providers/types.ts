@@ -1,4 +1,5 @@
 import type { BusyKind } from '../busy.constants.js';
+import type { ConferenceWrite } from '../conference.rules.js';
 import type { EventContext } from '../sync.mapping.google.js';
 import type { CrmShape, FieldGroup, ProviderAttendee, ProviderEvent } from '../sync.shapes.js';
 
@@ -48,6 +49,8 @@ export interface CreateEventInput {
     attendees: Record<string, ProviderAttendee>;
     /** Google `sendUpdates=all` (else `none`); Graph has no switch (invitations go to whoever is listed). */
     sendUpdates: boolean;
+    /** The video meeting to create with the event (P3-1): Meet createRequest / Teams online meeting; none when unset. */
+    conference?: ConferenceWrite | null;
 }
 
 /** `patchEvent` input: only the changed groups are written. */
@@ -63,6 +66,8 @@ export interface PatchEventInput {
     /** `If-Match` (412 on mismatch). */
     etag?: string;
     sendUpdates: boolean;
+    /** Video meeting change (P3-1, when the `conference` group changed): new Meet request / Teams / Meet removed. */
+    conference?: ConferenceWrite | null;
 }
 
 /** One busy block of a calendar (times only: subjects, locations and privacy flags are never read into the CRM). */

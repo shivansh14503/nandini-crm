@@ -2,6 +2,7 @@ import { GRAPH_MARKER_PROPERTY_ID } from './sync.constants.js';
 import { providerAllDayEnd, providerReminderMinutes, providerTimedEnd, type EventContext } from './sync.mapping.google.js';
 import type { CrmShape, CrmWhen, FieldGroup, ProviderAttendee } from './sync.shapes.js';
 import { graphUtcDateTime, windowsZone } from './sync.timezones.js';
+import { graphConferenceBody, type ConferenceWrite } from './conference.rules.js';
 
 /**
  * CRM → Microsoft Graph v1.0 request bodies (Calendar Phase 2 spec §9.4, §8.14). Pure.
@@ -10,6 +11,8 @@ import { graphUtcDateTime, windowsZone } from './sync.timezones.js';
  * - `sensitivity: 'private'` by default (D42), `showAs: 'busy'`, `transactionId` = the requested id (dedupes a
  *   retried POST [V]), the CRM marker as a single-value extended property [U].
  * - Reminders are set on create only (Graph has no "don't notify" switch, §8.6); the description is plain text.
+ * - Video meeting (P3-1): `isOnlineMeeting: true, onlineMeetingProvider: 'teamsForBusiness'`; a Teams link can't be
+ *   removed or changed once set [V], so nothing is ever sent to take it off.
  */
 
 export function graphTimes(when: CrmWhen, timeZone: string) {
@@ -38,7 +41,7 @@ export function graphReminder(minutes: number | null, allDay: boolean) {
 }
 
 /** `POST /users/{mailbox}/events` body. */
-export function toGraphEvent(crm: CrmShape, ctx: EventContext & { requestedId: string; attendees: Record<string, ProviderAttendee> }) {
+export function toGraphEvent(crm: CrmShape, ctx: EventContext & { requestedId: string; attendees: Record<string, ProviderAttendee>; conference?: ConferenceWrite | null }) {
     return {
         subject: crm.subject,
         ...graphTimes(crm.when, ctx.timeZone),
@@ -51,6 +54,7 @@ export function toGraphEvent(crm: CrmShape, ctx: EventContext & { requestedId: s
         responseRequested: true,
         transactionId: ctx.requestedId,
         singleValueExtendedProperties: [{ id: GRAPH_MARKER_PROPERTY_ID, value: ctx.activityId }],
+        ...graphConferenceBody(ctx.conference),
     };
 }
 
@@ -58,7 +62,7 @@ export function toGraphEvent(crm: CrmShape, ctx: EventContext & { requestedId: s
 export function toGraphPatch(
     groups: readonly FieldGroup[],
     crm: CrmShape,
-    ctx: Pick<EventContext, 'timeZone'> & { attendees?: Record<string, ProviderAttendee>; description?: string },
+    ctx: Pick<EventContext, 'timeZone'> & { attendees?: Record<string, ProviderAttendee>; description?: string; conference?: ConferenceWrite | null },
 ): Record<string, unknown> {
     const body: Record<string, unknown> = {};
     if (groups.includes('subject')) body.subject = crm.subject;
@@ -66,5 +70,6 @@ export function toGraphPatch(
     if (groups.includes('location')) body.location = { displayName: crm.location };
     if (groups.includes('attendees') && ctx.attendees) body.attendees = graphAttendees(ctx.attendees);
     if (ctx.description !== undefined) body.body = { contentType: 'text', content: ctx.description };
+    if (groups.includes('conference')) Object.assign(body, graphConferenceBody(ctx.conference));
     return body;
 }

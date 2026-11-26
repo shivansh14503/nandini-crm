@@ -38,12 +38,12 @@ export function graphEventOps(fetchImpl?: FetchImpl): EventOps {
 
     return {
         async createEvent(ctx, input) {
-            const body = toGraphEvent(input.crm, { ...input.event, requestedId: input.requestedId, attendees: input.attendees });
+            const body = toGraphEvent(input.crm, { ...input.event, requestedId: input.requestedId, attendees: input.attendees, conference: input.conference });
             return normalizeGraph(await call(ctx, 'POST', graphEventsUrl(ctx), 'create-event', body));
         },
 
         async patchEvent(ctx, id, input) {
-            const body = toGraphPatch(input.groups, input.crm, { timeZone: input.timeZone, attendees: input.attendees, description: input.description });
+            const body = toGraphPatch(input.groups, input.crm, { timeZone: input.timeZone, attendees: input.attendees, description: input.description, conference: input.conference });
             const json = await call(ctx, 'PATCH', graphEventUrl(ctx, id), 'patch-event', body, input.etag ? { 'If-Match': input.etag } : {});
             return normalizeGraph(json);
         },

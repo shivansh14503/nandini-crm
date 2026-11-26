@@ -70,6 +70,8 @@ export interface CalendarItem {
     activityId: string | null;
     /** Activity origin (`crm` / `followup` / `calendar`); null for derived items. */
     origin: string | null;
+    /** Calendar Phase 3 (P3-1): the activity's ready video meeting link (Meet / Teams); absent / null otherwise. */
+    conferenceJoinUrl?: string | null;
 }
 
 export interface CalendarFeed {
@@ -253,6 +255,8 @@ export const ACTIVITY_CALENDAR_SELECT = {
     relatedCode: true,
     location: true,
     origin: true,
+    conferenceState: true,
+    conferenceJoinUrl: true,
     attendees: { select: { kind: true, username: true, responseStatus: true } },
 } as const;
 
@@ -273,6 +277,9 @@ export interface ActivityCalendarRow {
     relatedCode: string | null;
     location: string | null;
     origin: string;
+    /** P3-1 (optional so callers building rows by hand needn't list them). */
+    conferenceState?: string | null;
+    conferenceJoinUrl?: string | null;
     attendees: { kind: string; username: string | null; responseStatus: string }[];
 }
 
@@ -312,6 +319,7 @@ export function activityToCalendarItem(row: ActivityCalendarRow, user: AuthUser,
         overdue: row.status === PLANNED_STATUS && (row.endAt ?? start) < now,
         activityId: row.id,
         origin: row.origin,
+        conferenceJoinUrl: row.conferenceState === 'ready' ? (row.conferenceJoinUrl ?? null) : null,
     };
 }
 

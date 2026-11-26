@@ -122,7 +122,7 @@ export default function ActivityForm({ mode = 'create', activityId, initialData,
                     mode={mode}
                     toast={<AppToast open={toast.open} message={toast.message} severity={toast.severity} onClose={closeToast} />}
                 >
-                    <ActivityFormFields clock={clock} durationOf={durationOf} lockedFields={lockedFields} lockReason={lockReason} activityId={mode === 'create' ? undefined : activityId} />
+                    <ActivityFormFields clock={clock} durationOf={durationOf} lockedFields={lockedFields} lockReason={lockReason} activityId={mode === 'create' ? undefined : activityId} activity={mode === 'create' ? undefined : activity} />
                 </CommonFormLayout>
             </FormConfigProvider>
         </FormProvider>

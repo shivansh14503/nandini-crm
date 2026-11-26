@@ -1,7 +1,7 @@
 # Nandini CRM — Build Plan
 
 > **Status:** living document. Part 1 records what has been built (reconstructed from git history, 115 commits
-> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-26, Calendar Phase 2 P2-1, P2-2, P2-2b (admin-managed calendar connections), P2-3a, P2-3b (calendar push engine), P2-4 and P2-6 (busy times), Calendar Phase 4 booking links, Profile Phase 1: My Profile, Profile Phase 2: Admin › Users, Profile Phase 3: notifications & preferences, Profile Phase 4: connected accounts and Profile Phase 5 PR5a + PR5b: company formats, which completes Phase 17). Part 2
+> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-26, Calendar Phase 2 P2-1, P2-2, P2-2b (admin-managed calendar connections), P2-3a, P2-3b (calendar push engine), P2-4 and P2-6 (busy times), Calendar Phase 4 booking links, Profile Phase 1: My Profile, Profile Phase 2: Admin › Users, Profile Phase 3: notifications & preferences, Profile Phase 4: connected accounts and Profile Phase 5 PR5a + PR5b: company formats, which completes Phase 17; Calendar Phase 3 P3-1: Google Meet and Microsoft Teams links). Part 2
 > is the roadmap. Tick
 > items off and add new ones as work lands.
 > Related: [System design](system-design.md) · [Database design](database-design.md) · [API plan](api-plan.md)
@@ -450,6 +450,25 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         Microsoft: `getSchedule` under the Exchange RBAC scope (first-run check F7).
   - [ ] **P2-7: webhooks and HTTPS go-live**
   - [ ] **P2-8: customer meetings from the calendar + replies both ways** (optional, off by default)
+- [ ] **Calendar Phase 3: video meetings** (spec §16, adapted to admin-managed connections)
+  - [x] **P3-1: Google Meet + Microsoft Teams links** (2026-11-26) — migration `20261128150000_activity_conference`
+        (`Activity.conferenceProvider` / `conferenceState` / `conferenceJoinUrl` / `conferenceId` / `conferenceError` /
+        `conferenceRequest`; option meta `videoMeeting: true` on Meeting and Demo / Presentation). Built-in form field
+        `videoMeeting` (Activities › Schedule, after Location; hidden for Task / Note); Admin › API Integrations › What
+        goes to calendars › "Offer a video meeting on" (`PUT /api/integrations/video-types`). The **owner's** company
+        calendar makes the link through `withCalendarAccess` (no per-user OAuth): Meet with Google
+        (`conferenceDataVersion=1`, `createRequest` `<requestedId>-c<n>`, `pending` → `conference` job, 5 s × 5),
+        Teams with Microsoft 365 (`isOnlineMeeting`, `onlineMeeting.joinUrl`; locked once ready, `409
+        VIDEO_MEETING_LOCKED`). `409 VIDEO_PROVIDER_NOT_CONNECTED`, `GET /api/activities/video-options`,
+        `POST /api/activities/:id/conference/retry`; inbound Meet / Teams links on push answers taken over read only;
+        join details in the event description. Frontend: form select (owner's options, Zoom disabled "later"),
+        drawer Join / copy / "Creating Meet link…" / error + Retry, calendar chip icon and agenda Join, record
+        Activities tab icon + Join, hidden list column "Video meeting", `newActivityHref` `video=`. Not run against a
+        real SQL Server, Google or Microsoft (fake provider and recorded-shape `fakeFetch` tests only). Owner steps:
+        Meet on for the Workspace org, Teams licences for owners, first-run check that `calendar.events.owned` under
+        domain-wide delegation accepts `createRequest` (else switch the delegated scope to `calendar.events`).
+        Next: booking links' default video meeting (needs a `BookingLink` column and form control).
+  - [ ] **P3-2: Zoom** (per-user OAuth, `CalendarConnection kind='video'`; the option stays disabled until then)
 - [ ] **Phase 4 (later; spec §17)**: booking links, recurring activities, email logging.
   - [x] **Booking links (public scheduling page on free/busy)** (2026-11-26) — migration `20261128120000_booking_links`
         (`BookingLink`, `BookingLinkBooking`; `Activity.origin` gains `booking`, notification kind `booking_created`).

@@ -44,6 +44,8 @@ import { isCreateEligible, isTypeSyncable } from './sync.outbox.js';
 import { planPush, shouldSendUpdates, type PushPlan } from './sync.plan.js';
 import { claimLease, type Lease } from './sync.lease.js';
 import { allInternal, crmActivityUrl, crmShapeOf, internalDescription, parseBase, peopleOf, type CrmShape, type FieldGroup, type ProviderEvent, type SyncBase } from './sync.shapes.js';
+import { withJoinDetails } from './conference.rules.js';
+import { conferenceForCreate, conferenceForPatch, enqueueConferenceCheck, recordConference, settleConference, type SettledConference } from './sync.conference.js';
 
 export { parseBase } from './sync.shapes.js';
 
@@ -167,6 +169,8 @@ interface Round {
     resolved: ResolvedAttendees;
     crmNow: CrmShape;
     plan: PushPlan;
+    /** The description without video join details (P3-1: sync.conference.ts adds them once the link is ready). */
+    descriptionText: string;
 }
 
 class LinkPush {
@@ -231,9 +235,11 @@ class LinkPush {
         const invited = link.invites === 'withhold' ? {} : withoutHeld(resolved.attendees, parseHeld(link.heldAttendeesJson));
         // D15: the internal text only while everyone on the event (after this push) is a company address.
         const onEvent = base && link.externalEventId ? peopleOf(patchAttendees(base.provider.attendees, base.crm.attendees, invited)) : invited;
-        const description = allInternal(Object.keys(onEvent), this.settings.companyDomains)
+        const descriptionText = allInternal(Object.keys(onEvent), this.settings.companyDomains)
             ? internalDescription({ followupType: activity.followupType, relatedCode: activity.relatedCode, activityId: activity.id, appUrl: ENV.MAIL.APP_PUBLIC_URL })
             : '';
+        // P3-1: a ready video meeting's join details go out too (allowed in external descriptions, spec §16.3).
+        const description = withJoinDetails(descriptionText, activity);
         const crmNow = crmShapeOf(activity, invited, description);
         const plan = planPush({
             activity: { isDeleted: activity.isDeleted, status: activity.status, hasSchedule: Boolean(activity.startAt), externalOrganizer: activity.externalOrganizer },
@@ -245,7 +251,7 @@ class LinkPush {
             crmNow,
             force: this.options.force,
         });
-        return { link, activity, base, resolved, crmNow, plan };
+        return { link, activity, base, resolved, crmNow, plan, descriptionText };
     }
 
     /** The lease still ours, with room for one more provider call (D12); throws LeaseLostError otherwise. */
@@ -314,6 +320,7 @@ class LinkPush {
             requestedId: id,
             attendees: invitationsOf(crmNow),
             sendUpdates: link.invites === 'send' && Object.keys(crmNow.attendees).length > 0,
+            conference: conferenceForCreate(this.provider, crmNow, id),
         });
 
         const event = await this.withToken(async (ctx) => {
@@ -334,6 +341,7 @@ class LinkPush {
             }
         });
         if (event.recurring) return this.settle(round, 'unsupported', {});
+        const conference = settleConference(activity, event, this.provider, conferenceForCreate(this.provider, crmNow, event.id), crmNow, round.descriptionText);
 
         const data = {
             ...this.eventColumns(event),
@@ -342,7 +350,7 @@ class LinkPush {
             iCalUid: event.iCalUid || null,
             generation,
             requestedId,
-            baseJson: JSON.stringify({ crm: crmNow, provider: event.shape } satisfies SyncBase),
+            baseJson: JSON.stringify({ crm: conference.crm, provider: event.shape } satisfies SyncBase),
             crmSyncedAt: activity.updatedAt,
             lastWarning: warning,
         };
@@ -350,18 +358,27 @@ class LinkPush {
             runInTransaction(async (tx) => {
                 const result = await this.settle(round, 'synced', data, tx);
                 if (event.iCalUid) await this.writeActivityIdentity(tx, activity.id, event.iCalUid, withSyncKey);
+                await recordConference(tx, activity, conference.outcome);
                 await tx.calendarConnection.update({ where: { id: this.connection.id }, data: { lastPushedAt: this.clock() } });
                 return result;
             });
+        let result: PushResult;
         try {
-            return await store(true);
+            result = await store(true);
         } catch (err) {
             // D45: never caught inside the transaction. Another activity already holds this event's UID (two calendars
             // holding the same meeting): the link is stored without claiming the identity; P2-5's relink sorts it out.
             if (!isUniqueViolation(err)) throw err;
             logger.warn({ linkId: link.id, activityId: activity.id }, 'Calendar event UID already belongs to another activity; stored without it');
-            return store(false);
+            result = await store(false);
         }
+        await this.afterConference(link.id, activity.conferenceRequest, conference);
+        return result;
+    }
+
+    /** P3-1: a video link still being created is read again by the `conference` job. */
+    private async afterConference(linkId: string, request: number, conference: SettledConference): Promise<void> {
+        if (conference.outcome.poll) await enqueueConferenceCheck({ linkId, request: request ?? 0, attempt: 1 });
     }
 
     /** `Activity.iCalUid / syncKey`, written with `updatedAt` matched and kept, so it never looks like a user edit (§4.4). */
@@ -379,8 +396,10 @@ class LinkPush {
 
     private async patch(round: Round, planned: readonly FieldGroup[], warning: string | null): Promise<PushResult> {
         const { link, base, crmNow, activity } = round;
-        // Graph has no reminder on patch (§8.6): a reminder-only change is agreed without a call.
-        const groups = this.provider === 'microsoft' ? planned.filter((g) => g !== 'reminder') : planned;
+        // Graph has no reminder on patch (§8.6): a reminder-only change is agreed without a call. A video meeting change
+        // with nothing to send (P3-1: e.g. a Teams link, which can't be removed) is agreed the same way.
+        const conferenceWrite = conferenceForPatch(this.provider, planned, crmNow, base?.crm, link.requestedId);
+        const groups = this.provider === 'microsoft' ? conferenceWrite.groups.filter((g) => g !== 'reminder') : conferenceWrite.groups;
         if (groups.length === 0) {
             return this.settle(round, 'synced', { baseJson: JSON.stringify({ crm: crmNow, provider: base?.provider ?? null }), crmSyncedAt: activity.updatedAt, lastWarning: warning });
         }
@@ -395,15 +414,19 @@ class LinkPush {
                 ...(groups.includes('description') ? { description: crmNow.description } : {}),
                 ...(link.etag ? { etag: link.etag } : {}),
                 sendUpdates: shouldSendUpdates(groups, link.invites, guests),
+                ...(groups.includes('conference') ? { conference: conferenceWrite.write } : {}),
             }),
         );
         if (event.recurring) return this.settle(round, 'unsupported', this.eventColumns(event));
+        const conference = settleConference(activity, event, this.provider, groups.includes('conference') ? conferenceWrite.write : null, crmNow, round.descriptionText);
         const result = await this.settle(round, 'synced', {
             ...this.eventColumns(event),
-            baseJson: JSON.stringify({ crm: crmNow, provider: event.shape } satisfies SyncBase),
+            baseJson: JSON.stringify({ crm: conference.crm, provider: event.shape } satisfies SyncBase),
             crmSyncedAt: activity.updatedAt,
             lastWarning: warning,
         });
+        await recordConference(prisma, activity, conference.outcome);
+        await this.afterConference(link.id, activity.conferenceRequest, conference);
         await this.touchConnection();
         return result;
     }

@@ -14,6 +14,7 @@ import {
 } from '../../modules/calendar-sync/sync.constants.js';
 import { runCalendarNightly, runCalendarPoll, runEnrolled, runFallbackTick, sweepOutbox } from '../../modules/calendar-sync/sync.maintenance.js';
 import { markPushExhausted, pushLink, type PushResult } from '../../modules/calendar-sync/sync.push.js';
+import { checkConference } from '../../modules/calendar-sync/sync.conference.js';
 import { writeWorkerHeartbeat } from '../../modules/calendar-sync/workerHeartbeat.js';
 import { runWithAuditOrigin } from '../../services/auditContext.js';
 import { calendarSyncQueue, createQueueConnection, isQueueAvailable, QUEUE_NAMES } from '../queues.js';
@@ -25,6 +26,8 @@ import { throttledLogger } from './throttledLogger.js';
  *   enrolled  a connection row reached `ok`, first time or after an error
  *             (`enrolled-<connectionId>-<enrolledAtMs>-r<readyAtMs>`): push its dirty links
  *   check     a connection health check (`check-<connectionId>-<minute>`): new enrolments and due re-checks
+ *   conference  read an event again until its video link is ready (`conference-<linkId>-<request>-<attempt>`, 5 s
+ *             apart, at most 5 tries; Calendar Phase 3 P3-1)
  *   poll      scheduler 'calendar-poll', every 5 minutes 07:00–21:55: outbox sweep + due checks (P2-5 adds pulls)
  *   nightly   scheduler 'calendar-nightly', 00:25: reconcile + due checks + admin digest (from the reminders worker),
  *             the follow-up activity backfill (from the reminders worker), error-link retries, client secrets
@@ -76,6 +79,12 @@ export async function processCalendarJob(job: Job, token?: string): Promise<unkn
             case CALENDAR_SYNC_JOBS.check: {
                 const connectionId = idOf(job.data, 'connectionId');
                 return connectionId ? { outcome: await checkConnection(connectionId) } : null;
+            }
+            case CALENDAR_SYNC_JOBS.conference: {
+                const linkId = idOf(job.data, 'linkId');
+                const data = job.data as { request?: unknown; attempt?: unknown };
+                if (!linkId || typeof data.request !== 'number' || typeof data.attempt !== 'number') return null;
+                return { outcome: await checkConference({ linkId, request: data.request, attempt: data.attempt }) };
             }
             case CALENDAR_SYNC_JOBS.poll:
                 return runCalendarPoll();
