@@ -14,7 +14,7 @@
 -- occurrence (it pre-reads the slots under the series lock; a race aborts the transaction, D45).
 --
 -- New columns are nullable / defaulted: no existing data changes. Must sort after 20261215090000_calendar_watch_channels
--- (P2-7) and P3-1's 20261215100000 (reserved).
+-- (P2-7) and 20261215100000_activity_conference (P3-1).
 BEGIN TRY
 
 BEGIN TRAN;

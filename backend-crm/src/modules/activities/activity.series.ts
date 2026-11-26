@@ -15,6 +15,7 @@ import { ACTIVITY_ONLY_FOLLOWUP_TYPES } from '../form-configs/formConfig.default
 import { canAccessRecord } from '../shared/accessControl.js';
 import { acquireLocks, lockRecords, runInTransaction } from '../shared/transactions.js';
 import { FOLLOW_UP_ACTIVITY_LOCKED, FOLLOW_UP_ORIGIN } from './activity.access.js';
+import { assertVideoMeetingAllowed } from './activity.conference.js';
 import { allDayRange, toActivityDto, type ActivityRow, type ActivityView } from './activity.mapper.js';
 import {
     lastOccurrenceDay,
@@ -127,6 +128,12 @@ export interface SeriesTemplate {
     location?: string;
     reminder?: string;
     remarks?: string;
+    /**
+     * Video meeting choice (Calendar Phase 3 P3-1): meet | teams | null (none). Only the choice: each occurrence asks its
+     * owner's calendar for its own link when it is pushed (its own conference columns and request number). Missing (a
+     * template saved before P3-1) keeps what each occurrence has.
+     */
+    videoMeeting?: string | null;
     attendees: AttendeeInput[];
     customFields: Record<string, unknown>;
 }
@@ -149,6 +156,7 @@ export function templateOf(row: ActivityRow): SeriesTemplate {
         location: opt(dto.location),
         reminder: opt(dto.reminder),
         remarks: opt(dto.remarks),
+        videoMeeting: dto.videoMeeting || null,
         // Replies belong to one occurrence: new occurrences start as needsAction (kept ones keep theirs).
         attendees: dto.attendees.map((a) => {
             if (a.kind === 'user') return { kind: 'user' as const, username: a.username ?? '' };
@@ -415,6 +423,9 @@ export async function rewriteSeries(tx: TransactionClient, series: ActivitySerie
                     continue;
                 }
                 const { input, schedule } = parseOccurrence(occurrenceFields(template, times), ctx.config);
+                // Video meeting rules per occurrence (P3-1): a ready Teams link stays locked (409), a new choice needs the
+                // owner's calendar to create it (409 VIDEO_PROVIDER_NOT_CONNECTED). The same choice keeps the row's own link.
+                await assertVideoMeetingAllowed(tx, input, row, ctx.config);
                 const writer: ActivityWriter = { actor: ctx.actor, user: null, config: ctx.config, markSync: true, series: seriesColumnsFor(series.id, times, slot.index) };
                 const after = await updateActivityRow(tx, row, input, schedule, writer, ctx.now);
                 ctx.written.push({ before: row, after, notify: false });
@@ -543,6 +554,7 @@ export const activitySeriesService = {
             const provisional = { ...input, attendees: input.attendees, customFields: input.customFields ?? {} } as unknown as SeriesTemplate;
             let series = await createSeriesRow(tx, { rule: normalized.rule, anchorDay, shape, template: provisional, actor: user.username });
             await acquireLocks(tx, [seriesLockKey(series.id)]);
+            await assertVideoMeetingAllowed(tx, { ...input, assignedTo: input.assignedTo || user.username }, null, config);
             const times = occurrenceTimes(shape, anchorDay);
             const row = await insertActivityRow(tx, input, schedule, { ...crmWriter(user, config), series: seriesColumnsFor(series.id, times, 1) }, now);
             // The template as the write path resolved it (owner, links, attendee names).
@@ -867,7 +879,7 @@ function seriesDiff(before: ActivitySeries, after: ActivitySeries): Record<strin
     }
     const ta = parseTemplate(before.templateJson);
     const tb = parseTemplate(after.templateJson);
-    for (const key of ['subject', 'followupType', 'location', 'reminder', 'relatedId'] as const) {
+    for (const key of ['subject', 'followupType', 'location', 'reminder', 'relatedId', 'videoMeeting'] as const) {
         if ((ta[key] ?? '') !== (tb[key] ?? '')) out[key] = { from: ta[key] ?? '', to: tb[key] ?? '' };
     }
     if (JSON.stringify(ta.attendees) !== JSON.stringify(tb.attendees)) out.attendees = { from: ta.attendees.length, to: tb.attendees.length };

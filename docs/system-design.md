@@ -1017,7 +1017,12 @@ job and the sweep (connection checks and the nightly connection steps still run)
   held" (`calendar_invites_held`) comes once a day per series (dedupe key on the series), and not at all from the
   nightly while another occurrence of that series still waits for its owner. A calendar change to one occurrence
   (pull or push-time merge through the system writer) makes it an exception, so a later "All events" edit leaves it
-  alone (as of 2026-11-26, review fixes).
+  alone (as of 2026-11-26, review fixes). **Video meetings** (P3-1, as of 2026-11-26): the series template stores only
+  the Video meeting choice; every occurrence created (series save, rewrite, nightly horizon) gets its own `requested`
+  columns (request 1) and asks its owner's calendar for its own Meet / Teams link when it is pushed. A rewrite keeps
+  each occurrence's link when the choice is unchanged, asks for a new one (its own request number + 1) or clears it
+  when the choice changes, checks the Teams lock and the owner's calendar per occurrence (409 for the whole edit), and
+  never touches exceptions.
 - **Redis down**: §4.3. **Heartbeat**: `calendar:worker:heartbeat` (§4.1), shown on Admin › API Integrations as
   `workerStatus` (running / not running / unknown without Redis; P2-3c).
 - **View**: `ActivityView.calendar` ([API plan](api-plan.md)) gives the activity's calendar state (provider, state,
@@ -1042,7 +1047,9 @@ job and the sweep (connection checks and the nightly connection steps still run)
   connection paused, a provider error) uses up a try; a gone event → `failed no_event`; a job failing on its last
   BullMQ attempt (or an in-process check whose database call failed on the last try) → `conference_timeout`; a push
   that fails for good → `event_refused`; the nightly run (`calendar-nightly`, 00:25) fails links still `requested` an
-  hour after the activity's last save (`failStaleConferences`, index `Activity(conferenceState, updatedAt)`, ≤ 200 rows).
+  hour after the activity's last save (`failStaleConferences`, index `Activity(conferenceState, updatedAt)`, ≤ 200 rows),
+  except recurring occurrences starting more than 13 days ahead: Calendar Phase 4 pushes an occurrence only once it is
+  inside the 14-day window, so its link waits until then (as of 2026-11-26).
   A 400 to a write that asked for a link (Google: "Invalid conference type value" when Meet is off for the
   organisation) marks it `failed not_created` and sends the write again without the video part, so the event still
   syncs; Graph answering a Teams request without a Teams meeting (no licence) is `not_created` at once. A new event

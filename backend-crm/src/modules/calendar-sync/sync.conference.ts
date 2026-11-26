@@ -2,6 +2,7 @@ import { ENV } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
 import { prisma, type TransactionClient } from '../../config/prisma.js';
 import { calendarSyncQueue, tryEnqueue } from '../../jobs/queues.js';
+import { SERIES_SYNC_WINDOW_MS } from '../activities/activity.series.constants.js';
 import { ConnectionUnavailableError, withCalendarAccess } from './calendarAccess.js';
 import { isCalendarProvider } from './connection.constants.js';
 import {
@@ -289,6 +290,8 @@ export async function markConferenceExhausted(data: Partial<ConferenceJobData>):
     await giveUp(activity, 'conference_timeout');
 }
 
+const DAY_MS = 24 * 60 * 60_000;
+
 /** How long a link may stay `requested` after the activity's last save before the nightly sweep gives up on it. */
 export const STALE_CONFERENCE_MS = 60 * 60_000;
 /** Rows per nightly sweep (the rest wait for the next night). */
@@ -297,13 +300,21 @@ const STALE_CONFERENCE_LIMIT = 200;
 /**
  * Nightly (calendar-nightly, 00:25, inside the existing nightly database wake): video links still `requested` an hour
  * after the activity's last save (no push ran: the owner's calendar was paused, the type stopped going to calendars,
- * a lost in-process timer) become `failed conference_timeout`, so Retry is offered. One read on the
+ * a lost in-process timer) become `failed conference_timeout`, so Retry is offered. Recurring occurrences not pushed
+ * yet (more than SERIES_SYNC_WINDOW_DAYS − 1 days ahead) are left waiting. One read on the
  * (conferenceState, updatedAt) index; nothing outside the nightly run.
  */
 export async function failStaleConferences(now: Date = new Date()): Promise<number> {
     if (!ENV.INTEGRATIONS.SYNC_ENABLED) return 0;
     const rows = await prisma.activity.findMany({
-        where: { conferenceState: 'requested', updatedAt: { lt: new Date(now.getTime() - STALE_CONFERENCE_MS) } },
+        where: {
+            conferenceState: 'requested',
+            updatedAt: { lt: new Date(now.getTime() - STALE_CONFERENCE_MS) },
+            // Calendar Phase 4: an occurrence of a recurring series isn't pushed until it comes inside the sync window
+            // (SERIES_SYNC_WINDOW_DAYS; the 00:20 nightly marks those entering it). Its link waits until then: only
+            // occurrences that have been inside the window for a day (pushed by now) can time out.
+            OR: [{ seriesId: null }, { startAt: { lte: new Date(now.getTime() + SERIES_SYNC_WINDOW_MS - DAY_MS) } }],
+        },
         select: ACTIVITY_CONFERENCE_SELECT,
         take: STALE_CONFERENCE_LIMIT,
     });

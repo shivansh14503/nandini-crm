@@ -637,7 +637,8 @@ occurrences by business day of `originalStartAt` (at most one row per series and
 `untilDay` (NVARCHAR(10) `YYYY-MM-DD`, inclusive) or `count` (1–366) or neither (no end); anchor `startDay`
 (occurrence 1), `startTime` (NVARCHAR(5) `HH:mm`, null when all-day), `allDay`, `durationMinutes`, `spanDays`
 (all-day length); `timeZone` (BUSINESS_TIMEZONE); `templateJson` (NVARCHAR(MAX): the fields every occurrence copies:
-type, subject, owner, related record, organization, contact, location, reminder, remarks, attendees, custom fields);
+type, subject, owner, related record, organization, contact, location, reminder, remarks, `videoMeeting` (the P3-1
+choice `meet` / `teams` / null only: never a join URL, conference id, state or request number), attendees, custom fields);
 `materializedThrough` (the last business day occurrences were created through, today + 90 after a run);
 `endedAt` (no more occurrences will be created: ended, split, cancelled, deleted or the count / until reached);
 `splitFromId` (the series a "This and following" edit split it from; no FK); `revision`; `createdBy` / `updatedBy` /

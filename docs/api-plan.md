@@ -162,7 +162,8 @@ Once ready, the event description gets "Join with Google Meet: <url>" / "Join Mi
 more quiet push (also for external guests). A wait always ends: `failed` codes `conference_failed` (Google failed it),
 `not_created` (the calendar refused or ignored the request: Meet off for the organisation answers 400, and the event is
 then sent without the video part; Teams without a licence), `join_url_rejected`, `conference_timeout` (5 reads, the
-worker's last attempt, or still `requested` an hour after the last save at the nightly run), `no_event` (the event is
+worker's last attempt, or still `requested` an hour after the last save at the nightly run; a recurring occurrence
+more than 13 days ahead, not pushed yet under Calendar Phase 4's 14-day window, keeps waiting), `no_event` (the event is
 gone), `event_refused` (the push failed for good), `provider_unavailable` (the owner's calendar can't make it).
 `canRetry` is true for a failed link on a live Planned activity the viewer may edit, except `provider_unavailable`.
 Video meeting can't be made Required in the Form Builder (`400` on `isRequired: true`), and saves never require it.
@@ -190,7 +191,8 @@ occurrence** (Phase 1 R12: rows, never an RRULE master), created through today +
   (no more occurrences are added) }`. Calendar items of occurrences carry `seriesId` (repeat icon).
 - `?scope=this|following|all` on `PUT /:id` and `DELETE /:id` (default `this`; anything else `400`). Series fields =
   type, subject, owner, related record, organization, contact, location, reminder, remarks, attendees, custom fields,
-  time of day, length and the rule; status (except Cancelled), customer response and completion stay per occurrence.
+  the Video meeting choice (P3-1: only the choice; each occurrence asks for its own link when pushed), time of day,
+  length and the rule; status (except Cancelled), customer response and completion stay per occurrence.
   `this`: the ordinary update / delete; an occurrence changed on its own (anything but status / customer response)
   becomes an exception that series edits leave alone; a deleted occurrence is never re-created. Changing `repeat` with
   `this` → `400 SERIES_SCOPE_REQUIRED` (sending the same rule back passes). `following`: the series is split: the old
@@ -204,7 +206,10 @@ occurrence** (Phase 1 R12: rows, never an RRULE master), created through today +
   future (not started) Planned non-exception occurrences are paired with the rule's days and updated; those off the
   rule are deleted and detached, so a day the rule drops comes back when the rule returns to it; free days are created;
   one whose new time has already passed today is left as it is; past, Completed, Cancelled and exception occurrences
-  are never touched. When the edited occurrence takes a slot another event of the series holds: a deleted or
+  are never touched. The Video meeting rules apply to every rewritten occurrence: a ready Teams link on one of them
+  makes a `following` / `all` edit that removes or changes it answer `409 VIDEO_MEETING_LOCKED` (nothing is saved), and a
+  new choice the owner's calendar can't make answers `409 VIDEO_PROVIDER_NOT_CONNECTED` (also on a series create);
+  the same choice keeps each occurrence's own link (as of 2026-11-26). When the edited occurrence takes a slot another event of the series holds: a deleted or
   rewritable one gives it up, any other answers `400` on `startAt`. `status: Cancelled` with `following` / `all`
   cancels those occurrences (exceptions too) and ends the series and its rule (`untilDay`, so a later `all` edit never
   revives it); `repeat: null` with `following` / `all` ends it after this occurrence (later / future ones not started

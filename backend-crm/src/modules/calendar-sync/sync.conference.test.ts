@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, it } from 'node:test';
+import { ENV } from '../../config/env.js';
 import type { AuthUser } from '../../types/user.types.js';
+import { addDays, zonedDayOf, zonedWallClockToInstant } from '../../utils/zonedTime.js';
+import { activitySeriesService } from '../activities/activity.series.js';
 import { activityService } from '../activities/activity.service.js';
 import { installActivityDouble, restoreActivityDouble, type ActivityDoubleState } from '../activities/testing/activityDouble.js';
 import { NEVER_REQUIRED_FIELDS } from '../form-configs/formConfig.defaults.js';
@@ -467,5 +470,110 @@ describe('Video meeting through the pull (P2-5 organizer copies)', () => {
         assert.equal(rowOf(view.id).conferenceProvider, 'meet');
         assert.equal(rowOf(view.id).conferenceState, 'ready');
         assert.equal(rowOf(view.id).conferenceJoinUrl, ready.conferenceJoinUrl);
+    });
+});
+
+describe('Video meeting on recurring activities (Calendar Phase 4)', () => {
+    /** A daily Meet series from tomorrow at 10:00 business time, `count` occurrences. */
+    async function meetSeries(count: number) {
+        const day = addDays(zonedDayOf(new Date(), ENV.BUSINESS_TIMEZONE), 1);
+        const start = zonedWallClockToInstant(`${day}T10:00`, ENV.BUSINESS_TIMEZONE);
+        const view = await activitySeriesService.create(
+            meeting({ subject: 'Daily stand-up', videoMeeting: 'meet', startAt: start.toISOString(), endAt: new Date(start.getTime() + HOUR).toISOString(), repeat: { frequency: 'daily', ends: 'after', count } }),
+            PALAK,
+        );
+        const rows = state.activities.filter((a) => a.seriesId === view.seriesId && !a.isDeleted).sort((a, b) => (a.startAt?.getTime() ?? 0) - (b.startAt?.getTime() ?? 0));
+        return { view, rows };
+    }
+    const linkFor = (activityId: string) => state.links.find((l) => l.activityId === activityId);
+
+    it('every occurrence asks for its own link when pushed; the template keeps only the choice', async () => {
+        install();
+        const { rows } = await meetSeries(3);
+        assert.equal(rows.length, 3);
+        assert.ok(rows.every((r) => r.conferenceProvider === 'meet' && r.conferenceState === 'requested' && r.conferenceRequest === 1 && !r.conferenceJoinUrl));
+        const template = JSON.parse(state.series[0].templateJson) as Record<string, unknown>;
+        assert.equal(template.videoMeeting, 'meet');
+        assert.ok(Object.keys(template).every((key) => !key.startsWith('conference')), 'no link, id, state or request in the template');
+
+        for (const row of rows) assert.equal((await pushLink(linkOf(row.id).id)).status, 'done');
+        const requestIds = rows.map((r) => eventOf(r.id).conferenceData?.createRequest?.requestId);
+        assert.deepEqual(requestIds, rows.map((r) => `${linkOf(r.id).requestedId}-c1`));
+        assert.equal(new Set(requestIds).size, 3);
+        const urls = rows.map((r) => rowOf(r.id).conferenceJoinUrl);
+        assert.ok(urls.every((u) => u?.startsWith('https://meet.google.com/')));
+        assert.equal(new Set(urls).size, 3, 'each occurrence has its own Meet link');
+
+        // The nightly horizon extension copies the choice, not another occurrence's link.
+        const open = await activitySeriesService.create(
+            meeting({ subject: 'Open-ended', videoMeeting: 'meet', startAt: rows[0].startAt!.toISOString(), endAt: rows[0].endAt!.toISOString(), repeat: { frequency: 'daily' } }),
+            PALAK,
+        );
+        for (const row of state.activities.filter((a) => a.seriesId === open.seriesId && linkFor(a.id))) await pushLink(linkOf(row.id).id);
+        const before = new Set(state.activities.map((a) => a.id));
+        const result = await activitySeriesService.runNightly(new Date(Date.now() + 5 * DAY));
+        const added = state.activities.filter((a) => !before.has(a.id));
+        assert.ok(result.created >= 4 && added.length === result.created, JSON.stringify(result));
+        assert.ok(added.every((a) => a.seriesId === open.seriesId && a.conferenceProvider === 'meet' && a.conferenceState === 'requested' && a.conferenceRequest === 1 && !a.conferenceJoinUrl && !a.conferenceId));
+    });
+
+    it('the stale sweep leaves occurrences that are not pushed yet (outside the 14-day window) waiting', async () => {
+        install();
+        const { rows } = await meetSeries(20);
+        const inside = rows.filter((r) => linkFor(r.id));
+        const outside = rows.filter((r) => !linkFor(r.id));
+        assert.ok(inside.length >= 13 && outside.length >= 5, `${inside.length} inside, ${outside.length} outside`);
+        // Push all but the last one inside the window (its owner's calendar never answered).
+        const stuck = inside.at(-2)!;
+        for (const row of inside) if (row.id !== stuck.id) await pushLink(linkOf(row.id).id);
+
+        const later = new Date(Date.now() + STALE_CONFERENCE_MS + 60_000);
+        const failed = await failStaleConferences(later);
+        assert.equal(rowOf(stuck.id).conferenceState, 'failed', 'pushed long ago inside the window: Retry offered');
+        assert.ok(outside.every((r) => rowOf(r.id).conferenceState === 'requested'), 'not pushed yet: still waiting');
+        assert.equal(rowOf(inside.at(-1)!.id).conferenceState, 'ready');
+        assert.equal(failed, 1);
+    });
+
+    it('"All events" changes the choice on future occurrences, never on an exception; a ready Teams occurrence blocks it (409)', async () => {
+        install();
+        const { rows } = await meetSeries(4);
+        for (const row of rows) await pushLink(linkOf(row.id).id);
+        const exception = rows[2];
+        await activitySeriesService.update(exception.id, { subject: 'Stand-up with Ravi' }, PALAK, { scope: 'this' });
+        assert.equal(rowOf(exception.id).seriesException, true);
+        const exceptionUrl = rowOf(exception.id).conferenceJoinUrl;
+        assert.ok(exceptionUrl);
+
+        await activitySeriesService.update(rows[0].id, { videoMeeting: '' }, PALAK, { scope: 'all' });
+        assert.equal(JSON.parse(state.series[0].templateJson).videoMeeting, null);
+        for (const row of [rows[0], rows[1], rows[3]]) {
+            assert.equal(rowOf(row.id).conferenceProvider, null);
+            assert.equal(rowOf(row.id).conferenceJoinUrl, null);
+        }
+        assert.equal(rowOf(exception.id).conferenceProvider, 'meet', 'the exception keeps its link');
+        assert.equal(rowOf(exception.id).conferenceJoinUrl, exceptionUrl);
+
+        await activitySeriesService.update(rows[0].id, { videoMeeting: 'meet' }, PALAK, { scope: 'all' });
+        for (const row of [rows[0], rows[1], rows[3]]) {
+            assert.equal(rowOf(row.id).conferenceState, 'requested');
+            assert.equal(rowOf(row.id).conferenceRequest, 2, 'a new request of its own');
+        }
+        assert.equal(rowOf(exception.id).conferenceJoinUrl, exceptionUrl);
+
+        // A ready Teams link on one occurrence: removing the video meeting from all events is refused as a whole.
+        Object.assign(rowOf(rows[3].id), { conferenceProvider: 'teams', conferenceState: 'ready', conferenceJoinUrl: 'https://teams.microsoft.com/l/meetup-join/1' });
+        await expectHttp(activitySeriesService.update(rows[0].id, { videoMeeting: null }, PALAK, { scope: 'all' }), 409, 'VIDEO_MEETING_LOCKED');
+        assert.equal(rowOf(rows[1].id).conferenceProvider, 'meet', 'rolled back');
+    });
+
+    it("a series asks the owner's calendar like a single save (409 VIDEO_PROVIDER_NOT_CONNECTED)", async () => {
+        install();
+        const day = addDays(zonedDayOf(new Date(), ENV.BUSINESS_TIMEZONE), 1);
+        const start = zonedWallClockToInstant(`${day}T10:00`, ENV.BUSINESS_TIMEZONE);
+        const body = meeting({ videoMeeting: 'teams', startAt: start.toISOString(), endAt: new Date(start.getTime() + HOUR).toISOString(), repeat: { frequency: 'daily', ends: 'after', count: 3 } });
+        await expectHttp(activitySeriesService.create(body, PALAK), 409, 'VIDEO_PROVIDER_NOT_CONNECTED');
+        assert.equal(state.series.length, 0);
+        assert.equal(state.activities.length, 0);
     });
 });
