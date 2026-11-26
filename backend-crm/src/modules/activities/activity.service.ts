@@ -1,3 +1,4 @@
+import { StatusCodes } from 'http-status-codes';
 import { ENV } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
 import { prisma, type TransactionClient } from '../../config/prisma.js';
@@ -21,7 +22,7 @@ import type { DropdownCategoryDto } from '../form-configs/formConfig.service.js'
 import { notifyActivityParticipants, scheduleActivityReminder } from '../notifications/notification.reminders.js';
 import { assertAssigneeValid } from '../shared/accessControl.js';
 import { assertDeletedRow, lockRecords, restoreData, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
-import { activityScopeWhere, canEditActivity, canViewActivity, myResponseOf, type ActivityAccessRow } from './activity.access.js';
+import { activityLocks, activityScopeWhere, canEditActivity, canViewActivity, myResponseOf, type ActivityAccessRow } from './activity.access.js';
 import { normalizeAttendees, planAttendeeSync, syncAttendees } from './activity.attendees.js';
 import { activityRangeWhere, calendarFeed, type CalendarFeed } from './activity.calendar.js';
 import { linkTargets, resolveActivityLinks, type LinkTarget } from './activity.links.js';
@@ -54,14 +55,13 @@ import {
     respondSchema,
     type ActivityInput,
 } from './activity.validator.js';
+import { activityWriteHook } from './activity.writeHook.js';
 
 export const EDIT_FORBIDDEN_MESSAGE = "Only the activity's owner can change it. Invitees can reply to the invitation.";
 export const RSVP_FORBIDDEN_MESSAGE = 'Only invited colleagues can reply to this activity.';
 const VIEW_FORBIDDEN_MESSAGE = 'You do not have permission to access or modify this record.';
 
-const WITH_ATTENDEES = { attendees: { orderBy: { sortOrder: 'asc' } } } as const satisfies Prisma.ActivityInclude;
-/** Columns the edit check reads. */
-const OWNER_SELECT = { assignedTo: true, createdBy: true } as const;
+export const WITH_ATTENDEES = { attendees: { orderBy: { sortOrder: 'asc' } } } as const satisfies Prisma.ActivityInclude;
 
 const notFound = () => HttpError.notFound('Activity not found');
 
@@ -82,7 +82,7 @@ export function toActivityView(row: ActivityRow, user: AuthUser): ActivityView {
 
 // ── Configuration ────────────────────────────────────────────────────────────
 
-interface ActivityConfig {
+export interface ActivityConfig {
     fields: ModuleFieldConfig;
     /** The Followup Type dropdown the activities form uses (its options' meta holds the default durations). */
     followupTypes: DropdownCategoryDto | null;
@@ -92,7 +92,7 @@ interface ActivityConfig {
  * The module's field configuration and its Followup Type list, from the cached form configuration. Load it before
  * opening a transaction (see `loadModuleFieldConfig`).
  */
-async function loadActivityConfig(): Promise<ActivityConfig> {
+export async function loadActivityConfig(): Promise<ActivityConfig> {
     const { formConfigService } = await import('../form-configs/formConfig.service.js');
     const configs = await formConfigService.getAllConfigs(true);
     const fields = buildModuleFieldConfig(configs, 'activities');
@@ -120,17 +120,17 @@ function configPayload(record: Record<string, unknown>, input: ActivityInput): R
 }
 
 /** Start / End as stored, or 400 with the schedule issues. */
-function scheduleOf(input: ActivityInput, config: ActivityConfig): Schedule {
+export function scheduleOf(input: ActivityInput, config: ActivityConfig): Schedule {
     const schedule = normalizeSchedule(input, ENV.BUSINESS_TIMEZONE, activityDurationMinutes(input.followupType, config.followupTypes));
     throwFieldIssues(schedule.issues);
     return schedule;
 }
 
 /** Columns derived from the status: completion stamps. */
-function completionData(status: string, before: { status: string; completedAt: Date | null; completedBy: string | null } | undefined, user: AuthUser, now: Date) {
+function completionData(status: string, before: { status: string; completedAt: Date | null; completedBy: string | null } | undefined, actor: string, now: Date) {
     if (status !== COMPLETED_STATUS) return { completedAt: null, completedBy: null };
     if (before?.status === COMPLETED_STATUS) return { completedAt: before.completedAt, completedBy: before.completedBy };
-    return { completedAt: now, completedBy: user.username };
+    return { completedAt: now, completedBy: actor };
 }
 
 const remindAtOf = (input: ActivityInput, schedule: Schedule, isDeleted = false) =>
@@ -196,48 +196,261 @@ function submittedKeys(patch: Record<string, unknown>): Set<string> {
     return keys;
 }
 
-// ── Writes ───────────────────────────────────────────────────────────────────
+/** Start / End sent as instants (`…Z`): compared by time, so `10:00:00Z` and `10:00:00.000Z` are the same. */
+const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?Z$/;
+const isBlank = (value: unknown) => value === null || value === undefined || (typeof value === 'string' && value.trim() === '');
+/** Link names the server keys by name (case and outer spaces ignored, as `mergeActivityPatch` does). */
+const NAME_KEYS = new Set(['relatedTo', 'organizationName', 'contact']);
+
+function sameSentValue(key: string, sent: unknown, stored: unknown): boolean {
+    if (isBlank(sent) || isBlank(stored)) return isBlank(sent) && isBlank(stored);
+    if (typeof sent === 'string' && typeof stored === 'string') {
+        if (NAME_KEYS.has(key)) return nameKey(sent) === nameKey(stored);
+        if (ISO_INSTANT.test(sent) && ISO_INSTANT.test(stored)) return Date.parse(sent) === Date.parse(stored);
+        return sent.trim() === stored.trim();
+    }
+    return JSON.stringify(sent) === JSON.stringify(stored);
+}
 
 /**
- * After a committed save (never inside its transaction): arms the reminder's delayed job and tells a new owner /
- * newly invited colleagues (notification.reminders.ts). Failures are logged, never thrown: the save has happened, and
- * the reminder sweep re-delivers anything missed.
+ * ActivityDto keys a CRM `PUT` asks to change: those it sends with another value than the stored one (sending the
+ * stored value back, as the form does, asks for nothing). Days count as Start / End, and another related id or module
+ * as another related record. What the server derives on its own is not asked for: the related record's label it
+ * re-reads on every save (activity.links.ts), which goes stale when a lead or opportunity is renamed. The lock check
+ * (`assertUnlockedChanges`) refuses a locked field only when it is both asked for and actually changed.
  */
-async function afterActivityCommit(before: ActivityRow | null, after: ActivityRow, user: AuthUser): Promise<void> {
-    try {
-        await scheduleActivityReminder(after);
-    } catch (err) {
-        logger.warn({ err: (err as Error).message, activityId: after.id }, 'Could not schedule the activity reminder; the reminder sweep covers it');
+export function requestedChanges(before: ActivityDto, patch: Record<string, unknown>): Set<string> {
+    const keys = new Set<string>();
+    for (const [key, value] of Object.entries(patch)) {
+        if (key in before && !sameSentValue(key, value, before[key as keyof ActivityDto])) keys.add(key);
     }
-    try {
-        await notifyActivityParticipants(before, after, user);
-    } catch (err) {
-        logger.warn({ err: (err as Error).message, activityId: after.id }, 'Could not notify the activity owner / invitees');
+    if (keys.has('startDay')) keys.add('startAt');
+    if (keys.has('endDay')) keys.add('endAt');
+    if (keys.has('relatedId') || keys.has('relatedModule')) {
+        keys.add('relatedTo');
+        keys.add('relatedCode');
     }
+    return keys;
+}
+
+// ── Writes ───────────────────────────────────────────────────────────────────
+
+/** One committed activity write, for `runActivityPostCommit`. */
+export interface ActivityCommitRow {
+    /** The row before the write; null on insert. */
+    before: ActivityRow | null;
+    after: ActivityRow;
+    /** Overrides `PostCommitOptions.notify` for this row (the system write path sets it). */
+    notify?: boolean;
+}
+
+export interface PostCommitOptions {
+    /** False: no owner / invitee notifications (imports, backfills). Default true. */
+    notify?: boolean;
+    /** P2-3b: true skips the calendar push (inbound applies). No effect yet. */
+    skipPush?: boolean;
+}
+
+/**
+ * After committed writes (never inside their transaction), per row: arms the reminder's delayed job and tells a new
+ * owner / newly invited colleagues (notification.reminders.ts), unless `notify` is false. P2-3b adds the calendar
+ * push here. Failures are logged, never thrown: the save has happened, and the reminder sweep re-delivers anything
+ * missed. For a deleted row both steps do nothing (no reminder is armed, nobody is told). `actor` may be a bare
+ * username (system writes); the notification text reads only its username.
+ */
+export async function runActivityPostCommit(rows: readonly ActivityCommitRow[], actor: AuthUser | string, opts: PostCommitOptions = {}): Promise<void> {
+    const user: AuthUser = typeof actor === 'string' ? { id: 0, username: actor, role: '' } : actor;
+    for (const { before, after, notify } of rows) {
+        try {
+            await scheduleActivityReminder(after);
+        } catch (err) {
+            logger.warn({ err: (err as Error).message, activityId: after.id }, 'Could not schedule the activity reminder; the reminder sweep covers it');
+        }
+        if ((notify ?? opts.notify) === false) continue;
+        try {
+            await notifyActivityParticipants(before, after, user);
+        } catch (err) {
+            logger.warn({ err: (err as Error).message, activityId: after.id }, 'Could not notify the activity owner / invitees');
+        }
+    }
+}
+
+/** Activity columns filled from the API's fields (`toActivityData`). */
+type ActivityApiColumn =
+    | 'followupType'
+    | 'subject'
+    | 'status'
+    | 'assignedTo'
+    | 'relatedModule'
+    | 'relatedId'
+    | 'relatedTo'
+    | 'relatedCode'
+    | 'organizationName'
+    | 'organizationId'
+    | 'contact'
+    | 'contactId'
+    | 'startAt'
+    | 'endAt'
+    | 'allDay'
+    | 'location'
+    | 'reminder'
+    | 'customerResponse'
+    | 'remarks'
+    | 'customDataJson';
+
+/** Columns the write path sets itself. */
+type ActivityManagedColumn =
+    | 'id'
+    | 'attendees'
+    | 'timeZone'
+    | 'remindAt'
+    | 'reminderSentAt'
+    | 'completedAt'
+    | 'completedBy'
+    | 'revision'
+    | 'createdBy'
+    | 'updatedBy'
+    | 'createdAt'
+    | 'updatedAt'
+    | 'isDeleted'
+    | 'deletedAt';
+
+/**
+ * Columns only the system write path sets, written with the row so the audit entry and the write hook see them:
+ * every Activity column except the API's fields (those come through the parsed input) and the ones the write path
+ * computes. None exist yet; P2-4's `origin` and P2-8's organizer columns join this type with their migrations.
+ */
+export type ActivityRowData = Partial<Omit<Prisma.ActivityUncheckedCreateInput, ActivityApiColumn | ActivityManagedColumn>>;
+
+/**
+ * Who makes a write. CRM saves (`activityService`) pass the signed-in `user`: the owner must be an active user and a
+ * newly picked related record one they may access. System writes (activity.system.ts) pass `user: null`: the owner
+ * is taken verbatim and the related record's access isn't checked (it must still exist).
+ */
+export interface ActivityWriter {
+    /** Username doing the write: audit `changedBy`, `updatedBy`, completion stamps, attendee replies, the write hook. */
+    actor: string;
+    user: AuthUser | null;
+    /**
+     * `createdBy` of an insert (default `actor`). System writers only: also re-aligns it on an update (P2-4: a
+     * follow-up activity's creator follows its record's, spec §11.1). CRM updates never change it.
+     */
+    createdBy?: string;
+    /** System writers only: extra columns written with the row (`ActivityRowData`). */
+    rowData?: ActivityRowData;
+    /**
+     * CRM updates: the ActivityDto keys the request asked to change (`requestedChanges`); the lock check refuses only
+     * those. Unset: every changed field counts.
+     */
+    requested?: ReadonlySet<string>;
+    /** Passed to the write hook (P2-3b: whether to mark the activity for calendar sync). Default true. */
+    markSync?: boolean;
+    /** Activity configuration loaded before the transaction, passed to the write hook; null when not loaded. */
+    config?: ActivityConfig | null;
+}
+
+const crmWriter = (user: AuthUser, config: ActivityConfig | null = null, requested?: ReadonlySet<string>): ActivityWriter => ({
+    actor: user.username,
+    user,
+    config,
+    requested,
+});
+
+/** Runs the write hook (activity.writeHook.ts) for one written row, inside the caller's transaction. */
+function afterActivityWrite(tx: TransactionClient, before: ActivityRow | null, after: ActivityRow, writer: ActivityWriter, now: Date): Promise<void> {
+    return activityWriteHook.onWrite(tx, { before, after, actor: writer.actor, now, markSync: writer.markSync ?? true, config: writer.config ?? null });
+}
+
+/**
+ * 409 when a CRM update changed a locked field it asked to change (activity.access.ts `activityLocks`, spec §8.13).
+ * A locked field the server changed on its own (a refreshed related-record label) or one sent with its stored value
+ * passes.
+ */
+function assertUnlockedChanges(existing: ActivityRow, changes: Record<string, unknown>, requested: ReadonlySet<string> | undefined): void {
+    const lock = activityLocks.lockFor(existing);
+    const blocked = lock ? lock.fields.filter((field) => field in changes && (!requested || requested.has(field))) : [];
+    if (!lock || blocked.length === 0) return;
+    throw new HttpError(lock.message, StatusCodes.CONFLICT, { code: lock.code, errors: blocked.map((field) => ({ message: lock.message, path: [field] })) });
+}
+
+/** 409 when the activity may not be deleted (`ActivityLock.deleteRefusedReason`). */
+function assertDeletable(existing: ActivityRow): void {
+    const lock = activityLocks.lockFor(existing);
+    if (lock?.deleteRefusedReason) throw new HttpError(lock.message, StatusCodes.CONFLICT, { code: lock.code });
 }
 
 /**
  * Inserts an activity inside the caller's transaction and returns the stored row (attendees included); cache
- * invalidation and `afterActivityCommit` are the caller's job. Activities are unnumbered (no document series).
+ * invalidation and `runActivityPostCommit` are the caller's job. Activities are unnumbered (no document series).
  */
-async function insertActivityRow(tx: TransactionClient, input: ActivityInput, schedule: Schedule, user: AuthUser, now: Date): Promise<ActivityRow> {
-    const assignedTo = (await assertAssigneeValid(tx, input.assignedTo)) ?? user.username;
-    const links = await resolveActivityLinks(tx, input, undefined, user);
+export async function insertActivityRow(tx: TransactionClient, input: ActivityInput, schedule: Schedule, writer: ActivityWriter, now: Date): Promise<ActivityRow> {
+    const assignedTo = writer.user ? ((await assertAssigneeValid(tx, input.assignedTo)) ?? writer.user.username) : input.assignedTo;
+    const links = await resolveActivityLinks(tx, input, undefined, writer.user);
     const attendees = await normalizeAttendees(tx, input.attendees, assignedTo);
-    const plan = planAttendeeSync(attendees, [], user.username, now);
+    const plan = planAttendeeSync(attendees, [], writer.actor, now);
     const withOwner = { ...input, assignedTo };
     const row = await tx.activity.create({
         data: {
             ...toActivityData(withOwner, links, schedule),
+            ...(writer.user ? {} : writer.rowData),
             timeZone: ENV.BUSINESS_TIMEZONE,
             remindAt: remindAtOf(withOwner, schedule),
-            ...completionData(input.status, undefined, user, now),
-            createdBy: user.username,
+            ...completionData(input.status, undefined, writer.actor, now),
+            createdBy: writer.createdBy ?? writer.actor,
             attendees: { create: plan.create },
         },
         include: WITH_ATTENDEES,
     });
-    await auditService.record(tx, { entityType: 'Activity', entityId: row.id, action: 'CREATE', changedBy: user.username, changes: toActivityDto(row) });
+    await auditService.record(tx, { entityType: 'Activity', entityId: row.id, action: 'CREATE', changedBy: writer.actor, changes: toActivityDto(row) });
+    await afterActivityWrite(tx, null, row, writer, now);
+    return row;
+}
+
+/**
+ * Applies a parsed and checked update to a locked, live row inside the caller's transaction: links, owner,
+ * attendees, completion stamps, reminder, `revision` bump, audit and the write hook. CRM writers are also held to
+ * the activity's locks (409, for the fields in `writer.requested`); system writers are not, and may also set
+ * `rowData` and re-align `createdBy`. Returns the stored row (attendees included).
+ */
+export async function updateActivityRow(tx: TransactionClient, existing: ActivityRow, input: ActivityInput, schedule: Schedule, writer: ActivityWriter, now: Date): Promise<ActivityRow> {
+    const id = existing.id;
+    const before = toActivityDto(existing);
+    const links = await resolveActivityLinks(tx, input, existing, writer.user);
+    const assignedTo = writer.user ? ((await assertAssigneeValid(tx, input.assignedTo, { previous: existing.assignedTo })) ?? existing.assignedTo) : input.assignedTo;
+    const withOwner = { ...input, assignedTo };
+    const attendees = await normalizeAttendees(tx, input.attendees, assignedTo, existing.attendees);
+    const plan = await syncAttendees(tx, id, attendees, existing.attendees, writer.actor, now);
+
+    const remindAt = remindAtOf(withOwner, schedule);
+    const system = writer.user === null;
+    const data = {
+        ...toActivityData(withOwner, links, schedule),
+        ...(system ? writer.rowData : {}),
+        ...completionData(input.status, existing, writer.actor, now),
+        remindAt,
+        reminderSentAt: nextReminderSentAt(existing, remindAt),
+        ...(system && writer.createdBy ? { createdBy: writer.createdBy } : {}),
+        updatedBy: writer.actor,
+    };
+    const scheduleChanged =
+        plan.setChanged ||
+        REVISION_FIELDS.some((key) => {
+            const a = existing[key];
+            const b = data[key];
+            return a instanceof Date || b instanceof Date ? (a as Date | null)?.getTime() !== (b as Date | null)?.getTime() : (a ?? null) !== (b ?? null);
+        });
+    const row = await tx.activity.update({
+        where: { id },
+        data: { ...data, ...(scheduleChanged ? { revision: { increment: 1 } } : {}) },
+        include: WITH_ATTENDEES,
+    });
+    const changes = diffRecords(before, toActivityDto(row));
+    // The transaction rolls the write back.
+    if (writer.user) assertUnlockedChanges(existing, changes, writer.requested);
+    if (Object.keys(changes).length > 0) {
+        await auditService.record(tx, { entityType: 'Activity', entityId: id, action: 'UPDATE', changedBy: writer.actor, changes });
+    }
+    await afterActivityWrite(tx, existing, row, writer, now);
     return row;
 }
 
@@ -246,7 +459,7 @@ async function insertActivityRow(tx: TransactionClient, input: ActivityInput, sc
  * Activities are unnumbered (no document series).
  */
 export async function createActivityRecord(tx: TransactionClient, input: ActivityInput, schedule: Schedule, user: AuthUser, now = new Date()): Promise<ActivityView> {
-    return toActivityView(await insertActivityRow(tx, input, schedule, user, now), user);
+    return toActivityView(await insertActivityRow(tx, input, schedule, crmWriter(user), now), user);
 }
 
 function listWhere(filters: ReturnType<typeof activityListQuerySchema.parse>, search: string | undefined, user: AuthUser, now: Date): Prisma.ActivityWhereInput {
@@ -352,9 +565,9 @@ export const activityService = {
         const schedule = scheduleOf(input, config);
         const now = new Date();
         throwFieldIssues(activityPastIssues({ ...input, ...schedule }, undefined, now, ENV.BUSINESS_TIMEZONE));
-        const row = await runInTransaction((tx) => insertActivityRow(tx, input, schedule, user, now));
+        const row = await runInTransaction((tx) => insertActivityRow(tx, input, schedule, crmWriter(user, config), now));
         await cacheService.invalidateEntityCaches('activities');
-        await afterActivityCommit(null, row, user);
+        await runActivityPostCommit([{ before: null, after: row }], user);
         return toActivityView(row, user);
     },
 
@@ -378,58 +591,31 @@ export const activityService = {
             const now = new Date();
             throwFieldIssues(activityPastIssues({ ...input, ...schedule }, before, now, ENV.BUSINESS_TIMEZONE));
 
-            const links = await resolveActivityLinks(tx, input, existing, user);
-            const assignedTo = (await assertAssigneeValid(tx, input.assignedTo, { previous: existing.assignedTo })) ?? existing.assignedTo;
-            const withOwner = { ...input, assignedTo };
-            const attendees = await normalizeAttendees(tx, input.attendees, assignedTo, existing.attendees);
-            const plan = await syncAttendees(tx, id, attendees, existing.attendees, user.username, now);
-
-            const remindAt = remindAtOf(withOwner, schedule);
-            const data = {
-                ...toActivityData(withOwner, links, schedule),
-                ...completionData(input.status, existing, user, now),
-                remindAt,
-                reminderSentAt: nextReminderSentAt(existing, remindAt),
-                updatedBy: user.username,
-            };
-            const scheduleChanged =
-                plan.setChanged ||
-                REVISION_FIELDS.some((key) => {
-                    const a = existing[key];
-                    const b = data[key];
-                    return a instanceof Date || b instanceof Date ? (a as Date | null)?.getTime() !== (b as Date | null)?.getTime() : (a ?? null) !== (b ?? null);
-                });
-            const row = await tx.activity.update({
-                where: { id },
-                data: { ...data, ...(scheduleChanged ? { revision: { increment: 1 } } : {}) },
-                include: WITH_ATTENDEES,
-            });
-            const changes = diffRecords(before, toActivityDto(row));
-            if (Object.keys(changes).length > 0) {
-                await auditService.record(tx, { entityType: 'Activity', entityId: id, action: 'UPDATE', changedBy: user.username, changes });
-            }
+            const row = await updateActivityRow(tx, existing, input, schedule, crmWriter(user, config, requestedChanges(before, patch)), now);
             return { existing, row };
         });
 
         await cacheService.invalidateEntityCaches('activities');
-        await afterActivityCommit(existing, row, user);
+        await runActivityPostCommit([{ before: existing, after: row }], user);
         return toActivityView(row, user);
     },
 
     async remove(id: string, user: AuthUser): Promise<void> {
-        await runInTransaction(async (tx) => {
+        const deleted = await runInTransaction(async (tx) => {
             await lockRecords(tx, 'activity', [id]);
-            const existing = await tx.activity.findFirst({
-                where: { id, isDeleted: false },
-                select: { ...OWNER_SELECT, attendees: { select: { username: true } } },
-            });
+            const existing = await tx.activity.findFirst({ where: { id, isDeleted: false }, include: WITH_ATTENDEES });
             if (!existing) throw notFound();
             assertCanEdit(user, existing);
+            assertDeletable(existing);
             // A deleted activity leaves the reminder set.
-            await tx.activity.update({ where: { id }, data: { ...softDeleteData(user), remindAt: null } });
+            const after = await tx.activity.update({ where: { id }, data: { ...softDeleteData(user), remindAt: null }, include: WITH_ATTENDEES });
             await auditService.record(tx, { entityType: 'Activity', entityId: id, action: 'DELETE', changedBy: user.username });
+            await afterActivityWrite(tx, existing, after, crmWriter(user), new Date());
+            return { before: existing, after };
         });
         await cacheService.invalidateEntityCaches('activities');
+        // Nothing to arm or tell for a deleted row; P2-3b's calendar push runs here.
+        await runActivityPostCommit([deleted], user);
     },
 
     /**
@@ -437,6 +623,8 @@ export const activityService = {
      * already passed is not re-armed). Writes a RESTORE entry pointing at the DELETE it reverses (`revertsId`).
      */
     async restore(id: string, user: AuthUser, revertsId?: string): Promise<void> {
+        // For the write hook (P2-3b: whether the restored activity's type syncs), loaded before the transaction.
+        const config = await loadActivityConfig();
         const { before, after } = await runInTransaction(async (tx) => {
             await lockRecords(tx, 'activity', [id]);
             const row = assertDeletedRow(await tx.activity.findUnique({ where: { id }, include: WITH_ATTENDEES }), 'Activity');
@@ -449,33 +637,59 @@ export const activityService = {
                 include: WITH_ATTENDEES,
             });
             await auditService.record(tx, { entityType: 'Activity', entityId: id, action: 'RESTORE', changedBy: user.username, revertsId });
+            await afterActivityWrite(tx, row, restored, crmWriter(user, config), now);
             return { before: row, after: restored };
         });
         await cacheService.invalidateEntityCaches('activities');
         // Re-arms the reminder; owner and attendees are unchanged, so nobody is told again.
-        await afterActivityCommit(before, after, user);
+        await runActivityPostCommit([{ before, after }], user);
     },
 
+    /**
+     * Deletes the live activities among `ids` (all-or-nothing on access: 403 if any may not be changed). Locked ones
+     * that refuse deletion (`ActivityLock.deleteRefusedReason`) are left alone and listed in `skipped`, which is
+     * present only when something was skipped.
+     */
     async bulkRemove(ids: string[], user: AuthUser): Promise<BulkDeleteResult> {
-        const result = await runInTransaction(async (tx) => {
+        const { result, rows } = await runInTransaction(async (tx) => {
             await lockRecords(tx, 'activity', ids);
-            const live = await tx.activity.findMany({
-                where: { id: { in: ids }, isDeleted: false },
-                select: { id: true, ...OWNER_SELECT, attendees: { select: { username: true } } },
-            });
+            const live = await tx.activity.findMany({ where: { id: { in: ids }, isDeleted: false }, include: WITH_ATTENDEES });
             for (const row of live) assertCanEdit(user, row);
-            const liveIds = live.map((row) => row.id);
+            const skipped: { id: string; reason: string }[] = [];
+            const deletable: ActivityRow[] = [];
+            for (const row of live) {
+                const reason = activityLocks.lockFor(row)?.deleteRefusedReason;
+                if (reason) skipped.push({ id: row.id, reason });
+                else deletable.push(row);
+            }
+            const liveIds = deletable.map((row) => row.id);
+            const rows: ActivityCommitRow[] = [];
             if (liveIds.length > 0) {
                 await tx.activity.updateMany({ where: { id: { in: liveIds } }, data: { ...softDeleteData(user), remindAt: null } });
                 await auditService.recordMany(
                     tx,
                     liveIds.map((entityId) => ({ entityType: 'Activity' as const, entityId, action: 'DELETE' as const, changedBy: user.username })),
                 );
+                const now = new Date();
+                const afterById = new Map(
+                    (await tx.activity.findMany({ where: { id: { in: liveIds } }, include: WITH_ATTENDEES })).map((row) => [row.id, row]),
+                );
+                for (const before of deletable) {
+                    const after = afterById.get(before.id);
+                    if (!after) continue;
+                    await afterActivityWrite(tx, before, after, crmWriter(user), now);
+                    rows.push({ before, after });
+                }
             }
-            return { deleted: liveIds.length, ids: liveIds, notFound: ids.filter((id) => !liveIds.includes(id)) };
+            const liveSet = new Set(live.map((row) => row.id));
+            const result: BulkDeleteResult = { deleted: liveIds.length, ids: liveIds, notFound: ids.filter((id) => !liveSet.has(id)) };
+            if (skipped.length > 0) result.skipped = skipped;
+            return { result, rows };
         });
 
         if (result.deleted > 0) await cacheService.invalidateEntityCaches('activities');
+        // Nothing to arm or tell for deleted rows; P2-3b's calendar push runs here.
+        await runActivityPostCommit(rows, user);
         return result;
     },
 
@@ -503,7 +717,7 @@ export const activityService = {
         });
         await cacheService.invalidateEntityCaches('activities');
         // A reply changes no owner or invitation; this only re-arms the reminder (a no-op for a pending one).
-        await afterActivityCommit(existing, row, user);
+        await runActivityPostCommit([{ before: existing, after: row }], user);
         return toActivityView(row, user);
     },
 

@@ -1,4 +1,4 @@
-import type { Prisma } from '../../generated/prisma/client.js';
+import type { Activity, Prisma } from '../../generated/prisma/client.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { canAccessRecord, hasGlobalAccess } from '../shared/accessControl.js';
 
@@ -37,6 +37,41 @@ export function canViewActivity(user: AuthUser, row: ActivityAccessRow): boolean
 /** True when `user` may change or delete the activity: global role, owner or creator (not an invitee). */
 export function canEditActivity(user: AuthUser, row: ActivityAccessRow): boolean {
     return canAccessRecord(user, row);
+}
+
+// ── Locks (Calendar Phase 2, spec §8.13) ─────────────────────────────────────
+
+/**
+ * A lock on an activity: fields only another source may change (P2-4: a lead / opportunity follow-up activity is
+ * changed on its record; P2-8: an externally organized meeting in the organizer's calendar). A state conflict, not
+ * a permission problem: `PUT` answers 409 with `code`. The system write path (activity.system.ts) is not subject to
+ * locks; its callers decide.
+ */
+export interface ActivityLock {
+    /** ActivityDto keys a CRM update may not change (sending the stored value is fine). */
+    fields: readonly string[];
+    /** Error code of the 409 (`FOLLOW_UP_ACTIVITY_LOCKED`, `EXTERNAL_EVENT_LOCKED`). */
+    code: string;
+    /** Message of the 409. */
+    message: string;
+    /** Null when the activity may still be deleted; else why a bulk delete skips it (a single delete answers 409). */
+    deleteRefusedReason: string | null;
+}
+
+export const activityLocks = {
+    /**
+     * The lock on a stored row, or null. None yet (Phase 1 activities are never locked); P2-4 and P2-8 add theirs
+     * here. `activity.service.ts` already enforces it in `update`, `remove` and `bulkRemove`. Tests replace it with
+     * `mock.method`.
+     */
+    lockFor(_row: Activity): ActivityLock | null {
+        return null;
+    },
+};
+
+/** Fields of the row a CRM update may not change (spec §8.13); `[]` when unlocked. */
+export function lockedFieldsFor(row: Activity): string[] {
+    return [...(activityLocks.lockFor(row)?.fields ?? [])];
 }
 
 /** The caller's reply when invited as a colleague, else null. */
