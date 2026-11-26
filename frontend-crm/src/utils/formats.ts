@@ -3,6 +3,7 @@ import {
     DEFAULT_DISPLAY_FORMATS,
     formatCount,
     formatDay,
+    formatDayWith,
     formatLongDay,
     formatMoney,
     formatNumber,
@@ -179,3 +180,41 @@ export function fmtExportDateTime(iso: string | Date | null | undefined): string
 
 /** Export cell of a day: `28-Nov-2026`; anything that isn't a day comes back unchanged. */
 export const fmtExportDay = (day: string): string => formatDay(day, DEFAULT_DISPLAY_FORMATS);
+
+// ─── Instants as days, yearly days ────────────────────────────────────────────
+
+/** An instant (ISO timestamp) as a `YYYY-MM-DDTHH:mm` wall clock on the business clock; missing or invalid → null. */
+export const businessWallClock = (iso: string | Date | null | undefined): string | null => wallClockOf(iso, state.timeZone);
+
+/** The business-clock day of an instant in the company date format (`legacy` while not customized). Missing or invalid → ''. */
+export function fmtInstantDay(iso: string | Date | null | undefined, opts?: { legacy?: DatePattern; weekday?: boolean }): string {
+    const wall = wallClockOf(iso, state.timeZone);
+    return wall ? formatDay(wall.slice(0, 10), state.formats, opts) : '';
+}
+
+/**
+ * A day that repeats every year (`MM-DD`, e.g. a yearly holiday) in the company date format without its year:
+ * `08-15` → `15-Aug` (today's style while not customized), `15 Aug`, `15/08`, `15-08`, `08/15` or `08-15`.
+ * Anything that isn't a real month and day (29 Feb counts) comes back unchanged.
+ */
+export function fmtYearlyDay(monthDay: string): string {
+    if (!/^\d{2}-\d{2}$/.test(monthDay)) return monthDay;
+    const dateFormat = state.formats.customized ? state.formats.dateFormat : DEFAULT_DISPLAY_FORMATS.dateFormat;
+    // The pattern without its year token and that token's separator: DD-MMM-YYYY → DD-MMM, YYYY-MM-DD → MM-DD.
+    const pattern = dateFormat.replace(/^YYYY[-/ ]|[-/ ]YYYY$/, '') as DatePattern;
+    const day = `2000-${monthDay}`; // a leap year, so 02-29 is a real day
+    const text = formatDayWith(day, pattern);
+    return text === day ? monthDay : text;
+}
+
+/**
+ * A stored day shown as stored (`2026-11-28`, e.g. a list's raw follow-up date) until the company formats are saved,
+ * then in the company date format. Anything that isn't a day stays as it is.
+ */
+export const fmtDayOrRaw = (value: string | null | undefined): string => (!value ? '' : state.formats.customized ? formatDay(value, state.formats) : value);
+
+/**
+ * A stored time shown as stored (`04:15 PM`, `14:30`) until the company formats are saved, then in the company time
+ * format. Anything that isn't a readable time stays as it is.
+ */
+export const fmtTimeOrRaw = (value: string | null | undefined): string => (!value ? '' : state.formats.customized ? formatTime(value, state.formats) : value);

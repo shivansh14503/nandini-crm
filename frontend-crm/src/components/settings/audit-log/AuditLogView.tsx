@@ -27,6 +27,7 @@ import { AuditUserHeader } from './AuditUserHeader';
 import { useAuditUsersList } from './AuditUsersList';
 import { AUDIT_FILTER_SCOPE, AUDIT_TABS, aggregateRange, criteriaToQuery, useAuditFilterFields, type AuditTab, type CategoryTab } from './auditLogFilter';
 import { AUDIT_LOG_KEY } from './auditLogUi';
+import { fmtCount, useDisplayFormats } from '@/utils/formats';
 
 const PAGE_SIZE = 50;
 
@@ -43,7 +44,8 @@ const DATE_CHOICES: { value: string; label: string }[] = [
 
 const pad = (n: number) => String(n).padStart(2, '0');
 const localYmd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-const count = (value: number) => value.toLocaleString('en-IN');
+/** A count in the company number grouping (Indian until it is changed). */
+const count = (value: number) => fmtCount(value);
 
 /** The summary's period (instants from the API) as calendar days: `21 Nov`, or `1 Nov – 21 Nov`. */
 function periodLabel(fromIso: string, toIso: string): string {
@@ -104,6 +106,8 @@ function StatTile({ label, value, hint, icon, alert, onClick }: { label: string;
 
 /** Admin › Audit Log: every change in the CRM, sign-ins and refused access, with who / when / where and before / after. */
 export function AuditLogView() {
+    // Re-renders the page's counts (and its panels' counts) when the company number grouping changes.
+    useDisplayFormats();
     const router = useRouter();
     const queryClient = useQueryClient();
     const { users } = useMasterData();

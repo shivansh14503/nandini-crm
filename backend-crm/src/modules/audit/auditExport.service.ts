@@ -78,10 +78,10 @@ function parseFilters(raw: unknown): AuditListFilters {
 }
 
 async function exportContext(): Promise<ExportContext> {
-    const [ctx, users] = await Promise.all([presentContext([]), prisma.user.findMany({ select: { username: true, fullName: true } })]);
+    // The export's "Time" and "Changes" columns keep their fixed format whatever the company formats say (spreadsheets read them).
+    const [ctx, users] = await Promise.all([presentContext([], DEFAULT_DISPLAY_FORMATS), prisma.user.findMany({ select: { username: true, fullName: true } })]);
     const names = new Map(users.map((user) => [user.username.toLowerCase(), user.fullName.trim() || user.username]));
-    // The export's "Time" column keeps its fixed format whatever the company formats say (spreadsheets read it).
-    return { ...ctx, formats: DEFAULT_DISPLAY_FORMATS, userName: (username) => (username === 'system' ? 'System' : (names.get(username.toLowerCase()) ?? username)) };
+    return { ...ctx, userName: (username) => (username === 'system' ? 'System' : (names.get(username.toLowerCase()) ?? username)) };
 }
 
 interface Progress {

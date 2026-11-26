@@ -14,6 +14,7 @@ import { CommonMasterView } from '../common/CommonMasterView';
 import { useTableFilter } from '../common/TableFilter';
 import { AppToast } from '../common/AppToast';
 import { useSaveFlash } from '@/utils/saveFlash';
+import { fmtCount, useDisplayFormats } from '@/utils/formats';
 import { MasterHeaderActions, outlinedHeaderButtonSx } from '../common/MasterHeaderActions';
 import { DataImportModal } from '../common/import';
 import { type DataTableFilterItem } from '../common/DataTable';
@@ -32,6 +33,8 @@ export function OrganizationsMasterView() {
     const router = useRouter();
     const { user } = useAuth();
     const isAdmin = user?.role?.toLowerCase() === 'admin';
+    // The record totals below follow the company number grouping (Indian until it is changed).
+    useDisplayFormats();
 
     // ── State ─────────────────────────────────────────────────────────────────
     // On the global search results page the table shows the matched records (any owner) instead of this list.
@@ -341,7 +344,7 @@ export function OrganizationsMasterView() {
                 },
                 onDeselectAll: () => setSelectedIds(new Set()),
                 totalRecords,
-                displayTotalRecords: totalRecords.toLocaleString('en-IN'),
+                displayTotalRecords: fmtCount(totalRecords),
                 currentPage,
                 rowsPerPage,
                 totalPages,
@@ -389,7 +392,7 @@ export function OrganizationsMasterView() {
                 page: currentPage - 1,
                 rowsPerPage,
                 totalCount: totalRecords,
-                displayTotalCount: totalRecords.toLocaleString('en-IN'),
+                displayTotalCount: fmtCount(totalRecords),
                 entityLabel: 'Organizations',
                 pageSizeOptions: [10, 25, 50, 100],
                 onPageChange: (pageZeroBased) => setCurrentPage(pageZeroBased + 1),

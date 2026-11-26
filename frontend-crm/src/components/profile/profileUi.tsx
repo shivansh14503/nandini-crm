@@ -5,6 +5,7 @@ import { Box, Button, CircularProgress, FormControlLabel, Switch, Typography } f
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { primaryButtonSx, secondaryButtonSx, surfaceSx } from '@/components/settings/form-customization/builderUi';
 import { relativeTime } from '@/components/settings/audit-log/auditLogUi';
+import { fmtInstantDay } from '@/utils/formats';
 
 /** Dialog paper that fits a phone: full width minus a small margin. */
 export const phoneDialogPaperSx = {
@@ -219,12 +220,9 @@ export function CardSaveFooter({
     );
 }
 
-/** `2026-03-14T…` → `14 Mar 2026`; '' for empty / invalid input. */
+/** `2026-03-14T…` → `14 Mar 2026` (its business-clock day; the company date format once saved); '' for empty / invalid input. */
 export function formatLongDate(iso?: string | null): string {
-    if (!iso) return '';
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return '';
-    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    return fmtInstantDay(iso, { legacy: 'D MMM YYYY' });
 }
 
 /** Relative time that reads inside a sentence: "5 min ago", "just now", "yesterday", "on 14 Mar". */

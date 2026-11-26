@@ -12,6 +12,7 @@ import {
 } from '@mui/material';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import { fmtCount, useDisplayFormats } from '@/utils/formats';
 import type { DataTablePaginationProps } from './types';
 
 export function DataTablePagination({
@@ -26,6 +27,8 @@ export function DataTablePagination({
     displayTotalCount,
     hideWhenEmpty = false,
 }: DataTablePaginationProps) {
+    // Device grouping until the company saves its formats (as before), then the company grouping.
+    const { customized } = useDisplayFormats();
     if (hideWhenEmpty && totalCount === 0) {
         return null;
     }
@@ -82,7 +85,7 @@ export function DataTablePagination({
                         </Typography>{' '}
                         of{' '}
                         <Typography component="span" sx={{ fontWeight: 600, color: 'var(--mui-palette-text-primary)' }}>
-                            {displayTotalCount ?? totalCount.toLocaleString()}
+                            {displayTotalCount ?? (customized ? fmtCount(totalCount) : totalCount.toLocaleString())}
                         </Typography>{' '}
                         {entityLabel}
                     </Typography>

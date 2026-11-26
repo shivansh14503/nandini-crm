@@ -1,5 +1,6 @@
 import type { AuditEntry } from '@/hooks/queries/useAuditLogs';
 import { parseTimeOfDay } from '@/utils/pastDates';
+import { businessWallClock, fmtDay, fmtShortDay, fmtTime } from '@/utils/formats';
 
 /** One item of a record's follow-up history. */
 export interface FollowUpEvent {
@@ -45,8 +46,6 @@ const FOLLOW_UP_FIELDS = ['nextFollowupDate', 'nextFollowupTime', 'customerRespo
 type FollowUpField = (typeof FOLLOW_UP_FIELDS)[number];
 type FollowUpState = Record<FollowUpField, string>;
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const pad = (n: number) => String(n).padStart(2, '0');
 const str = (value: unknown) => (value === null || value === undefined ? '' : String(value).trim());
 
 /**
@@ -60,24 +59,23 @@ const isDiff = (value: unknown): value is { from?: unknown; to?: unknown } => {
     return keys.length > 0 && keys.length <= 2 && keys.every((key) => key === 'from' || key === 'to');
 };
 
-/** `2026-11-16` + `11:10 AM` → `16 Nov 2026 · 11:10 am`; '' when no date. */
+/** `2026-11-16` + `11:10 AM` → `16 Nov 2026 · 11:10 am` (the company formats once saved); '' when no date. */
 export function formatSlot(date: string, time: string): string {
-    const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(date);
-    if (!match) return '';
-    const day = `${Number(match[3])} ${MONTHS[Number(match[2]) - 1]} ${match[1]}`;
+    if (!/^\d{4}-\d{2}-\d{2}/.test(date)) return '';
+    const day = fmtDay(date, { legacy: 'D MMM YYYY' });
     const minutes = parseTimeOfDay(time);
     if (minutes === null) return day;
-    const h = Math.floor(minutes / 60);
-    return `${day} · ${h % 12 || 12}:${pad(minutes % 60)} ${h < 12 ? 'am' : 'pm'}`;
+    return `${day} · ${fmtTime(minutes, { legacy: 'h:mm a' })}`;
 }
 
-/** ISO timestamp → `14 Nov, 10:11 am` (year added when it isn't the current one). */
+/** ISO timestamp → `14 Nov, 10:11 am` on the business clock (year added when it isn't the current one); '' when invalid. */
 export function formatEventTime(iso: string): string {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return '';
-    const year = d.getFullYear() === new Date().getFullYear() ? '' : ` ${d.getFullYear()}`;
-    const h = d.getHours();
-    return `${d.getDate()} ${MONTHS[d.getMonth()]}${year}, ${h % 12 || 12}:${pad(d.getMinutes())} ${h < 12 ? 'am' : 'pm'}`;
+    const wall = businessWallClock(iso);
+    if (!wall) return '';
+    const day = wall.slice(0, 10);
+    const sameYear = wall.slice(0, 4) === businessWallClock(new Date())?.slice(0, 4);
+    const date = sameYear ? fmtShortDay(day) : fmtDay(day, { legacy: 'D MMM YYYY' });
+    return `${date}, ${fmtTime(wall, { legacy: 'h:mm a' })}`;
 }
 
 /**

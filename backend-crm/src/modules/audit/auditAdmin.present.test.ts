@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { DEFAULT_DISPLAY_FORMATS } from '../company-formats/core/displayFormats.js';
+import { DEFAULT_DISPLAY_FORMATS, type DisplayFormats } from '../company-formats/core/displayFormats.js';
 import { displayTime, isDiff } from './audit.format.js';
 import {
     cellValue,
@@ -95,6 +95,86 @@ describe('fieldRows', () => {
     });
 });
 
+describe('values in the company formats', () => {
+    const saved: DisplayFormats = { dateFormat: 'DD/MM/YYYY', timeFormat: '24h', numberGrouping: 'international', customized: true };
+    const indian12h: DisplayFormats = { ...DEFAULT_DISPLAY_FORMATS, customized: true };
+    /** What `cellValue` printed before company formats existed (git show 46ef1b8:…/auditAdmin.present.ts). */
+    function oldCellValue(value: unknown): string {
+        if (value === null || value === undefined || value === '') return '—';
+        if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+        if (Array.isArray(value)) return value.length === 0 ? '—' : value.map((item) => (item !== null && typeof item === 'object' ? JSON.stringify(item) : String(item))).join(', ');
+        if (typeof value === 'object') {
+            if (isDiff(value)) return `${oldCellValue(value.from)} → ${oldCellValue(value.to)}`;
+            return Object.keys(value).length === 0 ? '—' : JSON.stringify(value);
+        }
+        return String(value);
+    }
+    const samples: unknown[] = [
+        '2026-09-05',
+        '2026-11-25T00:00',
+        '2026-11-25T12:00',
+        '2026-11-24T18:30:00.000Z',
+        '2026-02-30',
+        125000,
+        '125000.50',
+        -5,
+        0,
+        2026,
+        null,
+        undefined,
+        '',
+        'Asha Traders',
+        ['2026-09-05', '2026-11-25'],
+        { from: '2026-09-05', to: null },
+        { from: 1000, to: 125000.5 },
+    ];
+
+    it('shows every value exactly as before while formats are not saved', () => {
+        for (const value of samples) {
+            const before = oldCellValue(value);
+            assert.equal(cellValue(value), before, `no formats: ${JSON.stringify(value)}`);
+            assert.equal(cellValue(value, { formats: DEFAULT_DISPLAY_FORMATS }), before, `defaults: ${JSON.stringify(value)}`);
+            assert.equal(cellValue(value, { formats: DEFAULT_DISPLAY_FORMATS, kind: 'amount' }), before, `amount: ${JSON.stringify(value)}`);
+            assert.equal(namedValue('cost', value, { formats: DEFAULT_DISPLAY_FORMATS, kind: 'amount' }), before);
+        }
+    });
+
+    it('shows days, date-times and instants in the saved formats', () => {
+        const f = { formats: saved };
+        assert.equal(cellValue('2026-09-05', f), '05/09/2026');
+        assert.equal(cellValue('2026-11-25T00:00', f), '25/11/2026, 00:00');
+        assert.equal(cellValue('2026-11-25T12:00', f), '25/11/2026, 12:00');
+        assert.equal(cellValue('2026-11-25T12:00', { formats: indian12h }), '25-Nov-2026, 12:00 PM');
+        assert.equal(cellValue('2026-11-25T00:05', { formats: indian12h }), '25-Nov-2026, 12:05 AM');
+        assert.equal(cellValue('2026-11-24T18:30:00.000Z', f), displayTime(new Date('2026-11-24T18:30:00.000Z'), saved));
+        assert.equal(cellValue('2026-02-30', f), '2026-02-30');
+        assert.equal(cellValue(['2026-09-05', '2026-11-25'], f), '05/09/2026, 25/11/2026');
+        assert.equal(cellValue({ from: '2026-09-05', to: null }, f), '05/09/2026 → —');
+        assert.equal(cellValue('Ref 2026-09-05', f), 'Ref 2026-09-05');
+    });
+
+    it('groups amounts only (a number without a form type may be a year or a count)', () => {
+        const amount = (formats: DisplayFormats) => ({ formats, kind: 'amount' as const });
+        assert.equal(cellValue(1234567, amount(saved)), '1,234,567');
+        assert.equal(cellValue(1234567, amount(indian12h)), '12,34,567');
+        assert.equal(cellValue('125000.50', amount(indian12h)), '1,25,000.50');
+        assert.equal(cellValue(125000.5, amount(saved)), '125,000.50');
+        assert.equal(cellValue(-5, amount(saved)), '-5');
+        assert.equal(cellValue(0, amount(saved)), '0');
+        assert.equal(cellValue(null, amount(saved)), '—');
+        assert.equal(cellValue('n/a', amount(saved)), 'n/a');
+        assert.equal(cellValue({ from: 1000, to: 125000.5 }, amount(saved)), '1,000 → 125,000.50');
+        assert.equal(cellValue(2026, { formats: saved }), '2026');
+        assert.equal(namedValue('verificationStatus', 'risky', { formats: saved }), 'Risky');
+    });
+
+    it('formats follow-up parts through the labeler\'s formats', () => {
+        const changes = { followUp: { nextFollowupDate: '2026-11-25T10:30', response: 'Interested' } };
+        assert.equal(detailRows('FOLLOW_UP', 'leads', changes, labeler)[0].value, '2026-11-25T10:30');
+        assert.equal(detailRows('FOLLOW_UP', 'leads', changes, { ...labeler, formats: saved })[0].value, '25/11/2026, 10:30');
+    });
+});
+
 describe('email check entries', () => {
     it('show the result change as a field and the address as a detail', () => {
         const check = { verificationStatus: { from: 'valid', to: 'risky' }, email: 'a@x.in', reason: 'accept_all', runId: 'run-1' };
@@ -160,6 +240,18 @@ describe('summarize', () => {
         assert.equal(summarize('EMAIL_CHECK', 'leads', check, labeler), 'Email checked: a@x.in · Not checked → Invalid');
         assert.equal(summarize('UPDATE', 'leads', { ...check, reason: 'admin_accepted' }, labeler), 'Email accepted: a@x.in · Not checked → Invalid');
         assert.equal(summarize('SOMETHING_NEW', 'leads', null, labeler), 'Something New');
+    });
+
+    it('writes the exported row count as before until formats are saved, then in the company grouping', () => {
+        for (const rowCount of [0, 1, 999, 1000, 123456, 12345678]) {
+            const before = `Exported ${rowCount.toLocaleString('en-IN')} entr${rowCount === 1 ? 'y' : 'ies'} to CSV`;
+            assert.equal(summarize('EXPORT', 'audit-log', { rowCount, format: 'csv' }, labeler), before);
+            assert.equal(summarize('EXPORT', 'audit-log', { rowCount, format: 'csv' }, { ...labeler, formats: DEFAULT_DISPLAY_FORMATS }), before);
+        }
+        assert.equal(summarize('EXPORT', 'audit-log', { rowCount: 123456, format: 'xlsx' }, labeler), 'Exported 1,23,456 entries to XLSX');
+        const international: DisplayFormats = { ...DEFAULT_DISPLAY_FORMATS, numberGrouping: 'international', customized: true };
+        assert.equal(summarize('EXPORT', 'audit-log', { rowCount: 123456, format: 'xlsx' }, { ...labeler, formats: international }), 'Exported 123,456 entries to XLSX');
+        assert.equal(summarize('EXPORT', 'audit-log', {}, labeler), 'Exported entries');
     });
 });
 

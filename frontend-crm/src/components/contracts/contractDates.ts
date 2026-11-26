@@ -1,5 +1,7 @@
 import { contractPeriodMonths, type Contract, type ContractFormData } from '@/types/contract.types';
 import { localNow, localToday } from '@/utils/pastDates';
+import { fmtDay } from '@/utils/formats';
+import { isDay } from '@/utils/zonedTime';
 
 /**
  * Contract term arithmetic. Dates are plain `YYYY-MM-DD` strings and the renewal reminder a wall clock
@@ -99,8 +101,14 @@ export function isContractExpiringSoon(contract: Pick<Contract, 'endDate' | 'sta
     return contract.endDate >= today && contract.endDate <= addDaysToDate(today, EXPIRING_SOON_DAYS);
 }
 
-/** `YYYY-MM-DD` (or an ISO timestamp's date) as dd/mm/yyyy, the list's date style; '' when blank / invalid. */
+/**
+ * `YYYY-MM-DD` (or an ISO timestamp's leading date) as dd/mm/yyyy, the list's date style, until the company formats
+ * are saved, then in the company date format; '' when blank / invalid.
+ */
 export function formatContractDate(value: string | null | undefined): string {
     const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value ?? '');
-    return match ? `${match[3]}/${match[2]}/${match[1]}` : '';
+    if (!match) return '';
+    // Not a calendar day (2026-02-30): the digits as they are, like before.
+    if (!isDay(match[0])) return `${match[3]}/${match[2]}/${match[1]}`;
+    return fmtDay(match[0], { legacy: 'DD/MM/YYYY' });
 }

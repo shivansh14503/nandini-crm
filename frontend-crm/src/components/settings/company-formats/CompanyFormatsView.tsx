@@ -372,7 +372,7 @@ export function CompanyFormatsView() {
                         </Box>
 
                         <Typography sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)', lineHeight: 1.5 }}>
-                            Applies to most screens (lists, drawers, forms in view mode), the calendar, notifications, PDFs and the morning email. Date
+                            Applies to all screens (lists, drawers, forms in view mode), the calendar, notifications, PDFs and the morning email. Date
                             pickers follow the browser&apos;s own format; exports and stored values don&apos;t change; notifications already sent keep their
                             wording.
                         </Typography>

@@ -26,7 +26,7 @@ import type { TicketPriority, TicketStatus } from '@/types/ticket.types';
 import { DrawerChannelRow, DrawerCopyButton, DrawerSectionCard } from '../DrawerPrimitives';
 import { PrimaryTag } from '@/components/common/PrimaryTag';
 import { formatAddressLine } from '@/utils/address';
-import { useDisplayFormats } from '@/utils/formats';
+import { fmtNumber, getDisplayFormats, useDisplayFormats } from '@/utils/formats';
 import type { DrawerBadgeItem } from '../types';
 import { avatarBackground, avatarContent } from './avatar';
 import { defaultLayoutFor } from './defaultLayouts';
@@ -502,6 +502,9 @@ interface LineItem {
 
 const num = (value: unknown): number => (typeof value === 'number' && Number.isFinite(value) ? value : Number(value) || 0);
 
+/** A percentage discount: `12.5%` as stored until the company saves its formats, then in its grouping (≤ 3 decimals, as line items). */
+const formatPercent = (value: number): string => `${getDisplayFormats().customized ? fmtNumber(value, { maxDecimals: 3 }) : value}%`;
+
 function lineItemsOf(ctx: LayoutCtx): LineItem[] {
     if (!LINE_ITEM_MODULES.includes(ctx.module)) return [];
     const items = ctx.record?.lineItems;
@@ -550,7 +553,7 @@ function LineItemsBody({ block, ctx }: { block: Extract<DrawerBlock, { type: 'li
                         <Box>
                             <Typography sx={smallLabelSx}>Discount</Typography>
                             <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: num(item.discount) > 0 ? 'var(--mui-palette-error-main)' : undefined }}>
-                                {num(item.discount) > 0 ? (item.discountType === 'percentage' ? `${num(item.discount)}%` : formatRupees(num(item.discount))) : '—'}
+                                {num(item.discount) > 0 ? (item.discountType === 'percentage' ? formatPercent(num(item.discount)) : formatRupees(num(item.discount))) : '—'}
                             </Typography>
                         </Box>
                         <Box>

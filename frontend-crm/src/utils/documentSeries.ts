@@ -1,4 +1,5 @@
 import type { FinancialYear, FyFormat, SeriesInput, SeriesRule, SeriesSettings } from '@/types/documentSeries.types';
+import { fmtCount } from './formats';
 
 /**
  * Live previews for the Document Series admin page. Mirrors the API's formatter
@@ -80,7 +81,7 @@ export function validateDraft(settings: SeriesSettings, rules: { module: string;
 
         if (!Number.isInteger(rule.padLength) || rule.padLength < 1 || rule.padLength > MAX_PAD_LENGTH) errors[`${module}.padLength`] = `1 to ${MAX_PAD_LENGTH}.`;
         if (!Number.isInteger(rule.startingNumber) || rule.startingNumber < 1 || rule.startingNumber > MAX_STARTING_NUMBER) {
-            errors[`${module}.startingNumber`] = `1 to ${MAX_STARTING_NUMBER.toLocaleString('en-IN')}.`;
+            errors[`${module}.startingNumber`] = `1 to ${fmtCount(MAX_STARTING_NUMBER)}.`;
         }
         if (rule.includeCompanyPrefix && !settings.companyPrefix) errors[`${module}.includeCompanyPrefix`] = 'Set a company prefix first.';
     }

@@ -27,6 +27,7 @@ import {
     searchPageHref,
     type GlobalSearchCategory,
 } from '@/services/globalSearch.service';
+import { fmtCount, useDisplayFormats } from '@/utils/formats';
 import { ModuleIconTile, SEARCH_CATEGORY_META } from './searchCategories';
 import { SearchScopeProvider, useDrawerClaim, type SearchScopeValue } from './SearchScope';
 
@@ -46,6 +47,9 @@ const MODULE_VIEWS: Record<GlobalSearchCategory, React.ComponentType> = {
     partnerCompanies: PartnerCompaniesMasterView,
 };
 
+/** A count in the device's grouping until the company saves its formats (as before), then in the company grouping. */
+const countText = (value: number, customized: boolean) => (customized ? fmtCount(value) : value.toLocaleString());
+
 const SEARCHABLE_FIELDS = ['Record numbers', 'Names', 'Emails', 'Phone numbers', 'GSTIN', 'PAN', 'Bank account numbers'];
 
 /**
@@ -61,6 +65,7 @@ export function SearchResultsView() {
     // minDigits 1: after Enter even a single digit matches phone / account / other numbers by any part.
     const search = useGlobalSearch(q, { ids: true, totals: true, minDigits: 1 });
     const claimDrawer = useDrawerClaim();
+    const { customized } = useDisplayFormats();
 
     const totals = search.totals;
     const ids = search.ids;
@@ -83,7 +88,7 @@ export function SearchResultsView() {
                     <>
                         <Box sx={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: 1, mt: 2.5, mb: 1.25 }}>
                             <Typography component="h1" sx={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--crm-slate-900)' }}>
-                                {loading ? 'Searching…' : `${grandTotal.toLocaleString()} ${grandTotal === 1 ? 'result' : 'results'}`}
+                                {loading ? 'Searching…' : `${countText(grandTotal, customized)} ${grandTotal === 1 ? 'result' : 'results'}`}
                             </Typography>
                             <Typography sx={{ fontSize: '0.9rem', color: 'var(--mui-palette-text-secondary)' }}>
                                 for{' '}
@@ -133,11 +138,11 @@ export function SearchResultsView() {
                                                         lineHeight: 1.6,
                                                     }}
                                                 >
-                                                    {total.toLocaleString()}
+                                                    {countText(total, customized)}
                                                 </Box>
                                                 {total > MAX_IDS_PER_MODULE && (
                                                     <Typography sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)' }}>
-                                                        Showing the {MAX_IDS_PER_MODULE.toLocaleString()} most recently updated. Refine your search to narrow it down.
+                                                        Showing the {countText(MAX_IDS_PER_MODULE, customized)} most recently updated. Refine your search to narrow it down.
                                                     </Typography>
                                                 )}
                                             </Box>
@@ -267,6 +272,7 @@ function SearchBox({ initial, module }: { initial: string; module?: GlobalSearch
 }
 
 function ModuleTabs({ q, active, totals }: { q: string; active?: GlobalSearchCategory; totals?: Record<GlobalSearchCategory, number> }) {
+    const { customized } = useDisplayFormats();
     const tabs: { key: string; label: string; href: string; count?: number; selected: boolean; dot?: string }[] = [
         {
             key: 'all',
@@ -336,7 +342,7 @@ function ModuleTabs({ q, active, totals }: { q: string; active?: GlobalSearchCat
                                     backgroundColor: tab.selected ? 'var(--mui-palette-primary-soft)' : 'var(--mui-palette-background-hover)',
                                 }}
                             >
-                                {tab.count.toLocaleString()}
+                                {countText(tab.count, customized)}
                             </Box>
                         )}
                     </Box>

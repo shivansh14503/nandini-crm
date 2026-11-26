@@ -55,6 +55,7 @@ import { useActivityTypeIcon, useActivityTypeLabel } from '../ActivityBadges';
 import { RelatedRecordDrawer } from '../relatedRecord';
 import { timeZoneAbbr, useBusinessClock } from '../activityTime';
 import { useDisplayFormats } from '@/utils/formats';
+import { formatShortDay, shortDayOrder, type DisplayFormats } from '@/lib/display-formats/displayFormats';
 import { CalendarToolbar, type CalendarViewKey } from './CalendarToolbar';
 import {
     CalendarFilters,
@@ -107,14 +108,34 @@ const sameSet = (a: readonly string[], b: readonly string[]) => a.length === b.l
 /** `YYYY-MM-DD` formatted for the title ("25 Nov 2026"); `day` is a calendar day, so UTC noon avoids any shift. */
 const fmtDay = (day: string, options: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat('en-IN', { ...options, timeZone: 'UTC' }).format(new Date(`${day}T12:00:00Z`));
 
-/** The toolbar title of a view showing `[start, end)` (calendar days). */
-function viewTitle(view: CalendarViewKey, start: string, end: string): string {
+/**
+ * `25 Nov 2026`, or `Nov 25, 2026` once the company date format is saved as MM/DD/YYYY (the order of the company's
+ * short day labels, see `formatShortDay`).
+ */
+const shortDayWithYear = (day: string, formats: DisplayFormats) =>
+    shortDayOrder(formats) === 'MD' ? `${formatShortDay(day, formats)}, ${day.slice(0, 4)}` : `${formatShortDay(day, formats)} ${day.slice(0, 4)}`;
+
+/**
+ * The toolbar title of a view showing `[start, end)` (calendar days). Until the company saves its formats the title
+ * reads as it always has (`en-IN`); after that day and month follow the company's order (`Thursday, Nov 26, 2026`,
+ * `Nov 23 – 29, 2026` for MM/DD/YYYY; `Thursday, 26 Nov 2026`, `23 – 29 Nov 2026` otherwise).
+ */
+function viewTitle(view: CalendarViewKey, start: string, end: string, formats: DisplayFormats): string {
     if (view === 'month') return fmtDay(start, { month: 'long', year: 'numeric' });
-    if (view === 'day') return fmtDay(start, { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
     const last = addDays(end, -1);
-    if (start.slice(0, 4) !== last.slice(0, 4)) return `${fmtDay(start, { day: 'numeric', month: 'short', year: 'numeric' })} – ${fmtDay(last, { day: 'numeric', month: 'short', year: 'numeric' })}`;
-    if (start.slice(0, 7) !== last.slice(0, 7)) return `${fmtDay(start, { day: 'numeric', month: 'short' })} – ${fmtDay(last, { day: 'numeric', month: 'short', year: 'numeric' })}`;
-    return `${fmtDay(start, { day: 'numeric' })} – ${fmtDay(last, { day: 'numeric', month: 'short', year: 'numeric' })}`;
+    if (!formats.customized) {
+        if (view === 'day') return fmtDay(start, { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
+        if (start.slice(0, 4) !== last.slice(0, 4)) return `${fmtDay(start, { day: 'numeric', month: 'short', year: 'numeric' })} – ${fmtDay(last, { day: 'numeric', month: 'short', year: 'numeric' })}`;
+        if (start.slice(0, 7) !== last.slice(0, 7)) return `${fmtDay(start, { day: 'numeric', month: 'short' })} – ${fmtDay(last, { day: 'numeric', month: 'short', year: 'numeric' })}`;
+        return `${fmtDay(start, { day: 'numeric' })} – ${fmtDay(last, { day: 'numeric', month: 'short', year: 'numeric' })}`;
+    }
+    if (view === 'day') return `${fmtDay(start, { weekday: 'long' })}, ${shortDayWithYear(start, formats)}`;
+    if (start.slice(0, 4) !== last.slice(0, 4)) return `${shortDayWithYear(start, formats)} – ${shortDayWithYear(last, formats)}`;
+    if (start.slice(0, 7) !== last.slice(0, 7)) return `${formatShortDay(start, formats)} – ${shortDayWithYear(last, formats)}`;
+    // Same month: the month is named once (`23 – 29 Nov 2026` / `Nov 23 – 29, 2026`).
+    return shortDayOrder(formats) === 'MD'
+        ? `${formatShortDay(start, formats)} – ${Number(last.slice(8, 10))}, ${last.slice(0, 4)}`
+        : `${Number(start.slice(8, 10))} – ${shortDayWithYear(last, formats)}`;
 }
 
 /** Days on screen (`[start, end)`), the date the view is about and its type, as FullCalendar last reported them. */
@@ -454,7 +475,7 @@ export default function CalendarView() {
     // ── Toolbar actions ─────────────────────────────────────────────────────
     const changeView = (view: CalendarViewKey) => api()?.changeView(FC_VIEWS[view]);
     const currentView = range?.view ?? initial.view;
-    const title = range ? viewTitle(range.view, range.currentStart, range.currentEnd) : '';
+    const title = range ? viewTitle(range.view, range.currentStart, range.currentEnd, displayFormats) : '';
 
     // A view the width no longer offers (a week on a phone after rotating) switches to that width's default.
     useEffect(() => {

@@ -1,7 +1,7 @@
 # Nandini CRM — Build Plan
 
 > **Status:** living document. Part 1 records what has been built (reconstructed from git history, 115 commits
-> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-26, Calendar Phase 2 P2-1, P2-2 and P2-3a, Profile Phase 1: My Profile, Profile Phase 2: Admin › Users, Profile Phase 3: notifications & preferences and Profile Phase 5 PR5a: company formats). Part 2
+> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-26, Calendar Phase 2 P2-1, P2-2 and P2-3a, Profile Phase 1: My Profile, Profile Phase 2: Admin › Users, Profile Phase 3: notifications & preferences, Profile Phase 4: connected accounts and Profile Phase 5 PR5a + PR5b: company formats, which completes Phase 17). Part 2
 > is the roadmap. Tick
 > items off and add new ones as work lands.
 > Related: [System design](system-design.md) · [Database design](database-design.md) · [API plan](api-plan.md)
@@ -18,6 +18,7 @@
 | **3. PDF generation** | Nov 6 – Nov 12 | PDF templates and assets, Puppeteer renderer with semaphore + Redis cache; then the drag-and-drop block builder (`documentJson`), saved library items; scoped list indexes; assignee clean-up |
 | **4. Numbering, filters, data quality** | Nov 13 – Nov 15 | Document series (company prefix, financial year, per-module rules, gap-free counters); table filters (recent/saved); trade name, shared registration type, field locking policy |
 | **5. Masters & naming** | Nov 16 – Nov 18 | City master (seeded from ISO data, admin-managed, city ids on addresses with name write-through); uppercase organization/trade names; dropdown labels = stored values; UI-name alignment script; master view and table polish |
+| **17. User profile** | Nov 26 | My Profile (profile, photo, password, signed-in sessions, notifications and preferences, connected calendars); Admin › Users (add / edit / deactivate, temporary passwords with must-change-password); Admin › Company formats (company-wide date, time and number display formats on every screen, PDFs, the morning email, bell texts and the audit log; legacy styles until the first save) |
 
 ### Current capability snapshot
 
@@ -30,7 +31,7 @@
 | Activities & calendar | ✅ data model, API, Form Builder fields; Activities list, form, quick create, drawer, record Activities tabs and the Calendar page (FullCalendar v7, business timezone, drag to reschedule); reminders, assignment / invitation and contract renewal notifications in the navbar bell; 9 AM morning summary email (off until SMTP is set up). Google / Microsoft 365 sync is Phase 2 |
 | Documents | ✅ read-only list (filters, export / file download), drawer and detail page of the opportunities' documents |
 | Quotation PDF | ✅ templates, builder, preview, cached render |
-| Admin: forms, dropdowns, document series, cities, PDF templates, holidays | ✅ |
+| Admin: forms, dropdowns, document series, cities, PDF templates, holidays, company formats | ✅ |
 | Responsive layout | ✅ phones (from 320 px), tablets and desktops: menu drawer below 1200 px, icon-only navbar controls up to 1420 px, related records as a button on phones, no sideways page scroll |
 | Audit log | ✅ ledger table with who / where / how per entry, Admin › Audit Log screen (`/api/admin/audit-logs`), undo / restore, CSV / Excel export, ledger integrity checks; alert rules later (Phase 11 E) |
 | My Profile | ✅ own name, mobile, office phone and photo; change password (signs out other sessions); list and sign out signed-in sessions; notification preferences, default reminder and out of office (2026-11-26) |
@@ -445,7 +446,7 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
       has that tab. The company email editor and its unique index (`UX_Users_email`) already shipped with Calendar
       P2-1 / P2-2 (Admin › API Integrations › People, `users/userEmail.service.ts`). Only calendars are listed for now
       (no other account kinds).
-- [x] **Profile Phase 5: Admin › Company formats** (PR5a, 2026-11-26) — one company-wide setting on a new admin page
+- [x] **Profile Phase 5: Admin › Company formats** (PR5a + PR5b, 2026-11-26) — one company-wide setting on a new admin page
       (`/admin/company-formats`, not in Form Builder; `GET` / `PUT` / `DELETE /api/company-formats`, new single-row
       `CompanyFormatSettings` table): date format (`DD-MMM-YYYY` default, `DD MMM YYYY`, `DD/MM/YYYY`, `DD-MM-YYYY`,
       `MM/DD/YYYY`, `YYYY-MM-DD`), 12- or 24-hour time, Indian or international number grouping, with a live preview.
@@ -462,8 +463,9 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
       native date / time pickers (browser format) and exports (fixed format), and re-formatting stored text
       (notifications already sent, lead rating reasons, saved PDFs). Exactness exceptions: `Sept` → `Sep`, `-₹5`
       instead of `₹-5`, frontend instants in the business timezone instead of the device's.
-- [ ] **Profile Phase 5b: remaining format call sites** — move the ad-hoc formatters still outside the PR5a choke points
-      onto `utils/formats` (each with a legacy hint, then the hints can go): private date / time helpers
+- [x] **Profile Phase 5b: remaining format call sites** (2026-11-26) — moved the ad-hoc formatters still outside the PR5a
+      choke points onto `utils/formats`, each with its legacy hint so nothing changes until an admin saves; after a save
+      every screen follows the company formats and the admin page says "all screens": private date / time helpers
       (`integrationUi.tsx`, `profileUi.tsx`, `auditLogUi.tsx`, `TableFilterModal.tsx`, `followUpEvents.ts`,
       `FollowUpDecision.tsx`, `TicketBadges.tsx`, `contractDates.ts` + `contractColumns.tsx`, `holidayDisplay.tsx` (needs a
       yearly `DD-MMM` pattern), `applyFilter.ts`, `EmailVerification.tsx`, `EmailValidationView.tsx`,
@@ -472,9 +474,10 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
       (`DataTablePagination`, `DataTableToolbar`, `DataTableFilterPills`, `SearchResultsView`, `OrganizationsMasterView`,
       `ActiveFilterChips`, the five audit count helpers, `AuditIntegrityPanel`, `ScorecardPreview`, `utils/documentSeries.ts`);
       inline formats (`DrawerLayoutRenderer` %/discount, calendar titles and `CalendarFilters` for MM/DD order,
-      `TimePicker` hints under 24h); backend `auditAdmin.present.ts` `cellValue` / `namedValue` (dates and amounts in
-      audit diffs, new behaviour), `summarize()` count and the `opportunity.validator.ts` commission message (mirrored in
-      the frontend schema).
+      `TimePicker` hints under 24h); backend `auditAdmin.present.ts` `cellValue` / `namedValue` (new behaviour once saved:
+      days, date-times and amount-type fields in audit Before / After values, entry details and the undo preview; exports
+      stay fixed), the `summarize()` export count and the `opportunity.validator.ts` commission message (mirrored in the
+      frontend schema; `₹1,000` in both groupings). The legacy hints stay for now.
 
 ## Part 3 — Keeping these documents current
 

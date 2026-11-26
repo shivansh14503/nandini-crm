@@ -6,6 +6,7 @@ import ContentCopyRoundedIcon from '@mui/icons-material/ContentCopyRounded';
 import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
 import { ApiClientError } from '@/services/apiClient';
 import type { IntegrationProviderKey } from '@/types/integration.types';
+import { fmtDay, fmtInstant, fmtInstantDay } from '@/utils/formats';
 
 /** Shared pieces of Admin › API Integrations: status chips, copyable read-only values, provider marks. */
 
@@ -147,18 +148,20 @@ export function ProviderMark({ provider, size = 20 }: { provider: IntegrationPro
     );
 }
 
-/** `2026-12-03T…` → `3 Dec 2026`. */
+/**
+ * `2026-12-03` or an instant (`2026-12-03T…`, its business-clock day) → `3 Dec 2026` while the company formats are
+ * not customized, else the company date format. Invalid input comes back unchanged.
+ */
 export function formatDay(iso: string | null | undefined): string {
     if (!iso) return '';
-    const date = new Date(iso.length === 10 ? `${iso}T00:00:00` : iso);
-    return Number.isNaN(date.getTime()) ? iso : date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    if (iso.length === 10) return fmtDay(iso, { legacy: 'D MMM YYYY' });
+    return fmtInstantDay(iso, { legacy: 'D MMM YYYY' }) || iso;
 }
 
-/** `3 Dec 2026, 10:42 am`. */
+/** `3 Dec 2026, 10:42 am` on the business clock (the company formats once saved). Invalid input comes back unchanged. */
 export function formatDateTime(iso: string | null | undefined): string {
     if (!iso) return '';
-    const date = new Date(iso);
-    return Number.isNaN(date.getTime()) ? iso : date.toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+    return fmtInstant(iso, { legacyDate: 'D MMM YYYY', legacyTime: 'h:mm a' }) || iso;
 }
 
 /** Field errors from a failed save, keyed by their joined path (`settings.tenantId`, `email`). */

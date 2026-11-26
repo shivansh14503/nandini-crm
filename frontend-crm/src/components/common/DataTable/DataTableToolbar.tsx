@@ -23,6 +23,7 @@ import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import ViewColumnIcon from '@mui/icons-material/ViewColumn';
 import ClearIcon from '@mui/icons-material/Clear';
+import { fmtCount, useDisplayFormats } from '@/utils/formats';
 import type { DataTableToolbarProps } from './types';
 
 export function DataTableToolbar({
@@ -57,6 +58,8 @@ export function DataTableToolbar({
     onColumnClick,
     hideSearch = false,
 }: DataTableToolbarProps) {
+    // Device grouping until the company saves its formats (as before), then the company grouping.
+    const { customized } = useDisplayFormats();
     const [selectMenuAnchor, setSelectMenuAnchor] = useState<null | HTMLElement>(null);
     const [bulkMenuAnchor, setBulkMenuAnchor] = useState<null | HTMLElement>(null);
 
@@ -295,7 +298,7 @@ export function DataTableToolbar({
                             </Typography>{' '}
                             of{' '}
                             <Typography component="span" sx={{ fontWeight: 700, color: 'var(--mui-palette-text-primary)' }}>
-                                {displayTotalRecords ?? totalRecords.toLocaleString()}
+                                {displayTotalRecords ?? (customized ? fmtCount(totalRecords) : totalRecords.toLocaleString())}
                             </Typography>{' '}
                             records
                         </Typography>

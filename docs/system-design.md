@@ -1,6 +1,6 @@
 # Nandini CRM — System Design
 
-> **Status:** living document. Describes the system as built (code as of 2026-11-26; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Referrals module; Documents module; Activities data model and API, Calendar Phase 1 PR1; Activities screens and Calendar, PR2; notifications, reminders and mail workers, navbar bell and the morning summary email, PR3, with its review fixes; guarded cache reads for lookups, form configs and search, with its review fixes; Calendar Phase 2 P2-1, Admin › API Integrations foundation: encrypted provider credentials, connection tests, calendar sync settings, company emails, with its review fixes; My Profile (Profile Phase 1): profile, photo, change password, signed-in sessions; Admin › Users (Profile Phase 2, 2026-11-26): user management, the must-change-password claim, sessions revoked on deactivation / reset / role change; Calendar Phase 2 P2-2, employees connect / disconnect Google or Microsoft 365 calendars: OAuth with PKCE, sealed tokens, refresh, reconnect notifications; My Profile › Notifications (Profile Phase 3): bell kinds a user can turn off, the morning summary opt-out, a personal default reminder and out-of-office dates; Calendar Phase 2 P2-3a: one activity write path (system writes, write hook, lock seam, shared post-commit step), no behaviour change; Admin › Company formats (Profile Phase 5, PR5a): one company-wide date / time / number display setting, a shared formatter core, legacy styles kept until an admin saves).
+> **Status:** living document. Describes the system as built (code as of 2026-11-26; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Referrals module; Documents module; Activities data model and API, Calendar Phase 1 PR1; Activities screens and Calendar, PR2; notifications, reminders and mail workers, navbar bell and the morning summary email, PR3, with its review fixes; guarded cache reads for lookups, form configs and search, with its review fixes; Calendar Phase 2 P2-1, Admin › API Integrations foundation: encrypted provider credentials, connection tests, calendar sync settings, company emails, with its review fixes; My Profile (Profile Phase 1): profile, photo, change password, signed-in sessions; Admin › Users (Profile Phase 2, 2026-11-26): user management, the must-change-password claim, sessions revoked on deactivation / reset / role change; Calendar Phase 2 P2-2, employees connect / disconnect Google or Microsoft 365 calendars: OAuth with PKCE, sealed tokens, refresh, reconnect notifications; My Profile › Notifications (Profile Phase 3): bell kinds a user can turn off, the morning summary opt-out, a personal default reminder and out-of-office dates; Calendar Phase 2 P2-3a: one activity write path (system writes, write hook, lock seam, shared post-commit step), no behaviour change; Admin › Company formats (Profile Phase 5, PR5a): one company-wide date / time / number display setting, a shared formatter core, legacy styles kept until an admin saves; PR5b: the remaining ad-hoc format sites and the audit log's Before / After values follow it too).
 > Update it in the same change that alters architecture, infrastructure, Redis usage, queues or security.
 > Related: [Database design](database-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
@@ -897,20 +897,29 @@ stays `BUSINESS_TIMEZONE`. Stored in `CompanyFormatSettings` ([database design �
   database; a failed read → the defaults with a warning, so a PDF, a reminder or a timeline never fails over it):
   quotation PDFs (dates, amounts, numbers, amount in words: lakh / crore for Indian grouping, million / billion for
   international; the PDF cache key includes the formats), the morning summary email (once per run), new bell
-  notification texts (once per delivery, sweep or participant notice) and audit display times (record timeline, Form
-  Builder trail, Admin › Audit Log, ledger status). Formatters take the formats as their last argument, defaulting to
-  "not customized".
+  notification texts (once per delivery, sweep or participant notice), audit display times (record timeline, Form
+  Builder trail, Admin › Audit Log, ledger status) and, in Admin › Audit Log (entry detail, undo preview, list
+  summary), the Before / After values: once saved, `YYYY-MM-DD` days, `YYYY-MM-DDTHH:mm` wall clocks and ISO instants
+  (by shape) and fields whose form type is `amount` (grouped, no currency symbol) follow the formats; other numbers stay
+  as stored (a bare number may be a year or a count), as does every value while not customized
+  (`auditAdmin.present.ts` `cellValue`; the labeler carries the formats). The "Exported N entries" summary count
+  follows the grouping. Formatters take the formats as their last argument, defaulting to "not customized".
 - **Frontend** (`utils/formats.ts`): a module-level store seeded from a `localStorage` snapshot (`crm.companyFormats`)
   so a returning device renders the right formats before `GET /api/company-formats` returns; `CrmDataBootstrap`
   keeps it fresh (TanStack Query, stale 30 min and refetched every 30 min while the tab is visible, so other users
   see a change within 30 min or on reload) and a save fires `notifyCrmUpdate('company-formats')` so other tabs
   refetch. Frontend instant formatters convert to `BUSINESS_TIMEZONE`.
-- **Never re-formatted:** stored values and API JSON (ISO dates, plain numbers), native date / time pickers (the
-  browser decides), exports (the frontend CSVs and the audit CSV / XLSX "Time" column stay on their fixed format),
-  and text formatted when it was written (`Notification.title` / `body`, `Lead.ratingReason`, audit `changesJson`,
-  saved PDFs).
-- **PR5b** moves the remaining ad-hoc call sites onto the same adapters (build plan "Profile Phase 5b"); until then
-  those keep their old style even after a save.
+- **Never re-formatted:** stored values and API JSON (ISO dates, plain numbers; the audit entry's raw `changes`),
+  native date / time pickers (the browser decides), exports (the frontend CSVs and the audit CSV / XLSX "Time" and
+  "Changes" columns stay on their fixed format: `presentContext([], DEFAULT_DISPLAY_FORMATS)`), and text formatted
+  when it was written (`Notification.title` / `body`, `Lead.ratingReason`, saved PDFs).
+- **PR5b** (build plan "Profile Phase 5b") moved the remaining ad-hoc call sites onto the same adapters, each with its
+  own legacy hint: the private date / time helpers of the settings, profile, audit log, table filter, follow-up,
+  ticket, contract and holiday screens, raw ISO columns, record counts (table pagination, toolbar and filter pills,
+  search, the audit screens), inline percentages, calendar titles and filters (month-first order for `MM/DD/YYYY`)
+  and the time picker's hints; on the backend the audit Before / After values and summary count above and the
+  commission-limit message (`₹1,000` in both groupings; the frontend mirror formats with the live setting). With
+  that, a save applies to every screen.
 
 ## 9. Deployment topology
 
