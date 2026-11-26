@@ -575,6 +575,13 @@ and delete is in the audit log (entity `Holiday`, module `holidays`, category CO
 Migration `20261126170000_holidays_initial_list` loads the 21 holidays of 2024 and 2025 from the old CRM (Active,
 added by `system`, skipping any already there). Migration `20261126190000_holiday_drop_type` drops the short-lived
 `holidayType` column (Public / Optional / Company) and its default: the option was removed from Admin › Holidays.
+Migration `20261126200000_holiday_repeats_yearly` adds `repeatsYearly` (BIT, default 0): the holiday falls on the same
+day and month every year. Such a row keeps its day and month in `holidayDate` with the placeholder year **1904**
+(`YEARLY_ANCHOR_YEAR`: a leap year, so 29 Feb fits, and below the 2000–2100 range of one-off holidays, so the unique
+index covers both kinds without clashing); the API shows it as `MM-DD`. The calendar read expands yearly rows onto
+each year asked for (29 Feb falls on 28 Feb in other years). A one-off holiday that a yearly one of the same occasion
+already covers is refused as a duplicate; a yearly one may be added while one-off copies exist, and the calendar
+shows such a day once.
 
 ## 5. Index strategy
 

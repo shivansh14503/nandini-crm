@@ -317,7 +317,10 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
       error. Same date + occasion can't be saved twice (unique index, 409 `DUPLICATE_HOLIDAY`). Audited (entity
       `Holiday`, CONFIG). Active holidays show on the Calendar page as amber day shading plus an all-day chip (agenda
       too), and the activity Start / End fields (form, quick create, reschedule) note when a day is a holiday. Import
-      date cells are now read as the day written (they came out a day early east of UTC).
+      date cells are now read as the day written (they came out a day early east of UTC). **Repeats every year**
+      (2026-11-26): a switch on the form swaps the date for Day and Month pickers; the list shows "Every year", the
+      calendar puts the holiday on its day in any year (29 Feb on 28 Feb in other years), and import reads dates
+      without a year (or a Repeats Every Year column) as yearly.
 - [ ] Later, if wanted: holidays in the morning summary email, a warning on lead / opportunity Next Follow-up dates,
       per-branch holiday lists, and a "copy last year's holidays" action.
 

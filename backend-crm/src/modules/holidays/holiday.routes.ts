@@ -18,11 +18,13 @@ import {
 /**
  * /api/holidays (Admin › Holidays)
  *   GET    /calendar   ?from=YYYY-MM-DD&to=YYYY-MM-DD   (any signed-in user) active holidays on those days, inclusive
+ *                       (yearly holidays on each year's day; id `<id>@<year>` for those)
  *
  *   (admin only)
  *   GET    /           ?page&limit&search&year&status&sortBy&sortOrder  → { data, total, page, limit, years }
  *   GET    /:id
- *   POST   /           { occasion, holidayDate, status? }                     409 DUPLICATE_HOLIDAY when it exists
+ *   POST   /           { occasion, holidayDate, repeatsYearly?, status? }     409 DUPLICATE_HOLIDAY when it exists
+ *                       holidayDate is YYYY-MM-DD, or MM-DD when repeatsYearly (the API shows yearly ones as MM-DD)
  *   PUT    /:id        partial; PATCH is an alias                            409 DUPLICATE_HOLIDAY
  *   DELETE /:id
  *   POST   /bulk       { action: activate | deactivate | delete, ids }        → { affected }
