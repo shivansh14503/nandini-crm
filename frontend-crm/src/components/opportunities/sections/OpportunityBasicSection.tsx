@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { Box, Divider, Typography } from '@mui/material';
 import EventBusyOutlinedIcon from '@mui/icons-material/EventBusyOutlined';
 import { useFormContext, useWatch } from 'react-hook-form';
@@ -79,7 +79,7 @@ const primaryEmail = (c: Contact) => (c.emailAddress.find((e) => e.isPrimary) ??
  */
 export function OpportunityBasicSection({ notify, onDecisionPendingChange }: OpportunityBasicSectionProps) {
     const getOptions = useDropdownOptionsGetter('opportunities');
-    const { control, getValues, setValue, getFieldState } = useFormContext<F>();
+    const { control, getValues, setValue } = useFormContext<F>();
     const { mode } = useFormMode();
     const isEdit = mode === 'edit';
     const editable = mode !== 'view';
@@ -144,19 +144,12 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
     const salesStage = useWatch({ control, name: 'salesStage' });
     const addDocument = useWatch({ control, name: 'addDocument' });
     const needsDocument = salesStage === PO_SALES_STAGE;
-    // Commission Type follows the amount: Self up to ₹1,000, Other above. It is set when it is empty, and when the
-    // user's own amount edit crosses ₹1,000; a type picked by hand stays until then, and a loaded record keeps its own.
+    // Commission Type follows the amount and can't be edited: Self up to ₹1,000, Other above (the API sets it the same way).
     const typeForAmount = showCommissionType ? defaultCommissionType(commissionAmount) : '';
-    const lastTypeForAmount = useRef(typeForAmount);
     useEffect(() => {
-        const crossed = lastTypeForAmount.current !== typeForAmount;
-        lastTypeForAmount.current = typeForAmount;
-        if (!editable || !typeForAmount) return;
-        const amountEdited = getFieldState('commissionAmount').isDirty;
-        if (!commissionType || (crossed && amountEdited && commissionType !== typeForAmount)) {
-            setValue('commissionType', typeForAmount, { shouldDirty: true, shouldValidate: Boolean(commissionType) });
-        }
-    }, [editable, typeForAmount, commissionType, getFieldState, setValue]);
+        if (!editable || !typeForAmount || commissionType === typeForAmount) return;
+        setValue('commissionType', typeForAmount, { shouldDirty: true, shouldValidate: Boolean(commissionType) });
+    }, [editable, typeForAmount, commissionType, setValue]);
     const organizationNames = useMemo(() => organizations.map((o) => o.organizationName), [organizations]);
     const contactNames = useMemo(() => {
         const org = organizationName.trim().toLowerCase();
@@ -457,24 +450,28 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
                     />
                 )}
 
+                {/* Set from the amount, never by hand. */}
                 {showCommissionType && (
-                    <RhfSelect<F>
-                        name="commissionType"
-                        label="Commission Type"
-                        required
-                        hint="Self up to ₹1,000, Other above"
-                        options={getOptions('opportunity_commission_type', OPPORTUNITY_COMMISSION_TYPES)}
-                        placeholder="Select Commission Type"
-                        fieldSize="sm"
-                    />
+                    <LockedInputs locked>
+                        <RhfSelect<F>
+                            name="commissionType"
+                            label="Commission Type"
+                            required
+                            hint="Set by the amount: Self up to ₹1,000, Other above"
+                            options={getOptions('opportunity_commission_type', OPPORTUNITY_COMMISSION_TYPES)}
+                            placeholder="Set by Commission Amount"
+                            fieldSize="sm"
+                        />
+                    </LockedInputs>
                 )}
             </FormGrid>
 
-            {/* The commission payee's bank details (Commission Type Other), the same fields as on the Organization form. */}
+            {/* The commission payee's bank details (Commission Type Other, an amount above ₹1,000): all required. Same fields as on the Organization form. */}
             {showPayeeBank && (
                 <FormGrid columns={3} sx={{ mt: 2.5 }}>
                     <RhfTextField<F>
                         name="accountName"
+                        required
                         label="Account Name"
                         hint="Payee's account holder name"
                         placeholder="e.g. Rohit Verma"
@@ -482,6 +479,7 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
                     />
                     <RhfTextField<F>
                         name="accountNo"
+                        required
                         label="Account No"
                         placeholder="e.g. 50200012345678"
                         numericOnly
@@ -489,13 +487,15 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
                     />
                     <RhfTextField<F>
                         name="bankName"
+                        required
                         label="Bank Name"
                         placeholder="e.g. HDFC Bank, ICICI Bank, SBI"
                         maxLength={FIELD_MAX_LENGTH.personName}
                     />
-                    <RhfUppercaseField<F> name="ifscCode" label="IFSC Code" placeholder="e.g. HDFC0001234" maxLength={FIELD_MAX_LENGTH.ifsc} />
+                    <RhfUppercaseField<F> name="ifscCode" label="IFSC Code" required placeholder="e.g. HDFC0001234" maxLength={FIELD_MAX_LENGTH.ifsc} />
                     <RhfUppercaseField<F>
                         name="panNumber"
+                        required
                         label="PAN Number"
                         hint="10-character PAN"
                         placeholder="e.g. ABCDE1234F"
@@ -543,17 +543,6 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
             {addDocument === 'Yes' && (
                 <FormGrid columns={3} sx={{ mt: 2.5 }}>
                     <RhfFileUpload<F> name="documentFile" label="Upload Doc" module="opportunities" required hint="PDF, image, Word or Excel" />
-                    <RhfTextField<F>
-                        name="documentRemarks"
-                        label="Remarks"
-                        hint="About this document"
-                        placeholder="e.g. Signed purchase order from the client"
-                        multiline
-                        minRows={3}
-                        maxRows={6}
-                        fieldSize="full"
-                        maxLength={FIELD_MAX_LENGTH.longText}
-                    />
                 </FormGrid>
             )}
         </Box>

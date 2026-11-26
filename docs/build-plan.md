@@ -323,10 +323,10 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
 ### Phase 15 — Documents (P2, 2026-11-25)
 
 - [x] **Documents module** (2026-11-25) — Activities › Documents (modelled on the old CRM's Documents list): the
-      documents added on opportunities (Documentation section: Document No, Document Date, Remarks, Upload Doc), now
+      documents added on opportunities (Documentation section: Document No, Document Date, Upload Doc; Remarks was removed on 2026-11-26), now
       kept in their own `Document` table (one per opportunity; existing ones migrated). Read-only: no create form,
       documents are added and changed from the opportunity form. Table with Document No, Upload Doc (opens the file),
-      Document Date, Opportunity, Sales Stage, Organization Name, Remarks, Assigned to, Added By and Date Created; search,
+      Document Date, Opportunity, Sales Stage, Organization Name, Assigned to, Added By and Date Created; search,
       the Filter dialog, My Documents / Added in 7 Days pills, bulk Export to CSV and Download Selected Files,
       pagination; row → side drawer, eye → detail page with an inline preview of PDFs and images.
 - [ ] Not in the first version: Category / Sub Category / Expiration Date (the opportunity form doesn't ask for them),

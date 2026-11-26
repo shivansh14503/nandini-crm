@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { defaultCommissionType, hasCommission, opportunityInputSchema } from './opportunity.validator.js';
+import { defaultCommissionType, hasCommission, opportunityInputSchema, payeeBankIssues } from './opportunity.validator.js';
 import { toOpportunityData } from './opportunity.mapper.js';
 
 const links = { organization: { id: null, name: 'ACME TRADERS' }, contact: { id: null, name: 'Ravi Kumar' } };
@@ -56,9 +56,23 @@ describe('opportunity commission type', () => {
         assert.equal(large.commissionType, 'Other');
         assert.equal(large.bankName, 'HDFC Bank');
         assert.equal(large.ifscCode, 'HDFC0001234');
+        // Not editable: a type sent with the save gives way to the amount's.
+        const picked = toOpportunityData(opportunityInputSchema.parse({ ...base, commission: 'Yes', commissionAmount: 800, commissionType: 'Other', bankName: 'HDFC Bank' }), links, totals);
+        assert.equal(picked.commissionType, 'Self');
+        assert.equal(picked.bankName, null);
         const none = toOpportunityData(opportunityInputSchema.parse({ ...base, commission: 'No', commissionType: 'Other', bankName: 'HDFC Bank' }), links, totals);
         assert.equal(none.commissionType, null);
         assert.equal(none.bankName, null);
+    });
+
+    it('requires every payee bank detail above 1,000 only', () => {
+        const bank = { accountName: 'Rohit Verma', accountNo: '50200012345678', bankName: 'HDFC Bank', ifscCode: 'HDFC0001234', panNumber: 'ABCDE1234F' };
+        assert.deepEqual(payeeBankIssues({ commission: 'Yes', commissionAmount: 1000 }), []);
+        assert.deepEqual(payeeBankIssues({ commission: 'No', commissionAmount: 5000 }), []);
+        assert.deepEqual(payeeBankIssues({ commission: 'Yes', commissionAmount: 5000, ...bank }), []);
+        const missing = payeeBankIssues({ commission: 'Yes', commissionAmount: 1000.5, ...bank, bankName: ' ', panNumber: undefined });
+        assert.deepEqual(missing.map((i) => i.path[0]), ['bankName', 'panNumber']);
+        assert.match(missing[0].message, /Bank Name is required when Commission Amount is above ₹1,000/);
     });
 
     it('rejects a type other than Self or Other and a malformed PAN', () => {

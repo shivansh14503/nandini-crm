@@ -1420,14 +1420,13 @@ model RecordFile {
 // ── Documents ──────────────────────────────────────────────────────────────────
 
 /// Documents module (Activities › Documents): the document an opportunity records in its Documentation section
-/// (Add Document Yes: Document No, Document Date, Remarks, Upload Doc). Written only by the opportunity form, one per
+/// (Add Document Yes: Document No, Document Date, Upload Doc). Written only by the opportunity form, one per
 /// opportunity; switching Add Document to No deletes it. Listed while its opportunity is live.
 model Document {
   id              String    @id @default(uuid()) @db.NVarChar(50)
   opportunityId   String    @unique @db.NVarChar(50)
   documentNo      String?   @db.NVarChar(30)
   documentDate    DateTime? @db.Date
-  documentRemarks String?   @db.NVarChar(2000)
   /// Upload Doc (RecordFile). Required by the form; NULL only on documents migrated without a file.
   documentFileId  String?   @db.NVarChar(50)
 

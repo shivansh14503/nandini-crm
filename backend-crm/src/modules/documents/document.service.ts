@@ -39,7 +39,6 @@ export const documentService = {
                 and.push({
                     OR: [
                         { documentNo: { contains: page.search } },
-                        { documentRemarks: { contains: page.search } },
                         { documentFile: { fileName: { contains: page.search } } },
                         { opportunity: { opportunityCode: { contains: page.search } } },
                         { opportunity: { opportunityName: { contains: page.search } } },
