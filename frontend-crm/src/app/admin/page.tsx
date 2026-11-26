@@ -12,6 +12,7 @@ import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined';
 import FormatListNumberedOutlinedIcon from '@mui/icons-material/FormatListNumberedOutlined';
 import MarkEmailReadOutlinedIcon from '@mui/icons-material/MarkEmailReadOutlined';
 import EventBusyOutlinedIcon from '@mui/icons-material/EventBusyOutlined';
+import HubOutlinedIcon from '@mui/icons-material/HubOutlined';
 import ManageAccountsOutlinedIcon from '@mui/icons-material/ManageAccountsOutlined';
 import SecurityOutlinedIcon from '@mui/icons-material/SecurityOutlined';
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
@@ -99,6 +100,16 @@ const ADMIN_MODULES: AdminModule[] = [
         href: ROUTES.HOLIDAYS,
         badge: BADGES.available,
         highlights: ['Holiday list', 'Import', 'Year filter', 'On the calendar'],
+    },
+    {
+        key: 'api-integrations',
+        title: 'API Integrations',
+        description:
+            'Connect the CRM to Google Workspace and Microsoft 365 for calendar sync: app credentials, which activities go to calendars, company email domains, and who is connected.',
+        icon: <HubOutlinedIcon />,
+        href: ROUTES.API_INTEGRATIONS,
+        badge: BADGES.available,
+        highlights: ['Google', 'Microsoft 365', 'Zoom', 'Who is connected'],
     },
     {
         key: 'roles',

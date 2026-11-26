@@ -103,7 +103,6 @@ const DEFAULT_OPPORTUNITY_FORM: OpportunityFormData = {
     addDocument: 'No',
     documentNo: '',
     documentDate: '',
-    documentRemarks: '',
     documentFile: null,
 
     // Line Items: none until the user adds a product (as on a new quotation or a converted lead).

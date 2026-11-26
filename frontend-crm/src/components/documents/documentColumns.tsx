@@ -16,7 +16,7 @@ const textCellSx = { fontSize: '0.8rem', fontWeight: 600, color: 'var(--crm-slat
 
 /**
  * The Documents table's columns. Labels match the opportunity form's Documentation fields (Document No, Document
- * Date, Upload Doc, Remarks). `openRecord` runs on a plain click of the Document No link (opens the drawer).
+ * Date, Upload Doc). `openRecord` runs on a plain click of the Document No link (opens the drawer).
  */
 export function useDocumentColumns(openRecord: (record: Document) => void): DataTableColumn<Document>[] {
     return useMemo(
@@ -96,17 +96,6 @@ export function useDocumentColumns(openRecord: (record: Document) => void): Data
                             {d.organizationName || '-'}
                         </Typography>
                     ),
-            },
-            {
-                id: 'documentRemarks',
-                label: 'REMARKS',
-                sortable: true,
-                minWidth: 200,
-                render: (d) => (
-                    <Typography noWrap title={d.documentRemarks || undefined} sx={{ ...plainCellSx, maxWidth: 260 }}>
-                        {d.documentRemarks || '-'}
-                    </Typography>
-                ),
             },
             {
                 id: 'assignedTo',

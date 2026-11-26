@@ -114,6 +114,62 @@ describe('redact', () => {
         assert.equal(redact('x'), 'x');
         assert.equal(redact(null), null);
     });
+    it('hides integration secrets and OAuth tokens (exact keys, snake_case, and the camelCase suffix rule)', () => {
+        const keys = [
+            'secrets',
+            'secretsEnc',
+            'syncCursor',
+            'clientSecret',
+            'webhookSecret',
+            'idToken',
+            'codeVerifier',
+            'access_token',
+            'refresh_token',
+            'id_token',
+            'client_secret',
+            'code_verifier',
+            'accessTokenEnc',
+            'refreshTokenEnc',
+            'zoomWebhookSecret',
+            'smtpPassword',
+            'channelToken',
+        ];
+        const out = redact(Object.fromEntries(keys.map((key) => [key, 'value']))) as Record<string, unknown>;
+        for (const key of keys) assert.equal(out[key], REDACTED, key);
+    });
+    it('keeps record codes, custom fields that merely contain "otp" / "token", and the non-secret integration fields', () => {
+        const input = {
+            code: 'LD-0012',
+            leadCode: 'LD-0012',
+            hotProspect: 'Yes',
+            tokenVersion: 3,
+            tokens: 4,
+            secretChanged: true,
+            secretCleared: true,
+            clientSecretExpiresOn: '2027-01-31',
+            clientId: 'abc.apps.googleusercontent.com',
+            enabled: { from: false, to: true },
+        };
+        assert.deepEqual(redact(input), input);
+    });
+});
+
+describe('integration audit entities', () => {
+    it('files provider set-ups under API Integrations as CONFIG, connections under the calendar', () => {
+        assert.equal(moduleFor('IntegrationProvider'), 'admin-integrations');
+        assert.equal(categoryFor('IntegrationProvider', 'UPDATE'), 'CONFIG');
+        assert.equal(severityFor('UPDATE', categoryFor('IntegrationProvider', 'UPDATE')), 'NOTICE');
+        assert.equal(moduleFor('CalendarConnection'), 'calendar');
+        assert.equal(labelFromChanges('IntegrationProvider', 'microsoft', {}), 'Microsoft 365');
+        assert.equal(labelFromChanges('CalendarConnection', 'c1', { accountEmail: 'asha@nandiniinfosys.com' }), 'asha@nandiniinfosys.com');
+    });
+    it('treats CONNECT / DISCONNECT as SECURITY notices that are not diffs', () => {
+        assert.equal(categoryFor('CalendarConnection', 'CONNECT'), 'SECURITY');
+        assert.equal(categoryFor('CalendarConnection', 'DISCONNECT'), 'SECURITY');
+        assert.equal(severityFor('CONNECT', 'SECURITY'), 'NOTICE');
+        assert.equal(severityFor('DISCONNECT', 'SECURITY'), 'NOTICE');
+        assert.equal(changedFieldsOf('CONNECT', { provider: { from: null, to: 'google' } }), null);
+    });
 });
 
 describe('moduleTitle', () => {

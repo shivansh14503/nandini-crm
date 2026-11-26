@@ -26,6 +26,8 @@ import { assertRecordFile } from '../files/recordFile.service.js';
 import { OPPORTUNITY_DOCUMENT_INCLUDE, syncOpportunityDocument } from '../documents/document.sync.js';
 import {
     documentationIssues,
+    payeeBankIssues,
+    PAYEE_BANK_FIELDS,
     OPPORTUNITY_SORT_FIELDS,
     opportunityInputSchema,
     opportunityListQuerySchema,
@@ -123,6 +125,13 @@ function assertDocumentation(input: OpportunityInput): void {
     if (issues.length) throw HttpError.badRequest(issues[0].message, issues);
 }
 
+/** Commission above 1,000 (Type Other): every payee bank detail is required (payeeBankIssues). */
+function assertPayeeBank(input: OpportunityInput): void {
+    const issues = payeeBankIssues(input);
+    if (issues.length) throw HttpError.badRequest(issues[0].message, issues);
+}
+const PAYEE_BANK_TRIGGER_KEYS = ['commission', 'commissionAmount', 'commissionType', ...PAYEE_BANK_FIELDS.map((f) => f.key)];
+
 export async function createOpportunityRecord(
     tx: TransactionClient,
     input: OpportunityInput,
@@ -212,6 +221,7 @@ export const opportunityService = {
     async create(body: unknown, user: AuthUser): Promise<OpportunityDto> {
         const input = opportunityInputSchema.parse(body);
         assertDocumentation(input);
+        assertPayeeBank(input);
         assertLeadSourceDetails(input);
         // Sales Stage → Customer Response → follow-up (opportunity.followUp.ts): a closed stage stores neither.
         const plan = planOpportunityFollowUp(input, Boolean(input.customerResponse?.trim()), await loadResponseRules(prisma), businessNow());
@@ -249,6 +259,8 @@ export const opportunityService = {
             // Checked when the stage or the document changes, so records saved at PO before the rule existed still
             // take unrelated edits (follow-ups, …).
             if (['salesStage', 'addDocument', 'documentFile'].some((key) => key in patch)) assertDocumentation(input);
+            // Likewise the payee's bank details (commission above 1,000), when the edit touches the commission or them.
+            if (PAYEE_BANK_TRIGGER_KEYS.some((key) => key in patch)) assertPayeeBank(input);
             // Likewise the Lead Source's follow-up field (Referred By / Partner Company), when the edit touches them.
             if (LEAD_SOURCE_DETAIL_KEYS.some((key) => key in patch)) assertLeadSourceDetails(input);
             await assertRecordFile(tx, 'opportunities', input.documentFile, 'documentFile', existing.document?.documentFileId);

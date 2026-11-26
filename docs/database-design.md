@@ -1,7 +1,7 @@
 # Nandini CRM — Database Design
 
-> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (80 migrations,
-> latest `20261126210000_user_profile`, as of 2026-11-26). Update it in the same change as any schema migration.
+> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (82 migrations,
+> latest `20261126230000_user_profile`, as of 2026-11-26). Update it in the same change as any schema migration.
 > Related: [System design](system-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
 ---
@@ -35,6 +35,7 @@
 | Audit & UI state | `AuditLog`, `AuditExport`, `AuditDigest`, `TableFilter`, `ModuleScorecard` |
 | Notifications & outgoing mail | `Notification` (navbar bell), `EmailLog` (every email the CRM sends) |
 | Email checks | `EmailValidationRun` |
+| Integrations | `IntegrationProvider` (Admin › API Integrations; calendar connections arrive in P2-2) |
 
 ## 2. Design conventions
 
@@ -146,7 +147,7 @@ Pre-existing table kept for compatibility (columns `Id`, `Username`, `Password`,
 | `Username` | NVARCHAR(50) UNIQUE | Used everywhere as the owner/creator identifier |
 | `Password` | NVARCHAR(255) | bcrypt hash; legacy plain-text values are re-hashed on next login |
 | `Role` | NVARCHAR(50) | Default `Sales Executive`; drives admin access and row-level scope |
-| `email`, `department` | | `email` is unique in code only (SQL Server allows one NULL in a unique key); both admin-managed (read-only on My Profile) |
+| `email`, `department` | | `email` is unique in code only (SQL Server allows one NULL in a unique key). Since P2-1 the CRM writes it through `modules/users/userEmail.service.ts` (Admin › API Integrations › People; the later Admin › Users reuses it): trimmed and lower-cased, unique among **active non-group** users (writers serialise on an application lock), a company domain (`activities/calendarSync` `companyDomains`) unless the admin allows another, audited `User UPDATE`. The filtered unique index `UX_Users_email` follows in P2-2. Both admin-managed (read-only on My Profile) |
 | `fullName` | NVARCHAR(100), default `''` | Display name read everywhere (lookups, audit log, quotation PDFs). A profile write that changes a name sets it to `trim(firstName + ' ' + lastName)` |
 | `firstName`, `lastName` | NVARCHAR(100) NULL | Edited on My Profile (name-cased like other person names; together ≤ 99 characters so `fullName` fits). NULL or stale for users created or renamed outside the app: the API then shows them split from `fullName` (`resolveNameParts`) |
 | `phone` | NVARCHAR(20) NULL | The **mobile** number (E.164); My Profile calls it Mobile, quotation PDFs print it as the sales person's phone |
@@ -156,7 +157,7 @@ Pre-existing table kept for compatibility (columns `Id`, `Username`, `Password`,
 
 Indexes: `email`, `isActive`.
 
-Migration `20261126210000_user_profile` adds `firstName`, `lastName`, `officePhone` and `passwordChangedAt` (all NULL)
+Migration `20261126230000_user_profile` adds `firstName`, `lastName`, `officePhone` and `passwordChangedAt` (all NULL)
 and splits every existing name once: `firstName` = the text before the first space of `LTRIM(RTRIM(fullName))`,
 `lastName` = the rest, trimmed (NULL when empty); a blank `fullName` leaves both NULL. `fullName` itself is not
 rewritten (`npm run seed` splits the same way, `splitFullName` in `modules/profile/profile.dto.ts`). Writes: the
@@ -166,7 +167,7 @@ office phone), sign-in (`lastLoginAt`, legacy password re-hash) and the password
 
 ### 4.1a `UserPhoto` (profile photos)
 
-Migration `20261126210000_user_profile` (new table). Module `backend-crm/src/modules/profile`. A user's profile photo,
+Migration `20261126230000_user_profile` (new table). Module `backend-crm/src/modules/profile`. A user's profile photo,
 bytes in the database like `RecordFile` / `PdfAsset`: `id` (uuid), `userId` (INT, **UNIQUE**, FK → `Users.Id`
 **ON DELETE CASCADE**), `mimeType` (≤ 50, detected from the bytes: PNG, JPEG or WebP), `sizeBytes`, `data`
 (VARBINARY(MAX), ≤ 512 KB; the crop dialog sends 256 × 256), `createdAt`. One row per user; a new upload deletes the
@@ -229,11 +230,11 @@ required field for leads (closed leads have none).
 `leadGivenBy`, `nextFollowupDate`/`Time`, `followupType`, `customerResponse` (as on leads), `remarks`, `description`, `assignedTo`,
 billing (`tallySerialNo` — 9 digits starting with 7, checked by the API, `invoiceNo`, `invoiceDate`), `commission` (fixed `Yes` / `No`, default `No`) with
 `commissionAmount` (DECIMAL(18,2), required above 0 when `Yes`, NULL when `No`), `commissionType` (fixed `Self` /
-`Other` while `Yes`; defaults to `Self` up to 1,000 and `Other` above), the commission payee's bank details kept only
+`Other` while `Yes`; not editable: always `Self` up to 1,000 and `Other` above, set by the API from the amount), the commission payee's bank details kept only
 while `Other` (`accountName`, `accountNo`, `bankName`, `ifscCode`, `panNumber`: the Organization columns' sizes and
-rules), documentation (`addDocument` fixed `Yes` / `No`, must be `Yes` at Sales Stage `PO`; while `Yes` the opportunity
-has a `Document` row (§4.24) with Document No, Document Date, Remarks and the file, which the API returns on the
-opportunity as `documentNo`, `documentDate`, `documentRemarks`, `documentFile`; `No` deletes it), totals (`currency`, `groupName`,
+rules; all five required by the API while `Other`), documentation (`addDocument` fixed `Yes` / `No`, must be `Yes` at Sales Stage `PO`; while `Yes` the opportunity
+has a `Document` row (§4.24) with Document No, Document Date and the file, which the API returns on the
+opportunity as `documentNo`, `documentDate`, `documentFile`; `No` deletes it), totals (`currency`, `groupName`,
 `lumpSumDiscount`, `totalAmount`, `totalDiscount`, `subtotal`, `totalTax`, `grandTotal` — recomputed and verified
 server-side), `customDataJson`, audit/soft-delete.
 
@@ -506,10 +507,10 @@ The document an opportunity records in its Documentation section (migration `202
 moved it here from columns on `Opportunity` and copied the existing ones). Written only by opportunity saves
 (`modules/documents/document.sync.ts`): created when Add Document turns `Yes`, updated when its details change,
 deleted when it turns `No`. `opportunityId` (UNIQUE: one per opportunity) → `Opportunity`, `documentNo`,
-`documentDate` (DATE), `documentRemarks`, `documentFileId` → `RecordFile` (required by the API; NULL only on a
+`documentDate` (DATE), `documentFileId` → `RecordFile` (required by the API; NULL only on a
 migrated document that had no file), `createdBy` (who added it; on migrated rows the file's uploader), `updatedBy`,
 `createdAt`, `updatedAt`. No soft delete of its own: it is listed while its opportunity is live, under the
-opportunity's row-level access, and comes back with a restored opportunity. Both links are `NO ACTION`.
+opportunity's row-level access, and comes back with a restored opportunity. Both links are `NO ACTION`. Remarks (`documentRemarks`) was dropped on 2026-11-26 (migration `20261126210000_document_drop_remarks`).
 
 Indexes: `opportunityId` (unique), `documentFileId`, `createdAt`.
 
@@ -608,6 +609,30 @@ index covers both kinds without clashing); the API shows it as `MM-DD`. The cale
 each year asked for (29 Feb falls on 28 Feb in other years). A one-off holiday that a yearly one of the same occasion
 already covers is refused as a duplicate; a yearly one may be added while one-off copies exist, and the calendar
 shows such a day once.
+
+### 4.28 `IntegrationProvider` (Admin › API Integrations)
+
+Migration `20261126220000_integrations` (new table only; Calendar Phase 2 P2-1). Module
+`backend-crm/src/modules/integrations`. One row per external provider an admin has saved; no row = not set up, and
+every provider starts switched off.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `provider` | NVARCHAR(30) PK | `google` \| `microsoft` \| `zoom` |
+| `enabled` | BIT, default 0 | Employees can connect only while on; Zoom stays off until Phase 3 |
+| `clientId` | NVARCHAR(200) NULL | OAuth client (application) id; not secret |
+| `secretsEnc` | NVARCHAR(MAX) NULL | Sealed JSON `{ clientSecret, webhookSecret? }`: `enc:v1:<keyId>:<iv>:<tag>:<ct>`, AES-256-GCM, AAD `IntegrationProvider:<provider>:secrets` ([system design §3.6](system-design.md#36-security-model)). Never returned, logged or audited |
+| `keyId` | NVARCHAR(8) NULL | Key that sealed `secretsEnc` (`npm run integrations:reencrypt` moves rows to the active key) |
+| `secretHintsJson` | NVARCHAR(MAX) NULL | Non-secret hints: `{ clientSecret: { last4, updatedAt, updatedBy, expiresOn? }, webhookSecret?: {…} }` |
+| `settingsJson` | NVARCHAR(MAX) NULL | Google `{ scopeProfile, pkce }`, Microsoft `{ tenantId }`, Zoom `{}` |
+| `clientVersion` | INT, default 1 | Bumped when the client id or the Microsoft tenant changes (connections made with the old app must reconnect, P2-2) |
+| `lastTestAt`, `lastTestOk`, `lastTestMessage` (≤ 300) | | Last "Test connection" result; cleared when credentials change |
+| `updatedBy`, `createdAt`, `updatedAt` | | |
+
+Saves lock the row (`acquireLocks`) and are audited as entity `IntegrationProvider` (module `admin-integrations`,
+category CONFIG) with `secretChanged` / `webhookSecretChanged` / `secretCleared` flags instead of values. Company
+calendar settings are not here: they are the module setting `ModuleSetting (activities, calendarSync)`; which
+Followup Types sync is option meta `calendarSync` on `shared_followup_type` options (missing = on; Task / Note never).
 
 ## 5. Index strategy
 

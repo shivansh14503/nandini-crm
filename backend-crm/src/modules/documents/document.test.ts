@@ -11,28 +11,26 @@ describe('documentValues', () => {
     });
 
     it('maps the Documentation fields to columns, blanks to null', () => {
-        const values = documentValues({ addDocument: 'Yes', documentNo: ' PO-1 ', documentDate: '2026-11-20', documentRemarks: '', documentFile: 'f1' });
+        const values = documentValues({ addDocument: 'Yes', documentNo: ' PO-1 ', documentDate: '2026-11-20', documentFile: 'f1' });
         assert.ok(values);
         assert.equal(values.documentNo, 'PO-1');
         assert.equal(values.documentDate?.toISOString().slice(0, 10), '2026-11-20');
-        assert.equal(values.documentRemarks, null);
         assert.equal(values.documentFileId, 'f1');
     });
 });
 
 describe('sameDocument', () => {
-    const stored = { documentNo: 'PO-1', documentDate: new Date('2026-11-20T00:00:00Z'), documentRemarks: null, documentFileId: 'f1' };
+    const stored = { documentNo: 'PO-1', documentDate: new Date('2026-11-20T00:00:00Z'), documentFileId: 'f1' };
 
     it('matches a save that changes nothing', () => {
         assert.equal(sameDocument(stored, documentValues({ addDocument: 'Yes', documentNo: 'PO-1', documentDate: '2026-11-20', documentFile: 'f1' })!), true);
     });
 
-    it('sees a new file, number, date or remark', () => {
+    it('sees a new file, number or date', () => {
         const base = { addDocument: 'Yes', documentNo: 'PO-1', documentDate: '2026-11-20', documentFile: 'f1' };
         assert.equal(sameDocument(stored, documentValues({ ...base, documentFile: 'f2' })!), false);
         assert.equal(sameDocument(stored, documentValues({ ...base, documentNo: 'PO-2' })!), false);
         assert.equal(sameDocument(stored, documentValues({ ...base, documentDate: '2026-11-21' })!), false);
-        assert.equal(sameDocument(stored, documentValues({ ...base, documentRemarks: 'Signed copy' })!), false);
     });
 });
 
@@ -42,7 +40,6 @@ describe('toDocumentDto', () => {
         opportunityId: 'o1',
         documentNo: 'PO-1',
         documentDate: new Date('2026-11-20T00:00:00Z'),
-        documentRemarks: null,
         documentFileId: 'f1',
         createdBy: 'mittal.sharma',
         updatedBy: null,
@@ -68,7 +65,6 @@ describe('toDocumentDto', () => {
         const dto = toDocumentDto(row);
         assert.equal(dto.documentNo, 'PO-1');
         assert.equal(dto.documentDate, '2026-11-20');
-        assert.equal(dto.documentRemarks, '');
         assert.equal(dto.documentFile?.url, '/api/files/f1');
         assert.equal(dto.opportunity, 'Tally Prime, TSS');
         assert.equal(dto.opportunityCode, 'OPP-0001');

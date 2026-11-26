@@ -34,6 +34,10 @@ export type AuditEntityType =
     /** A company holiday (Admin › Holidays). */
     | 'Holiday'
     | 'City'
+    /** A provider's company set-up on Admin › API Integrations (Google, Microsoft 365, Zoom); id = provider key. */
+    | 'IntegrationProvider'
+    /** An employee's calendar connection (Calendar Phase 2 P2-2): CONNECT / DISCONNECT. */
+    | 'CalendarConnection'
     /** An export of the audit log itself (Admin › Audit Log). */
     | 'AuditExport'
     /** The audit log's SQL Server ledger (integrity checks). */
@@ -74,7 +78,11 @@ export type AuditAction =
     /** A user changed their own password (My Profile); `changes` holds only `passwordChangedAt`, never a password. */
     | 'PASSWORD_CHANGE'
     /** A user signed out one of their other sessions (`scope: 'one'`, `sessionId`) or all of them (`scope: 'others'`). */
-    | 'SESSION_REVOKE';
+    | 'SESSION_REVOKE'
+    /** A calendar (or, from Phase 3, video) account was connected to a CRM user (Calendar Phase 2 P2-2). */
+    | 'CONNECT'
+    /** A calendar connection was ended by its user, an admin or the nightly check for inactive users. */
+    | 'DISCONNECT';
 
 /** DATA = a CRM record changed; CONFIG = an admin setting changed; SECURITY = sign-ins and refused access. */
 export type AuditCategory = 'DATA' | 'CONFIG' | 'SECURITY';
@@ -109,6 +117,8 @@ const MODULE_BY_ENTITY: Record<AuditEntityType, string> = {
     DocumentSeries: 'document-series',
     Holiday: 'holidays',
     City: 'cities',
+    IntegrationProvider: 'admin-integrations',
+    CalendarConnection: 'calendar',
     AuditExport: 'audit-log',
     AuditLedger: 'audit-log',
 };
@@ -127,6 +137,7 @@ const CONFIG_ENTITIES: ReadonlySet<AuditEntityType> = new Set([
     'DocumentSeries',
     'Holiday',
     'City',
+    'IntegrationProvider',
 ]);
 
 const SECURITY_ACTIONS: ReadonlySet<AuditAction> = new Set([
@@ -138,6 +149,8 @@ const SECURITY_ACTIONS: ReadonlySet<AuditAction> = new Set([
     'LEDGER_VERIFY',
     'PASSWORD_CHANGE',
     'SESSION_REVOKE',
+    'CONNECT',
+    'DISCONNECT',
 ]);
 
 /** Actions whose `changes` are a `{ field: { from, to } }` diff. */
@@ -170,7 +183,7 @@ export function categoryFor(entityType: AuditEntityType, action: AuditAction): A
  */
 export function severityFor(action: AuditAction, category: AuditCategory): AuditSeverity {
     if (action === 'LOGIN_FAILED' || action === 'ACCESS_DENIED') return 'WARNING';
-    if (['DELETE', 'RESTORE', 'REVERT', 'CONVERT', 'IMPORT', 'EXPORT', 'PASSWORD_CHANGE', 'SESSION_REVOKE'].includes(action) || category === 'CONFIG') {
+    if (['DELETE', 'RESTORE', 'REVERT', 'CONVERT', 'IMPORT', 'EXPORT', 'PASSWORD_CHANGE', 'SESSION_REVOKE', 'CONNECT', 'DISCONNECT'].includes(action) || category === 'CONFIG') {
         return 'NOTICE';
     }
     return 'INFO';
@@ -202,8 +215,16 @@ export function changedFieldsOf(action: AuditAction, changes: unknown): string |
     return joined.length > 1 ? joined : null;
 }
 
-/** Keys whose values are never written to the audit log, at any depth. */
-const SENSITIVE_KEY = /^(password|passwordHash|newPassword|currentPassword|confirmPassword|token|accessToken|refreshToken|secret|apiKey|otp)$/i;
+/**
+ * Keys whose values are never written to the audit log, at any depth: a whole-key list (any case, snake_case token
+ * keys included) plus a case-sensitive camelCase suffix rule, so `clientSecret`, `webhookSecret`, `accessTokenEnc`
+ * and the like are caught without a substring rule (which would hide admin custom fields such as `hotProspect`,
+ * "otp" inside) and without listing `code` (which would hide record codes such as LD-0012 in every diff).
+ */
+const SENSITIVE_KEY_EXACT =
+    /^(password|passwordHash|newPassword|currentPassword|token|accessToken|refreshToken|idToken|secret|secrets|secretsEnc|clientSecret|webhookSecret|apiKey|otp|codeVerifier|syncCursor|access_token|refresh_token|id_token|client_secret|code_verifier)$/i;
+const SENSITIVE_KEY_SUFFIX = /(Secret|Secrets|Token|Password)(Enc)?$/;
+export const isSensitiveKey = (key: string): boolean => SENSITIVE_KEY_EXACT.test(key) || SENSITIVE_KEY_SUFFIX.test(key);
 export const REDACTED = '[redacted]';
 
 /** Copy of `value` with sensitive keys replaced by `[redacted]` (diff `{ from, to }` pairs included). */
@@ -212,7 +233,7 @@ export function redact<T>(value: T, depth = 0): T {
     if (Array.isArray(value)) return value.map((item) => redact(item, depth + 1)) as T;
     const out: Record<string, unknown> = {};
     for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
-        out[key] = SENSITIVE_KEY.test(key) ? REDACTED : redact(item, depth + 1);
+        out[key] = isSensitiveKey(key) ? REDACTED : redact(item, depth + 1);
     }
     return out as T;
 }
@@ -227,6 +248,9 @@ export function moduleTitle(key: string | undefined | null): string | undefined 
         .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
         .join(' ');
 }
+
+/** Names of the providers on Admin › API Integrations (integration.constants.ts has the same list). */
+const INTEGRATION_PROVIDER_LABELS: Record<string, string> = { google: 'Google Workspace', microsoft: 'Microsoft 365', zoom: 'Zoom' };
 
 const text = (value: unknown): string | undefined => (typeof value === 'string' && value.trim() ? value.trim() : undefined);
 const joinLabel = (...parts: (string | undefined)[]) => parts.filter(Boolean).join(' › ') || undefined;
@@ -288,6 +312,10 @@ export function labelFromChanges(entityType: AuditEntityType, entityId: string, 
             return 'Document Series';
         case 'Holiday':
             return pick('occasion');
+        case 'IntegrationProvider':
+            return INTEGRATION_PROVIDER_LABELS[entityId] ?? entityId;
+        case 'CalendarConnection':
+            return pick('accountEmail');
         case 'Import':
         case 'RecordFile':
         case 'PdfAsset':

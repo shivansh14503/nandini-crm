@@ -139,6 +139,8 @@ const ACTION_LABELS: Record<string, string> = {
     LEDGER_VERIFY: 'Integrity check',
     PASSWORD_CHANGE: 'Password changed',
     SESSION_REVOKE: 'Session signed out',
+    CONNECT: 'Connected',
+    DISCONNECT: 'Disconnected',
 };
 export const actionLabel = (action: string) => ACTION_LABELS[action] ?? humanize(action.toLowerCase());
 
@@ -148,6 +150,7 @@ const MODULE_LABELS: Record<string, string> = {
     'document-series': 'Document Series',
     'list-scorecards': 'List Scorecards',
     'audit-log': 'Audit Log',
+    'admin-integrations': 'API Integrations',
 };
 /** `partner-companies` → `Partner Companies`. */
 export const moduleLabel = (key: string) => MODULE_LABELS[key] ?? humanize(key.replace(/-/g, ' '));
@@ -180,6 +183,11 @@ export const COMMON_LABELS: Record<string, string> = {
     runId: 'Bulk Check',
     reordered: 'Reordered',
     reset: 'Reset to Defaults',
+    secretChanged: 'Secret Changed',
+    secretCleared: 'Secret Removed',
+    webhookSecretChanged: 'Webhook Secret Changed',
+    clientSecretExpiresOn: 'Secret Expires On',
+    clientVersion: 'App Version',
 };
 
 // ── Values ───────────────────────────────────────────────────────────────────

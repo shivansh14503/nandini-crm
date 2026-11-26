@@ -3,15 +3,13 @@ import type { RecordFile } from './recordFile.types';
 /**
  * A document in Activities › Documents (backend `DocumentDto`): the document an opportunity records in its
  * Documentation section. Read-only here; it is added, changed and removed from the opportunity form. The document
- * fields use the opportunity form's keys (Document No, Document Date, Remarks, Upload Doc).
+ * fields use the opportunity form's keys (Document No, Document Date, Upload Doc).
  */
 export interface Document {
     id: string;
     documentNo: string;
     /** YYYY-MM-DD, or empty. */
     documentDate: string;
-    /** Remarks. */
-    documentRemarks: string;
     /** Upload Doc. */
     documentFile: RecordFile | null;
     opportunityId: string;

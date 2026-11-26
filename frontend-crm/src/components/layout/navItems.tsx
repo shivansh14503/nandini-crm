@@ -2,6 +2,7 @@ import { Box } from '@mui/material';
 import HomeIcon from '@mui/icons-material/Home';
 import { getModuleColor, moduleForPath } from '@/theme/moduleColors';
 import { ROUTES } from '@/config/constants';
+import { isAdminRole } from '@/utils/adminRoles';
 
 export interface NavLinkItem {
     label: string;
@@ -12,6 +13,8 @@ export interface NavLinkItem {
      * label still links to `href`.
      */
     children?: readonly NavLinkItem[];
+    /** Shown only to admin roles (`isAdminRole`); see `navGroupsFor`. */
+    adminOnly?: boolean;
 }
 
 export interface NavGroup {
@@ -81,10 +84,18 @@ export const NAV_ITEMS: readonly NavGroup[] = [
             { label: 'Partner Company', href: ROUTES.PARTNER_COMPANIES },
             { label: 'Referrals', href: ROUTES.REFERRALS },
             { label: 'Reports', href: '/dashboard' },
-            { label: 'Integrations', href: '/dashboard' },
+            { label: 'Integrations', href: ROUTES.API_INTEGRATIONS, adminOnly: true },
         ],
     },
 ];
+
+/** The navigation a user sees: admin-only items (and groups left empty by them) are dropped for everyone else. */
+export function navGroupsFor(role: string | null | undefined): readonly NavGroup[] {
+    if (isAdminRole(role)) return NAV_ITEMS;
+    const visible = (items: readonly NavLinkItem[]): NavLinkItem[] =>
+        items.filter((item) => !item.adminOnly).map((item) => (item.children ? { ...item, children: visible(item.children) } : item));
+    return NAV_ITEMS.map((group) => ({ ...group, items: visible(group.items) })).filter((group) => group.items.length > 0);
+}
 
 /** Small dot in the module's identity color; non-module items get an empty slot so labels stay aligned. */
 export function ModuleDot({ href }: { href: string }) {

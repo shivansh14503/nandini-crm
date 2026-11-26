@@ -85,7 +85,6 @@ export const opportunityFormSchema = z.object({
     addDocument: optionalString.default('No'),
     documentNo: optionalText('Document No', L.shortCode),
     documentDate: optionalString,
-    documentRemarks: optionalText('Remarks', L.longText),
     // The uploaded file (`{ id, fileName, … }`), or null.
     documentFile: z.custom<{ id: string; fileName: string; mimeType: string; sizeBytes: number; url: string } | null>((v) => v === null || v === undefined || isRecordFile(v)).nullish(),
 
@@ -123,14 +122,30 @@ export function defaultCommissionType(amount: number | string | null | undefined
     return commissionAmountOf(amount) > SMALL_COMMISSION_LIMIT ? 'Other' : 'Self';
 }
 
-export function commissionIssues(values: { commission?: string; commissionAmount?: number | string | null; commissionType?: string }): ConfigValidationIssue[] {
+/** The commission payee's bank details, all required while Commission Type is Other (an amount above ₹1,000). */
+export const PAYEE_BANK_FIELDS = [
+    { key: 'accountName', label: 'Account Name' },
+    { key: 'accountNo', label: 'Account No' },
+    { key: 'bankName', label: 'Bank Name' },
+    { key: 'ifscCode', label: 'IFSC Code' },
+    { key: 'panNumber', label: 'PAN Number' },
+] as const;
+type PayeeBankKey = (typeof PAYEE_BANK_FIELDS)[number]['key'];
+
+export function commissionIssues(
+    values: { commission?: string; commissionAmount?: number | string | null; commissionType?: string } & Partial<Record<PayeeBankKey, string>>,
+): ConfigValidationIssue[] {
     if (values.commission !== 'Yes') return [];
     const raw = values.commissionAmount === null || values.commissionAmount === undefined ? '' : String(values.commissionAmount).trim();
     if (!raw) return [{ path: 'commissionAmount', message: 'Commission Amount is required when Commission is Yes.' }];
     const amount = Number(raw);
     if (!Number.isFinite(amount) || amount <= 0) return [{ path: 'commissionAmount', message: 'Enter a Commission Amount above 0.' }];
     if (!values.commissionType?.trim()) return [{ path: 'commissionType', message: 'Commission Type is required when Commission is Yes.' }];
-    return [];
+    if (defaultCommissionType(amount) !== 'Other') return [];
+    return PAYEE_BANK_FIELDS.filter((f) => !values[f.key]?.trim()).map((f) => ({
+        path: f.key,
+        message: `${f.label} is required when Commission Amount is above ₹${SMALL_COMMISSION_LIMIT.toLocaleString('en-IN')}.`,
+    }));
 }
 
 /** Add Document must be Yes at Sales Stage PO, and needs a file (Upload Doc) whenever it is Yes. */

@@ -32,7 +32,6 @@ export interface DocumentDto {
     id: string;
     documentNo: string;
     documentDate: string;
-    documentRemarks: string;
     /** Upload Doc. */
     documentFile: RecordFileDto | null;
     opportunityId: string;
@@ -65,7 +64,6 @@ export function toDocumentDto(row: DocumentRow): DocumentDto {
         id: row.id,
         documentNo: text(row.documentNo),
         documentDate: toDateOnly(row.documentDate),
-        documentRemarks: text(row.documentRemarks),
         documentFile: row.documentFile ? toRecordFileDto(row.documentFile) : null,
         opportunityId: opp.id,
         opportunityCode: opp.opportunityCode,

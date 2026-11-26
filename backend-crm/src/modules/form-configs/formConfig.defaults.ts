@@ -948,7 +948,6 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         t('documentDate', 'Document Date', { type: 'date' }),
         // Required while Add Document is Yes (the form and the API enforce it).
         t('documentFile', 'Upload Doc', { type: 'file', lock: true }),
-        t('documentRemarks', 'Remarks', { type: 'textarea' }),
     ]),
 
     // ── Quotations ──

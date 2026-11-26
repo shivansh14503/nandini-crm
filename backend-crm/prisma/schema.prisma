@@ -48,7 +48,7 @@ model User {
   lastName          String?   @db.NVarChar(100)
   /// Mobile number, E.164 (My Profile "Mobile"). Quotation PDFs print it as the sales person's phone.
   phone             String?   @db.NVarChar(20)
-  /// Desk / landline number, E.164 (My Profile "Office phone").
+  /// Desk / landline number, E.164 (My Profile "Office Phone").
   officePhone       String?   @db.NVarChar(20)
   department        String?   @db.NVarChar(50)
   isActive          Boolean   @default(true)
@@ -1447,14 +1447,13 @@ model RecordFile {
 // ── Documents ──────────────────────────────────────────────────────────────────
 
 /// Documents module (Activities › Documents): the document an opportunity records in its Documentation section
-/// (Add Document Yes: Document No, Document Date, Remarks, Upload Doc). Written only by the opportunity form, one per
+/// (Add Document Yes: Document No, Document Date, Upload Doc). Written only by the opportunity form, one per
 /// opportunity; switching Add Document to No deletes it. Listed while its opportunity is live.
 model Document {
   id              String    @id @default(uuid()) @db.NVarChar(50)
   opportunityId   String    @unique @db.NVarChar(50)
   documentNo      String?   @db.NVarChar(30)
   documentDate    DateTime? @db.Date
-  documentRemarks String?   @db.NVarChar(2000)
   /// Upload Doc (RecordFile). Required by the form; NULL only on documents migrated without a file.
   documentFileId  String?   @db.NVarChar(50)
 
@@ -1699,4 +1698,33 @@ model Holiday {
 
   @@unique([holidayDate, occasion])
   @@index([status, holidayDate])
+}
+
+// ── Integrations (Admin › API Integrations) ────────────────────────────────────
+
+/// Company-wide set-up of one external provider (Admin › API Integrations). One row per provider, created on first
+/// save. Secrets are AES-256-GCM sealed (src/services/secretBox.ts) and never returned by the API.
+model IntegrationProvider {
+  /// 'google' | 'microsoft' | 'zoom' (INTEGRATION_PROVIDERS in integration.constants.ts)
+  provider        String    @id @db.NVarChar(30)
+  enabled         Boolean   @default(false)
+  clientId        String?   @db.NVarChar(200)
+  /// Sealed JSON { clientSecret, webhookSecret? } (AAD "IntegrationProvider:<provider>:secrets").
+  secretsEnc      String?   @db.NVarChar(Max)
+  /// Key id of secretsEnc (rotation).
+  keyId           String?   @db.NVarChar(8)
+  /// Non-secret hints { clientSecret: { last4, updatedAt, updatedBy, expiresOn? }, webhookSecret?: {…} }.
+  secretHintsJson String?   @db.NVarChar(Max)
+  /// Non-secret settings: microsoft { tenantId }; google { scopeProfile: 'narrow'|'broad', pkce: true };
+  /// zoom {} — company calendar settings live in ModuleSetting activities/calendarSync.
+  settingsJson    String?   @db.NVarChar(Max)
+  /// Bumped when clientId (or the Microsoft tenant) changes: connections made with the old app must reconnect.
+  clientVersion   Int       @default(1)
+  lastTestAt      DateTime?
+  lastTestOk      Boolean?
+  /// Fixed code + short provider text (≤ 300) for admins.
+  lastTestMessage String?   @db.NVarChar(300)
+  updatedBy       String?   @db.NVarChar(50)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @default(now()) @updatedAt
 }

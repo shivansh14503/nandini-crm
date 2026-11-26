@@ -3,6 +3,7 @@ import { booleanQuery } from '../../validators/common.js';
 import { CATEGORY_MODULES, CRM_MODULES, CUSTOM_FIELD_TYPES, FIELD_SIZES } from './formConfig.defaults.js';
 import { CLOSES_LEAD_META_KEY, RATING_RULE_META_KEY, ratingLimitsSchema, ratingRuleSchema } from '../leads/lead.rating.js';
 import { NO_FOLLOW_UP_META_KEY, OPPORTUNITY_STAGES_META_KEY, opportunityStagesSchema } from '../opportunities/opportunity.followUp.js';
+import { CALENDAR_SYNC_META_KEY, CALENDAR_SYNC_SETTING_KEY, calendarSyncSettingsSchema } from '../integrations/calendarSyncSettings.js';
 
 /**
  * Request schemas for /api/form-configs. Rules that depend on the stored row (system options can't be renamed or
@@ -37,8 +38,9 @@ const label = (field: string, max: number) =>
 
 /**
  * Free-form option meta, except the keys the app reads: a Customer Response option's Rating rule (`ratingRule`),
- * Sales Stages (`opportunityStages`) and "No follow-up" switch (`noFollowUp`), and a Status option's "Closes the
- * lead" switch (`closesLead`). docs/lead-rating-rules.md, docs/api-plan.md (Opportunities).
+ * Sales Stages (`opportunityStages`) and "No follow-up" switch (`noFollowUp`), a Status option's "Closes the
+ * lead" switch (`closesLead`), and a Followup Type option's "Send to calendars" switch (`calendarSync`, Admin › API
+ * Integrations). docs/lead-rating-rules.md, docs/api-plan.md (Opportunities, Integrations).
  */
 const metaSchema = z
     .record(z.string(), z.unknown())
@@ -58,6 +60,9 @@ const metaSchema = z
         }
         if (NO_FOLLOW_UP_META_KEY in meta && typeof meta[NO_FOLLOW_UP_META_KEY] !== 'boolean') {
             ctx.addIssue({ code: 'custom', path: [NO_FOLLOW_UP_META_KEY], message: '"No follow-up" must be on or off.' });
+        }
+        if (CALENDAR_SYNC_META_KEY in meta && typeof meta[CALENDAR_SYNC_META_KEY] !== 'boolean') {
+            ctx.addIssue({ code: 'custom', path: [CALENDAR_SYNC_META_KEY], message: '"Send to calendars" must be on or off.' });
         }
     });
 
@@ -95,6 +100,8 @@ export const MODULE_SETTING_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
     'contacts:convertSections': convertSectionsSchema,
     'organizations:convertSections': convertSectionsSchema,
     'opportunities:convertSections': convertSectionsSchema,
+    /** Admin › API Integrations company calendar-sync settings (integrations/calendarSyncSettings.ts). */
+    [`activities:${CALENDAR_SYNC_SETTING_KEY}`]: calendarSyncSettingsSchema,
 };
 
 export const moduleSchema = z.enum(CRM_MODULES, { error: `module must be one of: ${CRM_MODULES.join(', ')}.` });

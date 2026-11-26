@@ -7,6 +7,7 @@ import { formConfigService, invalidateFormConfigCaches } from '../modules/form-c
 import { invalidateUserLookupCaches, lookupService } from '../modules/lookups/lookup.service.js';
 import { invalidatePartnerCaches } from '../modules/partner-companies/partnerCompany.service.js';
 import { searchService } from '../modules/search/search.service.js';
+import { invalidateUserCaches } from '../modules/users/userEmail.service.js';
 import { auditService } from './audit.service.js';
 import { CACHE_KEYS, cacheService, type GuardedReadOptions } from './cache.service.js';
 
@@ -66,6 +67,8 @@ describe('cached reads', () => {
         await formConfigService.getAllConfigs();
         await formConfigService.getAllConfigs(true);
         await searchService.search({ q: 'Acme' });
+        await lookupService.users({});
+        await lookupService.users({ includeInactive: 'true' });
 
         // Each guarded read, with the invalidator of the writes that change it (called for real, Redis stubbed).
         const expected: [key: string, writer: string, invalidate: () => Promise<void>][] = [
@@ -80,6 +83,8 @@ describe('cached reads', () => {
             ['cache:lookups:form-configs:active', 'form-config writes', invalidateFormConfigCaches],
             ['cache:lookups:form-configs:all', 'form-config writes', invalidateFormConfigCaches],
             ['cache:search:all:1:…', 'any entity write', () => cacheService.invalidateEntityCaches('leads')],
+            ['cache:lookups:users:active', 'user email edits (Admin › API Integrations)', invalidateUserCaches],
+            ['cache:lookups:users:all', 'user email edits (Admin › API Integrations)', invalidateUserCaches],
         ];
         assert.deepEqual(
             reads.map((read) => [read.method, read.key.replace(/^(cache:search:all:1:)\S+$/, '$1…')]),
