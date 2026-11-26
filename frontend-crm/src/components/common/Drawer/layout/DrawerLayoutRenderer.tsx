@@ -20,6 +20,7 @@ import { DoubleClickCopyText } from '@/components/common/useDoubleClickCopy';
 import { useScorecardBadge } from '@/components/common/scorecard/scorecardDisplay';
 import { scorecardPaletteHex, scorecardTextColor } from '@/components/common/scorecard/scorecardUtils';
 import { findCrmUser } from '@/services/masterData.store';
+import { UserAvatar } from '@/components/common/UserAvatar';
 import { TICKET_PRIORITY_COLORS, TICKET_STATUS_COLORS } from '@/components/tickets/TicketBadges';
 import type { TicketPriority, TicketStatus } from '@/types/ticket.types';
 import { DrawerChannelRow, DrawerCopyButton, DrawerSectionCard } from '../DrawerPrimitives';
@@ -378,35 +379,22 @@ function rawList(ctx: LayoutCtx, key: string): string[] {
     return (Array.isArray(raw) ? raw : [raw]).filter((v) => typeof v === 'string' && v.trim()).map((v) => String(v));
 }
 
-const initialsOf = (name: string) => {
-    const parts = name.replace(/[._-]+/g, ' ').trim().split(/\s+/);
-    return ((parts[0]?.[0] ?? '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
-};
-
-/** A user: initials in a brand circle, name, and role • department when the user is known. */
+/** A user: profile photo (else initials in a brand circle), name, and role • department when the user is known. */
 function PersonRow({ value, fallback }: { value: string; fallback: string }) {
     const user = findCrmUser(value);
     const name = user?.name || fallback;
     return (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, minWidth: 0 }}>
-            <Box
+            <UserAvatar
+                name={name}
+                photoUrl={user?.photoUrl}
+                size={34}
                 sx={{
-                    width: 34,
-                    height: 34,
-                    flexShrink: 0,
-                    borderRadius: '50%',
-                    background: 'linear-gradient(135deg, var(--crm-fill-blue-600) 0%, var(--crm-fill-blue-700) 100%)',
-                    color: '#ffffff',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
                     fontSize: '0.78rem',
-                    fontWeight: 700,
+                    background: 'linear-gradient(135deg, var(--crm-fill-blue-600) 0%, var(--crm-fill-blue-700) 100%)',
                     boxShadow: '0 2px 8px rgb(var(--crm-accent-rgb) / 0.25)',
                 }}
-            >
-                {initialsOf(name)}
-            </Box>
+            />
             <Box sx={{ minWidth: 0 }}>
                 <Typography noWrap sx={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--crm-slate-900)', lineHeight: 1.3 }}>
                     {name}

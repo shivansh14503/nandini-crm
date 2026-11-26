@@ -15,6 +15,8 @@ export interface CrmUser {
     status: CrmUserStatus;
     isGroupUser: boolean;
     onLeave: boolean;
+    /** `/api/user-photos/<id>`; null (or absent) when the user has no profile photo. */
+    photoUrl?: string | null;
 }
 
 export const CRM_USER_DEPARTMENTS: CrmUserDepartment[] = ['Sales', 'Support', 'Accounts', 'IT', 'Management'];
