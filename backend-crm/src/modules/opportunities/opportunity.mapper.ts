@@ -59,7 +59,6 @@ export interface OpportunityDto {
     /** The document's details and file (Upload Doc), kept only while Add Document is Yes. */
     documentNo: string;
     documentDate: string;
-    documentRemarks: string;
     documentFile: RecordFileDto | null;
     currency: string;
     groupName: string;
@@ -119,7 +118,6 @@ export function toOpportunityDto(row: OpportunityRow): OpportunityDto {
         addDocument: text(row.addDocument),
         documentNo: text(row.document?.documentNo),
         documentDate: toDateOnly(row.document?.documentDate ?? null),
-        documentRemarks: text(row.document?.documentRemarks),
         documentFile: row.document?.documentFile ? toRecordFileDto(row.document.documentFile) : null,
         currency: row.currency,
         groupName: text(row.groupName),
@@ -138,9 +136,9 @@ export function toOpportunityDto(row: OpportunityRow): OpportunityDto {
     };
 }
 
-/** Commission Type (default by amount) and, for Other, the payee's bank details; all cleared without a commission. */
+/** Commission Type (always set by the amount; the form can't edit it) and, for Other, the payee's bank details; all cleared without a commission. */
 function commissionColumns(input: OpportunityInput) {
-    const type = hasCommission(input) ? (input.commissionType ?? defaultCommissionType(input.commissionAmount)) : null;
+    const type = hasCommission(input) ? defaultCommissionType(input.commissionAmount) : null;
     const bank = (value: string | undefined) => (type === 'Other' ? nullable(value) : null);
     return {
         commissionType: type,

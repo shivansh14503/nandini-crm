@@ -90,7 +90,6 @@ export interface OpportunityFormData {
     /** The document's details and file (Upload Doc), kept while Add Document is Yes. */
     documentNo?: string;
     documentDate?: string;
-    documentRemarks?: string;
     documentFile?: RecordFile | null;
 
     // Line Items Tab

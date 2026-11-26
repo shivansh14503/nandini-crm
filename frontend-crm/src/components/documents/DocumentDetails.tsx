@@ -123,7 +123,7 @@ export function DocumentFileCard({ file }: { file: RecordFile | null }) {
     );
 }
 
-/** Document No, Document Date, Remarks and the file (Upload Doc). */
+/** Document No, Document Date and the file (Upload Doc). */
 export function DocumentInfoSection({ document: d }: { document: Document }) {
     return (
         <DrawerSectionCard title="Document" icon={<DescriptionOutlinedIcon sx={{ fontSize: 18, color: 'var(--crm-text-blue-600)' }} />}>
@@ -132,9 +132,6 @@ export function DocumentInfoSection({ document: d }: { document: Document }) {
                 <Field label={L.documentDate}>{d.documentDate ? formatDay(d.documentDate) : ''}</Field>
                 <Field label={L.documentFile} full>
                     <DocumentFileCard file={d.documentFile} />
-                </Field>
-                <Field label={L.documentRemarks} full>
-                    {d.documentRemarks ? <Typography sx={{ ...valueSx, fontWeight: 500, whiteSpace: 'pre-wrap' }}>{d.documentRemarks}</Typography> : ''}
                 </Field>
             </Box>
         </DrawerSectionCard>

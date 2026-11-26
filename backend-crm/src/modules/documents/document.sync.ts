@@ -5,7 +5,7 @@ import { fromDateOnly, nullable, toDateOnly } from '../../utils/mappers.js';
 import { RECORD_FILE_SELECT } from '../files/recordFile.dto.js';
 
 /**
- * The opportunity form's Documentation section (Add Document, Document No, Document Date, Remarks, Upload Doc) is
+ * The opportunity form's Documentation section (Add Document, Document No, Document Date, Upload Doc) is
  * stored in the Document table, one row per opportunity, which the Documents module lists. The opportunity API keeps
  * the same fields: the mapper reads them from the row and every opportunity save calls `syncOpportunityDocument`.
  */
@@ -22,7 +22,6 @@ export interface DocumentationInput {
     addDocument?: string;
     documentNo?: string;
     documentDate?: string;
-    documentRemarks?: string;
     documentFile?: string | null;
 }
 
@@ -32,7 +31,6 @@ export function documentValues(input: DocumentationInput) {
     return {
         documentNo: nullable(input.documentNo),
         documentDate: input.documentDate ? fromDateOnly(input.documentDate) : null,
-        documentRemarks: nullable(input.documentRemarks),
         documentFileId: input.documentFile ?? null,
     };
 }
@@ -40,11 +38,10 @@ export function documentValues(input: DocumentationInput) {
 type DocumentValues = NonNullable<ReturnType<typeof documentValues>>;
 
 /** Whether the stored document already holds these values (a save that changes nothing leaves it untouched). */
-export function sameDocument(row: Pick<Document, 'documentNo' | 'documentDate' | 'documentRemarks' | 'documentFileId'>, values: DocumentValues): boolean {
+export function sameDocument(row: Pick<Document, 'documentNo' | 'documentDate' | 'documentFileId'>, values: DocumentValues): boolean {
     return (
         (row.documentNo ?? null) === values.documentNo &&
         toDateOnly(row.documentDate) === toDateOnly(values.documentDate) &&
-        (row.documentRemarks ?? null) === values.documentRemarks &&
         (row.documentFileId ?? null) === values.documentFileId
     );
 }
@@ -58,7 +55,7 @@ export async function syncOpportunityDocument(tx: TransactionClient, opportunity
     const values = documentValues(input);
     const existing = await tx.document.findUnique({
         where: { opportunityId },
-        select: { id: true, documentNo: true, documentDate: true, documentRemarks: true, documentFileId: true },
+        select: { id: true, documentNo: true, documentDate: true, documentFileId: true },
     });
     if (!values) {
         if (existing) await tx.document.delete({ where: { id: existing.id } });

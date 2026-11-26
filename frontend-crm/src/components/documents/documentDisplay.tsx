@@ -16,7 +16,6 @@ import type { RecordFile } from '@/types/recordFile.types';
 export const DOCUMENT_LABELS = {
     documentNo: 'Document No',
     documentDate: 'Document Date',
-    documentRemarks: 'Remarks',
     documentFile: 'Upload Doc',
     opportunity: 'Opportunity',
     salesStage: 'Sales Stage',
