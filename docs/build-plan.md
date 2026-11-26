@@ -1,7 +1,7 @@
 # Nandini CRM — Build Plan
 
 > **Status:** living document. Part 1 records what has been built (reconstructed from git history, 115 commits
-> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-26, Calendar Phase 2 P2-1, P2-2, P2-2b (admin-managed calendar connections), P2-3a and P2-4, Profile Phase 1: My Profile, Profile Phase 2: Admin › Users, Profile Phase 3: notifications & preferences, Profile Phase 4: connected accounts and Profile Phase 5 PR5a + PR5b: company formats, which completes Phase 17). Part 2
+> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-26, Calendar Phase 2 P2-1, P2-2, P2-2b (admin-managed calendar connections), P2-3a, P2-4 and P2-6 (busy times), Profile Phase 1: My Profile, Profile Phase 2: Admin › Users, Profile Phase 3: notifications & preferences, Profile Phase 4: connected accounts and Profile Phase 5 PR5a + PR5b: company formats, which completes Phase 17). Part 2
 > is the roadmap. Tick
 > items off and add new ones as work lands.
 > Related: [System design](system-design.md) · [Database design](database-design.md) · [API plan](api-plan.md)
@@ -408,7 +408,24 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         marked sent (`quietPastReminder`, no reminder burst on the deploy-day backfill); the Activities tab's Next
         follow-up box uses the record's own date while the switch is off.
   - [ ] **P2-5: calendar → CRM (polling)**
-  - [ ] **P2-6: busy times**
+  - [x] **P2-6: busy times** (2026-11-26) — no migration. `GET /api/activities/busy?users&from&to&exclude&suggest`
+        (`modules/calendar-sync/busy.*`): up to 20 people, ≤ 31 days, times only (D11). CRM part: Planned activities
+        (owner, or invited colleague not declined; Site Visit all-day → `away`), cached 30 s and dropped by activity
+        writes. Calendar part: new adapter method `freeBusy` (Google `POST /freeBusy` as the requester, then per
+        colleague; Microsoft app-only `getSchedule`; the fake provider too), through `withCalendarAccess`, 5 s, one
+        try, ≤ 14-day windows, ≤ 5 at once, cached 60 s per person in Redis (in-process memo while Redis is down).
+        Not enrolled / excluded / row in error / provider failing → CRM only, marked by `status`. `exclude` stops an
+        activity being moved from blocking itself; `suggest` returns the first common free slot (09:00–19:00, 15-min
+        grid, 7 days). Rate limit 60 / min / user with an in-memory fallback. Review fixes (2026-11-26): `exclude`
+        drops only an identical calendar block; a requester call that fails as a whole doesn't fan out per
+        colleague; busy reads are `readOnly` (a refused call marks no row / provider health); 8 s provider deadline,
+        120 provider calls / min / user, windows and cache keys on the 15-minute grid; the strip debounces, ignores
+        the previous answer while loading and keeps gap buttons ≥ 32 px (chips on phones). Independent of P2-3b (no
+        `ActivityExternalLink`). Frontend: `ActivityBusyTimes` strip with "Everyone free" gaps and "Find a free
+        time" in the activity form (page, quick-create behind "Check availability") and the Reschedule dialog;
+        calendar "Show busy times" background bands in week / 3-day / day views. Not run against a real SQL Server,
+        Google or Microsoft (fake provider and recorded-shape `fakeFetch` tests only). Owner check before relying on
+        Microsoft: `getSchedule` under the Exchange RBAC scope (first-run check F7).
   - [ ] **P2-7: webhooks and HTTPS go-live**
   - [ ] **P2-8: customer meetings from the calendar + replies both ways** (optional, off by default)
 

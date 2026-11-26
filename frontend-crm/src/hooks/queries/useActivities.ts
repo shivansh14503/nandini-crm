@@ -1,7 +1,7 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { activityService } from '@/services/activity.service';
 import type { PaginationParams } from '@/types/api.types';
-import type { ActivityMeta, ActivityRelatedModule, CalendarFeed, CalendarFeedParams } from '@/types/activity.types';
+import type { ActivityMeta, ActivityRelatedModule, BusyTimes, BusyTimesParams, CalendarFeed, CalendarFeedParams } from '@/types/activity.types';
 import { createEntityHooks } from './createEntityHooks';
 import { queryKeys } from './queryKeys';
 
@@ -40,6 +40,21 @@ export function useCalendarFeed(params: CalendarFeedParams | undefined, options:
         queryKey: queryKeys.activities.calendar(key),
         queryFn: () => activityService.calendar(params!),
         enabled: Boolean(params) && (options.enabled ?? true),
+        placeholderData: keepPreviousData,
+    });
+}
+
+/**
+ * Colleagues' busy times of a window (the activity form's availability strip). Fresh for 60 s (the server caches the
+ * calendar part as long); the previous answer stays on screen while the next day / people load.
+ */
+export function useBusyTimes(params: Omit<BusyTimesParams, 'suggest'> | undefined, options: { enabled?: boolean } = {}) {
+    const key: PaginationParams = params ? { users: params.users.join(','), from: params.from, to: params.to, exclude: params.exclude } : {};
+    return useQuery<BusyTimes>({
+        queryKey: queryKeys.activities.busy(key),
+        queryFn: () => activityService.busy(params!),
+        enabled: Boolean(params && params.users.length > 0) && (options.enabled ?? true),
+        staleTime: 60_000,
         placeholderData: keepPreviousData,
     });
 }

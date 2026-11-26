@@ -43,6 +43,7 @@ import { CUSTOMER_RESPONSE_CATEGORY, CUSTOMER_RESPONSES } from '@/components/for
 import { useActivity, useDeleteActivity } from '@/hooks/queries/useActivities';
 import { useDropdownOptionLabel, useModuleFormConfig } from '@/hooks/queries/useFormConfigs';
 import { activityService } from '@/services/activity.service';
+import { ActivityBusyTimes } from './ActivityBusyTimes';
 import { findCrmUser } from '@/services/masterData.store';
 import { UserAvatar } from '@/components/common/UserAvatar';
 import { getModuleColor } from '@/theme/moduleColors';
@@ -250,8 +251,16 @@ function RescheduleDialog({
     const methods = useForm<RescheduleValues>({ defaultValues: loaded });
     const { control, handleSubmit, setError, setValue, getValues, formState } = methods;
     const allDay = Boolean(useWatch({ control, name: 'allDay' }));
+    const startAt = useWatch({ control, name: 'startAt' }) ?? '';
+    const endAt = useWatch({ control, name: 'endAt' }) ?? '';
     const isTask = activity.followupType === TASK_TYPE;
     const nowWall = instantToZonedWallClock(clock.now(), timeZone);
+    // Busy times (P2-6) of the owner and invited colleagues, folded until asked for.
+    const busyPeople = useMemo(
+        () => [activity.assignedTo, ...(activity.attendees ?? []).filter((a) => a.kind === 'user' && a.username).map((a) => a.username as string)].filter(Boolean),
+        [activity]
+    );
+    const showBusy = !allDay && !isTask && activity.followupType !== NOTE_TYPE && activity.status === PLANNED_STATUS && busyPeople.length > 0;
 
     const save = handleSubmit(async (values) => {
         const schedule: ScheduleValues = { followupType: activity.followupType, status: activity.status, ...values };
@@ -305,6 +314,25 @@ function RescheduleDialog({
                         />
                     )}
                     <Typography sx={{ fontSize: '0.74rem', color: 'var(--mui-palette-text-secondary)' }}>{`Times in ${timeZoneAbbr(timeZone)} (${timeZone})`}</Typography>
+                    {showBusy && (
+                        <Box sx={{ mt: 1, minWidth: 0 }}>
+                            <ActivityBusyTimes
+                                people={busyPeople}
+                                startAt={startAt}
+                                endAt={endAt}
+                                timeZone={timeZone}
+                                now={clock.now}
+                                excludeId={activity.id}
+                                onPickStart={(wall) => {
+                                    const previous = getValues('startAt');
+                                    if (wall === previous) return;
+                                    setValue('startAt', wall, { shouldDirty: true, shouldValidate: true });
+                                    followStart(wall, previous);
+                                }}
+                                collapsible
+                            />
+                        </Box>
+                    )}
                 </DialogContent>
             </FormProvider>
             <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>

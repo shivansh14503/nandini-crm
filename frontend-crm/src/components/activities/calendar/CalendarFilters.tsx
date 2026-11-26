@@ -191,10 +191,15 @@ export interface CalendarFiltersProps {
     typeLabel: (value: string) => string;
     typeIcon: (value: string) => React.ElementType;
     miniMonth: MiniMonthProps;
+    /**
+     * "Show busy times" (Calendar Phase 2, P2-6): colleagues' busy blocks from the CRM and their company calendars as
+     * shaded background. Offered only while colleagues are selected; `available` false (month / agenda) explains why.
+     */
+    busyTimes?: { checked: boolean; available: boolean; onChange: (checked: boolean) => void };
 }
 
 /** The calendar's side rail: mini month, whose calendars, which types, sources and statuses. */
-export function CalendarFilters({ values, onChange, me, typeOptions, typeLabel, typeIcon, miniMonth }: CalendarFiltersProps) {
+export function CalendarFilters({ values, onChange, me, typeOptions, typeLabel, typeIcon, miniMonth, busyTimes }: CalendarFiltersProps) {
     const masters = useMasterData();
     const users = useMemo(
         () => getActiveUsers().filter((u) => !u.isGroupUser),
@@ -257,6 +262,27 @@ export function CalendarFilters({ values, onChange, me, typeOptions, typeLabel, 
                     }
                     renderInput={(params) => <TextField {...params} placeholder={selectedUsers.length === 0 ? 'Add people…' : undefined} sx={fieldSx} />}
                 />
+                {busyTimes && !onlyMe && (
+                    <Box sx={{ mt: 0.5 }}>
+                        <FormControlLabel
+                            sx={checkboxLabelSx}
+                            control={
+                                <Checkbox
+                                    size="small"
+                                    checked={busyTimes.checked}
+                                    disabled={!busyTimes.available}
+                                    onChange={(event) => busyTimes.onChange(event.target.checked)}
+                                />
+                            }
+                            label="Show busy times"
+                        />
+                        <Typography sx={{ fontSize: '0.7rem', color: 'var(--mui-palette-text-muted)', pl: 0.5 }}>
+                            {busyTimes.available
+                                ? 'Shaded: when anyone selected is busy, from the CRM and their work calendars (times only).'
+                                : 'In the week, 3-day and day views.'}
+                        </Typography>
+                    </Box>
+                )}
             </Box>
 
             <Box>

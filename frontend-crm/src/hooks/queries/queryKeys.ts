@@ -25,6 +25,8 @@ export const queryKeys = {
         calendar: (params?: PaginationParams) => ['activities', 'calendar', params ?? {}] as const,
         /** Business timezone, durations and reminders (GET /api/activities/meta). */
         meta: () => ['activities', 'meta'] as const,
+        /** Colleagues' busy times of a window (GET /api/activities/busy). */
+        busy: (params?: PaginationParams) => ['activities', 'busy', params ?? {}] as const,
     },
     documents: createEntityKeys('documents'),
     leads: createEntityKeys('leads'),
