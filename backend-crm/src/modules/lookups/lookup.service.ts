@@ -4,6 +4,7 @@ import type { Prisma } from '../../generated/prisma/client.js';
 import { CACHE_KEYS, cacheService } from '../../services/cache.service.js';
 import { normalizePlaceName } from '../../utils/cityMaster.js';
 import { booleanQuery } from '../../validators/common.js';
+import { photoUrlOf } from '../profile/profile.dto.js';
 
 /**
  * Data for the frontend's lookup modals and pickers (`LookupRecordMap`): compact projections of the big
@@ -45,6 +46,8 @@ export interface CrmUserDto {
     status: 'Active' | 'Inactive';
     isGroupUser: boolean;
     onLeave: boolean;
+    /** `/api/user-photos/<id>`, or null when the user has no profile photo. */
+    photoUrl: string | null;
 }
 
 export const usersQuerySchema = z.object({ includeInactive: booleanQuery });
@@ -129,6 +132,8 @@ export const lookupService = {
             const rows = await prisma.user.findMany({
                 where: includeInactive ? {} : { isActive: true },
                 orderBy: [{ fullName: 'asc' }, { username: 'asc' }],
+                // Only the photo's id (for its URL), never the bytes.
+                include: { photo: { select: { id: true } } },
             });
             return rows.map((user) => ({
                 id: String(user.id),
@@ -140,6 +145,7 @@ export const lookupService = {
                 status: user.isActive ? 'Active' : 'Inactive',
                 isGroupUser: user.isGroupUser,
                 onLeave: user.onLeave,
+                photoUrl: photoUrlOf(user.photo?.id),
             }));
         });
     },

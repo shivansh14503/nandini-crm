@@ -1,12 +1,13 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Avatar, Box, Chip, IconButton, Tooltip, Typography } from '@mui/material';
+import { Box, Chip, IconButton, Tooltip, Typography } from '@mui/material';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import { useFormContext, useWatch, type FieldPath, type FieldValues, type PathValue } from 'react-hook-form';
 import { FormField } from '../FormField';
 import { LOOKUP_FIELD_SIZE, type FieldSize } from '../fieldSizing';
 import { UserLookupModal } from '@/components/common/lookup';
+import { UserAvatar } from '@/components/common/UserAvatar';
 import { findCrmUser } from '@/services/masterData.store';
 import { useMasterData } from '@/hooks/queries/useMasterData';
 import { useFormMode } from '@/context/FormModeContext';
@@ -23,13 +24,6 @@ export interface RhfAssignedUserCardProps<T extends FieldValues> {
     /** Width token (default: the shared picker-field width, like every field that opens a lookup modal). */
     fieldSize?: FieldSize;
 }
-
-const getInitials = (name: string) => {
-    const parts = name.replace(/[._-]+/g, ' ').trim().split(/\s+/).filter(Boolean);
-    if (parts.length === 0) return '?';
-    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-};
 
 /**
  * React Hook Form bound "assigned user" card: avatar, full name, role • department and a button that
@@ -90,9 +84,7 @@ export function RhfAssignedUserCard<T extends FieldValues>({
                 }}
             >
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
-                    <Avatar sx={{ width: 32, height: 32, fontSize: '0.78rem', fontWeight: 700, backgroundColor: 'var(--crm-fill-blue-700)', flexShrink: 0 }}>
-                        {getInitials(displayName)}
-                    </Avatar>
+                    <UserAvatar name={displayName} photoUrl={user?.photoUrl} size={32} sx={{ fontSize: '0.78rem' }} />
                     <Box sx={{ minWidth: 0 }}>
                         <Typography noWrap sx={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--mui-palette-text-primary)', lineHeight: 1.2 }}>
                             {displayName}

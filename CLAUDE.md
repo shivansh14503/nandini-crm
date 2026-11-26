@@ -86,6 +86,7 @@ Never use `var(--mui-palette-primary-main)` as a solid background with white tex
   // or focus ring:
   boxShadow: '0 0 0 3px rgb(var(--crm-accent-rgb) / 0.22)'
   ```
+- **Solid Danger Button (white text)**: `background: 'var(--crm-fill-red-700)'`, hover `var(--crm-fill-red-800)` (deep red in both modes; `error-main` / `error-dark` turn pale in dark mode). Example: `UserStatusDialog.tsx`.
 
 ---
 

@@ -43,6 +43,7 @@ import { useActivity, useDeleteActivity } from '@/hooks/queries/useActivities';
 import { useDropdownOptionLabel, useModuleFormConfig } from '@/hooks/queries/useFormConfigs';
 import { activityService } from '@/services/activity.service';
 import { findCrmUser } from '@/services/masterData.store';
+import { UserAvatar } from '@/components/common/UserAvatar';
 import { getModuleColor } from '@/theme/moduleColors';
 import {
     CANCELLED_STATUS,
@@ -124,36 +125,12 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 const locationHref = (location: string) =>
     /^https?:\/\//i.test(location) ? location : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`;
 
-const initialsOf = (name: string) =>
-    name
-        .trim()
-        .split(/\s+/)
-        .slice(0, 2)
-        .map((part) => part[0]?.toUpperCase() ?? '')
-        .join('') || '?';
-
 function PersonBlock({ username }: { username: string }) {
     const user = findCrmUser(username);
     const name = user?.name || username || '-';
     return (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2, minWidth: 0 }}>
-            <Box
-                sx={{
-                    width: 34,
-                    height: 34,
-                    borderRadius: '50%',
-                    flexShrink: 0,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '0.75rem',
-                    fontWeight: 800,
-                    color: '#ffffff',
-                    background: 'linear-gradient(135deg, var(--crm-fill-blue-700) 0%, var(--crm-fill-blue-600) 100%)',
-                }}
-            >
-                {initialsOf(name)}
-            </Box>
+            <UserAvatar name={name} photoUrl={user?.photoUrl} size={34} sx={{ fontSize: '0.75rem', fontWeight: 800 }} />
             <Box sx={{ minWidth: 0 }}>
                 <Typography noWrap sx={{ fontSize: '0.86rem', fontWeight: 700, color: 'var(--crm-slate-900)' }}>
                     {name}

@@ -1,5 +1,6 @@
 import { displayTime } from './audit.format.js';
 import { actionLabel, moduleLabel } from './auditAdmin.present.js';
+import { photoUrlOf } from '../profile/profile.dto.js';
 
 /**
  * Admin › Audit Log › Users: one row per person who can appear in the log, with what they did in the chosen range
@@ -17,6 +18,8 @@ export interface DirectoryUser {
     isGroupUser: boolean;
     onLeave: boolean;
     lastLoginAt: Date | null;
+    /** Only the profile photo's id (never the bytes); absent or null when the user has none. */
+    photo?: { id: string } | null;
 }
 
 /** Entries of one user and category in the range. */
@@ -51,6 +54,8 @@ export interface AuditUserActivity {
     status: AuditUserStatus;
     onLeave: boolean;
     isGroupUser: boolean;
+    /** `/api/user-photos/<id>`; null when the user has no photo (and for `system` / `unknown`). */
+    photoUrl: string | null;
     lastLoginAt: string | null;
     /** In the business timezone. */
     lastLogin: string | null;
@@ -137,16 +142,17 @@ export function buildUserActivity(
             status: user.isActive ? 'active' : 'inactive',
             onLeave: user.onLeave,
             isGroupUser: user.isGroupUser,
+            photoUrl: photoUrlOf(user.photo?.id),
             lastLoginAt: user.lastLoginAt ? user.lastLoginAt.toISOString() : null,
             lastLogin: user.lastLoginAt ? format(user.lastLoginAt) : null,
         });
     }
     if (counts.has(SYSTEM_USER) || last.get(SYSTEM_USER)?.lastAt) {
-        add({ username: SYSTEM_USER, name: 'System', role: 'Background jobs', department: null, email: null, status: 'system', onLeave: false, isGroupUser: false, lastLoginAt: null, lastLogin: null });
+        add({ username: SYSTEM_USER, name: 'System', role: 'Background jobs', department: null, email: null, status: 'system', onLeave: false, isGroupUser: false, photoUrl: null, lastLoginAt: null, lastLogin: null });
     }
     for (const [k, username] of rangeNames) {
         if (seen.has(k)) continue;
-        add({ username, name: username, role: null, department: null, email: null, status: 'unknown', onLeave: false, isGroupUser: false, lastLoginAt: null, lastLogin: null });
+        add({ username, name: username, role: null, department: null, email: null, status: 'unknown', onLeave: false, isGroupUser: false, photoUrl: null, lastLoginAt: null, lastLogin: null });
     }
 
     return result.sort(

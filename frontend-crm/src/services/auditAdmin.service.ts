@@ -242,6 +242,8 @@ export interface AuditUserActivity {
     status: AuditUserStatus;
     onLeave: boolean;
     isGroupUser: boolean;
+    /** `/api/user-photos/<id>`; null when the user has no photo (and for `system` / `unknown`). */
+    photoUrl: string | null;
     lastLoginAt: string | null;
     /** In the business timezone. */
     lastLogin: string | null;
