@@ -22,7 +22,8 @@ import { throttledLogger } from './throttledLogger.js';
 /**
  * Calendar sync (Calendar Phase 2 spec §10, docs/system-design.md §5.4): the `crm-calendar-sync` queue.
  *   push      one link (`push-<linkId>-<dirtyAtMs>`, the sweep adds `-s<minute>`), after a CRM save and by the sweep
- *   enrolled  a connection row first reached `ok` (`enrolled-<connectionId>-<enrolledAtMs>`): push its dirty links
+ *   enrolled  a connection row reached `ok`, first time or after an error
+ *             (`enrolled-<connectionId>-<enrolledAtMs>-r<readyAtMs>`): push its dirty links
  *   check     a connection health check (`check-<connectionId>-<minute>`): new enrolments and due re-checks
  *   poll      scheduler 'calendar-poll', every 5 minutes 07:00–21:55: outbox sweep + due checks (P2-5 adds pulls)
  *   nightly   scheduler 'calendar-nightly', 00:25: reconcile + due checks + admin digest (from the reminders worker),

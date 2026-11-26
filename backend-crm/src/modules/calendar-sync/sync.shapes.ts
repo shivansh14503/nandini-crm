@@ -76,6 +76,17 @@ export interface SyncBase {
     provider: ProviderShape;
 }
 
+/** `{ crm, provider }` stored on the link (`ActivityExternalLink.baseJson`); null when unreadable. */
+export function parseBase(json: string | null | undefined): SyncBase | null {
+    if (!json) return null;
+    try {
+        const value = JSON.parse(json) as SyncBase;
+        return value && typeof value === 'object' && value.crm && value.provider ? value : null;
+    } catch {
+        return null;
+    }
+}
+
 export const FIELD_GROUPS = ['subject', 'when', 'location', 'status', 'attendees', 'reminder', 'description'] as const;
 export type FieldGroup = (typeof FIELD_GROUPS)[number];
 

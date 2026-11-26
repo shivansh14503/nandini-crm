@@ -25,7 +25,17 @@ import {
 import { getAdapter } from './providers/registry.js';
 import type { CalendarProviderAdapter, CallCtx, CreateEventInput } from './providers/types.js';
 import { attendeeInputsFromProvider, parseHeld, patchAttendees, resolveAttendeeEmails, skippedWarning, withoutHeld, type ResolvedAttendees } from './sync.attendees.js';
-import { ERROR_RETRY_MAX_MS, ERROR_RETRY_STEP_MS, GATED_RETRY_MS, MAX_PRECONDITION_LOOPS, SYNC_ERROR_CODES, syncAuditRoute, type LinkState } from './sync.constants.js';
+import {
+    ERROR_RETRY_MAX_MS,
+    ERROR_RETRY_STEP_MS,
+    GATED_RETRY_MS,
+    LEASE_CALL_HEADROOM_MS,
+    MAX_PRECONDITION_LOOPS,
+    SYNC_ERROR_CODES,
+    syncAuditRoute,
+    TRANSIENT_RETRY_HOLD_MS,
+    type LinkState,
+} from './sync.constants.js';
 import { eventKeyOf, requestedIdFor, syncKeyOf } from './sync.keys.js';
 import { invitationsOf, type EventContext } from './sync.mapping.google.js';
 import { planMerge, systemPatchOf } from './sync.merge.js';
@@ -33,7 +43,9 @@ import { syncErrorNotification } from './sync.notifications.js';
 import { isCreateEligible, isTypeSyncable } from './sync.outbox.js';
 import { planPush, shouldSendUpdates, type PushPlan } from './sync.plan.js';
 import { claimLease, type Lease } from './sync.lease.js';
-import { allInternal, crmActivityUrl, crmShapeOf, internalDescription, peopleOf, type CrmShape, type FieldGroup, type ProviderEvent, type SyncBase } from './sync.shapes.js';
+import { allInternal, crmActivityUrl, crmShapeOf, internalDescription, parseBase, peopleOf, type CrmShape, type FieldGroup, type ProviderEvent, type SyncBase } from './sync.shapes.js';
+
+export { parseBase } from './sync.shapes.js';
 
 /**
  * `pushLink(linkId)` (Calendar Phase 2 spec §8.6; admin-managed model: addendum §8): makes one calendar copy match its
@@ -55,7 +67,12 @@ import { allInternal, crmActivityUrl, crmShapeOf, internalDescription, peopleOf,
  * Errors: user- / app-level failures are classified by `withCalendarAccess` (row → `error` / provider health → `error`
  * with the admins told) and the push is skipped; 400-class → link `error`, not retried until the next edit / nightly,
  * one `calendar_sync_error` to the owner; rate limit → `rate_limited` (the job delays itself); anything else (a
- * persistent 401 included) is thrown for BullMQ's backoff (`markPushExhausted` after the last attempt).
+ * persistent 401 included) is thrown for BullMQ's backoff, the link put back 10 minutes so the sweep doesn't start a
+ * second retry chain (`markPushExhausted` after the last attempt). A link whose event is gone (`cancelled`,
+ * `removed_remote`) keeps that state through an error, so the next try still restores instead of patching.
+ *
+ * Lease (D12): checked (and extended when less than LEASE_CALL_HEADROOM_MS is left) before every provider call; a
+ * push that lost it stops without storing anything and answers `busy` (the job moves itself back).
  */
 
 export type PushResult =
@@ -74,16 +91,16 @@ export interface PushOptions {
     force?: boolean;
 }
 
-/** `{ crm, provider }` stored on the link; null when unreadable. */
-export function parseBase(json: string | null | undefined): SyncBase | null {
-    if (!json) return null;
-    try {
-        const value = JSON.parse(json) as SyncBase;
-        return value && typeof value === 'object' && value.crm && value.provider ? value : null;
-    } catch {
-        return null;
+/** The lease ran out during a long push and another job took it (D12): stop without storing anything. */
+class LeaseLostError extends Error {
+    constructor() {
+        super('Calendar connection lease lost');
+        this.name = 'LeaseLostError';
     }
 }
+
+/** States that say the link's event is gone; an error never overwrites them (the plan restores from them). */
+const EVENT_GONE_STATES: ReadonlySet<string> = new Set<LinkState>(['cancelled', 'removed_remote']);
 
 /** A lead / opportunity follow-up activity (P2-4: schedule, type, status, owner and related record follow the record). */
 const isFollowUp = (activity: Pick<ActivityRow, 'origin'>) => activity.origin === 'followup';
@@ -121,6 +138,10 @@ async function pushWithLease(linkId: string, dirtyAt: Date, connection: Calendar
     try {
         return await new LinkPush(linkId, connection, clock, options, lease).run();
     } catch (err) {
+        if (err instanceof LeaseLostError) {
+            logger.warn({ linkId, connectionId: connection.id }, 'Calendar lease lost during a push; moved back');
+            return { status: 'busy' };
+        }
         // The row went to error / the provider is off or unhealthy (withCalendarAccess classified and recorded it).
         if (err instanceof ConnectionUnavailableError) return gated(linkId, dirtyAt, err.reason, clock());
         if (err instanceof ProviderRateLimitedError) {
@@ -128,6 +149,10 @@ async function pushWithLease(linkId: string, dirtyAt: Date, connection: Calendar
             await prisma.activityExternalLink.updateMany({ where: { id: linkId, dirtyAt }, data: { nextAttemptAt: new Date(clock().getTime() + retryAfterMs) } });
             return { status: 'rate_limited', retryAfterMs };
         }
+        // BullMQ owns the retry now: the sweep leaves the link alone meanwhile (markPushExhausted sets the long wait).
+        await prisma.activityExternalLink
+            .updateMany({ where: { id: linkId, dirtyAt }, data: { nextAttemptAt: new Date(clock().getTime() + TRANSIENT_RETRY_HOLD_MS) } })
+            .catch((holdErr: Error) => logger.warn({ err: holdErr.message, linkId }, 'Could not put a failed calendar push back'));
         throw err;
     } finally {
         await lease.release().catch((err: Error) => logger.warn({ err: err.message, connectionId: connection.id }, 'Could not release the calendar lease (it expires on its own)'));
@@ -168,7 +193,7 @@ class LinkPush {
     async run(): Promise<PushResult> {
         [this.settings, this.config] = await Promise.all([loadCalendarSettings(), loadActivityConfig()]);
         for (let loop = 0; ; loop += 1) {
-            await this.lease.keepAlive(this.clock());
+            await this.holdLease();
             const round = await this.load();
             if (!round) return { status: 'clean' };
             try {
@@ -223,8 +248,14 @@ class LinkPush {
         return { link, activity, base, resolved, crmNow, plan };
     }
 
+    /** The lease still ours, with room for one more provider call (D12); throws LeaseLostError otherwise. */
+    private async holdLease(): Promise<void> {
+        if (!(await this.lease.keepAlive(this.clock(), LEASE_CALL_HEADROOM_MS))) throw new LeaseLostError();
+    }
+
     /** One provider call through `withCalendarAccess` (gates, a minted token, one retry after a 401, failure classification). */
-    private withToken<T>(fn: (ctx: CallCtx) => Promise<T>): Promise<T> {
+    private async withToken<T>(fn: (ctx: CallCtx) => Promise<T>): Promise<T> {
+        await this.holdLease();
         return withCalendarAccess(this.connection.id, (ctx) => fn(ctx), { clock: this.clock });
     }
 
@@ -291,12 +322,14 @@ class LinkPush {
                 const restored = this.adapter.undeleteEvent ? await this.adapter.undeleteEvent(ctx, link.externalEventId, input(link.externalEventId)) : null;
                 if (restored) return restored;
                 bump();
+                await this.holdLease();
             }
             try {
                 return await this.adapter.createEvent(ctx, input(requestedId));
             } catch (err) {
                 if (!(err instanceof RequestedIdTakenError)) throw err;
                 bump();
+                await this.holdLease();
                 return this.adapter.createEvent(ctx, input(requestedId));
             }
         });
@@ -476,33 +509,44 @@ class LinkPush {
     /**
      * Stores the outcome and clears `dirtyAt` with compare-and-set. When an edit landed during the call (dirtyAt moved),
      * only the provider's answer is stored and the link stays dirty (its own job is queued); provider-truth states
-     * (cancelled, removed_remote, unsupported, detached) are stored either way.
+     * (cancelled, removed_remote, unsupported, detached) are stored either way. An error on a link whose event is gone
+     * keeps `cancelled` / `removed_remote` (the error code says what failed). When the row was stopped during the call
+     * (stopRow detached the link and cleared dirtyAt), the link stays `detached` and only the provider's answer (event
+     * id, etag, base) is kept, so a re-attach patches the right event.
      */
-    private async settle(round: Round, state: LinkState, data: Record<string, unknown>, db: Pick<TransactionClient, 'activityExternalLink'> = prisma): Promise<PushResult> {
+    private async settle(round: Round, outcome: LinkState, data: Record<string, unknown>, db: Pick<TransactionClient, 'activityExternalLink'> = prisma): Promise<PushResult> {
         const { link } = round;
+        const state: LinkState = outcome === 'error' && EVENT_GONE_STATES.has(link.state) ? (link.state as LinkState) : outcome;
+        const columns = outcome !== 'error' && EVENT_GONE_STATES.has(state) ? { lastErrorCode: null, lastErrorMessage: null, ...data } : data;
         const { count } = await db.activityExternalLink.updateMany({
             where: { id: link.id, dirtyAt: link.dirtyAt },
-            data: { ...data, state, dirtyAt: null, nextAttemptAt: null, attempts: 0 },
+            data: { ...columns, state, dirtyAt: null, nextAttemptAt: null, attempts: 0 },
         });
         if (count === 1) return { status: 'done', action: round.plan.action, state, stillDirty: false };
         const kept: LinkState = state === 'synced' || state === 'error' ? 'pending' : state;
-        await db.activityExternalLink.updateMany({ where: { id: link.id }, data: { ...data, state: kept } });
-        return { status: 'done', action: round.plan.action, state: kept, stillDirty: true };
+        const { count: dirty } = await db.activityExternalLink.updateMany({
+            where: { id: link.id, dirtyAt: { not: null }, state: { not: 'detached' } },
+            data: { ...columns, state: kept },
+        });
+        if (dirty === 1) return { status: 'done', action: round.plan.action, state: kept, stillDirty: true };
+        await db.activityExternalLink.updateMany({ where: { id: link.id, state: 'detached' }, data: columns });
+        return { status: 'done', action: round.plan.action, state: 'detached', stillDirty: false };
     }
 }
 
 /**
  * After BullMQ's last attempt at a transient failure (§8.6 step 8): `error`, still dirty, next try in
- * min(15 min × attempts, 6 h) (the outbox sweep honours `nextAttemptAt`).
+ * min(15 min × attempts, 6 h) (the outbox sweep honours `nextAttemptAt`). A link whose event is gone (`cancelled`,
+ * `removed_remote`) keeps its state, so the next try restores the event instead of patching one that no longer exists.
  */
 export async function markPushExhausted(linkId: string, now: Date = new Date()): Promise<void> {
-    const link = await prisma.activityExternalLink.findUnique({ where: { id: linkId }, select: { attempts: true, dirtyAt: true } });
-    if (!link?.dirtyAt) return;
+    const link = await prisma.activityExternalLink.findUnique({ where: { id: linkId }, select: { attempts: true, dirtyAt: true, state: true } });
+    if (!link?.dirtyAt || link.state === 'detached') return;
     const attempts = link.attempts + 1;
     await prisma.activityExternalLink.updateMany({
         where: { id: linkId, dirtyAt: link.dirtyAt },
         data: {
-            state: 'error',
+            ...(EVENT_GONE_STATES.has(link.state) ? {} : { state: 'error' }),
             attempts,
             lastErrorCode: SYNC_ERROR_CODES.retriesExhausted,
             nextAttemptAt: new Date(now.getTime() + Math.min(ERROR_RETRY_STEP_MS * attempts, ERROR_RETRY_MAX_MS)),

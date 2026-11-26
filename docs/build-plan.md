@@ -394,8 +394,12 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         `crm-calendar-sync` and `calendarSync.worker.ts` (push, `enrolled`, `check`, `calendar-poll` every 5 min
         07:00–21:55, `calendar-nightly` 00:25 taking over the reminders nightly's calendar steps and the follow-up
         backfill, Redis-down fallback tick, heartbeat). Stopping a connection detaches its links; re-activation
-        re-attaches them. D41 (invites only on the owner's save; guests a colleague adds held), D42 (private events),
-        D45. Notification kinds `calendar_sync_error`, `calendar_invites_held`, `integration_secret_expiring` (system,
+        re-attaches them. D41 (invites only on the owner's save; guests a colleague adds held by address on every
+        link that invites, detached ones and provider-off periods included; an owner change by anyone but the new
+        owner makes the new owner's earlier link a new copy), D42 (private events), D45. Review fixes: an error never
+        overwrites `cancelled` / `removed_remote` (a failed restore is retried as a restore, also by the nightly), the
+        lease is checked before every provider call, a failed push is put back while BullMQ retries it, an `enrolled`
+        job per recovery, a row stopped mid-push leaves the link `detached`. Notification kinds `calendar_sync_error`, `calendar_invites_held`, `integration_secret_expiring` (system,
         always deliver; bell icons). `ActivityView.calendar` (data only). `CALENDAR_SYNC_ENABLED`. Deviations: the
         `enrolled` job (replaces the per-user connect job) pushes dirty links only; the backfill of existing
         activities is P2-3c; a follow-up activity moved in the calendar is moved back (the write-back to the record is

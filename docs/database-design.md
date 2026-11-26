@@ -609,9 +609,9 @@ sync-made activity changes are audited under route `job:calendar-sync:<provider>
 | `activityId`, `connectionId` | NVARCHAR(50) | Unique together |
 | `provider` | NVARCHAR(30) | The connection's provider |
 | `role` | NVARCHAR(10), default `organizer` | `organizer` \| `attendee` (P2-5) |
-| `state` | NVARCHAR(20), default `pending` | `pending` \| `synced` \| `error` \| `cancelled` \| `removed_remote` \| `unsupported` \| `detached` |
+| `state` | NVARCHAR(20), default `pending` | `pending` \| `synced` \| `error` \| `cancelled` \| `removed_remote` \| `unsupported` \| `detached`. An error on a link whose event is gone keeps `cancelled` / `removed_remote` (with `lastErrorCode`), so the next try restores rather than patches |
 | `invites` | NVARCHAR(10), default `send` | `send` \| `withhold` (a private copy without attendees: saved by someone other than the owner, D41) |
-| `heldAttendeesJson` | NVARCHAR(MAX) NULL | Lower-cased emails a non-owner added to an event that invites: held until the owner sends them (D41) |
+| `heldAttendeesJson` | NVARCHAR(MAX) NULL | Lower-cased emails a non-owner added to an event that invites (by resolved address, also while the link is `detached`), or that were not on the event when someone other than the new owner re-assigned the activity: held until the owner sends them (D41) |
 | `generation` | INT, default 0 | Re-create counter |
 | `requestedId` | NVARCHAR(64) | Google event id we ask for / Graph `transactionId`: `crm` + 40 hex of sha256(activityId:connectionId:generation), so a retried create never duplicates |
 | `externalEventId`, `externalEventKey` | NVARCHAR(1024) / NVARCHAR(64) | The provider's event id and its sha256 hex (the indexed key) |
@@ -740,7 +740,7 @@ to `Users`.
 | `lastPulledAt`, `lastPushedAt`, `lastSuccessAt`, `lastCheckedAt` | | Sync health |
 | `nextCheckAt` | DATETIME2 NULL | Earliest next health check after a user-level error (backoff 15 min → 1 h → 6 h → 24 h) |
 | `lastErrorAt`, `lastErrorCode`, `lastErrorMessage` (≤ 300), `consecutiveFailures` | | `lastErrorMessage`: provider text for admins only (never shown to the employee, never logged at info) |
-| `leaseId`, `leaseUntil` | | Per-connection push mutex (P2-3b): claimed with a compare-and-set `UPDATE`, 120 s, extended while a long run works; expired ones cleared by the 00:25 calendar nightly |
+| `leaseId`, `leaseUntil` | | Per-connection push mutex (P2-3b): claimed with a compare-and-set `UPDATE`, 120 s, extended while a long run works (checked before every provider call, extended when less than 110 s is left; a push that lost it stops); expired ones cleared by the 00:25 calendar nightly |
 | `enrolledAt` (was `connectedAt`), `stoppedAt` (was `disconnectedAt`), `stoppedBy` (was `disconnectedBy`) | | Renamed with `sp_rename`, data kept. `stoppedBy`: the admin whose change stopped it, or `system` |
 | `createdAt`, `updatedAt` | | |
 
@@ -868,7 +868,7 @@ and `customized`; saving the stored values again writes nothing.
 | User added / edited (Admin › Users) | App locks (username, email address, reports-to chain, admin roster as needed; the per-user lock on edits) → checks → INSERT / UPDATE `Users` → `AuditLog` CREATE / UPDATE; user lookup caches dropped after commit |
 | User deactivated / reset (Admin › Users) | App lock on the user → `isActive = 0, deactivatedAt = now` (or new hash + `mustChangePassword = 1`) → `AuditLog` STATUS_CHANGE / PASSWORD_RESET; after commit every Redis session of the user is deleted |
 | Nightly retention (00:20) | Hard delete of old `Notification` and `EmailLog` rows (see §4.26) |
-| Calendar nightly (00:25, P2-3b, as of 2026-11-26) | Reconcile everyone's `CalendarConnection` enrolment, run due health checks, write the admins' `calendar_sync_issue` digest when someone's calendar went to `error` that day (moved from 00:20), the follow-up activity backfill (moved from 00:20), mark `error` links of activities that haven't ended dirty again (`pending`, attempts 0), `integration_secret_expiring` notifications, clear expired `CalendarConnection` leases |
+| Calendar nightly (00:25, P2-3b, as of 2026-11-26) | Reconcile everyone's `CalendarConnection` enrolment, run due health checks, write the admins' `calendar_sync_issue` digest when someone's calendar went to `error` that day (moved from 00:20), the follow-up activity backfill (moved from 00:20), mark `error` links of activities that haven't ended dirty again (`pending`, attempts 0; `cancelled` / `removed_remote` links whose restore was refused are dirtied keeping their state), `integration_secret_expiring` notifications, clear expired `CalendarConnection` leases |
 | Activity saved (P2-3b) | Inside its transaction: the owner's `ActivityExternalLink` inserted or `dirtyAt` set (only with a live connection). After commit: pushed; success writes the link's ids, etag, base and clears `dirtyAt` only if it didn't change meanwhile. A deletion in the calendar cancels the activity (system write) unless it is Completed or a follow-up activity (link `removed_remote`) |
 | Calendar enrolment reconcile (P2-2b) | App lock `calendar-connection:user:<username>` → read user, choice, providers → INSERT `pending` / UPDATE to `stopped` → `AuditLog` ENROL / STOP; a new row's first health check runs after commit |
 | People calendar choice | Upsert / delete `CalendarSyncUser` → `AuditLog` → reconcile the person after commit |

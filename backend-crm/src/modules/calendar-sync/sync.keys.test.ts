@@ -29,7 +29,7 @@ describe('sync.keys', () => {
     it('job ids use hyphens only (BullMQ ids never contain ":")', () => {
         const at = new Date('2026-11-27T05:00:00.123Z');
         assert.equal(pushJobId('link-1', at), `push-link-1-${at.getTime()}`);
-        assert.equal(enrolledJobId('conn-1', at), `enrolled-conn-1-${at.getTime()}`);
+        assert.equal(enrolledJobId('conn-1', at, new Date(at.getTime() + 5)), `enrolled-conn-1-${at.getTime()}-r${at.getTime() + 5}`);
         assert.equal(checkJobId('conn-1', new Date(120_500)), 'check-conn-1-2');
         assert.ok(!pushJobId('l', at).includes(':'));
     });

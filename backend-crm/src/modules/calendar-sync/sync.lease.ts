@@ -12,8 +12,11 @@ export type LeaseDb = Pick<PrismaClient, 'calendarConnection'>;
 export interface Lease {
     connectionId: string;
     leaseId: string;
-    /** Extends the lease when it is due (long runs; cheap to call between provider calls). */
-    keepAlive(now?: Date): Promise<boolean>;
+    /**
+     * Extends the lease when it is due (every LEASE_EXTEND_MS, or sooner when less than `headroomMs` is left); false
+     * when the lease was lost (it expired and someone else took it). Cheap to call before every provider call.
+     */
+    keepAlive(now?: Date, headroomMs?: number): Promise<boolean>;
     release(): Promise<void>;
 }
 
@@ -28,8 +31,9 @@ export async function claimLease(db: LeaseDb, connectionId: string, now: Date = 
     return {
         connectionId,
         leaseId,
-        async keepAlive(at: Date = new Date()) {
-            if (at.getTime() - extendedAt < LEASE_EXTEND_MS) return true;
+        async keepAlive(at: Date = new Date(), headroomMs: number = 0) {
+            const left = extendedAt + LEASE_TTL_MS - at.getTime();
+            if (at.getTime() - extendedAt < LEASE_EXTEND_MS && left >= headroomMs) return true;
             const { count: kept } = await db.calendarConnection.updateMany({
                 where: { id: connectionId, leaseId },
                 data: { leaseUntil: new Date(at.getTime() + LEASE_TTL_MS) },

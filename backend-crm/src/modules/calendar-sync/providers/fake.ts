@@ -43,6 +43,8 @@ export interface FakeProviderState {
     eventCalls: { op: FakeEventOp; id: string; mailbox: string; sendUpdates?: boolean; body?: Record<string, unknown> }[];
     /** The next call of an operation throws this error (then clears). */
     failNext: Partial<Record<FakeEventOp, ProviderError>>;
+    /** Tests: runs at the start of every event call (something happening while the call is in flight). */
+    onCall: ((op: FakeEventOp) => void | Promise<void>) | null;
 }
 
 export type FakeEventOp = 'create' | 'patch' | 'cancel' | 'get' | 'undelete';
@@ -58,6 +60,7 @@ export const fakeProviderState: FakeProviderState = {
     events: new Map(),
     eventCalls: [],
     failNext: {},
+    onCall: null,
 };
 
 export function resetFakeProvider(): void {
@@ -71,6 +74,7 @@ export function resetFakeProvider(): void {
     fakeProviderState.events.clear();
     fakeProviderState.eventCalls = [];
     fakeProviderState.failNext = {};
+    fakeProviderState.onCall = null;
 }
 
 let etagCounter = 0;
@@ -125,9 +129,10 @@ const notFound = (operation: string) => new ProviderNotFoundError({ provider: 'f
 
 function fakeEventOps(now: () => Date): Pick<CalendarProviderAdapter, 'createEvent' | 'patchEvent' | 'cancelEvent' | 'getEvent' | 'undeleteEvent'> {
     const state = fakeProviderState;
-    const begin = (ctx: CallCtx, op: FakeEventOp, call: { id: string; sendUpdates?: boolean; body?: Record<string, unknown> }) => {
+    const begin = async (ctx: CallCtx, op: FakeEventOp, call: { id: string; sendUpdates?: boolean; body?: Record<string, unknown> }) => {
         state.eventCalls.push({ op, mailbox: ctx.mailbox.toLowerCase(), ...call });
         checkToken(ctx, `${op}-event`);
+        if (state.onCall) await state.onCall(op);
         const error = state.failNext[op];
         if (error) {
             delete state.failNext[op];
@@ -150,13 +155,14 @@ function fakeEventOps(now: () => Date): Pick<CalendarProviderAdapter, 'createEve
         return event;
     };
     const rewrite = (ctx: CallCtx, input: CreateEventInput, id: string) => {
+        // Like Google's PATCH rewrite: the attendee list is always replaced (none on a private copy).
         const { id: _id, ...body } = toGoogleEvent(input.crm, { ...input.event, requestedId: id, attendees: input.attendees });
-        return normalizeGoogle(store(ctx, id, { ...body, status: 'confirmed' }, state.events.get(id)), ctx.accountEmail);
+        return normalizeGoogle(store(ctx, id, { attendees: undefined, ...body, status: 'confirmed' }, state.events.get(id)), ctx.accountEmail);
     };
 
     return {
         async createEvent(ctx, input) {
-            begin(ctx, 'create', { id: input.requestedId, sendUpdates: input.sendUpdates });
+            await begin(ctx, 'create', { id: input.requestedId, sendUpdates: input.sendUpdates });
             const existing = state.events.get(input.requestedId);
             if (existing) {
                 if (existing.extendedProperties?.private?.crmActivityId !== input.event.activityId) {
@@ -170,7 +176,7 @@ function fakeEventOps(now: () => Date): Pick<CalendarProviderAdapter, 'createEve
 
         async patchEvent(ctx, id, input) {
             const body = toGooglePatch(input.groups, input.crm, { timeZone: input.timeZone, attendees: input.attendees, description: input.description });
-            begin(ctx, 'patch', { id, sendUpdates: input.sendUpdates, body });
+            await begin(ctx, 'patch', { id, sendUpdates: input.sendUpdates, body });
             const existing = state.events.get(id);
             if (!existing || existing.status === 'cancelled') throw notFound('patch-event');
             if (input.etag && input.etag !== existing.etag) throw new ProviderPreconditionError({ provider: 'fake', operation: 'patch-event', status: 412, code: 'conditionNotMet' });
@@ -178,7 +184,7 @@ function fakeEventOps(now: () => Date): Pick<CalendarProviderAdapter, 'createEve
         },
 
         async cancelEvent(ctx, id, o) {
-            begin(ctx, 'cancel', { id, sendUpdates: o.sendUpdates });
+            await begin(ctx, 'cancel', { id, sendUpdates: o.sendUpdates });
             const existing = state.events.get(id);
             if (!existing || existing.status === 'cancelled') return 'gone';
             store(ctx, id, { status: 'cancelled' }, existing);
@@ -186,13 +192,13 @@ function fakeEventOps(now: () => Date): Pick<CalendarProviderAdapter, 'createEve
         },
 
         async getEvent(ctx, id) {
-            begin(ctx, 'get', { id });
+            await begin(ctx, 'get', { id });
             const existing = state.events.get(id);
             return existing ? normalizeGoogle(existing, ctx.accountEmail) : null;
         },
 
         async undeleteEvent(ctx, id, input) {
-            begin(ctx, 'undelete', { id, sendUpdates: input.sendUpdates });
+            await begin(ctx, 'undelete', { id, sendUpdates: input.sendUpdates });
             if (!state.events.has(id)) return null;
             return rewrite(ctx, input, id);
         },

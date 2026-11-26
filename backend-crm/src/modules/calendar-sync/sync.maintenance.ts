@@ -127,22 +127,43 @@ export async function runEnrolled(connectionId: string): Promise<{ pushed: numbe
 
 // ── Nightly (§10.1 `calendar-nightly`) ──────────────────────────────────────────────────────────────────────
 
-/** One more try for `error` links whose activity hasn't ended yet: dirty again, pushed by the 07:00 sweep. */
+/**
+ * One more try for refused links whose activity hasn't ended yet: dirty again, pushed by the 07:00 sweep. That is
+ * every `error` link (→ `pending`), and every `cancelled` / `removed_remote` link whose restore was refused (it keeps
+ * its state and error code, so the plan restores the event rather than patching one that is gone).
+ */
 export async function retryErrorLinks(now: Date): Promise<number> {
     if (!ENV.INTEGRATIONS.SYNC_ENABLED) return 0;
-    const links = await prisma.activityExternalLink.findMany({ where: { state: 'error' }, select: { id: true, activityId: true } });
+    const links = await prisma.activityExternalLink.findMany({
+        where: { OR: [{ state: 'error' }, { state: { in: ['cancelled', 'removed_remote'] }, lastErrorCode: { not: null }, dirtyAt: null }] },
+        select: { id: true, activityId: true, state: true },
+    });
     if (links.length === 0) return 0;
     const upcoming = await prisma.activity.findMany({
         where: { id: { in: links.map((l) => l.activityId) }, isDeleted: false, OR: [{ endAt: { gt: now } }, { endAt: null, startAt: { gt: now } }] },
         select: { id: true },
     });
     const ids = new Set(upcoming.map((a) => a.id));
-    const due = links.filter((l) => ids.has(l.activityId)).map((l) => l.id);
-    if (due.length === 0) return 0;
-    const { count } = await prisma.activityExternalLink.updateMany({
-        where: { id: { in: due }, state: 'error' },
-        data: { state: 'pending', dirtyAt: now, nextAttemptAt: null, attempts: 0 },
-    });
+    const due = links.filter((l) => ids.has(l.activityId));
+    const errors = due.filter((l) => l.state === 'error').map((l) => l.id);
+    const gone = due.filter((l) => l.state !== 'error').map((l) => l.id);
+    let count = 0;
+    if (errors.length > 0) {
+        count += (
+            await prisma.activityExternalLink.updateMany({
+                where: { id: { in: errors }, state: 'error' },
+                data: { state: 'pending', dirtyAt: now, nextAttemptAt: null, attempts: 0 },
+            })
+        ).count;
+    }
+    if (gone.length > 0) {
+        count += (
+            await prisma.activityExternalLink.updateMany({
+                where: { id: { in: gone }, state: { in: ['cancelled', 'removed_remote'] }, dirtyAt: null },
+                data: { dirtyAt: now, nextAttemptAt: null, attempts: 0 },
+            })
+        ).count;
+    }
     return count;
 }
 

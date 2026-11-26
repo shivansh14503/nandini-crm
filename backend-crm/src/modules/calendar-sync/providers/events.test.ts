@@ -86,6 +86,16 @@ describe('Google event operations', () => {
         await assert.rejects(createGoogleAdapter({ fetchImpl: theirs.fetchImpl }).createEvent(ctx(), input()), RequestedIdTakenError);
     });
 
+    it('undelete re-writes the event with status confirmed and always names the attendee list ([] on a private copy, D41)', async () => {
+        const { fetchImpl, calls } = fakeFetch([route(`${eventsUrl}/evt1?`, () => ({ status: 200, body: googleEvent({ id: 'evt1', attendees: undefined }) }), 'PATCH')]);
+        const adapter = createGoogleAdapter({ fetchImpl });
+        await adapter.undeleteEvent?.(ctx(), 'evt1', input({ attendees: {}, sendUpdates: false }));
+        assert.equal(calls[0].url, `${eventsUrl}/evt1?sendUpdates=none`);
+        const body = calls[0].json as Record<string, unknown>;
+        assert.equal(body.status, 'confirmed');
+        assert.deepEqual(body.attendees, [], 'the old guests are cleared, not kept by the PATCH');
+    });
+
     it('patch sends only the changed groups with If-Match; cancel answers gone on 410; get answers null on 404', async () => {
         const { fetchImpl, calls } = fakeFetch([
             route(`${eventsUrl}/evt1?`, () => ({ status: 200, body: googleEvent({ id: 'evt1' }) }), 'PATCH'),

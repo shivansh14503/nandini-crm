@@ -70,12 +70,13 @@ export async function wakePushes(links: readonly DirtyLink[]): Promise<void> {
 }
 
 /**
- * `enrolled` job of a row that first reached `ok`: pushes the row's dirty links (the first-sync backfill joins it in
- * P2-3c). Null without Redis (the caller runs it in-process; the outbox sweep covers a miss).
+ * `enrolled` job of a row that reached `ok` (first time, or recovered from `error`): pushes the row's dirty links (the
+ * first-sync backfill joins it in P2-3c). Each time gets its own job id (`readyAt`). Null without Redis (the
+ * fallback tick and the outbox sweep cover it).
  */
-export function enqueueEnrolled(connectionId: string, enrolledAt: Date): Promise<string | null> {
+export function enqueueEnrolled(connectionId: string, enrolledAt: Date, readyAt: Date = new Date()): Promise<string | null> {
     if (!ENV.INTEGRATIONS.SYNC_ENABLED) return Promise.resolve(null);
-    return tryEnqueue(calendarSyncQueue, CALENDAR_SYNC_JOBS.enrolled, { connectionId } satisfies ConnectionJobData, { jobId: enrolledJobId(connectionId, enrolledAt) });
+    return tryEnqueue(calendarSyncQueue, CALENDAR_SYNC_JOBS.enrolled, { connectionId } satisfies ConnectionJobData, { jobId: enrolledJobId(connectionId, enrolledAt, readyAt) });
 }
 
 /** `check` job of one connection row (enrolment, the poll tick's due checks). Null without Redis. */

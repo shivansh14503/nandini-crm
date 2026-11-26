@@ -109,14 +109,26 @@ export interface ActivityDoubleState {
 
 type Where = Record<string, unknown>;
 
+const instant = (value: unknown) => (value instanceof Date ? value.getTime() : (value as number));
+
 function matches(row: Record<string, unknown>, where: Where = {}): boolean {
     for (const [key, expected] of Object.entries(where)) {
+        if (key === 'OR') {
+            if (!(expected as Where[]).some((w) => matches(row, w))) return false;
+            continue;
+        }
         const actual = row[key];
         if (expected !== null && typeof expected === 'object' && !(expected instanceof Date)) {
             const ops = expected as Record<string, unknown>;
             for (const [op, operand] of Object.entries(ops)) {
-                if (op !== 'in') throw new Error(`activityDouble: unsupported operator ${key}.${op}`);
-                if (!(operand as unknown[]).some((value) => same(actual, value))) return false;
+                if (op === 'in') {
+                    if (!(operand as unknown[]).some((value) => same(actual, value))) return false;
+                } else if (op === 'gt' || op === 'lt') {
+                    if (actual === null || actual === undefined) return false;
+                    if (op === 'gt' ? !(instant(actual) > instant(operand)) : !(instant(actual) < instant(operand))) return false;
+                } else {
+                    throw new Error(`activityDouble: unsupported operator ${key}.${op}`);
+                }
             }
             continue;
         }

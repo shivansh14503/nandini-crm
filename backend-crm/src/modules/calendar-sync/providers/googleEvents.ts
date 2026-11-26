@@ -38,10 +38,18 @@ export function googleEventOps(fetchImpl?: FetchImpl): EventOps {
         }
     };
 
-    /** Re-writes an event of ours with the full body (`status: 'confirmed'` brings a deleted one back [U]). */
+    /**
+     * Re-writes an event of ours with the full body (`status: 'confirmed'` brings a deleted one back [U]). A PATCH keeps
+     * fields it doesn't name, so the attendee list is always sent (`[]` on a private copy: the old guests don't come
+     * back with it, D41).
+     */
     const rewrite = async (ctx: CallCtx, input: CreateEventInput, operation: string) => {
         const { id: _id, ...body } = fullBody(input);
-        const json = await call(ctx, 'PATCH', `${eventUrl(ctx, input.requestedId)}?${send(input.sendUpdates)}`, operation, { ...body, status: 'confirmed' });
+        const json = await call(ctx, 'PATCH', `${eventUrl(ctx, input.requestedId)}?${send(input.sendUpdates)}`, operation, {
+            ...body,
+            attendees: body.attendees ?? [],
+            status: 'confirmed',
+        });
         return normalizeGoogle(json, ctx.accountEmail);
     };
 

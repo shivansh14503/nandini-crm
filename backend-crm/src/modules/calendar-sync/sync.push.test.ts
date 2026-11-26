@@ -4,10 +4,11 @@ import type { AuthUser } from '../../types/user.types.js';
 import { activityService } from '../activities/activity.service.js';
 import { blankActivity, blankLink, installActivityDouble, restoreActivityDouble, type ActivityDoubleState } from '../activities/testing/activityDouble.js';
 import { fakeEditEvent, fakeProviderState, resetFakeProvider } from './providers/fake.js';
-import { ProviderBadRequestError, resetProviderPauses } from './providers/http.js';
+import { ProviderBadRequestError, ProviderPreconditionError, ProviderTransientError, resetProviderPauses } from './providers/http.js';
 import { setFakeHealth, setFakeProviderEnabledForTests } from './providers/registry.js';
 import { eventKeyOf, requestedIdFor, syncKeyOf } from './sync.keys.js';
-import { parseBase, pushLink } from './sync.push.js';
+import { markPushExhausted, parseBase, pushLink } from './sync.push.js';
+import { retryErrorLinks } from './sync.maintenance.js';
 import { setInlinePushForTests } from './sync.wake.js';
 import { blankConnection, type ConnectionRowState } from './testing/connectionDouble.js';
 import { setTokenSourceForTests } from './tokenSource.js';
@@ -23,9 +24,11 @@ const inDays = (days: number) => new Date(Math.floor((Date.now() + days * DAY) /
 
 const PALAK: AuthUser = { id: 1, username: 'palak', role: 'user' };
 const ASHA: AuthUser = { id: 2, username: 'asha', role: 'Admin' };
+const MIRA: AuthUser = { id: 3, username: 'mira', role: 'Admin' };
 const USERS = [
     { username: 'palak', fullName: 'Palak Shah', isActive: true, email: 'palak@nandiniinfosys.com' },
     { username: 'asha', fullName: 'Asha Rao', isActive: true, email: 'asha@nandiniinfosys.com' },
+    { username: 'mira', fullName: 'Mira Iyer', isActive: true, email: 'mira@nandiniinfosys.com' },
 ];
 
 const conn = (over: Partial<ConnectionRowState> = {}) =>
@@ -321,5 +324,162 @@ describe('pushLink', () => {
         assert.equal(result.status === 'done' && result.action, 'cancel');
         assert.equal(fakeProviderState.eventCalls.at(-1)?.op, 'cancel');
         assert.equal(fakeProviderState.eventCalls.at(-1)?.sendUpdates, false, 'no guests, no notice');
+    });
+});
+
+describe('D41 holds (review fixes)', () => {
+    const ashaConn = () => blankConnection({ id: 'c2', username: 'asha', provider: 'fake', accountEmail: 'asha@nandiniinfosys.com', status: 'ok', backfilledAt: new Date(0) });
+    const linkOn = (activityId: string, connectionId: string) => {
+        const link = state.links.find((l) => l.activityId === activityId && l.connectionId === connectionId);
+        assert.ok(link, `a link on ${connectionId}`);
+        return link;
+    };
+    const heldNotices = () => state.notifications.filter((n) => n.kind === 'calendar_invites_held');
+
+    it('A → B → A by someone else: the restored copy on A is private; a guest added while B owned it is never invited from A', async () => {
+        install([conn(), ashaConn()]);
+        const view = await activityService.create(meeting({ attendees: [{ kind: 'email', email: 'g1@acme.com' }] }), PALAK);
+        await pushLink(linkOn(view.id, 'c1').id);
+        await activityService.update(view.id, { assignedTo: 'asha' }, MIRA);
+        await pushLink(linkOn(view.id, 'c1').id);
+        await pushLink(linkOn(view.id, 'c2').id);
+        assert.equal(linkOn(view.id, 'c1').state, 'cancelled');
+        await activityService.update(view.id, { attendees: [{ kind: 'email', email: 'g1@acme.com' }, { kind: 'email', email: 'g2@other.com' }] }, ASHA);
+        const notices = heldNotices().length;
+        await activityService.update(view.id, { assignedTo: 'palak' }, MIRA);
+        const back = linkOn(view.id, 'c1');
+        assert.equal(back.invites, 'withhold', 'a new copy for Palak made by Mira');
+        assert.equal(heldNotices().length, notices + 1, 'Palak is told');
+        const calls = fakeProviderState.eventCalls.length;
+        const result = await pushLink(back.id);
+        assert.equal(result.status === 'done' && result.action, 'create');
+        const restore = fakeProviderState.eventCalls.slice(calls).filter((c) => c.op === 'undelete' || c.op === 'create');
+        assert.ok(restore.length > 0);
+        assert.ok(restore.every((c) => c.sendUpdates === false), 'nothing sent from Palak');
+        assert.equal(fakeProviderState.events.get(back.externalEventId as string)?.attendees, undefined, 'no guests on the private copy');
+    });
+
+    it('guests added while the provider is off are held, and the push after it is back on does not invite them', async () => {
+        install();
+        const view = await activityService.create(meeting(), PALAK);
+        await pushLink(linkOf(view.id).id);
+        setFakeProviderEnabledForTests(false);
+        await activityService.update(view.id, { attendees: [{ kind: 'email', email: 'x@customer.com' }] }, MIRA);
+        assert.equal(linkOf(view.id).heldAttendeesJson, JSON.stringify(['x@customer.com']));
+        setFakeProviderEnabledForTests(true);
+        linkOf(view.id).nextAttemptAt = null;
+        await pushLink(linkOf(view.id).id);
+        assert.equal(fakeProviderState.events.get(linkOf(view.id).externalEventId as string)?.attendees, undefined);
+    });
+
+    it('a detached link records held guests without becoming dirty; after re-attach they stay held', async () => {
+        install();
+        const view = await activityService.create(meeting(), PALAK);
+        await pushLink(linkOf(view.id).id);
+        // The row was stopped (stopRow): links detached, not dirty.
+        state.connections[0].status = 'stopped';
+        Object.assign(linkOf(view.id), { state: 'detached', dirtyAt: null });
+        await activityService.update(view.id, { attendees: [{ kind: 'email', email: 'x@customer.com' }] }, MIRA);
+        assert.equal(linkOf(view.id).state, 'detached');
+        assert.equal(linkOf(view.id).dirtyAt, null);
+        assert.equal(linkOf(view.id).heldAttendeesJson, JSON.stringify(['x@customer.com']));
+        // Re-activated (reattachLinks): pending and dirty again.
+        state.connections[0].status = 'ok';
+        Object.assign(linkOf(view.id), { state: 'pending', dirtyAt: new Date() });
+        const result = await pushLink(linkOf(view.id).id);
+        assert.equal(result.status, 'done');
+        assert.equal(fakeProviderState.eventCalls.some((c) => c.sendUpdates === true && c.op !== 'create'), false, 'nothing sent');
+        assert.equal(fakeProviderState.events.get(linkOf(view.id).externalEventId as string)?.attendees, undefined);
+    });
+
+    it("a non-owner changing a contact attendee's address holds the new address", async () => {
+        install([conn()], { contacts: [{ id: 'k1', name: 'Kiran', organizationId: null, isDeleted: false }] });
+        const view = await activityService.create(meeting({ attendees: [{ kind: 'contact', contactId: 'k1', email: 'k@cust.com' }] }), PALAK);
+        await pushLink(linkOf(view.id).id);
+        await activityService.update(view.id, { attendees: [{ kind: 'contact', contactId: 'k1', email: 'someone@anywhere.com' }] }, MIRA);
+        assert.equal(linkOf(view.id).heldAttendeesJson, JSON.stringify(['someone@anywhere.com']));
+        await pushLink(linkOf(view.id).id);
+        const emails = fakeProviderState.events.get(linkOf(view.id).externalEventId as string)?.attendees?.map((a) => a.email) ?? [];
+        assert.equal(emails.includes('someone@anywhere.com'), false);
+    });
+});
+
+describe('push robustness (review fixes)', () => {
+    const transient = () => new ProviderTransientError({ provider: 'fake', operation: 'create-event', status: 503, code: 'backendError' });
+
+    it('a restore whose retries ran out stays cancelled: the next try restores (never a patch that would cancel the activity)', async () => {
+        install();
+        const view = await activityService.create(meeting(), PALAK);
+        await pushLink(linkOf(view.id).id);
+        await activityService.update(view.id, { status: 'Cancelled' }, PALAK);
+        await pushLink(linkOf(view.id).id);
+        assert.equal(linkOf(view.id).state, 'cancelled');
+        await activityService.update(view.id, { status: 'Planned' }, PALAK);
+        fakeProviderState.failNext.undelete = transient();
+        await assert.rejects(pushLink(linkOf(view.id).id));
+        assert.ok((linkOf(view.id).nextAttemptAt?.getTime() ?? 0) > Date.now() + 9 * 60_000, 'the sweep leaves it to BullMQ');
+        await markPushExhausted(linkOf(view.id).id);
+        assert.equal(linkOf(view.id).state, 'cancelled');
+        assert.equal(linkOf(view.id).lastErrorCode, 'retries_exhausted');
+        const result = await pushLink(linkOf(view.id).id);
+        assert.equal(result.status === 'done' && result.action, 'create');
+        assert.equal(state.activities.find((a) => a.id === view.id)?.status, 'Planned');
+        assert.equal(linkOf(view.id).state, 'synced');
+        assert.equal(linkOf(view.id).lastErrorCode, null);
+    });
+
+    it('a refused restore keeps the link cancelled and the nightly retries it as a restore', async () => {
+        install();
+        const view = await activityService.create(meeting(), PALAK);
+        await pushLink(linkOf(view.id).id);
+        await activityService.update(view.id, { status: 'Cancelled' }, PALAK);
+        await pushLink(linkOf(view.id).id);
+        await activityService.update(view.id, { status: 'Planned' }, PALAK);
+        fakeProviderState.failNext.undelete = new ProviderBadRequestError({ provider: 'fake', operation: 'undelete-event', status: 400, code: 'invalid' });
+        const failed = await pushLink(linkOf(view.id).id);
+        assert.equal(failed.status === 'done' && failed.state, 'cancelled');
+        assert.equal(linkOf(view.id).lastErrorCode, 'invalid');
+        assert.equal(await retryErrorLinks(new Date()), 1);
+        assert.equal(linkOf(view.id).state, 'cancelled');
+        assert.ok(linkOf(view.id).dirtyAt);
+        const result = await pushLink(linkOf(view.id).id);
+        assert.equal(result.status === 'done' && result.action, 'create');
+        assert.equal(state.activities.find((a) => a.id === view.id)?.status, 'Planned');
+    });
+
+    it('a row stopped during the call: the link stays detached (not pending), the provider answer kept', async () => {
+        install();
+        const view = await activityService.create(meeting(), PALAK);
+        fakeProviderState.onCall = (op) => {
+            if (op !== 'create') return;
+            state.connections[0].status = 'stopped';
+            Object.assign(linkOf(view.id), { state: 'detached', dirtyAt: null, nextAttemptAt: null });
+        };
+        const result = await pushLink(linkOf(view.id).id);
+        assert.equal(result.status === 'done' && result.state, 'detached');
+        const link = linkOf(view.id);
+        assert.equal(link.state, 'detached');
+        assert.equal(link.dirtyAt, null);
+        assert.ok(link.externalEventId, 'the event id is kept for the re-attach');
+    });
+
+    it('a push that lost its lease mid-run stops with busy and stores nothing', async () => {
+        install();
+        const view = await activityService.create(meeting(), PALAK);
+        await pushLink(linkOf(view.id).id);
+        await activityService.update(view.id, { subject: 'Renamed' }, PALAK);
+        let now = Date.now();
+        fakeProviderState.failNext.patch = new ProviderPreconditionError({ provider: 'fake', operation: 'patch-event', status: 412, code: 'conditionNotMet' });
+        fakeProviderState.onCall = (op) => {
+            if (op !== 'patch') return;
+            now += 125_000;
+            Object.assign(state.connections[0], { leaseId: 'someone-else', leaseUntil: new Date(now + 60_000) });
+        };
+        const dirtyAt = linkOf(view.id).dirtyAt;
+        const result = await pushLink(linkOf(view.id).id, { now: () => new Date(now) });
+        assert.deepEqual(result, { status: 'busy' });
+        assert.equal(linkOf(view.id).dirtyAt, dirtyAt, 'still dirty');
+        assert.equal(fakeProviderState.eventCalls.filter((c) => c.op === 'get').length, 0, 'no provider call without the lease');
+        assert.equal(state.connections[0].leaseId, 'someone-else', 'the new holder keeps its lease');
     });
 });

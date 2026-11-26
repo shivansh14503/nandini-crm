@@ -8,8 +8,9 @@ import { isActivityOnlyFollowupType } from '../shared/followupTypes.js';
 import { LIVE_CONNECTION_STATUSES } from './connection.constants.js';
 import { isFakeProviderEnabled } from './providers/fakeSwitch.js';
 import { parseHeld, resolveAttendeeEmails, serializeHeld } from './sync.attendees.js';
-import { CREATE_ELIGIBLE_PAST_MS, INERT_LINK_STATES, type LinkInvites } from './sync.constants.js';
+import { CREATE_ELIGIBLE_PAST_MS, type LinkInvites } from './sync.constants.js';
 import { requestedIdFor } from './sync.keys.js';
+import { parseBase } from './sync.shapes.js';
 
 /**
  * The durable push outbox (Calendar Phase 2 spec §8.3, D11, D41, D43). `markActivityForSync` runs inside every activity
@@ -24,11 +25,14 @@ import { requestedIdFor } from './sync.keys.js';
  *    owner's user active and not a group login (D43). No live row → the user isn't synced: nothing is written.
  * 3. No organizer link on that connection and the activity is create-eligible → a link is inserted, dirty, with
  *    `invites='send'` only when the actor is the owner; otherwise `withhold` (a private copy, the owner is told,
- *    D41). A `detached` link on that connection (the row was re-activated) is re-attached.
- * 4. Every other live organizer link (any connection: an owner change cancels on the old one) → dirty; `pending`
- *    unless it is `cancelled` / `removed_remote` (the plan needs to know the event is gone).
- *    Attendees a non-owner adds to a link that invites are held (`heldAttendeesJson`) until the owner sends them;
- *    an attendee removed in the CRM leaves the held list.
+ *    D41). A `detached` link on that connection (the row was re-activated) is re-attached (`reattachedState`).
+ * 4. Every other organizer link (any connection: an owner change cancels on the old one) → dirty; `pending` unless
+ *    it is `cancelled` / `removed_remote` (the plan needs to know the event is gone). `detached` links stay inert and
+ *    `unsupported` ones are left alone.
+ *    D41 on existing links (`heldChanges`, by address): addresses a non-owner puts on the activity are held
+ *    (`heldAttendeesJson`) on every link that sends invitations, detached ones included, until the owner sends them;
+ *    an owner change by anyone but the new owner makes the new owner's earlier link a new copy (guests not already
+ *    on its event held, or `withhold` when its event is gone); an address removed in the CRM leaves the held lists.
  * 5. The dirty links and any "invitations held" notice are remembered for `runActivityPostCommit` (keyed by the
  *    written row object, so a rolled-back transaction leaves nothing behind).
  */
@@ -145,18 +149,20 @@ export async function ownerConnectionOf(db: OutboxDb, owner: string): Promise<{ 
     return conn;
 }
 
-/** Attendee rows a write added / removed (by identity). */
-function attendeeDelta(before: ActivityRow | null, after: ActivityRow) {
-    const was = new Map((before?.attendees ?? []).map((a) => [attendeeIdentity(a), a]));
-    const now = new Map(after.attendees.map((a) => [attendeeIdentity(a), a]));
-    return {
-        added: [...now].filter(([id]) => !was.has(id)).map(([, a]) => a),
-        removed: [...was].filter(([id]) => !now.has(id)).map(([, a]) => a),
-    };
-}
-
 /** Attendees other than the owner (who could get an invitation). */
 const guestCount = (row: ActivityRow) => row.attendees.filter((a) => !(a.kind === 'user' && sameUser(a.username, row.assignedTo))).length;
+
+/** The calendar event of this link exists (it isn't gone: `cancelled` / `removed_remote` keep the id of a deleted one). */
+const hasLiveEvent = (link: { externalEventId: string | null; state: string }) => Boolean(link.externalEventId) && link.state !== 'cancelled' && link.state !== 'removed_remote';
+
+/**
+ * The state a `detached` link goes back to when its row is re-activated: `cancelled` when the CRM had deleted its
+ * event before the row stopped (an event id kept without a base, §8.6), else `pending`. A gone event must not be
+ * patched (a 404 there reads as a deletion in the calendar and would cancel the activity).
+ */
+export function reattachedState(link: { externalEventId: string | null; baseJson: string | null }): 'cancelled' | 'pending' {
+    return link.externalEventId && !link.baseJson ? 'cancelled' : 'pending';
+}
 
 export async function markActivityForSync(db: OutboxDb, event: ActivityWriteEvent): Promise<OutboxResult | null> {
     const { before, after, actor, now, config } = event;
@@ -192,42 +198,107 @@ export async function markActivityForSync(db: OutboxDb, event: ActivityWriteEven
         if (invites === 'withhold' && guests > 0) result.notices.push({ activityId: after.id, owner, actor, subject: after.subject, guests, newCopy: true });
     }
 
-    const delta = attendeeDelta(before, after);
-    const needsHeld = !actorIsOwner && (delta.added.length > 0 || delta.removed.length > 0);
-    const deltaEmails = needsHeld || delta.removed.length > 0 ? await resolveAttendeeEmails(db, [...delta.added, ...delta.removed], owner) : null;
+    const held = await heldChanges(db, links, before, after, actorIsOwner);
 
     for (const link of links) {
+        if (link.state === 'unsupported') continue;
         const reattach = link.state === 'detached' && ownerConn !== null && link.connectionId === ownerConn.id && (eligible || Boolean(link.externalEventId));
-        if (INERT_LINK_STATES.has(link.state) && !reattach) continue;
-
-        let held = parseHeld(link.heldAttendeesJson);
-        const heldBefore = held.length;
-        if (deltaEmails && link.invites === 'send') {
-            const removed = new Set(delta.removed.map((a) => deltaEmails.emailOf.get(a) ?? '').filter(Boolean));
-            held = held.filter((email) => !removed.has(email));
-            if (!actorIsOwner && link.connectionId === ownerConn?.id) {
-                const added = delta.added.map((a) => deltaEmails.emailOf.get(a) ?? '').filter(Boolean);
-                held = [...new Set([...held, ...added])];
-            }
+        const change = held.get(link.id);
+        if (link.state === 'detached' && !reattach) {
+            // Inert until its row is re-activated, but who added which guest is still recorded (D41), so the
+            // re-attach push never invites people the owner didn't.
+            if (change?.changed) await db.activityExternalLink.update({ where: { id: link.id }, data: change.data });
+            if (change?.notice) result.notices.push({ activityId: after.id, owner, actor, subject: after.subject, ...change.notice });
+            continue;
         }
-        const heldJson = serializeHeld(held);
         const keepState = link.state === 'cancelled' || link.state === 'removed_remote';
+        const state = reattach ? reattachedState(link) : keepState ? null : 'pending';
         await db.activityExternalLink.update({
             where: { id: link.id },
             data: {
                 dirtyAt: now,
-                ...(keepState ? {} : { state: 'pending' }),
-                heldAttendeesJson: heldJson,
+                ...(state ? { state } : {}),
+                ...(change?.changed ? change.data : {}),
                 ...(reattach || link.state === 'error' ? { attempts: 0, nextAttemptAt: null } : {}),
             },
         });
         result.links.push({ id: link.id, dirtyAt: now });
-        if (held.length > heldBefore) {
-            result.notices.push({ activityId: after.id, owner, actor, subject: after.subject, guests: held.length - heldBefore, newCopy: false });
-        }
+        if (change?.notice) result.notices.push({ activityId: after.id, owner, actor, subject: after.subject, ...change.notice });
     }
 
+    // One "invitations held" notice per write (a guest held on the old owner's link too is the same news).
+    if (result.notices.length > 1) {
+        const [first, ...rest] = result.notices;
+        result.notices = [{ ...first, guests: Math.max(...result.notices.map((n) => n.guests)), newCopy: [first, ...rest].some((n) => n.newCopy) }];
+    }
     if (result.links.length === 0 && result.notices.length === 0) return null;
     pending.set(after, result);
     return result;
+}
+
+/** What a write changes on one existing link's invitations (D41). */
+interface HeldChange {
+    changed: boolean;
+    data: { heldAttendeesJson?: string | null; invites?: LinkInvites };
+    notice: Pick<HeldNotice, 'guests' | 'newCopy'> | null;
+}
+
+type LinkRow = Awaited<ReturnType<OutboxDb['activityExternalLink']['findMany']>>[number];
+
+/**
+ * D41 on existing links: new invitations leave the owner's mailbox only on the owner's own action. Decided by
+ * addresses, not attendee identities (a contact row's address can change), and on every link that sends invitations
+ * whatever its state or whether the owner's row is live right now (provider switched off, row stopped: the push after
+ * the re-activation must not invite the people added meanwhile).
+ * - An address no longer on the activity leaves every held list.
+ * - The actor isn't the owner: every address the write put on the activity is held on every `send` link.
+ * - The owner changed and the actor isn't the new owner: the new owner's own earlier link is a new copy for them. With
+ *   its event still in the calendar, every address not already on that event (`base.crm`) is held; with the event gone
+ *   (cancelled, removed in the calendar, never created) it becomes a private copy (`withhold`), as a new link would.
+ */
+async function heldChanges(db: OutboxDb, links: readonly LinkRow[], before: ActivityRow | null, after: ActivityRow, actorIsOwner: boolean): Promise<Map<string, HeldChange>> {
+    const out = new Map<string, HeldChange>();
+    const sendLinks = links.filter((l) => l.invites === 'send' && l.state !== 'unsupported');
+    if (!before || sendLinks.length === 0) return out;
+    const owner = after.assignedTo;
+    const attendeesChanged = attendeeKeys(before) !== attendeeKeys(after);
+    const ownerChanged = !sameUser(before.assignedTo, owner);
+    if (!attendeesChanged && !(ownerChanged && !actorIsOwner)) return out;
+    // The owner's own edit only ever releases held addresses (it holds nothing).
+    if (actorIsOwner && sendLinks.every((l) => !l.heldAttendeesJson)) return out;
+
+    const resolved = await resolveAttendeeEmails(db, [...before.attendees, ...after.attendees], owner);
+    const emailsOf = (rows: ActivityRow['attendees']) => new Set(rows.map((a) => resolved.emailOf.get(a) ?? '').filter(Boolean));
+    const was = emailsOf(before.attendees);
+    const now = emailsOf(after.attendees);
+    const added = [...now].filter((email) => !was.has(email));
+    const removed = new Set([...was].filter((email) => !now.has(email)));
+
+    let ownersCalendar = new Set<string>();
+    if (ownerChanged && !actorIsOwner) {
+        const conns = await db.calendarConnection.findMany({ where: { id: { in: [...new Set(sendLinks.map((l) => l.connectionId))] } }, select: { id: true, username: true } });
+        ownersCalendar = new Set(conns.filter((c) => sameUser(c.username, owner)).map((c) => c.id));
+    }
+
+    for (const link of sendLinks) {
+        const current = parseHeld(link.heldAttendeesJson);
+        let held = current.filter((email) => !removed.has(email));
+        let invites: LinkInvites = 'send';
+        if (!actorIsOwner) {
+            let hold = added;
+            if (ownersCalendar.has(link.connectionId)) {
+                const base = parseBase(link.baseJson);
+                if (hasLiveEvent(link) && base) hold = [...hold, ...[...now].filter((email) => !(email in base.crm.attendees))];
+                else invites = 'withhold';
+            }
+            if (invites === 'send') held = [...new Set([...held, ...hold])];
+        }
+        const heldJson = serializeHeld(held);
+        const changed = invites !== link.invites || heldJson !== (link.heldAttendeesJson ?? null);
+        const fresh = held.filter((email) => !current.includes(email)).length;
+        const guests = guestCount(after);
+        const notice = invites === 'withhold' ? (guests > 0 ? { guests, newCopy: true } : null) : fresh > 0 ? { guests: fresh, newCopy: false } : null;
+        out.set(link.id, { changed, data: { heldAttendeesJson: heldJson, ...(invites !== link.invites ? { invites } : {}) }, notice });
+    }
+    return out;
 }

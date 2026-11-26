@@ -62,6 +62,12 @@ export const PUSH_JOB_DELAY_MS = 2_000;
 /** Per-connection lease (§8.4): held this long, extended every LEASE_EXTEND_MS by long runs. */
 export const LEASE_TTL_MS = 120_000;
 export const LEASE_EXTEND_MS = 60_000;
+/**
+ * Lease time a push makes sure it still has before each provider call (extending first when less is left): one call
+ * can take up to about 105 s (3 attempts × 15 s timeout, backoff, up to two 30 s in-place `Retry-After` waits,
+ * providers/http.ts), so the lease never lapses in the middle of a call.
+ */
+export const LEASE_CALL_HEADROOM_MS = 110_000;
 /** A job that finds the lease taken is moved back this long (+ jitter), without spending an attempt. */
 export const LEASE_RETRY_DELAY_MS = 5_000;
 
@@ -81,6 +87,11 @@ export const CHECK_SWEEP_LIMIT = 200;
 
 /** 412 → merge → retry loops of one push before the link goes to `error` (§8.6 step 6). */
 export const MAX_PRECONDITION_LOOPS = 3;
+/**
+ * A push that failed with a transient error is put back this long while BullMQ retries it (30 s, 60 s, 120 s, 240 s:
+ * about 7.5 minutes), so the outbox sweep doesn't queue a second retry chain for the same link.
+ */
+export const TRANSIENT_RETRY_HOLD_MS = 10 * 60_000;
 /** After the last BullMQ attempt: next try in min(15 min × attempts, 6 h) (§8.6 step 8). */
 export const ERROR_RETRY_STEP_MS = 15 * 60_000;
 export const ERROR_RETRY_MAX_MS = 6 * 60 * 60_000;

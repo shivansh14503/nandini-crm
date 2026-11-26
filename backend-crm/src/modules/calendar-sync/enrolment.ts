@@ -17,6 +17,7 @@ import {
 } from './connection.constants.js';
 import { isFakeProviderEnabled } from './providers/fakeSwitch.js';
 import { CREATE_ELIGIBLE_PAST_MS } from './sync.constants.js';
+import { reattachedState } from './sync.outbox.js';
 import { enqueueCheck } from './sync.wake.js';
 import { loadProviderAccess } from './providers/registry.js';
 import { tokenSource } from './tokenSource.js';
@@ -268,21 +269,33 @@ async function startRow(
 /**
  * A re-activated row: its detached organizer links of activities the user still owns, not deleted and ending after
  * now − 1 day, become dirty again (the outbox sweep pushes them once the row is checked). Older ones stay detached.
+ * Guests a non-owner added meanwhile were held on the link by the outbox (D41), so the push doesn't invite them; a
+ * link whose event the CRM had deleted comes back `cancelled` (restored, never patched).
  */
 async function reattachLinks(tx: TransactionClient, connectionId: string, username: string, now: Date): Promise<number> {
-    const detached = await tx.activityExternalLink.findMany({ where: { connectionId, state: 'detached', role: 'organizer' }, select: { id: true, activityId: true } });
+    const detached = await tx.activityExternalLink.findMany({
+        where: { connectionId, state: 'detached', role: 'organizer' },
+        select: { id: true, activityId: true, externalEventId: true, baseJson: true },
+    });
     if (detached.length === 0) return 0;
     const current = await tx.activity.findMany({
         where: { id: { in: detached.map((l) => l.activityId) }, assignedTo: username, isDeleted: false, endAt: { gt: new Date(now.getTime() - CREATE_ELIGIBLE_PAST_MS) } },
         select: { id: true },
     });
     const ids = new Set(current.map((a) => a.id));
-    const linkIds = detached.filter((l) => ids.has(l.activityId)).map((l) => l.id);
-    if (linkIds.length === 0) return 0;
-    const { count } = await tx.activityExternalLink.updateMany({
-        where: { id: { in: linkIds }, state: 'detached' },
-        data: { state: 'pending', dirtyAt: now, attempts: 0, nextAttemptAt: null },
-    });
+    const back = detached.filter((l) => ids.has(l.activityId));
+    let count = 0;
+    // Held guests (D41) were recorded while the link was detached; an event the CRM had deleted comes back `cancelled`.
+    for (const state of ['pending', 'cancelled'] as const) {
+        const linkIds = back.filter((l) => reattachedState(l) === state).map((l) => l.id);
+        if (linkIds.length === 0) continue;
+        count += (
+            await tx.activityExternalLink.updateMany({
+                where: { id: { in: linkIds }, state: 'detached' },
+                data: { state, dirtyAt: now, attempts: 0, nextAttemptAt: null },
+            })
+        ).count;
+    }
     return count;
 }
 

@@ -43,9 +43,13 @@ export function sweepPushJobId(linkId: string, dirtyAt: Date, now: Date): string
     return `${pushJobId(linkId, dirtyAt)}-s${Math.floor(now.getTime() / 60_000)}`;
 }
 
-/** `enrolled-<connectionId>-<enrolledAt ms>`: one per enrolment (a re-enrolment sets a new enrolledAt). */
-export function enrolledJobId(connectionId: string, enrolledAt: Date): string {
-    return `enrolled-${connectionId}-${enrolledAt.getTime()}`;
+/**
+ * `enrolled-<connectionId>-<enrolledAt ms>-r<readyAt ms>`: one per time the row reaches `ok` (first ok, and every
+ * recovery from `error`). An id per enrolment only would be silently ignored by BullMQ on a second recovery while the
+ * first job still sits in its completed (1 h) / failed (7 days) sets.
+ */
+export function enrolledJobId(connectionId: string, enrolledAt: Date, readyAt: Date): string {
+    return `enrolled-${connectionId}-${enrolledAt.getTime()}-r${readyAt.getTime()}`;
 }
 
 /** `check-<connectionId>-<minute>`: at most one queued health check per row and minute. */
