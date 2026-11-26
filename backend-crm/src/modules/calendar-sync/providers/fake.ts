@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { TokenError, type SyncFailure } from '../syncErrors.js';
 import { toGoogleEvent, toGooglePatch } from '../sync.mapping.google.js';
 import { normalizeGoogle } from '../sync.shapes.js';
+import { fakeWatchOps } from './fakeWatch.js';
 import { classifyFailure, CursorExpiredError, ProviderAuthError, ProviderBadRequestError, type ProviderError, ProviderNotFoundError, ProviderPreconditionError, RequestedIdTakenError } from './http.js';
 import type { AccessGrant, CalendarProviderAdapter, CallCtx, ChangePage, CreateEventInput, FreeBusyRequest, FreeBusyResult, ListChangesRequest, ProviderBusyBlock } from './types.js';
 import type { GoogleEventWire } from './wire.js';
@@ -254,6 +255,8 @@ export function createFakeAdapter(options: { now?: () => Date } = {}): CalendarP
         async listChanges(ctx, request) {
             return fakeListChanges(ctx, request);
         },
+
+        ...fakeWatchOps(now),
     };
 }
 

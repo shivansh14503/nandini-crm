@@ -14,9 +14,11 @@ import {
     type PullReason,
 } from '../../modules/calendar-sync/sync.constants.js';
 import { runCalendarNightly, runCalendarPoll, runEnrolled, runFallbackTick, sweepOutbox } from '../../modules/calendar-sync/sync.maintenance.js';
+import { isWatchOp, runWatchJob } from '../../modules/calendar-sync/sync.channels.js';
 import { pullConnection, type PullResult } from '../../modules/calendar-sync/sync.pull.js';
 import { markPushExhausted, pushLink, type PushResult } from '../../modules/calendar-sync/sync.push.js';
 import { pollCron } from '../../modules/calendar-sync/syncHours.js';
+import { pullAgainIfNotified } from '../../modules/calendar-sync/webhook.service.js';
 import { writeWorkerHeartbeat } from '../../modules/calendar-sync/workerHeartbeat.js';
 import { runWithAuditOrigin } from '../../services/auditContext.js';
 import { calendarSyncQueue, createQueueConnection, isQueueAvailable, QUEUE_NAMES } from '../queues.js';
@@ -30,11 +32,14 @@ import { throttledLogger } from './throttledLogger.js';
  *   check     a connection health check (`check-<connectionId>-<minute>`): new enrolments and due re-checks
  *   pull      calendar → CRM changes of one connection (`pull-<connectionId>-<10 s bucket>`, P2-5): poll fan-out,
  *             Sync now, the calendar page, the nightly Outlook re-baseline; one attempt (the next poll retries)
+ *   watch     a webhook channel of one connection (`watch-<connectionId>-<op>-<minute>`, P2-7): ensure | renew |
+ *             recreate | stop (Graph lifecycle notifications)
  *   poll      scheduler 'calendar-poll', every CALENDAR_POLL_MINUTES (5) inside CALENDAR_SYNC_HOURS (07:00–22:00):
- *             a pull per synced person + outbox sweep + due checks
+ *             a pull per synced person (with webhooks live, every CALENDAR_POLL_MINUTES_WITH_WEBHOOKS for people whose
+ *             channel is healthy) + outbox sweep + due checks + up to 20 webhook channels created / renewed
  *   nightly   scheduler 'calendar-nightly', 00:25: reconcile + due checks + admin digest (from the reminders worker),
  *             the follow-up activity backfill (from the reminders worker), error-link retries, client secrets
- *             expiring, expired leases cleared, Outlook delta windows re-baselined
+ *             expiring, expired leases cleared, Outlook delta windows re-baselined, webhook channels (P2-7)
  * All in the business timezone. A push that finds the connection's lease taken, or the provider rate-limiting, moves
  * itself back without spending an attempt. Every Redis `ready` upserts the schedulers and runs one outbox sweep. While
  * Redis is down a one-minute tick runs due checks, pushes due links and pulls due people in-process inside the sync
@@ -95,6 +100,7 @@ export async function processCalendarJob(job: Job, token?: string): Promise<unkn
             case CALENDAR_SYNC_JOBS.pull: {
                 const connectionId = idOf(job.data, 'connectionId');
                 if (!connectionId) return null;
+                const startedAt = new Date();
                 const result = await pullConnection(connectionId, reasonOf(job.data));
                 const delay = pullRetryDelay(result);
                 if (delay !== null) {
@@ -102,7 +108,14 @@ export async function processCalendarJob(job: Job, token?: string): Promise<unkn
                     await job.moveToDelayed(Date.now() + delay, token);
                     throw new DelayedError();
                 }
+                // D26 (P2-7): a webhook that arrived while this pull ran gets one more pull.
+                if (result.status === 'done') await pullAgainIfNotified(connectionId, startedAt).catch(() => false);
                 return result;
+            }
+            case CALENDAR_SYNC_JOBS.watch: {
+                const connectionId = idOf(job.data, 'connectionId');
+                const op = (job.data as Record<string, unknown> | null)?.op;
+                return connectionId && isWatchOp(op) ? { outcome: await runWatchJob(connectionId, op) } : null;
             }
             case CALENDAR_SYNC_JOBS.check: {
                 const connectionId = idOf(job.data, 'connectionId');

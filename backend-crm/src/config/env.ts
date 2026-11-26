@@ -186,6 +186,21 @@ const envSchema = z
             .int()
             .refine((value) => POLL_MINUTE_STEPS.includes(value), `CALENDAR_POLL_MINUTES must be one of ${POLL_MINUTE_STEPS.join(', ')} (a value that divides 60).`)
             .default(5),
+        /**
+         * Calendar webhooks (Calendar Phase 2 P2-7): the safety-net poll of a person whose Google push channel / Graph
+         * subscription is healthy, in minutes (5–120, default 30). Polls of everyone else keep CALENDAR_POLL_MINUTES, and
+         * every poll stays inside CALENDAR_SYNC_HOURS.
+         */
+        CALENDAR_POLL_MINUTES_WITH_WEBHOOKS: z.coerce.number().int().min(5).max(120).default(30),
+        /**
+         * Calendar webhooks on / off (P2-7), default true. Effective only when PUBLIC_API_URL starts with https:// (Google
+         * and Microsoft only call https addresses with a valid certificate); false stops every channel at the next nightly
+         * run and polling carries on alone.
+         */
+        CALENDAR_WEBHOOKS_ENABLED: z
+            .enum(['true', 'false'])
+            .default('true')
+            .transform((value) => value === 'true'),
 
         /**
          * Booking links (Calendar Phase 4): the key that signs the times a public booking page offers (slot tokens,
@@ -225,6 +240,25 @@ const publicApiUrl = (env.PUBLIC_API_URL ?? (env.NODE_ENV === 'production' ? und
  */
 export type IntegrationsNotReadyReason = 'key_missing';
 const integrationsReadyReason: IntegrationsNotReadyReason | null = !integrationsKeyRing ? 'key_missing' : null;
+
+/**
+ * Why calendar webhooks are off (P2-7), or null when they are live: no public address, not https, switched off with
+ * CALENDAR_WEBHOOKS_ENABLED=false, calendar sync itself switched off (CALENDAR_SYNC_ENABLED=false), or no
+ * INTEGRATIONS_ENCRYPTION_KEY (channel tokens are signed with it; webhooksLive() needs it too).
+ */
+export const WEBHOOKS_OFF_REASONS = ['no_public_url', 'needs_https', 'disabled', 'sync_disabled', 'key_missing'] as const;
+export type WebhooksOffReason = (typeof WEBHOOKS_OFF_REASONS)[number];
+const webhooksOffReason: WebhooksOffReason | null = !publicApiUrl
+    ? 'no_public_url'
+    : !publicApiUrl.startsWith('https://')
+      ? 'needs_https'
+      : !env.CALENDAR_WEBHOOKS_ENABLED
+        ? 'disabled'
+        : !env.CALENDAR_SYNC_ENABLED
+          ? 'sync_disabled'
+          : !integrationsKeyRing
+            ? 'key_missing'
+            : null;
 
 export const ENV = {
     NODE_ENV: env.NODE_ENV,
@@ -315,5 +349,13 @@ export const ENV = {
         SYNC_HOURS: env.CALENDAR_SYNC_HOURS,
         /** CALENDAR_POLL_MINUTES: minutes between polls inside the sync hours. */
         POLL_MINUTES: env.CALENDAR_POLL_MINUTES,
+        /** CALENDAR_POLL_MINUTES_WITH_WEBHOOKS: safety-net poll of people whose webhook channel is healthy (P2-7). */
+        POLL_MINUTES_WITH_WEBHOOKS: env.CALENDAR_POLL_MINUTES_WITH_WEBHOOKS,
+        /** CALENDAR_WEBHOOKS_ENABLED as set (P2-7). */
+        WEBHOOKS_ENABLED: env.CALENDAR_WEBHOOKS_ENABLED,
+        /** Calendar webhooks are live: https PUBLIC_API_URL, CALENDAR_WEBHOOKS_ENABLED and CALENDAR_SYNC_ENABLED (P2-7). */
+        WEBHOOKS_ACTIVE: webhooksOffReason === null,
+        /** Why they are not (null while live). */
+        WEBHOOKS_OFF_REASON: webhooksOffReason,
     },
 } as const;

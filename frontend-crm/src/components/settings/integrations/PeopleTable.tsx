@@ -24,10 +24,10 @@ import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import { TableSkeleton } from '@/components/common/skeletons';
 import { EmptyState, errorMessage, inputSx, panelHeaderSx, secondaryButtonSx, surfaceSx } from '@/components/settings/form-customization/builderUi';
 import { usePeople } from '@/hooks/queries/useIntegrationsAdmin';
-import type { Person, PersonCalendar, ProviderAdmin, UserEmailIssue } from '@/types/integration.types';
+import type { Person, PersonCalendar, PersonWebhook, ProviderAdmin, UserEmailIssue } from '@/types/integration.types';
 import { CalendarChoiceDialog } from './CalendarChoiceDialog';
 import { CompanyEmailDialog } from './CompanyEmailDialog';
-import { CALENDAR_PROVIDER_LABELS, NOT_SYNCED_LABELS, StatusChip, formatDateTime, hintSx, type ChipTone } from './integrationUi';
+import { CALENDAR_PROVIDER_LABELS, NOT_SYNCED_LABELS, PERSON_WEBHOOK_LABELS, StatusChip, formatDateTime, hintSx, type ChipTone } from './integrationUi';
 
 /** People filters: `calendar_problem` is also what the admins' daily digest opens (`?tab=people&issue=calendar_problem`). */
 export type PeopleFilter = 'all' | 'calendar_problem' | 'not_synced' | 'issues' | UserEmailIssue;
@@ -113,6 +113,13 @@ function matches(p: Person, filter: PeopleFilter): boolean {
     }
 }
 
+/** The webhook chip's tooltip (P2-7). Pure. */
+function webhookTitle(webhook: PersonWebhook): string {
+    if (webhook.status === 'active') return `Calendar changes arrive in seconds (webhook; renewed automatically${webhook.expiresAt ? `, current one runs to ${formatDateTime(webhook.expiresAt)}` : ''}).`;
+    if (webhook.status === 'failed') return 'The provider refused this calendar’s webhook; changes arrive by polling. Retried every few hours.';
+    return 'The webhook for this calendar is being set up; until then changes arrive by polling.';
+}
+
 /** The Calendar cell: the live row (provider, status, mailbox, the admin sentence of a problem), or why not synced. */
 function CalendarCell({ calendar }: { calendar: PersonCalendar }) {
     const c = calendar.connection;
@@ -134,6 +141,11 @@ function CalendarCell({ calendar }: { calendar: PersonCalendar }) {
                 {c.source === 'override' && (
                     <StatusChip tone="brand" title="Chosen for this person instead of the email domain's provider">
                         Override
+                    </StatusChip>
+                )}
+                {c.webhook && (
+                    <StatusChip tone={PERSON_WEBHOOK_LABELS[c.webhook.status].tone} title={webhookTitle(c.webhook)}>
+                        {PERSON_WEBHOOK_LABELS[c.webhook.status].label}
                     </StatusChip>
                 )}
             </Box>

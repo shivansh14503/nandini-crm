@@ -482,7 +482,29 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         calendar "Show busy times" background bands in week / 3-day / day views. Not run against a real SQL Server,
         Google or Microsoft (fake provider and recorded-shape `fakeFetch` tests only). Owner check before relying on
         Microsoft: `getSchedule` under the Exchange RBAC scope (first-run check F7).
-  - [ ] **P2-7: webhooks and HTTPS go-live**
+  - [x] **P2-7: webhooks and HTTPS go-live** (2026-11-26) — migration `20261215090000_calendar_watch_channels`
+        (`CalendarWatchChannel`). Adapter methods `watch` / `renewWatch` / `stopWatch` / `watchExists` (optional on the
+        interface): Google `events.watch` on `primary` as the person (7-day ttl) and `channels.stop`; Graph app-only
+        subscriptions on `users/{mailbox}/events` (10,000 of the documented 10,080 minutes, lifecycle URL) with
+        `PATCH` / `DELETE` / `GET`; the fake provider too. `sync.channels.ts`: ensure / renew (Google: new channel then
+        stop the old; Graph: `PATCH`, 404 → re-create) / stop / lifecycle, token and `clientState` = HMAC with the key
+        ring's HKDF `webhook` subkey (no secret column; every ring key verifies, so rotation works), channel ids tagged
+        with the public address so an address change replaces them; created after enrolment, by the poll (≤ 20 per
+        tick) and nightly (Graph existence check, strays stopped, old rows deleted); a refused watch leaves a `failed`
+        row retried after 6 h and never marks the person or provider. Stopped best effort when a row stops or the
+        provider is switched off, and nightly while webhooks are off. `/api/webhooks/google/calendar`,
+        `/microsoft/calendar`, `/microsoft/lifecycle` (no sign-in, HMAC-verified, own body limits, 600 / min / IP,
+        answer first then work; forged Google pings and Graph notifications refused before any database read, Graph
+        `clientState` = `<conn>.<generation>.<HMAC>`). D26: a ping stamps Redis and queues `pull-<conn>-w<10 s bucket>`
+        (2 s delay) unless that job is still pending; while it runs the stamp queues `pull-<conn>-n<stamp ms>` after
+        it, once finished a fresh `…-w<bucket>-<ms>`. A refused replace backs off 6 h while the old channel delivers.
+        Outside `CALENDAR_SYNC_HOURS` change notifications are dropped unread (Azure SQL sleeps; the morning poll
+        covers them), lifecycle ones handled at any hour. Safety-net poll every `CALENDAR_POLL_MINUTES_WITH_WEBHOOKS`
+        (default 30) for people with a healthy channel. `CALENDAR_WEBHOOKS_ENABLED` (default true), live only with an
+        https `PUBLIC_API_URL`. Admin › API Integrations: server-wide state and interval, a webhook line per provider
+        card, a per-person chip on People. Go-live checklist and runbook: system design §9.2.2. Tested with the fake
+        provider, hand-written Google / Graph answers and in-memory doubles; no real SQL Server, Google or Microsoft
+        call.
   - [ ] **P2-8: customer meetings from the calendar + replies both ways** (optional, off by default)
 - [ ] **Phase 4 (later; spec §17)**: booking links, recurring activities, email logging.
   - [x] **Booking links (public scheduling page on free/busy)** (2026-11-26) — migration `20261128120000_booking_links`

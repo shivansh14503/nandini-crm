@@ -1878,11 +1878,38 @@ model CalendarConnection {
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @default(now()) @updatedAt
 
-  links ActivityExternalLink[]
+  links    ActivityExternalLink[]
+  channels CalendarWatchChannel[]
 
   @@index([username, status])
   @@index([provider, status])
   @@index([status, nextCheckAt])
+}
+
+/// A Google push channel or Microsoft Graph subscription for one connection (Calendar Phase 2 P2-7, webhooks). Own
+/// table because Google renewal overlaps two channels for a while (no renew call). Created / renewed / stopped by
+/// calendar-sync/sync.channels.ts; looked up by calendar-sync/webhook.service.ts. Not audited (system state).
+model CalendarWatchChannel {
+  /// Our id: the Google channel id (≤ 64 chars) / our id for a Graph subscription. `w<8 hex address tag>-<uuid>`.
+  id           String   @id @db.NVarChar(64)
+  connectionId String   @db.NVarChar(50)
+  provider     String   @db.NVarChar(30)
+  /// Google resourceId / Graph subscription id.
+  externalId   String?  @db.NVarChar(200)
+  /// Ring key id used for the token / clientState HMAC.
+  tokenKeyId   String   @db.NVarChar(8)
+  /// Graph clientState generation (bumped on re-create).
+  generation   Int      @default(1)
+  expiresAt    DateTime
+  /// active | stopped | failed
+  status       String   @default("active") @db.NVarChar(20)
+  createdAt    DateTime @default(now())
+
+  connection CalendarConnection @relation(fields: [connectionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([connectionId, status])
+  @@index([externalId])
+  @@index([status, expiresAt])
 }
 
 /// One Activity as seen in one connected calendar, and the durable push outbox (`dirtyAt`): Calendar Phase 2 P2-3b.

@@ -61,3 +61,32 @@ export function checkJobId(connectionId: string, now: Date): string {
 export function pullJobId(connectionId: string, now: Date): string {
     return `pull-${connectionId}-${Math.floor(now.getTime() / 10_000)}`;
 }
+
+/**
+ * `pull-<connectionId>-w<10 s bucket>`: a webhook-triggered pull (P2-7). Its own id, apart from the poll's: a burst of
+ * pings within 10 s shares one pending job. Only a pending (waiting / delayed) job may absorb a ping; once that id is
+ * active or finished (BullMQ keeps completed jobs an hour and silently ignores an add with an id it still holds), the
+ * ping uses `freshWebhookPullJobId` instead.
+ */
+export function webhookPullJobId(connectionId: string, now: Date): string {
+    return `pull-${connectionId}-w${Math.floor(now.getTime() / 10_000)}`;
+}
+
+/** `pull-<connectionId>-w<10 s bucket>-<ms>`: a webhook pull after this bucket's pull already ran (or failed). */
+export function freshWebhookPullJobId(connectionId: string, now: Date): string {
+    return `${webhookPullJobId(connectionId, now)}-${now.getTime()}`;
+}
+
+/**
+ * `pull-<connectionId>-n<stamp ms>`: the one extra pull a finished pull queues when a webhook arrived while it ran
+ * (D26), keyed on that ping's stamp. A pull queued for stamp S starts after S, so a later follow-up needs a newer stamp
+ * and therefore another id: it never equals the running job's id, nor any job still kept in BullMQ's sets.
+ */
+export function followUpPullJobId(connectionId: string, stampMs: number): string {
+    return `pull-${connectionId}-n${stampMs}`;
+}
+
+/** `watch-<connectionId>-<op>-<minute>`: one webhook channel job per connection, operation and minute (P2-7). */
+export function watchJobId(connectionId: string, op: string, now: Date): string {
+    return `watch-${connectionId}-${op}-${Math.floor(now.getTime() / 60_000)}`;
+}

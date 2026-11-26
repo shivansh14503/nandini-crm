@@ -161,4 +161,8 @@ export const secretBox = {
     hasKey: (kid: string | null | undefined): boolean => Boolean(kid && activeRing?.keys.has(kid)),
     seal: (plain: string, aad: string): string => seal(requireRing(), plain, aad),
     open: (sealed: string, aad: string): string => open(requireRing(), sealed, aad),
+    /** Kids in the ring, active first (webhook HMACs are accepted under every one of them, P2-7). */
+    keyIds: (): string[] => (activeRing ? [activeRing.activeKid, ...[...activeRing.keys.keys()].filter((kid) => kid !== activeRing?.activeKid)] : []),
+    /** The webhook HMAC subkey of a ring key (default: the active one). Throws KEY_MISSING / NOT_CONFIGURED. */
+    webhookKey: (kid?: string): Buffer => subkey(requireRing(), 'webhook', kid),
 };

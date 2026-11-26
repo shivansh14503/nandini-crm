@@ -5,6 +5,7 @@ import { graphStatusKind } from '../busy.intervals.js';
 import type { AdapterOptions } from './google.js';
 import { graphChangeOps } from './graphChanges.js';
 import { graphEventOps } from './graphEvents.js';
+import { graphWatchOps } from './graphWatch.js';
 import { providerFetch } from './http.js';
 import type { CalendarProviderAdapter, CallCtx, FreeBusyRequest, FreeBusyResult, ProviderBusyBlock } from './types.js';
 
@@ -99,5 +100,6 @@ export function createMicrosoftAdapter(options: AdapterOptions = {}): CalendarPr
 
         ...graphEventOps(fetchImpl),
         ...graphChangeOps(fetchImpl),
+        ...graphWatchOps(fetchImpl),
     };
 }

@@ -1,5 +1,5 @@
 import { StatusCodes } from 'http-status-codes';
-import { ENV } from '../../config/env.js';
+import { ENV, type WebhooksOffReason } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
 import { prisma } from '../../config/prisma.js';
 import type { Prisma } from '../../generated/prisma/client.js';
@@ -14,7 +14,9 @@ import {
     calendarChoicesByUsername,
     connectionCountsByProvider,
     liveConnectionsByUsername,
+    webhookCountsByProvider,
     type ConnectionCounts,
+    type WebhookCounts,
     type PersonCalendarChoiceDto,
     type PersonConnectionDto,
 } from '../calendar-sync/connection.queries.js';
@@ -34,6 +36,7 @@ import { isFakeProviderEnabled } from '../calendar-sync/providers/fakeSwitch.js'
 import { parseServiceAccountKey, ServiceAccountKeyError, type ServiceAccountKey } from '../calendar-sync/providers/googleServiceAccount.js';
 import type { FetchImpl } from '../calendar-sync/providers/types.js';
 import { ADMIN_ERROR_MESSAGES, type TokenErrorCode } from '../calendar-sync/syncErrors.js';
+import { pollMinutes } from '../calendar-sync/syncHours.js';
 import { tokenSource } from '../calendar-sync/tokenSource.js';
 import { isHeartbeatRedisReady, readWorkerHeartbeat, workerStatusOf, type WorkerStatus } from '../calendar-sync/workerHeartbeat.js';
 import { FOLLOWUP_TYPE_CATEGORY_KEY } from '../form-configs/formConfig.defaults.js';
@@ -183,6 +186,8 @@ export interface ProviderAdminDto {
     /** Company email domains this provider serves (calendar providers; [] otherwise). */
     domains: string[];
     webhookUrls: string[] | null;
+    /** Calendar webhooks of this provider (P2-7); null for Zoom. */
+    webhook: ProviderWebhookDto | null;
     lastTest: { at: string; ok: boolean; message: string | null } | null;
     /** A passing app-level test since the last credentials change (needed to switch the provider on). */
     appTested: boolean;
@@ -193,6 +198,28 @@ export interface ProviderAdminDto {
     counts: ConnectionCounts;
     updatedAt: string | null;
     updatedBy: string | null;
+}
+
+/**
+ * Webhooks of a calendar provider on its card (P2-7): `unavailable` while webhooks are off server-wide (`reason` says
+ * why), `off` while the provider is switched off, `errors` when some people's channel was refused, `starting` while
+ * some synced people have none yet (created within minutes), else `live`.
+ */
+export const PROVIDER_WEBHOOK_STATUSES = ['live', 'starting', 'errors', 'off', 'unavailable'] as const;
+export type ProviderWebhookStatus = (typeof PROVIDER_WEBHOOK_STATUSES)[number];
+
+export interface ProviderWebhookDto extends WebhookCounts {
+    status: ProviderWebhookStatus;
+    reason: WebhooksOffReason | null;
+}
+
+/** The card's webhook line (pure). Null for providers without calendar webhooks (Zoom). */
+export function providerWebhookOf(provider: IntegrationProviderKey, enabled: boolean, counts: WebhookCounts | undefined): ProviderWebhookDto | null {
+    if (!isCalendarProvider(provider)) return null;
+    const c = counts ?? { active: 0, failed: 0, waiting: 0 };
+    const reason = ENV.INTEGRATIONS.WEBHOOKS_OFF_REASON;
+    const status: ProviderWebhookStatus = reason ? 'unavailable' : !enabled ? 'off' : c.failed > 0 ? 'errors' : c.waiting > 0 ? 'starting' : 'live';
+    return { status, reason, ...c };
 }
 
 export interface SyncTypeDto {
@@ -214,6 +241,13 @@ export interface IntegrationsAdminDto {
     publicApiUrlConfigured: boolean;
     /** Calendar webhooks are live (Calendar Phase 2 P2-7, needs https); false until then. */
     webhooksActive: boolean;
+    /** Why they aren't (null while live): no_public_url | needs_https | disabled | sync_disabled | key_missing. */
+    webhooksOffReason: WebhooksOffReason | null;
+    /**
+     * Safety-net poll interval of people with a healthy channel, as the scheduler uses it: the larger of
+     * CALENDAR_POLL_MINUTES_WITH_WEBHOOKS and CALENDAR_POLL_MINUTES (pollIntervalMinutes in sync.channels.ts).
+     */
+    pollMinutesWithWebhooks: number;
     /** The dev-only test calendar provider is on (CALENDAR_FAKE_PROVIDER): People may pick "Test (dev)". */
     fakeProvider: boolean;
     /** The calendar sync worker's last heartbeat (Redis key, P2-3b); null when no worker wrote it in the last 2 minutes or Redis is down. */
@@ -354,7 +388,7 @@ const healthOf = (row: ProviderRow | null): ProviderHealthDto => {
 
 const EMPTY_COUNTS: ConnectionCounts = { ok: 0, pending: 0, error: 0, excluded: 0 };
 
-export function toProviderDto(provider: IntegrationProviderKey, row: ProviderRow | null, now: Date = new Date(), counts?: ConnectionCounts): ProviderAdminDto {
+export function toProviderDto(provider: IntegrationProviderKey, row: ProviderRow | null, now: Date = new Date(), counts?: ConnectionCounts, webhookCounts?: WebhookCounts): ProviderAdminDto {
     const { secrets, readable } = openSecrets(row);
     const hints = parseJson<SecretHints>(row?.secretHintsJson, {});
     const settings = providerSettings(provider, row);
@@ -376,6 +410,7 @@ export function toProviderDto(provider: IntegrationProviderKey, row: ProviderRow
         settings,
         domains: DOMAIN_PROVIDERS.has(provider) ? domainsIn(settings) : [],
         webhookUrls: webhookUrlsFor(provider, ENV.INTEGRATIONS.PUBLIC_API_URL),
+        webhook: providerWebhookOf(provider, Boolean(row?.enabled), webhookCounts),
         lastTest: row?.lastTestAt ? { at: row.lastTestAt.toISOString(), ok: Boolean(row.lastTestOk), message: row.lastTestMessage } : null,
         appTested: appTestedFor(hints, clientVersion),
         clientVersion,
@@ -565,6 +600,11 @@ async function providerCounts(): Promise<Map<string, ConnectionCounts>> {
     return connectionCountsByProvider((person) => providerServing(person.email, person.provider, context));
 }
 
+/** Webhook channel counts per provider (P2-7); nothing is read while webhooks are off. */
+async function providerWebhookCounts(now: Date): Promise<Map<string, WebhookCounts>> {
+    return ENV.INTEGRATIONS.WEBHOOKS_ACTIVE ? webhookCountsByProvider(now) : new Map();
+}
+
 async function afterProviderChange(provider: IntegrationProviderKey, user: AuthUser): Promise<void> {
     dropProviderCredentialsCache(provider);
     if (isCalendarProvider(provider)) tokenSource.invalidate(provider);
@@ -573,9 +613,15 @@ async function afterProviderChange(provider: IntegrationProviderKey, user: AuthU
 
 export const integrationService = {
     async getAdmin(now: Date = new Date()): Promise<IntegrationsAdminDto> {
-        const [rows, configs, counts, worker] = await Promise.all([prisma.integrationProvider.findMany(), formConfigService.getAllConfigs(), providerCounts(), readWorkerHeartbeat()]);
+        const [rows, configs, counts, worker, webhooks] = await Promise.all([
+            prisma.integrationProvider.findMany(),
+            formConfigService.getAllConfigs(),
+            providerCounts(),
+            readWorkerHeartbeat(),
+            providerWebhookCounts(now),
+        ]);
         const byProvider = new Map(rows.map((row) => [row.provider, row]));
-        const providers = INTEGRATION_PROVIDERS.map((p) => toProviderDto(p, byProvider.get(p) ?? null, now, counts.get(p)));
+        const providers = INTEGRATION_PROVIDERS.map((p) => toProviderDto(p, byProvider.get(p) ?? null, now, counts.get(p), webhooks.get(p)));
         const anyUnreadable = providers.some((p) => !p.secret.readable || (p.serviceAccount && !p.serviceAccount.readable));
         const { KEY_CONFIGURED, ACTIVE_KEY_ID, PUBLIC_API_URL, PUBLIC_API_URL_CONFIGURED } = ENV.INTEGRATIONS;
         return {
@@ -584,7 +630,9 @@ export const integrationService = {
             activeKeyId: ACTIVE_KEY_ID,
             publicApiUrl: PUBLIC_API_URL,
             publicApiUrlConfigured: PUBLIC_API_URL_CONFIGURED,
-            webhooksActive: false,
+            webhooksActive: ENV.INTEGRATIONS.WEBHOOKS_ACTIVE,
+            webhooksOffReason: ENV.INTEGRATIONS.WEBHOOKS_OFF_REASON,
+            pollMinutesWithWebhooks: Math.max(pollMinutes(), ENV.INTEGRATIONS.POLL_MINUTES_WITH_WEBHOOKS),
             fakeProvider: isFakeProviderEnabled(),
             worker,
             workerStatus: workerStatusOf(isHeartbeatRedisReady(), worker),
@@ -596,8 +644,9 @@ export const integrationService = {
     },
 
     async getProvider(provider: IntegrationProviderKey): Promise<ProviderAdminDto> {
-        const [row, counts] = await Promise.all([prisma.integrationProvider.findUnique({ where: { provider } }), providerCounts()]);
-        return toProviderDto(provider, row, new Date(), counts.get(provider));
+        const now = new Date();
+        const [row, counts, webhooks] = await Promise.all([prisma.integrationProvider.findUnique({ where: { provider } }), providerCounts(), providerWebhookCounts(now)]);
+        return toProviderDto(provider, row, now, counts.get(provider), webhooks.get(provider));
     },
 
     /**

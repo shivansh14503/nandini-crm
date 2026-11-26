@@ -56,6 +56,7 @@ import userAdminRouter from './modules/user-admin/userAdmin.routes.js';
 import { serializeRequestForLog } from './utils/redactUrl.js';
 import { isAppOrigin } from './config/origins.js';
 import calendarConnectionRouter from './modules/calendar-sync/connection.routes.js';
+import calendarWebhookRouter from './modules/calendar-sync/webhook.routes.js';
 import bookingLinkRouter from './modules/booking-links/bookingLink.routes.js';
 import publicBookingRouter from './modules/booking-links/bookingLink.public.routes.js';
 
@@ -93,6 +94,9 @@ app.use(
         serializers: { req: serializeRequestForLog },
     }),
 );
+// Calendar webhooks from Google / Microsoft (Calendar Phase 2 P2-7): no session, signature-verified; mounted before the
+// cookie and body parsers with their own (Google: headers only; Graph: JSON ≤ 256 KB), their own rate limit.
+app.use('/api/webhooks', calendarWebhookRouter);
 app.use(cookieParser());
 // Mounted before the global body parser: imports carry up to 5,000 rows and parse with their own 10 MB limit.
 app.use('/api/import', importRouter);
@@ -194,6 +198,8 @@ function logIntegrationsReadiness(): void {
     }
     if (ENV.IS_PRODUCTION && PUBLIC_API_URL && !PUBLIC_API_URL.startsWith('https://')) {
         logger.warn('PUBLIC_API_URL is not https: calendar webhooks stay off (changes arrive by polling)');
+    } else if (ENV.INTEGRATIONS.WEBHOOKS_ACTIVE) {
+        logger.info('Calendar webhooks are on: channels are created for synced people (changes arrive within seconds)');
     }
 }
 

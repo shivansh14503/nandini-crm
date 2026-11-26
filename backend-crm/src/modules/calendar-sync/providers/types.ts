@@ -7,7 +7,7 @@ import type { CrmShape, FieldGroup, ProviderAttendee, ProviderEvent } from '../s
  * clients behind one interface, no SDKs (D1). Access tokens are minted per call from the company credentials
  * (tokenSource.ts) and handed to the adapter inside a `CallCtx`; minting is not on the adapter. P2-2b shipped
  * `probeCalendar` (the per-row health check); P2-3b adds the event operations (create / patch / cancel / get /
- * undelete) of the push engine, P2-6 `freeBusy`, P2-5 `listChanges` (pull); watch joins with P2-7. The engine never imports an
+ * undelete) of the push engine, P2-6 `freeBusy`, P2-5 `listChanges` (pull), P2-7 watch / renewWatch / stopWatch / watchExists (webhooks). The engine never imports an
  * adapter directly: it goes through `getAdapter()` (providers/registry.ts), which tests replace with the in-memory fake.
  *
  * Nothing here is ever logged with its values: tokens stay inside these objects.
@@ -110,6 +110,36 @@ export interface ChangePage {
 }
 
 /**
+ * Webhooks (P2-7, spec §7.2 / §7.4 / §7.5; addendum §8.6): a Google push channel (`events.watch` on the person's
+ * `primary` calendar, impersonated) or a Microsoft Graph subscription (`users/{mailbox}/events`, app-only).
+ */
+export interface WatchRequest {
+    /** Our channel id (Google `id`, ≤ 64 chars); Graph doesn't take one (it names the subscription itself). */
+    channelId: string;
+    /** HTTPS address the provider calls. */
+    address: string;
+    /** Graph `lifecycleNotificationUrl`. */
+    lifecycleAddress?: string;
+    /** Google channel `token` (≤ 256) / Graph `clientState` (≤ 128): carries the HMAC the webhook route checks (channelToken). */
+    token: string;
+    /** Requested expiry (the provider may answer an earlier one). */
+    expiresAt: Date;
+}
+
+/** A created channel / subscription as the provider answered. */
+export interface WatchCreated {
+    /** Google `resourceId` / Graph subscription `id`. */
+    externalId: string;
+    expiresAt: Date;
+}
+
+/** What renew / stop / exists need to name a channel. */
+export interface WatchChannelRef {
+    channelId: string;
+    externalId: string;
+}
+
+/**
  * The adapter interface: the health probe (P2-2b), the event operations of the push engine (P2-3b) and free/busy
  * (P2-6) and the pull (`listChanges`, P2-5). Watch and RSVP join with P2-7 and P2-8. Graph URLs use `ctx.mailbox` (`/users/{mailbox}`).
  */
@@ -147,4 +177,15 @@ export interface CalendarProviderAdapter {
      * the cursor (Google 410, Graph 410 / syncStateNotFound): the pull starts a full sync.
      */
     listChanges(ctx: CallCtx, request: ListChangesRequest): Promise<ChangePage>;
+    /**
+     * Webhooks (P2-7). Optional so an adapter (or a test double) without them simply gets no channel: the poll covers
+     * that person. Google `POST …/events/watch`; Graph `POST /subscriptions`.
+     */
+    watch?(ctx: CallCtx, request: WatchRequest): Promise<WatchCreated>;
+    /** Graph `PATCH /subscriptions/{id}`; `'recreate'` when the provider no longer has it (404). Google has no renew call. */
+    renewWatch?(ctx: CallCtx, channel: WatchChannelRef, expiresAt: Date): Promise<{ expiresAt: Date } | 'recreate'>;
+    /** Google `POST /channels/stop`; Graph `DELETE /subscriptions/{id}`. A channel the provider no longer has is fine. */
+    stopWatch?(ctx: CallCtx, channel: WatchChannelRef): Promise<void>;
+    /** Graph `GET /subscriptions/{id}`: false on 404 (the nightly backstop for a lost `subscriptionRemoved`). */
+    watchExists?(ctx: CallCtx, channel: WatchChannelRef): Promise<boolean>;
 }
