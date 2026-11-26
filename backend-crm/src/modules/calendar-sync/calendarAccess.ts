@@ -56,9 +56,18 @@ export interface CalendarAccessOptions {
     check?: boolean;
 }
 
-/** Called once a row first reaches `ok` (P2-3b registers the `enrolled` job that runs the first-sync backfill). */
+/** Called once a row first reaches `ok` (`backfilledAt` still null). */
 type ReadyListener = (row: ConnectionRow) => void | Promise<void>;
-const readyListeners = new Set<ReadyListener>();
+/**
+ * P2-3b: the row's `enrolled` job (sync.wake.ts, imported on demand: that module sits behind this one's importers),
+ * which pushes the links saved while the row was pending; P2-3c adds the first-sync backfill to it. Without Redis
+ * nothing is queued: the worker's fallback tick pushes those links within a minute (inside 07:00–22:00).
+ */
+const enqueueEnrolledJob: ReadyListener = async (row) => {
+    const { enqueueEnrolled } = await import('./sync.wake.js');
+    await enqueueEnrolled(row.id, row.enrolledAt);
+};
+const readyListeners = new Set<ReadyListener>([enqueueEnrolledJob]);
 export function onConnectionReady(listener: ReadyListener): () => void {
     readyListeners.add(listener);
     return () => readyListeners.delete(listener);

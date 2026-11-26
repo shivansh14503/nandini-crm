@@ -14,7 +14,7 @@ import { withoutMutedRecipients } from './notification.preferences.js';
  * read first and only the missing rows are inserted, in chunks under the 2,100-parameter limit.
  *
  * Every row goes through `withoutMutedRecipients` first: a recipient who turned that kind off in My Profile ›
- * Notifications gets no row (kinds without a switch, such as `calendar_sync_issue`, always deliver).
+ * Notifications gets no row (kinds without a switch, such as the calendar kinds below, always deliver).
  */
 
 /**
@@ -22,8 +22,25 @@ import { withoutMutedRecipients } from './notification.preferences.js';
  * `admin-integrations`, entityId the provider), or the nightly digest of people whose calendar isn't syncing (entityId
  * `people:calendar_problem`). It opens Admin › API Integrations. P2-2's `calendar_reconnect` is retired (its rows were
  * deleted by migration 20261128090000_calendar_admin_connect).
+ *
+ * P2-3b (the push engine, calendar-sync/sync.notifications.ts), system kinds that always deliver:
+ *   - `calendar_sync_error` → the activity's owner: the calendar refused a change of that activity (entityModule
+ *     `activities`; once per activity and business day).
+ *   - `calendar_invites_held` → the owner (D41): someone else put guests on the owner's calendar event and nobody was
+ *     invited (entityModule `activities`).
+ *   - `integration_secret_expiring` → admins: a provider's client secret expires within 30 days (entityModule
+ *     `admin-integrations`, entityId the provider; once a week).
  */
-export const NOTIFICATION_KINDS = ['activity_reminder', 'activity_assigned', 'activity_invited', 'contract_renewal', 'calendar_sync_issue'] as const;
+export const NOTIFICATION_KINDS = [
+    'activity_reminder',
+    'activity_assigned',
+    'activity_invited',
+    'contract_renewal',
+    'calendar_sync_issue',
+    'calendar_sync_error',
+    'calendar_invites_held',
+    'integration_secret_expiring',
+] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
 export interface NotificationInput {

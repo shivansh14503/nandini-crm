@@ -152,6 +152,15 @@ const envSchema = z
             .enum(['true', 'false'])
             .default('false')
             .transform((value) => value === 'true'),
+        /**
+         * Kill switch of the CRM → calendar push engine (Calendar Phase 2 P2-3b). `false` stops every push, the outbox
+         * sweep and the enrolled job (links stay dirty and push once it is back on); connection checks still run.
+         * Providers stay off until an admin switches them on, so `true` changes nothing until then.
+         */
+        CALENDAR_SYNC_ENABLED: z
+            .enum(['true', 'false'])
+            .default('true')
+            .transform((value) => value === 'true'),
     })
     .superRefine((env, ctx) => {
         if (env.NODE_ENV === 'production' && (!env.JWT_SECRET || env.JWT_SECRET.length < 32)) {
@@ -262,5 +271,7 @@ export const ENV = {
         FAKE_PROVIDER: env.CALENDAR_FAKE_PROVIDER && env.NODE_ENV !== 'production',
         /** CALENDAR_FAKE_PROVIDER=true was set in production and is ignored (start-up warning). */
         FAKE_PROVIDER_IGNORED: env.CALENDAR_FAKE_PROVIDER && env.NODE_ENV === 'production',
+        /** CALENDAR_SYNC_ENABLED: the push engine runs (P2-3b). */
+        SYNC_ENABLED: env.CALENDAR_SYNC_ENABLED,
     },
 } as const;

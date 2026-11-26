@@ -1,11 +1,12 @@
 import { GOOGLE_CALENDAR_API } from '../../integrations/integration.constants.js';
+import { googleEventOps } from './googleEvents.js';
 import { providerFetch } from './http.js';
 import type { CalendarProviderAdapter, CallCtx, FetchImpl } from './types.js';
 
 /**
  * Google Calendar v3 for one impersonated employee (addendum §2, §4.3). The token comes from the service account with
  * domain-wide delegation (googleServiceAccount.ts) and acts as the employee, so `calendars/primary` is theirs and
- * `ctx.mailbox` is not needed. The event operations join this adapter with the push engine (P2-3b).
+ * `ctx.mailbox` is not needed. The event operations of the push engine (P2-3b) live in googleEvents.ts.
  */
 
 export interface AdapterOptions {
@@ -27,5 +28,7 @@ export function createGoogleAdapter(options: AdapterOptions = {}): CalendarProvi
                 { fetchImpl, attempts: 2 },
             );
         },
+
+        ...googleEventOps(fetchImpl),
     };
 }

@@ -1,5 +1,5 @@
 import type { AppErrorCode, TransientErrorCode, UserErrorCode } from './connection.constants.js';
-import { ProviderBadRequestError, ProviderError, ProviderRateLimitedError, ProviderTransientError } from './providers/http.js';
+import { ProviderAuthError, ProviderBadRequestError, ProviderError, ProviderRateLimitedError, ProviderTransientError } from './providers/http.js';
 import type { SyncProvider } from './providers/types.js';
 
 /**
@@ -162,6 +162,11 @@ export function classifyApiError(provider: SyncProvider, err: unknown, options: 
         if (GRAPH_NO_MAILBOX.has(err.code) && (options.probe || err.code.startsWith('Mailbox'))) return { level: 'user', code: 'no_mailbox', providerText };
         if (options.probe && err.status === 404) return { level: 'user', code: 'no_mailbox', providerText };
         return null;
+    }
+    // Google (and the fake): 403 insufficientPermissions on an event call (not the probe, see below) = the domain-wide
+    // delegation entry lacks the scope the push writes with (P2-3b): the whole app, not one person.
+    if (!options.probe && err instanceof ProviderAuthError && err.status === 403 && err.code === 'insufficientPermissions') {
+        return { level: 'app', code: 'scopes_not_authorised', providerText };
     }
     // Google (and the fake, which speaks Google's shapes): F11, any 403 / 404 on the user's own primary calendar.
     if (options.probe && (err.status === 403 || err.status === 404)) return { level: 'user', code: 'calendar_unavailable', providerText };

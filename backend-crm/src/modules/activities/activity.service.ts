@@ -17,6 +17,7 @@ import {
     throwFieldIssues,
     type ModuleFieldConfig,
 } from '../form-configs/customFieldValidator.js';
+import { calendarViewOf, loadOwnerCalendarLinks, NO_CALENDAR_LINKS, type CalendarLinksByActivity } from '../calendar-sync/sync.view.js';
 import { FOLLOWUP_TYPE_CATEGORY_KEY } from '../form-configs/formConfig.defaults.js';
 import type { DropdownCategoryDto } from '../form-configs/formConfig.service.js';
 import { notifyActivityParticipants, scheduleActivityReminder } from '../notifications/notification.reminders.js';
@@ -76,10 +77,27 @@ function assertCanEdit(user: AuthUser, row: ActivityAccessRow): void {
     if (!canEditActivity(user, row)) throw HttpError.forbidden(EDIT_FORBIDDEN_MESSAGE);
 }
 
-/** The DTO plus what the caller may do with it (`viewer`, `lockedFields` sit outside the audited record). */
-export function toActivityView(row: ActivityRow, user: AuthUser): ActivityView {
-    return { ...toActivityDto(row), viewer: { canEdit: canEditActivity(user, row), myResponse: myResponseOf(user, row) }, lockedFields: lockedFieldsFor(row) };
+/**
+ * The DTO plus what the caller may do with it (`viewer`, `lockedFields` and `calendar` sit outside the audited record).
+ * `links`: the owners' calendar links (calendar-sync/sync.view.ts); without them `calendar` is null.
+ */
+export function toActivityView(row: ActivityRow, user: AuthUser, links: CalendarLinksByActivity = NO_CALENDAR_LINKS): ActivityView {
+    const canEdit = canEditActivity(user, row);
+    return {
+        ...toActivityDto(row),
+        viewer: { canEdit, myResponse: myResponseOf(user, row) },
+        lockedFields: lockedFieldsFor(row),
+        calendar: calendarViewOf(row, links.get(row.id), user.username, canEdit),
+    };
 }
+
+/** Views of committed rows with their calendar state (one link read per call, a second only when links exist). */
+async function toActivityViews(rows: readonly ActivityRow[], user: AuthUser): Promise<ActivityView[]> {
+    const links = await loadOwnerCalendarLinks(rows);
+    return rows.map((row) => toActivityView(row, user, links));
+}
+
+const toOneView = async (row: ActivityRow, user: AuthUser): Promise<ActivityView> => (await toActivityViews([row], user))[0];
 
 // ── Configuration ────────────────────────────────────────────────────────────
 
@@ -257,16 +275,17 @@ export interface ActivityCommitRow {
 export interface PostCommitOptions {
     /** False: no owner / invitee notifications (imports, backfills). Default true. */
     notify?: boolean;
-    /** P2-3b: true skips the calendar push (inbound applies). No effect yet. */
+    /** True skips the calendar push wake-up (inbound applies: they didn't mark the link dirty). */
     skipPush?: boolean;
 }
 
 /**
  * After committed writes (never inside their transaction), per row: arms the reminder's delayed job and tells a new
- * owner / newly invited colleagues (notification.reminders.ts), unless `notify` is false. P2-3b adds the calendar
- * push here. Failures are logged, never thrown: the save has happened, and the reminder sweep re-delivers anything
- * missed. For a deleted row both steps do nothing (no reminder is armed, nobody is told). `actor` may be a bare
- * username (system writes); the notification text reads only its username.
+ * owner / newly invited colleagues (notification.reminders.ts), unless `notify` is false; then wakes the calendar push
+ * for the links the write's outbox left dirty and sends "invitations held" notices (calendar-sync/sync.wake.ts), unless
+ * `skipPush`. Failures are logged, never thrown: the save has happened, and the reminder sweep and the outbox sweep
+ * re-deliver anything missed. For a deleted row no reminder is armed and nobody is told (its calendar event is
+ * cancelled by the push). `actor` may be a bare username (system writes); the notification text reads only its username.
  */
 export async function runActivityPostCommit(rows: readonly ActivityCommitRow[], actor: AuthUser | string, opts: PostCommitOptions = {}): Promise<void> {
     const user: AuthUser = typeof actor === 'string' ? { id: 0, username: actor, role: '' } : actor;
@@ -282,6 +301,14 @@ export async function runActivityPostCommit(rows: readonly ActivityCommitRow[], 
         } catch (err) {
             logger.warn({ err: (err as Error).message, activityId: after.id }, 'Could not notify the activity owner / invitees');
         }
+    }
+    if (opts.skipPush) return;
+    try {
+        // Dynamic: the push engine imports this module (no import cycle at load time).
+        const { runCalendarPostCommit } = await import('../calendar-sync/sync.wake.js');
+        await runCalendarPostCommit(rows);
+    } catch (err) {
+        logger.warn({ err: (err as Error).message }, 'Could not wake the calendar push; the outbox sweep covers it');
     }
 }
 
@@ -323,13 +350,16 @@ type ActivityManagedColumn =
     | 'createdAt'
     | 'updatedAt'
     | 'isDeleted'
-    | 'deletedAt';
+    | 'deletedAt'
+    | 'externalLinks';
 
 /**
  * Columns only the system write path sets, written with the row so the audit entry and the write hook see them:
  * every Activity column except the API's fields (those come through the parsed input) and the ones the write path
- * computes. P2-4: `origin` (`'followup'` on a lead / opportunity follow-up activity); P2-8's organizer columns join
- * this type with their migration.
+ * computes. P2-4: `origin` (`'followup'` on a lead / opportunity follow-up activity). P2-3b's sync columns (`iCalUid`,
+ * `syncKey`, `organizerEmail`, `organizerName`, `externalOrganizer`, `externalUpdatedAt`) are allowed here for P2-8's
+ * imports; the push engine writes `iCalUid` / `syncKey` itself with an `updatedAt`-preserving `updateMany` (spec §4.4).
+ * Links (`externalLinks`) are the calendar engine's own rows.
  */
 export type ActivityRowData = Partial<Omit<Prisma.ActivityUncheckedCreateInput, ActivityApiColumn | ActivityManagedColumn>>;
 
@@ -566,14 +596,14 @@ export const activityService = {
             prisma.activity.count({ where }),
             prisma.activity.findMany({ where, include: WITH_ATTENDEES, orderBy: [page.orderBy, { id: 'asc' }], skip: page.skip, take: page.take }),
         ]);
-        return { data: rows.map((row) => toActivityView(row, user)), total, page: page.page, limit: page.limit };
+        return { data: await toActivityViews(rows, user), total, page: page.page, limit: page.limit };
     },
 
     async getById(id: string, user: AuthUser): Promise<ActivityView> {
         const row = await prisma.activity.findFirst({ where: { id, isDeleted: false }, include: WITH_ATTENDEES });
         if (!row) throw notFound();
         assertCanView(user, row);
-        return toActivityView(row, user);
+        return toOneView(row, user);
     },
 
     async create(body: unknown, user: AuthUser): Promise<ActivityView> {
@@ -588,7 +618,7 @@ export const activityService = {
         const row = await runInTransaction((tx) => insertActivityRow(tx, input, schedule, crmWriter(user, config), now));
         await cacheService.invalidateEntityCaches('activities');
         await runActivityPostCommit([{ before: null, after: row }], user);
-        return toActivityView(row, user);
+        return toOneView(row, user);
     },
 
     async update(id: string, patch: Record<string, unknown>, user: AuthUser): Promise<ActivityView> {
@@ -617,7 +647,7 @@ export const activityService = {
 
         await cacheService.invalidateEntityCaches('activities');
         await runActivityPostCommit([{ before: existing, after: row }], user);
-        return toActivityView(row, user);
+        return toOneView(row, user);
     },
 
     async remove(id: string, user: AuthUser): Promise<void> {
@@ -634,7 +664,7 @@ export const activityService = {
             return { before: existing, after };
         });
         await cacheService.invalidateEntityCaches('activities');
-        // Nothing to arm or tell for a deleted row; P2-3b's calendar push runs here.
+        // Nothing to arm or tell for a deleted row; the calendar push (a cancel) is woken here.
         await runActivityPostCommit([deleted], user);
     },
 
@@ -738,7 +768,7 @@ export const activityService = {
         await cacheService.invalidateEntityCaches('activities');
         // A reply changes no owner or invitation; this only re-arms the reminder (a no-op for a pending one).
         await runActivityPostCommit([{ before: existing, after: row }], user);
-        return toActivityView(row, user);
+        return toOneView(row, user);
     },
 
     /** `GET /meta`: what the calendar and the form need before any activity is loaded. */

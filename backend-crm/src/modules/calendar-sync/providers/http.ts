@@ -263,3 +263,9 @@ export async function providerFetch<T = unknown>(req: ProviderRequest, options: 
     }
     throw lastError ?? new ProviderTransientError({ ...ctx, status: 0, code: 'unknown', retryable: true });
 }
+
+/**
+ * Google create answered 409 and the event holding our requested id isn't ours (another copy of the same meeting in
+ * this calendar, D10): the push bumps `generation` and creates again with a new id.
+ */
+export class RequestedIdTakenError extends ProviderConflictError {}

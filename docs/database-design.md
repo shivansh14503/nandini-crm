@@ -1,7 +1,7 @@
 # Nandini CRM — Database Design
 
-> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (89 migrations,
-> latest `20261128090000_calendar_admin_connect`, Calendar Phase 2 P2-2b, as of 2026-11-26). Update it in the same change as any schema migration.
+> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (90 migrations,
+> latest `20261128100000_activity_calendar_sync`, Calendar Phase 2 P2-3b, as of 2026-11-26). Update it in the same change as any schema migration.
 > Related: [System design](system-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
 ---
@@ -12,7 +12,7 @@
 | --- | --- |
 | Engine | Microsoft SQL Server / Azure SQL (schema `dbo`) |
 | Access | Prisma 7 ORM through `@prisma/adapter-mssql`; a few raw SQL statements (`MERGE` for counters, `sp_getapplock` for locks, `OPENJSON`) |
-| Tables | **47** application tables + Prisma's `_prisma_migrations` |
+| Tables | **48** application tables + Prisma's `_prisma_migrations` |
 | Owned child tables ("sub tables") | 8: `EntityEmail`, `OpportunityLineItem`, `QuotationLineItem`, `PartnerCompanyContact`, `DropdownOption`, `ActivityAttendee`, `UserPhoto`, `UserPreference` |
 | Migrations | `backend-crm/prisma/migrations/` (`npm run db:migrate` in dev, `npm run db:deploy` in prod) |
 | Seed | `backend-crm/prisma/seed.ts` (`npm run seed`) |
@@ -23,7 +23,7 @@
 | --- | --- |
 | Identity | `Users` (model `User`), `UserPhoto` (profile photos), `UserPreference` (My Profile › Notifications) |
 | CRM core | `Organization`, `Contact`, `Lead`, `Opportunity`, `Quotation`, `Ticket`, `Contract`, `Document`, `Product` |
-| Activities & calendar | `Activity`, `ActivityAttendee` |
+| Activities & calendar | `Activity`, `ActivityAttendee`, `ActivityExternalLink` (an activity's copy in a connected calendar + push outbox, P2-3b) |
 | Owned children | `EntityEmail`, `OpportunityLineItem`, `QuotationLineItem` |
 | Partner master | `PartnerCompany`, `PartnerCompanyContact` |
 | Referral master | `Referral` (Referred By of leads and opportunities) |
@@ -93,6 +93,8 @@ erDiagram
     Contact ||--o{ Activity : "contact for"
     Contact ||--o{ ActivityAttendee : "invited as"
     Activity ||--o{ ActivityAttendee : attendees
+    Activity ||--o{ ActivityExternalLink : "calendar copies"
+    CalendarConnection ||--o{ ActivityExternalLink : "pushes"
     Lead ||--o{ EntityEmail : emailAddress
     Referral ||--o{ EntityEmail : emailAddress
     Referral ||--o{ Lead : "referred"
@@ -556,6 +558,12 @@ subject, type, times, all-day, location, owner, status, attendees added or remov
 `origin` (NVARCHAR(20), default `crm`; who made the row: `crm` = the CRM, `followup` = a lead / opportunity follow-up
 activity, `calendar` = brought in from a calendar (P2-8); set on insert by the system write path only, never by a form;
 migration `20261127130000_followup_activities`, as of 2026-11-26, Calendar Phase 2 P2-4), audit/soft-delete.
+Calendar columns (migration `20261128100000_activity_calendar_sync`, as of 2026-11-26, P2-3b; NULL / 0 on existing
+rows): `iCalUid` (NVARCHAR(1024), the event's calendar identity), `syncKey` (NVARCHAR(64), sha256 hex of
+`iCalUid + '|'`, the indexed key), `organizerEmail` (NVARCHAR(254)), `organizerName` (NVARCHAR(200)),
+`externalOrganizer` (BIT, default 0: a meeting someone outside the CRM organizes; the organizer columns are filled
+from P2-8), `externalUpdatedAt` (DATETIME2, the last calendar-side change applied). Set by the sync engine only (system
+write path), never by a form; not in the audited DTO yet.
 
 **Follow-up activities** (P2-4, `activities/activity.followUp.ts`): every open lead / opportunity with a next
 follow-up has exactly one row with `origin = 'followup'`, `status = 'Planned'`, `relatedModule` / `relatedId` = the
@@ -584,8 +592,41 @@ Indexes: `Activity` `(isDeleted, startAt)`, `(isDeleted, assignedTo, startAt)` (
 (one row per colleague, contact and outside email of an activity): `UX_ActivityAttendee_user (activityId, username)
 WHERE username IS NOT NULL`, `UX_ActivityAttendee_contact (activityId, contactId) WHERE contactId IS NOT NULL`,
 `UX_ActivityAttendee_email (activityId, email) WHERE kind = 'email'`; and `UX_Activity_openFollowUp` on `Activity`
-(above; not in `schema.prisma`, as Prisma can't express a filtered index: `prisma migrate diff` from the schema never
-shows it, so don't drop it in a later migration).
+(above) and `UX_Activity_syncKey (syncKey) WHERE syncKey IS NOT NULL` (one activity per calendar event identity,
+soft-deleted rows included, so a meeting removed from the CRM is never imported again; P2-3b) on `Activity` (not in
+`schema.prisma`, as Prisma can't express a filtered index: `prisma migrate diff` from the schema never shows them, so
+don't drop them in a later migration).
+
+**`ActivityExternalLink`** (migration `20261128100000_activity_calendar_sync`, as of 2026-11-26, Calendar Phase 2
+P2-3b; module `backend-crm/src/modules/calendar-sync`): one activity as seen in one connected calendar, and the
+durable push outbox. Owned by `Activity` (`ON DELETE CASCADE`); `connectionId` → `CalendarConnection` (`NO ACTION`:
+stopped rows are kept and their links become `detached`). Not audited (the activity's own audit covers the change;
+sync-made activity changes are audited under route `job:calendar-sync:<provider>`).
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | NVARCHAR(50) PK | `uuid()` |
+| `activityId`, `connectionId` | NVARCHAR(50) | Unique together |
+| `provider` | NVARCHAR(30) | The connection's provider |
+| `role` | NVARCHAR(10), default `organizer` | `organizer` \| `attendee` (P2-5) |
+| `state` | NVARCHAR(20), default `pending` | `pending` \| `synced` \| `error` \| `cancelled` \| `removed_remote` \| `unsupported` \| `detached` |
+| `invites` | NVARCHAR(10), default `send` | `send` \| `withhold` (a private copy without attendees: saved by someone other than the owner, D41) |
+| `heldAttendeesJson` | NVARCHAR(MAX) NULL | Lower-cased emails a non-owner added to an event that invites: held until the owner sends them (D41) |
+| `generation` | INT, default 0 | Re-create counter |
+| `requestedId` | NVARCHAR(64) | Google event id we ask for / Graph `transactionId`: `crm` + 40 hex of sha256(activityId:connectionId:generation), so a retried create never duplicates |
+| `externalEventId`, `externalEventKey` | NVARCHAR(1024) / NVARCHAR(64) | The provider's event id and its sha256 hex (the indexed key) |
+| `iCalUid`, `etag`, `htmlLink`, `providerUpdatedAt` | | The event's identity, last etag (`If-Match`), "open in calendar" link (owner / editors only) |
+| `baseJson`, `crmSyncedAt` | NVARCHAR(MAX) / DATETIME2 | `{ crm, provider }`: the last state both sides agreed on (three-way merge on a 412) |
+| `dirtyAt` | DATETIME2 NULL | **Outbox**: set inside the activity write's own transaction, cleared by the push with compare-and-set |
+| `nextAttemptAt`, `attempts` | | Backoff after a failure / gate (null = now) |
+| `lastErrorCode`, `lastErrorMessage` (≤ 300), `lastWarning` (≤ 500), `lastConflictAt`, `lastSyncedAt` | | Status shown in `ActivityView.calendar`; the message to the owner / editors only |
+| `createdAt`, `updatedAt` | | |
+
+Indexes: unique `(activityId, connectionId)`, `(connectionId, state)`, `(dirtyAt, nextAttemptAt)` (the outbox sweep:
+`dirtyAt IS NOT NULL AND dirtyAt < now − 2 min AND (nextAttemptAt IS NULL OR nextAttemptAt <= now)`), and the
+hand-written filtered unique `UX_ActivityExternalLink_event (connectionId, externalEventKey) WHERE externalEventKey IS
+NOT NULL` (one link per provider event and connection). A unique-index clash is never caught inside a transaction
+(D45).
 
 Dropdowns (`DropdownCategory.module = 'activities'`): `activity_status` (fixed system options `Planned`, `Completed`,
 `Cancelled`; default `Planned`) and `activity_reminder` (fixed system options; value = label, e.g. `15 minutes before`;
@@ -680,7 +721,9 @@ Migration `20261127090000_calendar_connections` (Calendar Phase 2 P2-2) created 
 `20261128090000_calendar_admin_connect` (P2-2b, as of 2026-11-26) turned it into **per-user sync state with no tokens**.
 Module `backend-crm/src/modules/calendar-sync`. Rows are created and stopped only by the enrolment reconcile
 (`enrolment.ts`), never by the employee. One row per (user, provider, mailbox) identity: an email or provider change
-stops the old row and starts a new one; stopped rows are kept for link history. No FK to `Users`.
+stops the old row and starts a new one; stopped rows are kept for link history (their `ActivityExternalLink` rows
+become `detached`; re-activation re-attaches the organizer links of activities ending after yesterday, P2-3b). No FK
+to `Users`.
 
 | Column | Type | Notes |
 | --- | --- | --- |
@@ -697,7 +740,7 @@ stops the old row and starts a new one; stopped rows are kept for link history. 
 | `lastPulledAt`, `lastPushedAt`, `lastSuccessAt`, `lastCheckedAt` | | Sync health |
 | `nextCheckAt` | DATETIME2 NULL | Earliest next health check after a user-level error (backoff 15 min → 1 h → 6 h → 24 h) |
 | `lastErrorAt`, `lastErrorCode`, `lastErrorMessage` (≤ 300), `consecutiveFailures` | | `lastErrorMessage`: provider text for admins only (never shown to the employee, never logged at info) |
-| `leaseId`, `leaseUntil` | | Per-connection job mutex (P2-3) |
+| `leaseId`, `leaseUntil` | | Per-connection push mutex (P2-3b): claimed with a compare-and-set `UPDATE`, 120 s, extended while a long run works; expired ones cleared by the 00:25 calendar nightly |
 | `enrolledAt` (was `connectedAt`), `stoppedAt` (was `disconnectedAt`), `stoppedBy` (was `disconnectedBy`) | | Renamed with `sp_rename`, data kept. `stoppedBy`: the admin whose change stopped it, or `system` |
 | `createdAt`, `updatedAt` | | |
 
@@ -800,6 +843,11 @@ and `customized`; saving the stored values again writes nothing.
 - **Calendar connections** (as of 2026-11-26): `(username, status)` serves the user's own list and the People table,
   `(provider, status)` the admin counts, `(keyId)` key rotation; the filtered unique indexes enforce one live
   connection per person and per provider account.
+- **Calendar push outbox** (P2-3b, as of 2026-11-26): `ActivityExternalLink (dirtyAt, nextAttemptAt)` answers the
+  5-minute sweep (07:00–21:55) with a seek on `dirtyAt` (most rows have it null); `(connectionId, state)` serves the
+  `enrolled` job and stopping / re-attaching a connection; `UX_ActivityExternalLink_event` and `UX_Activity_syncKey`
+  index 64-character sha256 keys because the providers' ids (up to 1,024 characters) would exceed SQL Server's
+  1,700-byte index key limit.
 
 ## 6. Data lifecycle
 
@@ -819,7 +867,9 @@ and `customized`; saving the stored values again writes nothing.
 | Notification preferences (My Profile › Notifications) | App lock on the user → upsert the `UserPreference` row → `AuditLog` User UPDATE; user lookup caches dropped after commit when the out-of-office changed |
 | User added / edited (Admin › Users) | App locks (username, email address, reports-to chain, admin roster as needed; the per-user lock on edits) → checks → INSERT / UPDATE `Users` → `AuditLog` CREATE / UPDATE; user lookup caches dropped after commit |
 | User deactivated / reset (Admin › Users) | App lock on the user → `isActive = 0, deactivatedAt = now` (or new hash + `mustChangePassword = 1`) → `AuditLog` STATUS_CHANGE / PASSWORD_RESET; after commit every Redis session of the user is deleted |
-| Nightly retention (00:20) | Hard delete of old `Notification` and `EmailLog` rows (see §4.26); then the calendar steps (P2-2b, as of 2026-11-26): reconcile everyone's `CalendarConnection` enrolment, run due health checks, and write the admins' `calendar_sync_issue` digest when someone's calendar went to `error` that day |
+| Nightly retention (00:20) | Hard delete of old `Notification` and `EmailLog` rows (see §4.26) |
+| Calendar nightly (00:25, P2-3b, as of 2026-11-26) | Reconcile everyone's `CalendarConnection` enrolment, run due health checks, write the admins' `calendar_sync_issue` digest when someone's calendar went to `error` that day (moved from 00:20), the follow-up activity backfill (moved from 00:20), mark `error` links of activities that haven't ended dirty again (`pending`, attempts 0), `integration_secret_expiring` notifications, clear expired `CalendarConnection` leases |
+| Activity saved (P2-3b) | Inside its transaction: the owner's `ActivityExternalLink` inserted or `dirtyAt` set (only with a live connection). After commit: pushed; success writes the link's ids, etag, base and clears `dirtyAt` only if it didn't change meanwhile. A deletion in the calendar cancels the activity (system write) unless it is Completed or a follow-up activity (link `removed_remote`) |
 | Calendar enrolment reconcile (P2-2b) | App lock `calendar-connection:user:<username>` → read user, choice, providers → INSERT `pending` / UPDATE to `stopped` → `AuditLog` ENROL / STOP; a new row's first health check runs after commit |
 | People calendar choice | Upsert / delete `CalendarSyncUser` → `AuditLog` → reconcile the person after commit |
 
@@ -832,7 +882,9 @@ and `customized`; saving the stored values again writes nothing.
   `UX_ActivityAttendee_*` indexes of `20261126090000_activities`, `UX_Users_email` of
   `20261127090000_calendar_connections`, and `UX_CalendarConnection_user` / `UX_CalendarConnection_mailbox` of
   `20261128090000_calendar_admin_connect`, which replaced P2-2's `UX_CalendarConnection_user_kind` /
-  `UX_CalendarConnection_account`). `20261127090000_calendar_connections`
+  `UX_CalendarConnection_account`; `UX_Activity_openFollowUp` of `20261127130000_followup_activities`;
+  `UX_ActivityExternalLink_event` and `UX_Activity_syncKey` of `20261128100000_activity_calendar_sync`, the latter
+  created through `sp_executesql` because its column is added in the same batch). `20261127090000_calendar_connections`
   also lower-cases `Users.email` and stops (THROW 50001, rolled back) when two active non-group users share an
   address: run `npm run calendar:check-emails` before deploying; after a stop, fix the users, run
   `npx prisma migrate resolve --rolled-back 20261127090000_calendar_connections` and deploy again.

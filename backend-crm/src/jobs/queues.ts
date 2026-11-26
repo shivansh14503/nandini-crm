@@ -11,6 +11,7 @@ export const QUEUE_NAMES = {
     auditLedger: 'crm-audit-ledger',
     reminders: 'crm-reminders',
     mail: 'crm-mail',
+    calendarSync: 'crm-calendar-sync',
 } as const;
 
 /** How long a producer waits for Redis before falling back to synchronous processing. */
@@ -103,6 +104,20 @@ export const mailQueue = () =>
         backoff: { type: 'exponential', delay: 30_000 },
         removeOnComplete: { age: 7 * 24 * 60 * 60, count: 100 },
         removeOnFail: { age: 30 * 24 * 60 * 60 },
+    });
+
+/**
+ * Calendar sync (src/jobs/workers/calendarSync.worker.ts, Calendar Phase 2 spec §10.1): `push` (one link), `enrolled`
+ * (a connection row first reached ok), `check` (a connection health check), and the `calendar-poll` and
+ * `calendar-nightly` schedulers. Its own queue and worker, so provider latency never delays reminders or mail. Pushes
+ * are idempotent (requested ids, compare-and-set on the outbox), so retries are safe; job ids use hyphens only.
+ */
+export const calendarSyncQueue = () =>
+    getQueue(QUEUE_NAMES.calendarSync, {
+        attempts: 5,
+        backoff: { type: 'exponential', delay: 30_000 },
+        removeOnComplete: { age: 60 * 60, count: 2_000 },
+        removeOnFail: { age: 7 * 24 * 60 * 60 },
     });
 
 /** Background jobs are usable only while Redis is reachable (checked on the shared client). */

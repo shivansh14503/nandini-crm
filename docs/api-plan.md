@@ -3,7 +3,8 @@
 > **Status:** living document. Lists every endpoint of `backend-crm` as of 2026-11-26 (Referrals: Company Name replaces Organization Name; through Calendar Phase 2 P2-2b, admin-managed calendar
 > connections: `/api/calendar-connections` is read-only own status, the per-user OAuth routes and the admin connection
 > routes are gone, People gained the calendar routes; P2-4: lead / opportunity follow-ups create activities
-> (`origin`, `lockedFields`, `409 FOLLOW_UP_ACTIVITY_LOCKED`, the follow-up side effects of lead / opportunity saves); P2-1: `/api/admin/integrations`, Admin › API
+> (`origin`, `lockedFields`, `409 FOLLOW_UP_ACTIVITY_LOCKED`, the follow-up side effects of lead / opportunity saves); P2-3b: `ActivityView.calendar`, the
+> `calendar_sync_error` / `calendar_invites_held` / `integration_secret_expiring` notifications, the calendar worker's heartbeat; P2-1: `/api/admin/integrations`, Admin › API
 > Integrations; Profile Phase 1: `/api/me` (My Profile), `/api/user-photos` and `POST /api/auth/change-password`; and
 > Profile Phase 2: `/api/admin/users` (Admin › Users) with the must-change-password claim; Profile Phase 3:
 > `/api/me/preferences` (My Profile › Notifications); Profile Phase 5: `/api/company-formats` (Admin › Company formats), with PR5b's audit field values in the company formats)
@@ -123,7 +124,15 @@ time in the business timezone for the type's default length (all-day when the ti
 moves with its record. `ActivityDto.origin`: `crm` (made in the CRM), `followup`, `calendar` (P2-8). Every activity
 the API returns also carries `lockedFields: string[]` (outside the audited record): for every follow-up activity
 `followupType`, `startAt`, `endAt`, `allDay`, `status`, `assignedTo`, `relatedModule`, `relatedId`, `relatedTo`; empty
-otherwise. A `PUT` / `PATCH` that **changes** one of them is `409 FOLLOW_UP_ACTIVITY_LOCKED` ("This is the lead's next
+otherwise. Every activity the API returns also carries `calendar` (as of 2026-11-26, Calendar Phase 2 P2-3b; outside
+the audited record; `null` when the activity has no calendar copy): the owner's calendar copy (owner's live
+connection), `{ provider: google|microsoft|fake, state: pending|synced|error|cancelled|removed_remote|unsupported|detached,
+pending (a push is waiting), invites: send|withhold, heldCount (guests held until the owner sends invitations, D41),
+canSendInvites (owner only), lastSyncedAt, htmlLink, errorCode, errorMessage, warning, conflictAt, externalUpdatedAt }`
+(ISO times or `null`; `htmlLink` and `errorMessage` only for the owner and users who can edit the activity, else `null`). Read only: saves never take it, and no endpoint changes it yet (the send-invites action and the UI
+are P2-3c). A save of an enrolled owner's activity pushes it to their calendar after commit
+([system design §5.4](system-design.md#54-calendar-sync-crm-calendar-sync)); the response doesn't wait for the push.
+A `PUT` / `PATCH` that **changes** one of them is `409 FOLLOW_UP_ACTIVITY_LOCKED` ("This is the lead's next
 follow-up. Change it on the lead (LD-0012): Record a follow-up.", `errors[]` one per field; resending an unchanged
 value passes); subject, location, attendees, reminder, response, remarks and custom fields stay editable. Deleting
 one is refused (`409 FOLLOW_UP_ACTIVITY_LOCKED`), and `bulk-delete` skips it. Switch: Admin › API Integrations ›
@@ -245,7 +254,8 @@ interface PreferencesPatch {                                   // every key opti
   days."; and only when the range differs from the stored one: "End Date cannot be in the past." (a start in the past
   is fine while the end is today or later), "Start Date must be within the next 365 days." (`preferences.rules.ts`,
   contract-tested with `frontend-crm/src/utils/notificationPreferences.ts`).
-- Kinds without a switch (`calendar_sync_issue`) are not configurable and always deliver. Bell notifications keep
+- Kinds without a switch (`calendar_sync_issue`, `calendar_sync_error`, `calendar_invites_held`,
+  `integration_secret_expiring`) are not configurable and always deliver. Bell notifications keep
   arriving while out of office; muting a kind stops new rows only (ones already in the bell stay).
 - Saves take the per-user lock `user:id:<id>` and are audited as User `UPDATE` with the changed columns (dates as
   `YYYY-MM-DD`); no change → nothing written, no audit entry. An out-of-office change drops `cache:lookups:users:*`.
@@ -257,7 +267,8 @@ audited, deleted by the nightly retention job. Written by the reminders worker a
 one.
 
 `NotificationDto` (empty values are `''`, never `null`):
-`{ id, kind: 'activity_reminder' | 'activity_assigned' | 'activity_invited' | 'contract_renewal' | 'calendar_sync_issue',
+`{ id, kind: 'activity_reminder' | 'activity_assigned' | 'activity_invited' | 'contract_renewal' | 'calendar_sync_issue' |
+'calendar_sync_error' | 'calendar_invites_held' | 'integration_secret_expiring',
 title, body, entityModule: 'activities' | 'contracts' | 'admin-integrations' | '', entityId, dueAt (ISO or ''), actor
 (username, 'system' or ''), readAt (ISO, '' while unread), createdAt (ISO), href }`. `href` is the app route to open:
 activities `/calendar?activity=<id>` (the calendar opens the activity drawer), contracts `/contracts/<id>`,
@@ -270,6 +281,13 @@ can't fix them. App-level ("Calendar sync stopped: <provider>", body = the fixed
 provider, code and business day, dedupe `calendar_sync_issue:<provider>:<code>:<business date>:<admin>`. People digest
 (nightly, when at least one person's calendar went to `error` that day): dedupe
 `calendar_sync_issue:users:<business date>:<admin>`. Always delivers (no preference switch).
+As of 2026-11-26 (P2-3b; actor `system`; always deliver): `calendar_sync_error` to the activity's owner when the
+calendar refused its push (entity `activities`, dedupe `calendar_sync_error:<activityId>:<business date>:<owner>`);
+`calendar_invites_held` to the owner when a colleague added guests whose invitations wait for the owner (entity
+`activities`, dedupe `calendar_invites_held:<activityId>:<business date>:<owner>`); `integration_secret_expiring` to
+admins while a provider's client secret ends within 30 days (entity `admin-integrations`, entityId = the provider,
+from the 00:25 calendar nightly, dedupe `integration_secret_expiring:<provider>:<expiresOn>:<ISO week>:<admin>`, so
+at most once a week).
 Titles: `Reminder: <subject>`, `Assigned to you: <subject>`, `Invitation: <subject>`, `Contract renewal due: <title>`;
 bodies say when and what it is related to (e.g. "Starts at 10:30 AM (in 15 min) · Related to LD-0012 Ramesh").
 
@@ -440,7 +458,7 @@ carry summaries only (`secret: { set, readable, last4, updatedAt, updatedBy, exp
 
 | Method | Path | Description |
 | --- | --- | --- |
-| GET | `/` | `{ ready: { ok, reason: key_missing\|null }, keyStatus: ok\|missing\|unreadable, activeKeyId, publicApiUrl, publicApiUrlConfigured, webhooksActive, fakeProvider (the dev-only test calendar is on), worker: { lastSeenAt }\|null, providers: ProviderAdminDto[], settings: CalendarSyncSettings, syncTypes: [{ value, label, calendarSync, locked, lockReason? }] }`; `Cache-Control: no-store`. `PUBLIC_API_URL` no longer gates readiness (no redirects; webhooks still need it, P2-7). `ProviderAdminDto`: `{ provider: google\|microsoft\|zoom, label, kind: calendar\|video, available, enabled, configured, clientId, secret, webhookSecret (zoom) \| null, serviceAccount (google) \| null, scopes (google: the two delegated scopes) \| null, scopesAdminConsole (google: the exact comma-delimited text for Admin console › Domain-wide delegation) \| null, settings, domains, webhookUrls, lastTest: { at, ok, message }\|null, appTested, clientVersion, health: { status: unknown\|ok\|error, code, message, at }, counts: { ok, pending, error, excluded }, updatedAt, updatedBy }` (`counts`: live rows by status; `excluded` = active, non-group people excluded in `CalendarSyncUser`, on the provider their override or email domain points to, whether or not they ever had a row) |
+| GET | `/` | `{ ready: { ok, reason: key_missing\|null }, keyStatus: ok\|missing\|unreadable, activeKeyId, publicApiUrl, publicApiUrlConfigured, webhooksActive, fakeProvider (the dev-only test calendar is on), worker: { lastSeenAt }\|null (the calendar sync worker's Redis heartbeat, written every minute; null when none in the last 2 minutes or Redis is down; as of 2026-11-26, P2-3b), providers: ProviderAdminDto[], settings: CalendarSyncSettings, syncTypes: [{ value, label, calendarSync, locked, lockReason? }] }`; `Cache-Control: no-store`. `PUBLIC_API_URL` no longer gates readiness (no redirects; webhooks still need it, P2-7). `ProviderAdminDto`: `{ provider: google\|microsoft\|zoom, label, kind: calendar\|video, available, enabled, configured, clientId, secret, webhookSecret (zoom) \| null, serviceAccount (google) \| null, scopes (google: the two delegated scopes) \| null, scopesAdminConsole (google: the exact comma-delimited text for Admin console › Domain-wide delegation) \| null, settings, domains, webhookUrls, lastTest: { at, ok, message }\|null, appTested, clientVersion, health: { status: unknown\|ok\|error, code, message, at }, counts: { ok, pending, error, excluded }, updatedAt, updatedBy }` (`counts`: live rows by status; `excluded` = active, non-group people excluded in `CalendarSyncUser`, on the provider their override or email domain points to, whether or not they ever had a row) |
 | PUT | `/providers/:provider` | `{ enabled?, serviceAccountKey? (google: the key file's JSON text, ≤ 10 KB, write-only; `type` service_account, `client_email`, numeric `client_id`, RSA `private_key`; the key's `token_uri` is ignored), clientId? (microsoft, zoom), clientSecret? (microsoft, zoom; ≥ 8 chars; omitted = keep), webhookSecret? (zoom), clientSecretExpiresOn? (YYYY-MM-DD \| null; microsoft, zoom), settings? (google `{ domains }`, microsoft `{ tenantId (GUID or tenant domain), domains }`) }` → `ProviderAdminDto`. Domains: company domains only (400 on `settings.domains`), at most one provider per domain (409 `DOMAIN_IN_USE`). Any credentials change (key, client id, secret, tenant) bumps `clientVersion` (old in-memory tokens are never reused) and clears `lastTest`, `appTested` and health. Switching on needs complete credentials (409 `INTEGRATION_NOT_CONFIGURED`) and a passing app-level test since the last credentials change (409 `INTEGRATION_NOT_TESTED`); Zoom can't be switched on before Phase 3 (409 `INTEGRATION_NOT_AVAILABLE`); a secret without the encryption key: 503 `INTEGRATIONS_NOT_READY`. After the save everyone is reconciled (enrolled / stopped to match). Audited `IntegrationProvider` CREATE / UPDATE with `secretChanged` / `serviceAccountKeyChanged: true` and the key's non-secret summary, never the secret or key |
 | DELETE | `/providers/:provider/secret` | → `ProviderAdminDto`: secrets / key removed, provider switched off, its live rows stopped (`provider_removed`; audited `secretCleared`) |
 | POST | `/providers/:provider/test` | `{ asUsername? }` → `{ ok, code, message, steps: [{ step: app\|user, ok, code, message }], testedAt }` with the **saved** credentials. Step `app`: Google signs a JWT for the service account itself (no `sub`) and exchanges it (proves the key); Microsoft requests a client-credentials token and reports the `roles` it carries (none is expected with RBAC for Applications; a list without `Calendars.ReadWrite` is flagged). Step `user` (when `asUsername` names a person with a company email): mints as that person (Google `sub`) and reads one event from their primary calendar (Google `calendars/primary/events`, Graph `/users/{mailbox}/events?$top=1&$select=id`), proving delegation / the app's scope. `asUsername` must be someone this provider would sync: active, not a group login, not excluded, a company email, and not on the other provider by override or domain (a domain no provider claims yet is allowed); otherwise 409 `CALENDAR_TEST_NOT_ALLOWED` (on `asUsername`) and nothing is called; unknown user 404. Every test with `asUsername` is audited `IntegrationProvider TEST_AS_USER` (SECURITY, NOTICE; `changedBy` = the admin, `{ asUsername, ok, code, userStep }`, never a token; as of 2026-11-26, P2-2b review fixes). `code` is a fixed `TokenErrorCode` (`delegation_missing`, `delegation_wrong_id`, `scopes_not_authorised`, `admin_policy`, `key_invalid`, `clock_skew`, `invalid_client`, `secret_expired`, `app_not_in_tenant`, `tenant_not_found`, `no_application_permission`, `user_not_found`, `user_unavailable`, `calendar_unavailable`, `mailbox_out_of_scope`, `no_mailbox`, `rate_limited`, `provider_unavailable`, `network`, `provider_error`, `not_configured`) or a success / setup code: `key_ok` (Google app step), `credentials_ok` (Microsoft app step), `delegation_ok` / `mailbox_ok` (user step), `no_email` (the person has no company email), `not_available` (zoom), `credentials_changed` (credentials saved or removed while the probe ran: not stored, test again). Stored as `lastTest` (and `appTested` when step `app` passed) only while the credentials are unchanged. A provider health `error` goes back to `ok` only when the test proves that problem fixed: a passing `user` step clears any code; a passing `app` step alone clears only the key / client codes (Google `key_invalid`, `clock_skew`; Microsoft `invalid_client`, `secret_expired`, `tenant_not_found`, `app_not_in_tenant`; `not_configured`), never delegation, scope, policy or `no_application_permission`. 6 / min per admin (§3) |

@@ -91,7 +91,8 @@ export async function hasActiveCalendarConnection(username: string): Promise<boo
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Nightly calendar steps, run from the reminders worker's nightly job until the calendar worker exists (P2-3b):
+ * Nightly calendar steps, run by the calendar sync worker's `calendar-nightly` job (00:25; P2-2b ran them from the
+ * reminders worker's nightly job until P2-3b):
  * reconcile everyone (repairs any missed trigger and stops rows of people who left), run the due health checks, and
  * send admins one digest when someone's calendar went to `error` in the last day.
  */
