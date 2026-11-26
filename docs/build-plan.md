@@ -29,7 +29,7 @@
 | Activities & calendar | ✅ data model, API, Form Builder fields; Activities list, form, quick create, drawer, record Activities tabs and the Calendar page (FullCalendar v7, business timezone, drag to reschedule); reminders, assignment / invitation and contract renewal notifications in the navbar bell; 9 AM morning summary email (off until SMTP is set up). Google / Microsoft 365 sync is Phase 2 |
 | Documents | ✅ read-only list (filters, export / file download), drawer and detail page of the opportunities' documents |
 | Quotation PDF | ✅ templates, builder, preview, cached render |
-| Admin: forms, dropdowns, document series, cities, PDF templates | ✅ |
+| Admin: forms, dropdowns, document series, cities, PDF templates, holidays | ✅ |
 | Responsive layout | ✅ phones (from 320 px), tablets and desktops: menu drawer below 1200 px, icon-only navbar controls up to 1420 px, related records as a button on phones, no sideways page scroll |
 | Audit log | ✅ ledger table with who / where / how per entry, Admin › Audit Log screen (`/api/admin/audit-logs`), undo / restore, CSV / Excel export, ledger integrity checks; alert rules later (Phase 11 E) |
 | Users admin | ❌ seed / DB only |
@@ -306,6 +306,20 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
       pagination; row → side drawer, eye → detail page with an inline preview of PDFs and images.
 - [ ] Not in the first version: Category / Sub Category / Expiration Date (the opportunity form doesn't ask for them),
       several documents per opportunity, a Documents tab on the opportunity's related records, global search.
+
+### Phase 16 — Holidays (P2, 2026-11-26)
+
+- [x] **Admin › Holidays** (2026-11-26) — the company holiday list (modelled on the old CRM's Holidays list):
+      Occasion, Holiday Date, Day, Holiday Type (Public / Optional / Company) and Status (Active / Inactive, as on
+      Referrals). Add and edit in a dialog; search, year / type / status filters, sorting, pagination; bulk Mark Active,
+      Mark Inactive and Delete. Import from .csv / .xlsx / .xls with a downloadable template, column mapping and a server
+      check before saving that marks each row new, duplicate (already in the list or repeated in the file, skipped) or
+      error. Same date + occasion can't be saved twice (unique index, 409 `DUPLICATE_HOLIDAY`). Audited (entity
+      `Holiday`, CONFIG). Active holidays show on the Calendar page as amber day shading plus an all-day chip (agenda
+      too), and the activity Start / End fields (form, quick create, reschedule) note when a day is a holiday. Import
+      date cells are now read as the day written (they came out a day early east of UTC).
+- [ ] Later, if wanted: holidays in the morning summary email, a warning on lead / opportunity Next Follow-up dates,
+      per-branch holiday lists, and a "copy last year's holidays" action.
 
 ## Part 3 — Keeping these documents current
 

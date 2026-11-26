@@ -2,11 +2,12 @@
 
 import React from 'react';
 import { Box, FormHelperText, TextField } from '@mui/material';
-import { useController, type FieldPath, type FieldValues } from 'react-hook-form';
+import { useController, useWatch, type FieldPath, type FieldValues } from 'react-hook-form';
 import { FormField, fieldSx } from '@/components/forms/FormField';
 import { DATE_TIME_COLUMNS, TimePicker } from '@/components/forms/TimePicker';
 import { useFormMode } from '@/context/FormModeContext';
 import { formatFormValue } from './activityTime';
+import { HolidayNotice } from './HolidayNotice';
 
 export interface RhfScheduleFieldProps<T extends FieldValues> {
     /** `startAt` / `endAt`: the Form Builder field, in both modes. */
@@ -24,11 +25,17 @@ export interface RhfScheduleFieldProps<T extends FieldValues> {
     defaultTime?: (day: string) => string;
     /** Called after the user changes the value, with the new value and the one it replaced. */
     onValueChange?: (next: string, previous: string) => void;
+    /**
+     * The field whose day this one usually shares (End passes `startAt`): the holiday note is left to that field
+     * when both fall on the same day, so it isn't shown twice.
+     */
+    sameDayAs?: FieldPath<T>;
 }
 
 /**
  * Start / End of an activity in the business timezone: a date plus a time (`YYYY-MM-DDTHH:mm`), or the day alone
  * when All Day is on. The pickers read the business clock, not the device's, so "today" is the business day.
+ * A day that is a company holiday (Admin › Holidays) gets an amber note; it can still be picked.
  */
 export function RhfScheduleField<T extends FieldValues>({
     name,
@@ -40,10 +47,12 @@ export function RhfScheduleField<T extends FieldValues>({
     allowPast = false,
     defaultTime = () => '09:00',
     onValueChange,
+    sameDayAs,
 }: RhfScheduleFieldProps<T>) {
     const { field, fieldState } = useController<T>({ name });
     const { mode } = useFormMode();
     const raw = typeof field.value === 'string' ? field.value : '';
+    const other = useWatch<T>({ name: (sameDayAs ?? name) as FieldPath<T> });
 
     if (mode === 'view') {
         return (
@@ -62,6 +71,8 @@ export function RhfScheduleField<T extends FieldValues>({
     const timePart = /^\d{2}:\d{2}$/.test(raw.slice(11, 16)) ? raw.slice(11, 16) : '';
     const today = now.slice(0, 10);
     const error = fieldState.error?.message;
+    const otherDay = sameDayAs && typeof other === 'string' ? other.slice(0, 10) : '';
+    const holidayDay = datePart && datePart !== otherDay ? datePart : '';
 
     const dateInput = (
         <TextField
@@ -103,6 +114,7 @@ export function RhfScheduleField<T extends FieldValues>({
                 </Box>
             )}
             {error && <FormHelperText error>{error}</FormHelperText>}
+            {holidayDay && <HolidayNotice day={holidayDay} />}
         </FormField>
     );
 }

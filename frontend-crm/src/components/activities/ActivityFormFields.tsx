@@ -459,6 +459,7 @@ export function ActivityFormFields({ clock, durationOf, compact = false, onOpenR
                                 defaultTime={defaultTime}
                                 hint={allDay ? 'Last day' : undefined}
                                 onValueChange={revalidateEnd}
+                                sameDayAs="startAt"
                             />
                         )}
                         {shows('allDay') && <RhfCheckbox<ActivityFormValues> name="allDay" label="All Day" alignWithInputs />}

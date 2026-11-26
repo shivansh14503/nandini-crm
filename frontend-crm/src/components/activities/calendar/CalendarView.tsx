@@ -6,6 +6,7 @@ import { Alert, Box, Drawer, Fab, IconButton, Typography, useMediaQuery, useThem
 import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
 import AutorenewOutlinedIcon from '@mui/icons-material/AutorenewOutlined';
+import EventBusyOutlinedIcon from '@mui/icons-material/EventBusyOutlined';
 import FullCalendar, {
     type CalendarRef,
     type DateClickInfo,
@@ -30,6 +31,7 @@ import { ROUTES } from '@/config/constants';
 import { useAuth } from '@/context/AuthContext';
 import { AppToast } from '@/components/common/AppToast';
 import { useCalendarFeed, useUpdateActivity } from '@/hooks/queries/useActivities';
+import { useCalendarHolidays } from '@/hooks/queries/useHolidays';
 import { useModuleFormConfig } from '@/hooks/queries/useFormConfigs';
 import { FOLLOWUP_TYPE_CATEGORY_KEY } from '@/utils/formConfig';
 import { addDays, instantToZonedWallClock, isDay, zonedDayOf, zonedStartOfDay } from '@/utils/zonedTime';
@@ -46,6 +48,7 @@ import {
     type CalendarItem,
 } from '@/types/activity.types';
 import type { ActivityFormValues } from '@/validations/activity.schema';
+import type { CalendarHoliday } from '@/types/holiday.types';
 import { ActivityDetailDrawer } from '../ActivityDetailDrawer';
 import { ActivityQuickCreateDialog } from '../ActivityQuickCreateDialog';
 import { useActivityTypeIcon, useActivityTypeLabel } from '../ActivityBadges';
@@ -60,7 +63,7 @@ import {
     type CalendarFilterValues,
     type MiniMonthProps,
 } from './CalendarFilters';
-import { EventContent } from './EventContent';
+import { EventContent, HolidayEventContent } from './EventContent';
 
 /** FullCalendar view per calendar view. */
 const FC_VIEWS: Record<CalendarViewKey, string> = {
@@ -90,6 +93,8 @@ const DAY_HEADER_FORMAT: FormatterInput = { weekday: 'short', day: 'numeric' };
 const EVENT_TIME_FORMAT: FormatterInput = { hour: 'numeric', minute: '2-digit', meridiem: 'short' };
 const LIST_DAY_FORMAT: FormatterInput = { weekday: 'long', day: 'numeric', month: 'short' };
 const noEventsContent = () => 'Nothing scheduled in this period.';
+/** Holidays first in a day, then FullCalendar's usual order. `rank` is an extended prop (holidays 0, the rest 1). */
+const EVENT_ORDER = 'rank,start,-duration,allDay,title';
 
 const isViewKey = (value: string | null | undefined): value is CalendarViewKey => Boolean(value && value in FC_VIEWS);
 const sameSet = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((x) => b.includes(x));
@@ -134,7 +139,7 @@ function toEventInput(item: CalendarItem, timeZone: string, coarsePointer: boole
         startEditable: draggable,
         // Resize handles are too small for a finger; a task has no End to stretch.
         durationEditable: draggable && !coarsePointer && item.followupType !== TASK_TYPE,
-        extendedProps: { item },
+        extendedProps: { item, rank: 1 },
     };
     if (item.allDay) {
         const startDay = item.startDay || zonedDayOf(new Date(item.start), timeZone);
@@ -142,6 +147,39 @@ function toEventInput(item: CalendarItem, timeZone: string, coarsePointer: boole
         return { ...base, allDay: true, start: startDay, end: addDays(endDay, 1) };
     }
     return { ...base, allDay: false, start: item.start, end: item.end ?? undefined };
+}
+
+/**
+ * A company holiday (Admin › Holidays) as two entries: an amber tint over the whole day (a background event, in
+ * every grid view) and an all-day chip with its name (also the agenda row). Neither can be dragged.
+ */
+function holidayEvents(holiday: CalendarHoliday): EventInput[] {
+    const end = addDays(holiday.holidayDate, 1);
+    return [
+        {
+            id: `holidayDay:${holiday.id}`,
+            start: holiday.holidayDate,
+            end,
+            allDay: true,
+            display: 'background',
+            color: 'var(--mui-palette-warning-main)',
+            className: 'crm-cal-holiday-day',
+        },
+        {
+            id: `holiday:${holiday.id}`,
+            title: holiday.occasion,
+            start: holiday.holidayDate,
+            end,
+            allDay: true,
+            color: 'transparent',
+            contrastColor: 'inherit',
+            className: 'crm-cal-event crm-cal-holiday',
+            editable: false,
+            startEditable: false,
+            durationEditable: false,
+            extendedProps: { holiday, rank: 0 },
+        },
+    ];
 }
 
 /** Initial filters from the query string (`?users=a,b`). */
@@ -227,9 +265,16 @@ export default function CalendarView() {
     const feed = useCalendarFeed(feedParams);
     const items = useMemo(() => feed.data?.items ?? [], [feed.data]);
 
+    // Active company holidays on the days loaded (any signed-in user may read them).
+    const holidays = useCalendarHolidays(range?.start, range ? addDays(range.end, -1) : undefined);
+    const holidayEntries = useMemo<EventInput[]>(() => (holidays.data ?? []).flatMap(holidayEvents), [holidays.data]);
+
     const events = useMemo<EventInput[]>(
-        () => items.map((item) => toEventInput(moved[item.key] ? { ...item, ...moved[item.key] } : item, timeZone, coarsePointer)),
-        [items, moved, timeZone, coarsePointer]
+        () => [
+            ...holidayEntries,
+            ...items.map((item) => toEventInput(moved[item.key] ? { ...item, ...moved[item.key] } : item, timeZone, coarsePointer)),
+        ],
+        [holidayEntries, items, moved, timeZone, coarsePointer]
     );
 
     // ── Query string ────────────────────────────────────────────────────────
@@ -328,6 +373,7 @@ export default function CalendarView() {
     const onEventClick = useCallback((info: EventClickInfo) => {
         info.jsEvent.preventDefault();
         const item = info.event.extendedProps.item as CalendarItem | undefined;
+        // Holidays have no record to open.
         if (!item) return;
         if (item.source === 'activity') {
             setActivityId(item.recordId);
@@ -382,9 +428,11 @@ export default function CalendarView() {
 
     const renderEvent = useCallback(
         (info: EventDisplayInfo) => {
+            const list = info.view.type.startsWith('list');
+            const holiday = info.event.extendedProps.holiday as CalendarHoliday | undefined;
+            if (holiday) return <HolidayEventContent holiday={holiday} Icon={EventBusyOutlinedIcon} list={list} />;
             const item = info.event.extendedProps.item as CalendarItem | undefined;
             if (!item) return null;
-            const list = info.view.type.startsWith('list');
             const compact = info.isShort || info.isNarrow || info.view.type.startsWith('dayGrid');
             const Icon = item.source === 'contractRenewal' ? AutorenewOutlinedIcon : typeIcon(item.followupType);
             return <EventContent item={item} Icon={Icon} timeText={info.timeText} list={list} compact={compact} />;
@@ -480,6 +528,7 @@ export default function CalendarView() {
                         {`Times in ${timeZoneAbbr(timeZone)} (${timeZone})`}
                         {!coarsePointer && ' · Drag an activity to reschedule it, or select empty time to add one.'}
                         {coarsePointer && ' · Long-press an activity to move it; tap empty time to add one.'}
+                        {holidayEntries.length > 0 && ' · Company holidays are shaded amber.'}
                     </Typography>
                 </Box>
                 {feed.data?.truncated && (
@@ -533,6 +582,7 @@ export default function CalendarView() {
                         navLinks
                         dayMaxEvents
                         eventDisplay="block"
+                        eventOrder={EVENT_ORDER}
                         allDayText="All day"
                         scrollTime="08:00:00"
                         slotDuration={`00:${SLOT_MINUTES}:00`}
