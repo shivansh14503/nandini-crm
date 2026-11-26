@@ -185,6 +185,9 @@ export const ORGANIZATION_LOOKUP_PRESET: LookupPreset<ExtendedOrganization> = {
     },
 };
 
+/** Filter order of the partner-only organization picker (Partner Company Search). */
+const PARTNER_FILTER_ORDER = ['organizationName', 'natureOfPartner', 'typeOfEntity', 'customerType', 'assignedTo'];
+
 /**
  * The organization picker when it offers partner organizations only (its Customer Type locked to Partner, as for a
  * Partner Company): Nature of Partner, the partner's own kind, takes Nature of Business's place as filter and column.
@@ -194,11 +197,17 @@ export function partnerOrganizationPreset(
     natureOptions: readonly { value: string; label: string }[],
     natureLabel: (value: string) => string = (v) => v
 ): LookupPreset<ExtendedOrganization> {
+    const filterFields = preset.filterFields.map((f) =>
+        f.key === 'natureOfBusiness' ? { key: 'natureOfPartner', label: 'Nature of Partner', type: 'multiselect' as const, width: f.width, options: [...natureOptions] } : f
+    );
+    const rank = (key: string) => {
+        const i = PARTNER_FILTER_ORDER.indexOf(key);
+        return i === -1 ? PARTNER_FILTER_ORDER.length : i;
+    };
     return {
         ...preset,
-        filterFields: preset.filterFields.map((f) =>
-            f.key === 'natureOfBusiness' ? { key: 'natureOfPartner', label: 'Nature of Partner', type: 'multiselect', width: f.width, options: [...natureOptions] } : f
-        ),
+        // Partner pickers lay their filters out in their own order (stable sort: unlisted filters keep theirs, last).
+        filterFields: [...filterFields].sort((a, b) => rank(a.key) - rank(b.key)),
         columns: preset.columns.map((c) =>
             c.id === 'natureOfBusiness'
                 ? { id: 'natureOfPartner', label: 'Nature of Partner', minWidth: c.minWidth, sortable: true, getValue: (o: ExtendedOrganization) => natureLabel(o.natureOfPartner ?? '') }
