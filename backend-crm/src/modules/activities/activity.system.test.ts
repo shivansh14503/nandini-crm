@@ -564,6 +564,9 @@ describe('runActivityPostCommit', () => {
         const { prisma } = await import('../../config/prisma.js');
         const client = prisma as unknown as Record<string, unknown>;
         const real = client.notification;
+        const realPreferences = client.userPreference;
+        // Nobody turned a bell kind off (My Profile › Notifications).
+        Object.defineProperty(client, 'userPreference', { configurable: true, writable: true, value: { findMany: async () => [] } });
         Object.defineProperty(client, 'notification', {
             configurable: true,
             writable: true,
@@ -585,6 +588,7 @@ describe('runActivityPostCommit', () => {
             assert.ok(state.calls.includes('user.findMany'));
         } finally {
             Object.defineProperty(client, 'notification', { configurable: true, writable: true, value: real });
+            Object.defineProperty(client, 'userPreference', { configurable: true, writable: true, value: realPreferences });
         }
     });
 });
