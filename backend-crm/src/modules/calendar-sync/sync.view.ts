@@ -5,13 +5,17 @@ import { LIVE_CONNECTION_STATUSES } from './connection.constants.js';
 import { parseHeld } from './sync.attendees.js';
 
 /**
- * `ActivityView.calendar` (Calendar Phase 2 spec §4.4, §14.5; data only in P2-3b, the drawer's status line is P2-3c):
- * the activity in its owner's connected calendar. Read with one query per list page (links of the page's activities),
- * plus one for their connections only when links exist. Imports only types from the activities module.
+ * `ActivityView.calendar` (Calendar Phase 2 spec §4.4, §14.5; the drawer's ActivitySyncStatus, the list's Calendar
+ * column and the calendar's error dot read it, P2-3c): the activity in its owner's connected calendar. Read with one
+ * query per list page (links of the page's activities), plus one for their connections only when links exist. Imports
+ * only types from the activities module.
  */
 
+/** An organizer link, plus whether the first-sync backfill created it (sync.backfill.ts stamps `createdAt = backfilledAt`). */
+export type OwnerCalendarLink = ActivityExternalLink & { fromBackfill?: boolean };
+
 /** The owner's organizer link of each activity (by activity id). */
-export type CalendarLinksByActivity = ReadonlyMap<string, ActivityExternalLink>;
+export type CalendarLinksByActivity = ReadonlyMap<string, OwnerCalendarLink>;
 export const NO_CALENDAR_LINKS: CalendarLinksByActivity = new Map();
 
 const lc = (value: string | null | undefined) => (value ?? '').trim().toLowerCase();
@@ -26,13 +30,15 @@ export async function loadOwnerCalendarLinks(rows: readonly Pick<ActivityRow, 'i
     if (links.length === 0) return NO_CALENDAR_LINKS;
     const connections = await prisma.calendarConnection.findMany({
         where: { id: { in: [...new Set(links.map((l) => l.connectionId))] }, status: { in: [...LIVE_CONNECTION_STATUSES] } },
-        select: { id: true, username: true },
+        select: { id: true, username: true, backfilledAt: true },
     });
     const ownerOf = new Map(connections.map((c) => [c.id, lc(c.username)]));
+    const backfilledAt = new Map(connections.map((c) => [c.id, c.backfilledAt?.getTime() ?? null]));
     const assignee = new Map(rows.map((r) => [r.id, lc(r.assignedTo)]));
-    const out = new Map<string, ActivityExternalLink>();
+    const out = new Map<string, OwnerCalendarLink>();
     for (const link of links) {
-        if (ownerOf.get(link.connectionId) === assignee.get(link.activityId)) out.set(link.activityId, link);
+        if (ownerOf.get(link.connectionId) !== assignee.get(link.activityId)) continue;
+        out.set(link.activityId, { ...link, fromBackfill: backfilledAt.get(link.connectionId) === link.createdAt.getTime() });
     }
     return out;
 }
@@ -43,7 +49,7 @@ const guestCount = (row: Pick<ActivityRow, 'assignedTo' | 'attendees'>) => row.a
 /** The view of one activity's link for `viewer` (pure). */
 export function calendarViewOf(
     row: Pick<ActivityRow, 'assignedTo' | 'attendees' | 'externalUpdatedAt'>,
-    link: ActivityExternalLink | undefined,
+    link: OwnerCalendarLink | undefined,
     viewer: string,
     viewerCanEdit: boolean,
 ): ActivityCalendarView | null {
@@ -51,13 +57,17 @@ export function calendarViewOf(
     const isOwner = lc(viewer) !== '' && lc(viewer) === lc(row.assignedTo);
     const privileged = isOwner || viewerCanEdit;
     const heldCount = parseHeld(link.heldAttendeesJson).length;
+    const withheld = link.invites === 'withhold';
+    const invitesWaiting = (withheld && guestCount(row) > 0) || heldCount > 0;
     return {
         provider: link.provider,
         state: link.state,
         pending: link.dirtyAt !== null,
         invites: link.invites,
         heldCount,
-        canSendInvites: isOwner && ((link.invites === 'withhold' && guestCount(row) > 0) || heldCount > 0),
+        canSendInvites: isOwner && invitesWaiting,
+        invitesWaiting,
+        copyReason: withheld ? (link.fromBackfill ? 'connected' : 'assigned') : null,
         lastSyncedAt: iso(link.lastSyncedAt),
         htmlLink: privileged ? link.htmlLink : null,
         errorCode: link.lastErrorCode,

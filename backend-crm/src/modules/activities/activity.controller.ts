@@ -3,6 +3,7 @@ import { sendSuccess } from '../../utils/apiResponse.js';
 import { requireUser } from '../../utils/requestContext.js';
 import { createCrudController } from '../shared/crud.js';
 import { busyService } from '../calendar-sync/busy.service.js';
+import { calendarSyncActions } from '../calendar-sync/sync.actions.js';
 import { activityService } from './activity.service.js';
 
 export const activityController = {
@@ -28,5 +29,15 @@ export const activityController = {
 
     async respond(req: Request, res: Response): Promise<void> {
         sendSuccess(res, await activityService.respond(String(req.params.id), req.body, requireUser(req)), 'Reply saved');
+    },
+
+    /** Calendar Phase 2 P2-3c: push the owner's calendar copy again (Retry / Add again). */
+    async retryCalendarSync(req: Request, res: Response): Promise<void> {
+        sendSuccess(res, await calendarSyncActions.retry(String(req.params.id), requireUser(req)), 'Sending to the calendar');
+    },
+
+    /** Calendar Phase 2 P2-3c: the owner sends the held invitations. */
+    async sendCalendarInvites(req: Request, res: Response): Promise<void> {
+        sendSuccess(res, await calendarSyncActions.sendInvites(String(req.params.id), requireUser(req)), 'Invitations are on their way');
     },
 };

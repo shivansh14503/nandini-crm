@@ -35,6 +35,19 @@ export interface OwnCalendar {
     since: string;
     /** Last successful push or pull; null until sync has run. */
     lastSyncedAt: string | null;
+    /** The first-sync copy of upcoming CRM activities (P2-3c). Optional: older servers don't send it. */
+    backfill?: OwnCalendarBackfill;
+}
+
+/**
+ * `waiting`: not run yet (or under way); `done`: `copied` upcoming activities were copied at `at` (private copies when
+ * they have guests: nobody was invited). `sending`: changes of this calendar still waiting to be sent.
+ */
+export interface OwnCalendarBackfill {
+    state: 'waiting' | 'done';
+    at: string | null;
+    copied: number | null;
+    sending: number;
 }
 
 /** `GET /api/calendar-connections`. */

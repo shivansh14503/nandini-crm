@@ -24,6 +24,20 @@ export interface OwnCalendarDto {
     since: string;
     /** max(lastPushedAt, lastPulledAt); null until sync has run. */
     lastSyncedAt: string | null;
+    /** The first-sync backfill (P2-3c): upcoming CRM activities copied to the calendar when it was first connected. */
+    backfill: OwnBackfillDto;
+}
+
+/**
+ * `waiting`: not run yet (the row waits for its first check, or the copy is under way); `done`: `copied` activities were
+ * copied at `at` (private copies when they have guests: nobody was invited). `sending`: copies (and other changes) of
+ * this calendar still waiting to be sent, so the card can say "12 of 40 still being copied".
+ */
+export interface OwnBackfillDto {
+    state: 'waiting' | 'done';
+    at: string | null;
+    copied: number | null;
+    sending: number;
 }
 
 /** GET /api/calendar-connections. */
@@ -47,7 +61,7 @@ export const connectionService = {
             prisma.user.findUnique({ where: { id: user.id }, select: { email: true, isActive: true, isGroupUser: true } }),
             prisma.calendarConnection.findFirst({
                 where: { username: user.username, status: { in: [...LIVE_CONNECTION_STATUSES] } },
-                select: { provider: true, accountEmail: true, status: true, enrolledAt: true, lastPushedAt: true, lastPulledAt: true },
+                select: { id: true, provider: true, accountEmail: true, status: true, enrolledAt: true, lastPushedAt: true, lastPulledAt: true, backfilledAt: true, backfillCount: true },
             }),
             prisma.calendarSyncUser.findUnique({ where: { username: user.username }, select: { provider: true, excluded: true } }),
             loadEnrolmentContext(),
@@ -55,7 +69,11 @@ export const connectionService = {
         // A real provider needs the encryption key; the dev-only fake has no secrets (as in withCalendarAccess).
         const ready = context.providers.some((p) => p.enabled && p.configured && (p.key === 'fake' ? context.fakeOn : secretBox.ready()));
         if (live && isCalendarProvider(live.provider)) {
-            const access = await loadProviderAccess(live.provider);
+            const [access, sending] = await Promise.all([
+                loadProviderAccess(live.provider),
+                // [connectionId, state] index: links waiting to be sent.
+                prisma.activityExternalLink.count({ where: { connectionId: live.id, state: 'pending' } }),
+            ]);
             const paused = !access.enabled || !access.configured || access.healthStatus === 'error';
             return {
                 ready,
@@ -66,6 +84,12 @@ export const connectionService = {
                     status: paused ? 'paused' : (live.status as OwnCalendarStatus),
                     since: live.enrolledAt.toISOString(),
                     lastSyncedAt: latest(live.lastPushedAt, live.lastPulledAt),
+                    backfill: {
+                        state: live.backfilledAt ? 'done' : 'waiting',
+                        at: live.backfilledAt ? live.backfilledAt.toISOString() : null,
+                        copied: live.backfilledAt ? (live.backfillCount ?? 0) : null,
+                        sending,
+                    },
                 },
                 reason: null,
             };

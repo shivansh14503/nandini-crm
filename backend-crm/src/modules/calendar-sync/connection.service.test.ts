@@ -35,6 +35,19 @@ afterEach(() => {
 });
 
 describe('getOwn', () => {
+    it('backfill progress (P2-3c): copied count and the copies still being sent', async () => {
+        const asha = user(1, 'asha');
+        const at = new Date(now.getTime() - 60_000);
+        state = installConnectionDouble({ users: [asha], connections: [fakeRow('c1', 'asha', { status: 'ok', backfilledAt: at, backfillCount: 3 })] });
+        state.links.push(
+            { id: 'l1', connectionId: 'c1', state: 'pending' } as unknown as (typeof state.links)[number],
+            { id: 'l2', connectionId: 'c1', state: 'synced' } as unknown as (typeof state.links)[number],
+            { id: 'l3', connectionId: 'other', state: 'pending' } as unknown as (typeof state.links)[number],
+        );
+        const own = await connectionService.getOwn(authOf(asha));
+        assert.deepEqual(own.calendar?.backfill, { state: 'done', at: at.toISOString(), copied: 3, sending: 1 });
+    });
+
     it('a live row: provider label, mailbox, status, since, last synced; never an error code or provider text', async () => {
         const asha = user(1, 'asha');
         state = installConnectionDouble({
@@ -54,6 +67,7 @@ describe('getOwn', () => {
             status: 'error',
             since: now.toISOString(),
             lastSyncedAt: new Date(now.getTime() - 1000).toISOString(),
+            backfill: { state: 'waiting', at: null, copied: null, sending: 0 },
         });
         const text = JSON.stringify(own);
         assert.ok(!text.includes('calendar_unavailable') && !text.includes('Provider words'));

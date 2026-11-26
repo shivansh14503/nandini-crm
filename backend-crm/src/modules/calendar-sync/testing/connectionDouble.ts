@@ -478,6 +478,7 @@ export function installConnectionDouble(
 
     const activityExternalLink = {
         findMany: async (args: ManyArgs = {}) => findManyOf(state.links, args),
+        count: async ({ where }: { where?: Where } = {}) => state.links.filter((l) => matchesWhere(l, where)).length,
         updateMany: async ({ where, data }: { where: Where; data: Row }) => {
             const rows = state.links.filter((l) => matchesWhere(l, where));
             for (const row of rows) Object.assign(row, data, { updatedAt: touch() });

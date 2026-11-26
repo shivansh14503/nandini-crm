@@ -81,8 +81,7 @@ export interface ActivityViewer {
 }
 
 /**
- * The activity in its owner's calendar (Calendar Phase 2 spec §4.4, §14.5; data only in P2-3b, the drawer's status line
- * is P2-3c), from the owner's organizer link on their live connection row; null when there is none (the owner isn't
+ * The activity in its owner's calendar (Calendar Phase 2 spec §4.4, §14.5; the drawer's status line, P2-3c), from the owner's organizer link on their live connection row; null when there is none (the owner isn't
  * synced, or the type never syncs). Outside the audited DTO. `htmlLink` and `errorMessage` only for the owner and
  * editors.
  */
@@ -98,6 +97,17 @@ export interface ActivityCalendarView {
     heldCount: number;
     /** The viewer is the owner and there is someone to invite (withheld copy with guests, or held guests). */
     canSendInvites: boolean;
+    /**
+     * Someone waits for the owner to send invitations (a withheld copy with guests, or held guests), whoever views it:
+     * the owner sees Send invitations, others "Waiting for <owner> to send the invitations" (P2-3c).
+     */
+    invitesWaiting: boolean;
+    /**
+     * Why a private copy (`invites='withhold'`) has no guests: `connected` = copied when the owner's calendar was first
+     * connected (the backfill, D23); `assigned` = saved or reassigned by someone other than the owner (D41); null when
+     * invitations are sent.
+     */
+    copyReason: 'connected' | 'assigned' | null;
     lastSyncedAt: string | null;
     htmlLink: string | null;
     errorCode: string | null;

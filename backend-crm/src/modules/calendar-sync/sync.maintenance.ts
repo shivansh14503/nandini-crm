@@ -9,11 +9,22 @@ import { notify } from '../notifications/notification.producer.js';
 import { isLiveStatus } from './connection.constants.js';
 import { runCalendarConnectionNightly } from './connection.service.js';
 import { dueCheckIds, runDueChecks } from './enrolment.js';
-import { CALENDAR_SYNC_JOBS, CHECK_SWEEP_LIMIT, ENROLLED_PUSH_BATCH, FALLBACK_PUSH_LIMIT, OUTBOX_SWEEP_GRACE_MS, OUTBOX_SWEEP_LIMIT, SYNC_WINDOW } from './sync.constants.js';
+import {
+    BACKFILL_RECOVERY_GRACE_MS,
+    BACKFILL_RECOVERY_LIMIT,
+    CALENDAR_SYNC_JOBS,
+    CHECK_SWEEP_LIMIT,
+    ENROLLED_PUSH_BATCH,
+    FALLBACK_PUSH_LIMIT,
+    OUTBOX_SWEEP_GRACE_MS,
+    OUTBOX_SWEEP_LIMIT,
+    SYNC_WINDOW,
+} from './sync.constants.js';
 import { sweepPushJobId } from './sync.keys.js';
 import { secretExpiringNotifications } from './sync.notifications.js';
 import { markPushExhausted, pushLink } from './sync.push.js';
-import { enqueueCheck, type PushJobData } from './sync.wake.js';
+import { runBackfill } from './sync.backfill.js';
+import { enqueueCheck, enqueueEnrolled, type PushJobData } from './sync.wake.js';
 import { adminRecipients } from './syncIssue.notifications.js';
 
 /**
@@ -21,8 +32,8 @@ import { adminRecipients } from './syncIssue.notifications.js';
  * the outbox sweep, the `enrolled` job, due connection checks, the Redis-down fallback and the nightly steps. Every
  * step logs and never throws to its scheduler, so one failing step doesn't stop the others.
  *
- * Database wake cadence (Azure SQL serverless): the poll tick makes two small indexed reads every 5 minutes inside
- * 07:00–22:00 business time (when the 15-minute reminder sweep keeps the database awake anyway); the nightly run is at
+ * Database wake cadence (Azure SQL serverless): the poll tick makes three small indexed reads every 5 minutes inside
+ * 07:00–22:00 business time (the outbox sweep, due checks, rows `ok` without a first-sync backfill) (when the 15-minute reminder sweep keeps the database awake anyway); the nightly run is at
  * 00:25, inside the existing 00:05–00:25 nightly wake; the fallback tick (Redis down only) reads once a minute inside
  * 07:00–22:00. Nothing runs outside those windows, so the database can pause overnight.
  */
@@ -85,15 +96,32 @@ export async function pushDueInline(now: Date = new Date(), limit: number = FALL
 }
 
 /**
- * The `enrolled` job (§8.12, admin-managed: replaces P2-3's per-user `connect`): a row first reached `ok`, so its
- * dirty links (activities saved while it was pending or in error) are pushed now, in batches of 100, ignoring their
- * `nextAttemptAt`. Stops at the first gate (row in error again, provider off) or rate limit; the outbox sweep does the
- * rest. The first-sync backfill (copying upcoming activities that have no link yet) is P2-3c.
+ * The `enrolled` job (§8.12, admin-managed: replaces P2-3's per-user `connect`): a row reached `ok`. On its first `ok`
+ * (`backfilledAt` still null) the first-sync backfill copies the person's upcoming activities as links (P2-3c,
+ * sync.backfill.ts: private copies when they have guests, D23); then its dirty links (backfilled ones, and activities
+ * saved while it was pending or in error) are pushed, in batches of 100, ignoring their `nextAttemptAt`. Stops at the
+ * first gate (row in error again, provider off) or rate limit; the outbox sweep does the rest. A failed backfill is
+ * logged and left for the poll tick's recovery (the row keeps `backfilledAt` null); the push part still runs.
  */
-export async function runEnrolled(connectionId: string): Promise<{ pushed: number; stopped: string | null } | null> {
+export async function runEnrolled(connectionId: string): Promise<{ pushed: number; stopped: string | null; backfilled?: number } | null> {
     if (!ENV.INTEGRATIONS.SYNC_ENABLED) return null;
-    const connection = await prisma.calendarConnection.findUnique({ where: { id: connectionId }, select: { id: true, status: true } });
+    const connection = await prisma.calendarConnection.findUnique({ where: { id: connectionId }, select: { id: true, status: true, backfilledAt: true } });
     if (!connection || !isLiveStatus(connection.status) || connection.status === 'error') return null;
+    let backfilled: number | undefined;
+    if (connection.backfilledAt === null && connection.status === 'ok') {
+        try {
+            const result = await runBackfill(connectionId);
+            if (result.status === 'done') backfilled = result.created;
+        } catch (err) {
+            logger.warn({ err: (err as Error).message, connectionId }, 'Calendar first-sync backfill failed; the poll tick runs it again');
+        }
+    }
+    const done = await pushConnectionLinks(connectionId);
+    return backfilled === undefined ? done : { ...done, backfilled };
+}
+
+/** Pushes every dirty link of one connection, 100 per round, until none is left or a gate / rate limit stops it. */
+async function pushConnectionLinks(connectionId: string): Promise<{ pushed: number; stopped: string | null }> {
     let pushed = 0;
     const tried = new Set<string>();
     for (;;) {
@@ -221,17 +249,49 @@ export async function runCalendarNightly(now: Date = new Date()) {
     return result;
 }
 
-/** The `calendar-poll` tick of P2-3b: the outbox sweep and due connection checks (P2-5 adds the pulls). */
+/**
+ * Rows `ok` for a while without a first-sync backfill (P2-3c): their `enrolled` job was lost (Redis restarted, the
+ * worker was down when the row first reached `ok`). One small indexed read (`[status, nextCheckAt]` prefix).
+ */
+export async function dueBackfillRows(now: Date, limit: number = BACKFILL_RECOVERY_LIMIT): Promise<{ id: string; enrolledAt: Date }[]> {
+    if (!ENV.INTEGRATIONS.SYNC_ENABLED) return [];
+    return prisma.calendarConnection.findMany({
+        where: { status: 'ok', backfilledAt: null, OR: [{ lastSuccessAt: null }, { lastSuccessAt: { lt: new Date(now.getTime() - BACKFILL_RECOVERY_GRACE_MS) } }] },
+        select: { id: true, enrolledAt: true },
+        orderBy: { enrolledAt: 'asc' },
+        take: limit,
+    });
+}
+
+/** Poll tick: an `enrolled` job again for each such row (one job id per row and hour, so a slow job isn't doubled). */
+export async function enqueueDueBackfills(now: Date = new Date()): Promise<number> {
+    let queued = 0;
+    const hour = new Date(Math.floor(now.getTime() / 3_600_000) * 3_600_000);
+    for (const row of await dueBackfillRows(now)) if ((await enqueueEnrolled(row.id, row.enrolledAt, hour)) !== null) queued += 1;
+    if (queued > 0) logger.info({ queued }, 'Calendar first-sync backfills re-queued');
+    return queued;
+}
+
+/** Redis down (fallback tick): one due backfill (and its pushes) in-process per tick. */
+export async function backfillDueInline(now: Date = new Date()): Promise<number> {
+    const [row] = await dueBackfillRows(now, 1);
+    if (!row) return 0;
+    return (await runEnrolled(row.id))?.backfilled ?? 0;
+}
+
+/** The `calendar-poll` tick: the outbox sweep, due connection checks and lost first-sync backfills (P2-5 adds the pulls). */
 export async function runCalendarPoll(now: Date = new Date()) {
     const queued = await step('outbox-sweep', () => sweepOutbox(now), 0);
     const checks = await step('due-checks', () => enqueueDueChecks(now), 0);
-    return { queued, checks };
+    const backfills = await step('backfill-recovery', () => enqueueDueBackfills(now), 0);
+    return { queued, checks, backfills };
 }
 
-/** The Redis-down fallback tick (§10.2): only inside the sync window; due checks and dirty links in-process. */
-export async function runFallbackTick(now: Date = new Date()): Promise<{ checked: number; pushed: number }> {
-    if (isQueueAvailable() || !isInsideSyncWindow(now)) return { checked: 0, pushed: 0 };
+/** The Redis-down fallback tick (§10.2): only inside the sync window; due checks, a lost backfill and dirty links in-process. */
+export async function runFallbackTick(now: Date = new Date()): Promise<{ checked: number; pushed: number; backfilled: number }> {
+    if (isQueueAvailable() || !isInsideSyncWindow(now)) return { checked: 0, pushed: 0, backfilled: 0 };
     const checked = await step('fallback-checks', async () => (await runDueChecks(now)).checked, 0);
+    const backfilled = await step('fallback-backfill', () => backfillDueInline(now), 0);
     const pushed = await step('fallback-push', () => pushDueInline(now), 0);
-    return { checked, pushed };
+    return { checked, pushed, backfilled };
 }

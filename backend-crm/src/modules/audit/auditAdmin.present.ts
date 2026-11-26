@@ -144,6 +144,7 @@ const ACTION_LABELS: Record<string, string> = {
     FOLLOW_UP: 'Follow-up',
     EMAIL_CHECK: 'Email checked',
     RSVP: 'Replied',
+    SEND_INVITES: 'Invitations sent',
     IMPORT: 'Imported',
     LOGIN: 'Signed in',
     LOGIN_FAILED: 'Failed sign-in',
@@ -416,6 +417,10 @@ export function summarize(action: string, module: string, changes: unknown, labe
             return 'Lead converted';
         case 'RSVP':
             return 'Replied to invitation';
+        case 'SEND_INVITES': {
+            const guests = count(c.guests);
+            return `Sent calendar invitations${guests !== undefined ? ` to ${guests} guest${guests === 1 ? '' : 's'}` : ''}`;
+        }
         case 'REVERT':
             return fields.length > 0 ? `Undid change to ${listOf(fields)}` : 'Change undone';
         case 'IMPORT': {

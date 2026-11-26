@@ -66,6 +66,12 @@ export type AuditAction =
      * colleague's reply, so it isn't undoable.
      */
     | 'RSVP'
+    /**
+     * An activity's owner sent the calendar invitations that were held for them (Calendar Phase 2 P2-3c, D41):
+     * `{ provider, privateCopy, guests }`, counts only. Not an UPDATE: the activity row doesn't change, and it can't
+     * be undone (the invitations have been mailed).
+     */
+    | 'SEND_INVITES'
     | 'IMPORT'
     | 'LOGIN'
     | 'LOGIN_FAILED'

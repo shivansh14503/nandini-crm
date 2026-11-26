@@ -70,6 +70,12 @@ export interface CalendarItem {
     activityId: string | null;
     /** Activity origin (`crm` / `followup` / `calendar`); null for derived items. */
     origin: string | null;
+    /**
+     * State of the activity's copy in its owner's calendar (calendar-sync LINK_STATES, Calendar Phase 2 P2-3c), for the
+     * owner and editors only (the calendar shows an error dot on `error`); null for derived items, activities that
+     * aren't synced and viewers who may not change the activity.
+     */
+    syncState: string | null;
 }
 
 export interface CalendarFeed {
@@ -312,7 +318,21 @@ export function activityToCalendarItem(row: ActivityCalendarRow, user: AuthUser,
         overdue: row.status === PLANNED_STATUS && (row.endAt ?? start) < now,
         activityId: row.id,
         origin: row.origin,
+        syncState: null,
     };
+}
+
+/** Fills `syncState` on the activity items the caller may change, from their owners' calendar links (one read). */
+async function withSyncStates(rows: readonly ActivityCalendarRow[], items: CalendarItem[], user: AuthUser): Promise<CalendarItem[]> {
+    const editable = rows.filter((row) => canEditActivity(user, row));
+    if (editable.length === 0) return items;
+    const { loadOwnerCalendarLinks } = await import('../calendar-sync/sync.view.js');
+    const links = await loadOwnerCalendarLinks(editable);
+    if (links.size === 0) return items;
+    return items.map((item) => {
+        const link = item.activityId ? links.get(item.activityId) : undefined;
+        return link ? { ...item, syncState: link.state } : item;
+    });
 }
 
 /** A follow-up slot is overdue once it has passed (an all-day one once its day has). */
@@ -360,6 +380,7 @@ function followupItem(
         overdue: slotOverdue(slot, now, timeZone),
         activityId: null,
         origin: null,
+        syncState: null,
     };
 }
 
@@ -451,6 +472,7 @@ export function contractRenewalToCalendarItem(
         overdue: false,
         activityId: null,
         origin: null,
+        syncState: null,
     };
 }
 
@@ -512,9 +534,10 @@ export async function calendarFeed(query: CalendarQuery, user: AuthUser, now = n
                       orderBy: [{ startAt: 'asc' }, { id: 'asc' }],
                       take: CALENDAR_CAPS.activity + 1,
                   })
-                  .then((rows) => {
+                  .then(async (rows) => {
                       const capped = capRows(rows, CALENDAR_CAPS.activity);
-                      return { items: capped.rows.map((row) => activityToCalendarItem(row, user, now)), truncated: capped.truncated };
+                      const items = capped.rows.map((row) => activityToCalendarItem(row, user, now));
+                      return { items: await withSyncStates(capped.rows, items, user), truncated: capped.truncated };
                   })
             : empty,
         sources.has('leadFollowup')

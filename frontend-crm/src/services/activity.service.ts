@@ -1,6 +1,7 @@
 import type { ApiResponse, PaginationParams } from '../types/api.types';
 import type {
     Activity,
+    ActivityBulkDeleteResult,
     ActivityFormData,
     ActivityLinkTarget,
     ActivityLinkTargetParams,
@@ -53,6 +54,30 @@ export const activityService = {
     /** Records of one module the user can link an activity to ("Related To" picker). */
     linkTargets: async (params: ActivityLinkTargetParams): Promise<ActivityLinkTarget[]> =>
         (await apiClient.get<ApiResponse<ActivityLinkTarget[]>>(`${ENDPOINT}/link-targets`, { params: { ...params } })).data,
+
+    /**
+     * Bulk delete that reads the API's answer (the shared `deleteBulk` keeps its `void` shape for every other module):
+     * `skipped` lists live activities left alone (lead / opportunity follow-ups), where the API sends it.
+     */
+    bulkDelete: async (ids: string[]): Promise<ActivityBulkDeleteResult> => {
+        const res = await apiClient.post<ApiResponse<ActivityBulkDeleteResult>>(`${ENDPOINT}/bulk-delete`, { ids });
+        notifyCrmUpdate(ENDPOINT);
+        return res.data ?? { deleted: ids.length, ids, notFound: [] };
+    },
+
+    /** Push the owner's calendar copy again now (Retry), or bring back an event deleted in the calendar (Add again). */
+    retryCalendarSync: async (id: string): Promise<Activity> => {
+        const res = await apiClient.post<ApiResponse<Activity>>(`${ENDPOINT}/${encodeURIComponent(id)}/calendar-sync/retry`, {});
+        notifyCrmUpdate(ENDPOINT, id);
+        return res.data;
+    },
+
+    /** The owner sends the invitations held for them (a private copy, or guests someone else added). Owner only. */
+    sendCalendarInvites: async (id: string): Promise<Activity> => {
+        const res = await apiClient.post<ApiResponse<Activity>>(`${ENDPOINT}/${encodeURIComponent(id)}/calendar-sync/send-invites`, {});
+        notifyCrmUpdate(ENDPOINT, id);
+        return res.data;
+    },
 
     /** An invited colleague's reply. Notifies the entity endpoint itself (a sub-path would refresh every query). */
     respond: async (id: string, responseStatus: Exclude<AttendeeResponse, 'needsAction'>): Promise<Activity> => {

@@ -392,12 +392,12 @@ describe('D41 holds (review fixes)', () => {
         assert.equal(fakeProviderState.events.get(linkOf(view.id).externalEventId as string)?.attendees, undefined);
     });
 
-    it("a non-owner changing a contact attendee's address holds the new address", async () => {
+    it("a non-owner changing a contact attendee's address holds that contact (by identity) under the new address", async () => {
         install([conn()], { contacts: [{ id: 'k1', name: 'Kiran', organizationId: null, isDeleted: false }] });
         const view = await activityService.create(meeting({ attendees: [{ kind: 'contact', contactId: 'k1', email: 'k@cust.com' }] }), PALAK);
         await pushLink(linkOf(view.id).id);
         await activityService.update(view.id, { attendees: [{ kind: 'contact', contactId: 'k1', email: 'someone@anywhere.com' }] }, MIRA);
-        assert.equal(linkOf(view.id).heldAttendeesJson, JSON.stringify(['someone@anywhere.com']));
+        assert.equal(linkOf(view.id).heldAttendeesJson, JSON.stringify(['contact:k1']));
         await pushLink(linkOf(view.id).id);
         const emails = fakeProviderState.events.get(linkOf(view.id).externalEventId as string)?.attendees?.map((a) => a.email) ?? [];
         assert.equal(emails.includes('someone@anywhere.com'), false);
