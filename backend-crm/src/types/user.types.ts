@@ -13,6 +13,11 @@ export interface AuthSession {
     jti: string;
     /** False when Redis was down at login, so the session could not be recorded (and can't be revoked early). */
     tracked: boolean;
+    /**
+     * The token's `mcp` claim: the user must choose a new password (a new user, or after an admin reset). Until they
+     * do, `authenticate` allows only the routes in `PASSWORD_CHANGE_ALLOWED_ROUTES`. Missing = false (older tokens).
+     */
+    mustChangePassword?: boolean;
 }
 
 declare global {

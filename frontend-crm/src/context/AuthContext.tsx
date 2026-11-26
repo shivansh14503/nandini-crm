@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { authService } from '../services/auth.service';
-import { ApiClientError } from '../services/apiClient';
+import { ApiClientError, subscribeApiErrors } from '../services/apiClient';
 import type { User, LoginPayload } from '../types/auth.types';
 
 interface AuthContextType {
@@ -10,7 +10,8 @@ interface AuthContextType {
     loading: boolean;
     error: string | null;
     isAuthenticated: boolean;
-    login: (credentials: LoginPayload) => Promise<void>;
+    /** Signs in and returns the signed-in user (callers check `mustChangePassword` to pick the next page). */
+    login: (credentials: LoginPayload) => Promise<User>;
     logout: () => Promise<void>;
     /** Re-reads the user from GET /api/auth/me; only a 401 signs the user out (other errors keep the current user). */
     refreshUser: () => Promise<void>;
@@ -25,6 +26,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 // from a first visit and surfaced as "session expired" on the login page.
 const HAD_SESSION_KEY = 'crm.hadSession';
 export const SESSION_EXPIRED_KEY = 'crm.sessionExpired';
+/** API error code (403) while the signed-in user must change their password first. */
+export const PASSWORD_CHANGE_REQUIRED = 'PASSWORD_CHANGE_REQUIRED';
 
 function safeStorage(op: () => void) {
     try {
@@ -74,6 +77,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser((current) => (current ? { ...current, ...patch } : current));
     }, []);
 
+    // An admin reset the password while this session was open (or the flag was missed): the API refuses with 403
+    // PASSWORD_CHANGE_REQUIRED, and PasswordChangeGate then takes the user to My Profile › Security.
+    useEffect(
+        () =>
+            subscribeApiErrors((err) => {
+                if (err.status === 403 && err.details?.code === PASSWORD_CHANGE_REQUIRED) {
+                    setUser((current) => (current && !current.mustChangePassword ? { ...current, mustChangePassword: true } : current));
+                }
+            }),
+        [],
+    );
+
     useEffect(() => {
         let active = true;
         authService
@@ -107,6 +122,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(res.user);
         setError(null);
         markSignedIn();
+        return res.user;
     };
 
     const logout = async () => {

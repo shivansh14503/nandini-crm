@@ -76,6 +76,21 @@ const requestInterceptors: RequestInterceptor[] = [
 const responseInterceptors: ResponseInterceptor[] = [];
 const errorInterceptors: ErrorInterceptor[] = [];
 
+/** Notified of every failed request (after the error interceptors); the error is still thrown to the caller. */
+export type ApiErrorListener = (error: ApiClientError) => void;
+const errorListeners = new Set<ApiErrorListener>();
+
+/**
+ * Watches every failed API request app-wide, e.g. a 403 PASSWORD_CHANGE_REQUIRED (AuthContext). Returns the
+ * unsubscribe function. A listener that throws is ignored, so it can never change the caller's error.
+ */
+export function subscribeApiErrors(listener: ApiErrorListener): () => void {
+    errorListeners.add(listener);
+    return () => {
+        errorListeners.delete(listener);
+    };
+}
+
 function buildUrl(endpoint: string, params?: PaginationParams): string {
     const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
     const base = `${ENV.API_URL}${cleanEndpoint}`;
@@ -164,6 +179,13 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
             : normalizeApiError(err);
         for (const onError of errorInterceptors) {
             await onError(normalized);
+        }
+        for (const listener of errorListeners) {
+            try {
+                listener(normalized);
+            } catch {
+                // A listener's own failure must not replace the request's error.
+            }
         }
         throw normalized;
     }

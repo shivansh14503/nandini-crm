@@ -42,8 +42,13 @@ export const queryKeys = {
         /** Saved sections / blocks library of a module. */
         saved: (module: string) => ['pdf-templates', 'saved', module] as const,
     },
+    /** Admin › Users (`/api/admin/users`); `notifyCrmUpdate('/api/admin/users')` refreshes it. */
     users: {
         all: ['users'] as const,
+        adminLists: () => ['users', 'admin', 'list'] as const,
+        adminList: (params?: object) => ['users', 'admin', 'list', params ?? {}] as const,
+        adminMeta: () => ['users', 'admin', 'meta'] as const,
+        adminDetail: (id: number) => ['users', 'admin', 'detail', id] as const,
     },
     /** Admin › API Integrations (`/api/admin/integrations`); `notifyCrmUpdate('/api/admin/integrations')` refreshes it. */
     integrations: {

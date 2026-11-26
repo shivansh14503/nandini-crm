@@ -11,8 +11,9 @@ import { photoUploadSchema, profileUpdateSchema, sessionIdParamSchema, type Phot
 
 /**
  * /api/me (My Profile: the signed-in user's own profile, photo and sessions; every route acts on the caller only)
- *   GET    /profile          → ProfileDto { id, username, firstName, lastName, fullName, email, role, department, mobile,
- *                              officePhone, photoUrl, lastLoginAt, passwordChangedAt, createdAt }
+ *   GET    /profile          → ProfileDto { id, username, firstName, lastName, fullName, email, role, department, jobTitle,
+ *                              reportsTo: { id, name } | null, mobile, officePhone, photoUrl, mustChangePassword,
+ *                              lastLoginAt, passwordChangedAt, createdAt }   (jobTitle / reportsTo are set in Admin › Users)
  *   PATCH  /profile          { firstName?, lastName?, mobile?, officePhone? } (other keys refused) → ProfileDto
  *                              firstName required when sent; '' / null clears lastName / mobile / officePhone;
  *                              phones are E.164 (national Indian numbers are normalized). fullName is recomputed.

@@ -127,6 +127,7 @@ const ACTION_TITLES: Record<string, { title: string; tag: string }> = {
     DUPLICATE: { title: 'Duplicated', tag: 'Created' },
     PDF_GENERATED: { title: 'PDF generated', tag: 'PDF' },
     PASSWORD_CHANGE: { title: 'Password changed', tag: 'Security' },
+    PASSWORD_RESET: { title: 'Password reset by an admin', tag: 'Security' },
     SESSION_REVOKE: { title: 'Session signed out', tag: 'Security' },
 };
 

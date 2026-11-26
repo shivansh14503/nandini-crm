@@ -138,6 +138,7 @@ const ACTION_LABELS: Record<string, string> = {
     EXPORT: 'Exported',
     LEDGER_VERIFY: 'Integrity check',
     PASSWORD_CHANGE: 'Password changed',
+    PASSWORD_RESET: 'Password reset',
     SESSION_REVOKE: 'Session signed out',
     CONNECT: 'Connected',
     DISCONNECT: 'Disconnected',
@@ -396,6 +397,8 @@ export function summarize(action: string, module: string, changes: unknown, labe
         }
         case 'PASSWORD_CHANGE':
             return 'Changed their password';
+        case 'PASSWORD_RESET':
+            return `Reset the password${c.generated === true ? ' (temporary password)' : ''}`;
         case 'SESSION_REVOKE': {
             if (c.scope !== 'others') return 'Signed out one of their other sessions';
             const signedOut = count(c.signedOutSessions);

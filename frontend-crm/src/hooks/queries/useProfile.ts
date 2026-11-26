@@ -66,13 +66,21 @@ function useSessionsMutation<TArgs, TResult>(fn: (args: TArgs) => Promise<TResul
 export const useRevokeSession = () => useSessionsMutation((id: string) => profileService.revokeSession(id));
 export const useRevokeOtherSessions = () => useSessionsMutation(() => profileService.revokeOtherSessions());
 
-/** Changing the password signs out the user's other sessions, so both the profile and the session list refresh. */
+/**
+ * Changing the password signs out the user's other sessions, so both the profile and the session list refresh. It
+ * also ends a must-change password (set by an admin): the auth user is updated at once, so navigation unlocks.
+ */
 export function useChangePassword() {
     const queryClient = useQueryClient();
+    const { updateUser } = useAuth();
     return useMutation({
         mutationFn: (payload: ChangePasswordPayload) => authService.changePassword(payload),
         onSuccess: (result) => {
-            queryClient.setQueryData<ProfileDto>(PROFILE_QUERY_KEY, (prev) => (prev ? { ...prev, passwordChangedAt: result.passwordChangedAt } : prev));
+            const mustChangePassword = result.mustChangePassword ?? false;
+            queryClient.setQueryData<ProfileDto>(PROFILE_QUERY_KEY, (prev) =>
+                prev ? { ...prev, passwordChangedAt: result.passwordChangedAt, mustChangePassword } : prev,
+            );
+            updateUser({ mustChangePassword });
             return queryClient.invalidateQueries({ queryKey: ME_QUERY_KEY });
         },
     });

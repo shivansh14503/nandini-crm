@@ -1,0 +1,96 @@
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+import { passwordPolicyIssue } from '../auth/passwordPolicy.js';
+import { adminGuardIssue, fullNameLengthIssue, generateTemporaryPassword, losesAdminAccess, managerIssue, MAX_MANAGER_DEPTH, TEMPORARY_PASSWORD_LENGTH } from './userAdmin.rules.js';
+
+describe('managerIssue (reports-to cycles)', () => {
+    // 2 → 1, 3 → 2, 4 → 3 ; 5 reports to nobody.
+    const chain = new Map<number, number | null>([
+        [1, null],
+        [2, 1],
+        [3, 2],
+        [4, 3],
+        [5, null],
+    ]);
+    it('refuses the user themselves', () => assert.equal(managerIssue(3, 3, chain), 'self'));
+    it('refuses someone below the user (directly or not)', () => {
+        assert.equal(managerIssue(2, 3, chain), 'cycle');
+        assert.equal(managerIssue(1, 4, chain), 'cycle');
+    });
+    it('allows someone above or beside', () => {
+        assert.equal(managerIssue(4, 1, chain), null);
+        assert.equal(managerIssue(5, 4, chain), null);
+        assert.equal(managerIssue(1, 5, chain), null);
+    });
+    it('a new user (null) can report to anyone', () => assert.equal(managerIssue(null, 4, chain), null));
+    it('stops on an existing loop and on chains deeper than the limit', () => {
+        const looped = new Map<number, number | null>([
+            [1, 2],
+            [2, 1],
+        ]);
+        assert.equal(managerIssue(9, 1, looped), 'cycle');
+        const deep = new Map<number, number | null>(Array.from({ length: MAX_MANAGER_DEPTH + 5 }, (_, i) => [i + 1, i + 2] as [number, number]));
+        assert.equal(managerIssue(1000, 1, deep), 'cycle');
+        const shallow = new Map<number, number | null>(Array.from({ length: MAX_MANAGER_DEPTH - 1 }, (_, i) => [i + 1, i + 2 < MAX_MANAGER_DEPTH ? i + 2 : null] as [number, number | null]));
+        assert.equal(managerIssue(1000, 1, shallow), null);
+    });
+});
+
+describe('adminGuardIssue', () => {
+    const admin = { id: 2, role: 'Admin', isActive: true };
+    it('lets admins change anyone while another admin remains', () => {
+        assert.equal(adminGuardIssue({ actorId: 1, target: admin, next: { role: 'Sales Manager', isActive: true }, activeAdminCount: 2 }), null);
+        assert.equal(adminGuardIssue({ actorId: 1, target: admin, next: { role: 'Admin', isActive: false }, activeAdminCount: 2 }), null);
+    });
+    it('refuses removing your own admin access', () => {
+        assert.equal(adminGuardIssue({ actorId: 2, target: admin, next: { role: 'Sales Manager', isActive: true }, activeAdminCount: 5 }), 'SELF_LOCKOUT');
+        assert.equal(adminGuardIssue({ actorId: 2, target: admin, next: { role: 'Admin', isActive: false }, activeAdminCount: 5 }), 'SELF_LOCKOUT');
+    });
+    it('refuses taking it from the last active admin', () => {
+        assert.equal(adminGuardIssue({ actorId: 1, target: admin, next: { role: 'Sales Executive', isActive: true }, activeAdminCount: 1 }), 'LAST_ADMIN');
+    });
+    it('ignores changes that keep admin access or never had it', () => {
+        assert.equal(adminGuardIssue({ actorId: 2, target: admin, next: { role: 'super admin', isActive: true }, activeAdminCount: 1 }), null);
+        assert.equal(adminGuardIssue({ actorId: 1, target: { id: 3, role: 'Sales Executive', isActive: true }, next: { role: 'Field', isActive: false }, activeAdminCount: 1 }), null);
+        assert.equal(losesAdminAccess({ role: 'Admin', isActive: false }, { role: 'Sales', isActive: false }), false);
+    });
+});
+
+describe('fullNameLengthIssue', () => {
+    it('matches My Profile', () => {
+        assert.equal(fullNameLengthIssue('a'.repeat(100)), null);
+        assert.equal(fullNameLengthIssue('a'.repeat(101)), 'First and last name together cannot exceed 99 characters.');
+    });
+});
+
+describe('generateTemporaryPassword', () => {
+    it('is 12 letters and digits, with both, and passes the password rules', () => {
+        for (let i = 0; i < 200; i++) {
+            const password = generateTemporaryPassword('palak');
+            assert.equal(password.length, TEMPORARY_PASSWORD_LENGTH);
+            assert.match(password, /^[A-Za-z0-9]+$/);
+            assert.match(password, /[A-Za-z]/);
+            assert.match(password, /[0-9]/);
+            assert.doesNotMatch(password, /[0O1lI]/);
+            assert.equal(passwordPolicyIssue(password, { username: 'palak' }), null);
+        }
+    });
+    it('differs each time', () => {
+        const seen = new Set(Array.from({ length: 50 }, () => generateTemporaryPassword('palak')));
+        assert.equal(seen.size, 50);
+    });
+    it('retries when a candidate equals the username', () => {
+        // A seeded sequence: the first candidate it builds is used as the username, so the generator must try again.
+        const seeded = () => {
+            let state = 7;
+            return (max: number) => {
+                state = (state * 1103515245 + 12345) % 2147483648;
+                return state % max;
+            };
+        };
+        const first = generateTemporaryPassword('nobody', seeded());
+        const second = generateTemporaryPassword(first, seeded());
+        assert.notEqual(second, first);
+        assert.equal(passwordPolicyIssue(second, { username: first }), null);
+    });
+});

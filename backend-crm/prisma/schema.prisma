@@ -32,38 +32,53 @@ datasource db {
 /// backfill (the user_profile migration also splits `fullName` into `firstName` / `lastName` once).
 model User {
   // Int keeps the existing auth contract (frontend `User.id: number`).
-  id                Int       @id @default(autoincrement()) @map("Id")
-  username          String    @unique @map("Username") @db.NVarChar(50)
+  id                 Int       @id @default(autoincrement()) @map("Id")
+  username           String    @unique @map("Username") @db.NVarChar(50)
   /// bcrypt hash. Legacy plain-text values are re-hashed on the user's next successful login.
-  passwordHash      String    @map("Password") @db.NVarChar(255)
-  role              String    @default("Sales Executive") @map("Role") @db.NVarChar(50)
+  passwordHash       String    @map("Password") @db.NVarChar(255)
+  role               String    @default("Sales Executive") @map("Role") @db.NVarChar(50)
   /// Not @unique: SQL Server unique constraints allow a single NULL. Uniqueness is enforced in the service.
-  email             String?   @db.NVarChar(120)
+  email              String?   @db.NVarChar(120)
   /// Display name, always `trim(firstName + ' ' + lastName)` when the user edits their profile (My Profile). Read
   /// everywhere a user's name is shown (lookups, audit log, quotation PDFs), so it stays a real column.
-  fullName          String    @default("") @db.NVarChar(100)
+  fullName           String    @default("") @db.NVarChar(100)
   /// Given name (My Profile). Backfilled from `fullName` (text before the first space) by the user_profile migration.
-  firstName         String?   @db.NVarChar(100)
+  firstName          String?   @db.NVarChar(100)
   /// Family name (My Profile); the rest of `fullName` after the first space. NULL when the user has none.
-  lastName          String?   @db.NVarChar(100)
+  lastName           String?   @db.NVarChar(100)
   /// Mobile number, E.164 (My Profile "Mobile"). Quotation PDFs print it as the sales person's phone.
-  phone             String?   @db.NVarChar(20)
+  phone              String?   @db.NVarChar(20)
   /// Desk / landline number, E.164 (My Profile "Office Phone").
-  officePhone       String?   @db.NVarChar(20)
-  department        String?   @db.NVarChar(50)
-  isActive          Boolean   @default(true)
-  isGroupUser       Boolean   @default(false)
-  onLeave           Boolean   @default(false)
-  lastLoginAt       DateTime?
+  officePhone        String?   @db.NVarChar(20)
+  department         String?   @db.NVarChar(50)
+  /// Free-text job title (Admin › Users), e.g. "Inside Sales Lead". Shown read-only on My Profile. Not an access rule.
+  jobTitle           String?   @db.NVarChar(100)
+  /// The user's manager (Admin › Users "Reports to"). Kept when the manager is deactivated; never a cycle (checked
+  /// by the API). NO ACTION: a user who still has direct reports can't be deleted.
+  reportsToId        Int?
+  isActive           Boolean   @default(true)
+  isGroupUser        Boolean   @default(false)
+  onLeave            Boolean   @default(false)
+  /// Set for a new user and after an admin password reset: until they choose a new password, the JWT carries `mcp`
+  /// and the API allows only the change-password and sign-out routes (403 PASSWORD_CHANGE_REQUIRED).
+  mustChangePassword Boolean   @default(false)
+  lastLoginAt        DateTime?
   /// Set when the user changes their own password (POST /api/auth/change-password). NULL = never changed in this CRM.
-  passwordChangedAt DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @default(now()) @updatedAt
+  passwordChangedAt  DateTime?
+  createdAt          DateTime  @default(now())
+  /// Username of the admin who added the user in Admin › Users. NULL for users created before it (seed, SQL).
+  createdBy          String?   @db.NVarChar(50)
+  /// When an admin last deactivated the user (Admin › Users); NULL while active.
+  deactivatedAt      DateTime?
+  updatedAt          DateTime  @default(now()) @updatedAt
 
-  photo UserPhoto?
+  photo         UserPhoto?
+  reportsTo     User?      @relation("UserReportsTo", fields: [reportsToId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  directReports User[]     @relation("UserReportsTo")
 
   @@index([email])
   @@index([isActive])
+  @@index([reportsToId])
   @@map("Users")
 }
 

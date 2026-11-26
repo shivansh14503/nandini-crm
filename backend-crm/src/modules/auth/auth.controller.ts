@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import { authService } from './auth.service.js';
 import { readToken, tryVerifyToken } from '../../middlewares/authMiddleware.js';
+import { effectiveMustChangePassword } from '../../middlewares/passwordChangeGate.js';
 import { setAuthCookie, clearAuthCookie } from './cookie.util.js';
 import type { ChangePasswordInput, LoginInput } from './auth.validator.js';
 import { sendSuccess } from '../../utils/apiResponse.js';
@@ -34,7 +35,9 @@ export async function logout(req: Request, res: Response): Promise<void> {
 
 /**
  * GET /api/auth/me — requires `authenticate`. Read from the database (not the JWT) so a name or photo change shows at
- * once: `{ id, username, role, fullName, firstName, lastName, photoUrl }`. 401 when the account no longer exists.
+ * once: `{ id, username, role, fullName, firstName, lastName, photoUrl, mustChangePassword }`. 401 when the account no
+ * longer exists. `mustChangePassword` is also true while this session's token still carries the `mcp` claim (the API
+ * refuses it everything else until then), so the UI and the gate agree.
  * When the database can't answer (outage, a paused Azure SQL resuming), it falls back to the verified JWT's claims
  * with no name or photo, so a database blip never signs the user out.
  */
@@ -42,18 +45,33 @@ export async function getMe(req: Request, res: Response): Promise<void> {
     const authUser = requireUser(req);
     let user: AuthMeDto;
     try {
-        user = await authService.me(authUser.id);
+        const row = await authService.me(authUser.id);
+        // Locked while either the account or this session's token says so, as the API gate is.
+        user = { ...row, mustChangePassword: effectiveMustChangePassword(row.mustChangePassword, req.auth?.mustChangePassword === true) };
     } catch (err) {
         if (err instanceof HttpError) throw err;
         logger.warn({ err: (err as Error).message, userId: authUser.id }, 'GET /api/auth/me: database unavailable; answering from the token');
-        user = { id: authUser.id, username: authUser.username, role: authUser.role, fullName: '', firstName: null, lastName: null, photoUrl: null };
+        user = {
+            id: authUser.id,
+            username: authUser.username,
+            role: authUser.role,
+            fullName: '',
+            firstName: null,
+            lastName: null,
+            photoUrl: null,
+            mustChangePassword: req.auth?.mustChangePassword === true,
+        };
     }
     res.status(StatusCodes.OK).json({ status: 'ok', user });
 }
 
-/** POST /api/auth/change-password — requires `authenticate`; body validated by `changePasswordSchema`. */
+/**
+ * POST /api/auth/change-password — requires `authenticate`; body validated by `changePasswordSchema`. After a temporary
+ * password is replaced the cookie is re-issued for the same session without the must-change-password claim.
+ */
 export async function changePassword(req: Request, res: Response): Promise<void> {
     if (!req.auth) throw HttpError.unauthorized();
-    const result = await authService.changePassword(requireUser(req), req.auth, req.body as ChangePasswordInput);
+    const { result, token } = await authService.changePassword(requireUser(req), req.auth, req.body as ChangePasswordInput);
+    if (token) setAuthCookie(res, token);
     sendSuccess(res, result, 'Password changed');
 }

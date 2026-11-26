@@ -24,7 +24,9 @@ export function WorkDetailsCard({ profile }: { profile: ProfileDto }) {
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: 'repeat(2, minmax(0, 1fr))' }, columnGap: 3, rowGap: 2.25 }}>
                 <ReadOnlyField label="Username" value={profile.username} copyable />
                 <ReadOnlyField label="Role" value={profile.role} />
+                <ReadOnlyField label="Job title" value={profile.jobTitle ?? ''} />
                 <ReadOnlyField label="Department" value={profile.department ?? ''} />
+                <ReadOnlyField label="Reports to" value={profile.reportsTo?.name ?? ''} />
                 <ReadOnlyField label="Member since" value={formatLongDate(profile.createdAt)} />
                 {/* Full row: an email address is long and should not break mid-word in a half-width column. */}
                 <ReadOnlyField

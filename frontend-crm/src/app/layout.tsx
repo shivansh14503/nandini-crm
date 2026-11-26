@@ -5,6 +5,7 @@ import { ThemeRegistry } from "@/theme/ThemeRegistry";
 import { QueryProvider } from "@/context/QueryProvider";
 import { AuthProvider } from "@/context/AuthContext";
 import { CrmDataBootstrap } from "@/components/common/CrmDataBootstrap";
+import { PasswordChangeGate } from "@/components/auth/PasswordChangeGate";
 import { EnterTogglesCheckboxes } from "@/components/common/EnterTogglesCheckboxes";
 import { DateInputGuard } from "@/components/common/DateInputGuard";
 import { APP_CONFIG } from "@/config/constants";
@@ -46,7 +47,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <CrmDataBootstrap />
               <EnterTogglesCheckboxes />
               <DateInputGuard />
-              {children}
+              {/* A user who must change their password is kept on My Profile › Security. */}
+              <PasswordChangeGate>{children}</PasswordChangeGate>
             </AuthProvider>
           </QueryProvider>
         </ThemeRegistry>

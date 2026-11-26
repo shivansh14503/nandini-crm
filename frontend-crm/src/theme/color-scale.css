@@ -178,6 +178,10 @@
   --crm-fill-blue-800: #1E40AF;
   --crm-fill-blue-900: #1E3A8A;
 
+  /* Solid danger fills with white text on top (destructive confirm buttons). */
+  --crm-fill-red-700: #B91C1C;
+  --crm-fill-red-800: #991B1B;
+
   /* Accent-colored text: brand blue in light, high-contrast brand green in dark. */
   --crm-text-blue-400: #60A5FA;
   --crm-text-blue-500: #3B82F6;
@@ -365,6 +369,10 @@
   --crm-fill-blue-700: #417526;
   --crm-fill-blue-800: #35611E;
   --crm-fill-blue-900: #2A4E17;
+
+  /* Danger fills stay deep red in dark mode (the red scale turns pale), so white text stays readable. */
+  --crm-fill-red-700: #B91C1C;
+  --crm-fill-red-800: #991B1B;
 
   /* Accent text in dark mode uses readable brand green shades (matching light mode blue). */
   --crm-text-blue-400: #8FD16A;
