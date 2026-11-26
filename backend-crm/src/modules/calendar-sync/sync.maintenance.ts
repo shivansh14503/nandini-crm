@@ -22,6 +22,7 @@ import {
     PULL_PAST_DAYS,
 } from './sync.constants.js';
 import { sweepPushJobId } from './sync.keys.js';
+import { healthyChannelConnectionIds, maintainChannels, ensureChannel, pollIntervalMinutes, pullIsDue, webhooksLive } from './sync.channels.js';
 import { secretExpiringNotifications } from './sync.notifications.js';
 import { markPushExhausted, pushLink } from './sync.push.js';
 import { runBackfill } from './sync.backfill.js';
@@ -39,9 +40,13 @@ import { adminRecipients } from './syncIssue.notifications.js';
  * CALENDAR_SYNC_HOURS, default 07:00–22:00 business time, when the 15-minute reminder sweep keeps the database awake
  * anyway) makes three small indexed reads (the outbox sweep, due checks, rows `ok` without a first-sync backfill, P2-3c)
  * plus one pull per synced person (P2-5: a lease claim / release and a "last pulled" write each; a provider call that
- * finds nothing changed touches nothing else); the nightly run is at
+ * finds nothing changed touches nothing else); with webhooks live (P2-7) people whose channel is healthy are pulled
+ * only every CALENDAR_POLL_MINUTES_WITH_WEBHOOKS (30) instead, one more small read finds them, and the tick creates /
+ * renews at most 20 channels; the nightly run is at
  * 00:25, inside the existing 00:05–00:25 nightly wake; the fallback tick (Redis down only) reads once a minute inside
- * the sync hours. Nothing runs outside those windows, so the database can pause overnight.
+ * the sync hours. Webhook change pings inside the sync hours cause one pull each (the database is awake then); outside
+ * them they are acknowledged without a read (webhook.service.ts), and only a rare Graph lifecycle notification may wake
+ * the database at night. Nothing else runs outside those windows, so the database can pause overnight.
  */
 
 /** Inside the background sync hours (CALENDAR_SYNC_HOURS, §10.4): polls and the fallback tick run only then. */
@@ -71,11 +76,23 @@ export async function pullableConnections(): Promise<{ id: string; provider: str
     return rows.filter((r) => usable.has(r.provider as CalendarProvider));
 }
 
-/** The poll fan-out (§10.1 `calendar-poll` step 1): one `pull` job per synced person. Returns how many were queued. */
+/**
+ * Synced people due a background pull (§10.1 `calendar-poll` step 1). Without webhooks: everyone, every tick. With
+ * webhooks live (P2-7): a person whose channel is healthy only once their last pull is CALENDAR_POLL_MINUTES_WITH_WEBHOOKS
+ * old (the safety net); everyone else (no channel yet, failed, expiring) every tick as before.
+ */
+export async function duePullConnections(now: Date = new Date()): Promise<{ id: string; provider: string; lastPulledAt: Date | null }[]> {
+    const rows = await pullableConnections();
+    if (rows.length === 0 || !webhooksLive()) return rows;
+    const healthy = await healthyChannelConnectionIds(now);
+    return rows.filter((row) => !healthy.has(row.id) || pullIsDue(row.lastPulledAt, pollIntervalMinutes(true, pollMinutes()), now));
+}
+
+/** The poll fan-out (§10.1 `calendar-poll` step 1): one `pull` job per person due. Returns how many were queued. */
 export async function enqueuePulls(now: Date = new Date()): Promise<number> {
     if (!ENV.INTEGRATIONS.SYNC_ENABLED || !isInsideSyncWindow(now)) return 0;
     let queued = 0;
-    for (const row of await pullableConnections()) if ((await enqueuePull(row.id, 'poll', now)) !== null) queued += 1;
+    for (const row of await duePullConnections(now)) if ((await enqueuePull(row.id, 'poll', now)) !== null) queued += 1;
     return queued;
 }
 
@@ -92,10 +109,11 @@ export function resetInlinePullsForTests(): void {
 /** Redis down (§10.2): the longest-waiting synced people pulled in-process, one after another, ≤ 5 per tick. */
 export async function pullDueInline(now: Date = new Date(), limit: number = FALLBACK_PULL_LIMIT): Promise<number> {
     if (!ENV.INTEGRATIONS.SYNC_ENABLED) return 0;
-    const dueBefore = now.getTime() - pollMinutes() * 60_000;
+    const healthy = webhooksLive() ? await healthyChannelConnectionIds(now) : new Set<string>();
+    const dueBefore = (id: string) => now.getTime() - pollIntervalMinutes(healthy.has(id), pollMinutes()) * 60_000;
     const lastTry = (row: { id: string; lastPulledAt: Date | null }) => Math.max(row.lastPulledAt?.getTime() ?? 0, inlineTriedAt.get(row.id) ?? 0);
     const due = (await pullableConnections())
-        .filter((r) => lastTry(r) <= dueBefore)
+        .filter((r) => lastTry(r) <= dueBefore(r.id))
         .sort((a, b) => lastTry(a) - lastTry(b))
         .slice(0, limit);
     let pulled = 0;
@@ -203,6 +221,14 @@ export async function runEnrolled(connectionId: string): Promise<{ pushed: numbe
         }
     }
     const done = await pushConnectionLinks(connectionId);
+    // P2-7 (spec §8.12 step 4): the person's webhook channel, once webhooks are live (never fails the job).
+    if (webhooksLive()) {
+        try {
+            await ensureChannel(connectionId);
+        } catch (err) {
+            logger.warn({ err: (err as Error).message, connectionId }, 'Calendar webhook channel not created after enrolment; the poll tick tries again');
+        }
+    }
     return backfilled === undefined ? done : { ...done, backfilled };
 }
 
@@ -322,7 +348,8 @@ async function step<T>(name: string, fn: () => Promise<T>, fallback: T): Promise
 /**
  * `calendar-nightly` (00:25): the connection steps P2-2b ran from the reminders worker (reconcile everyone, due health
  * checks, the admins' problem digest), the follow-up activity backfill P2-4 ran there too, then P2-3b's own: error
- * links retried, client secrets expiring, expired leases cleared; and P2-5's Outlook delta re-baseline.
+ * links retried, client secrets expiring, expired leases cleared; P2-5's Outlook delta re-baseline; and P2-7's webhook
+ * channels (renewals, missing ones created, Graph subscriptions checked, stray ones stopped, old rows deleted).
  */
 export async function runCalendarNightly(now: Date = new Date()) {
     const connections = await step('connections', () => runCalendarConnectionNightly(now), { changed: 0, checked: 0, problems: 0 });
@@ -331,7 +358,8 @@ export async function runCalendarNightly(now: Date = new Date()) {
     const secrets = await step('secret-expiring', () => notifyExpiringSecrets(now), 0);
     const leases = await step('expired-leases', () => clearExpiredLeases(now), 0);
     const rebaselined = await step('graph-rebaseline', () => rebaselineGraphWindows(now), 0);
-    const result = { connections, followUps, retried, secrets, leases, rebaselined };
+    const channels = await step('webhook-channels', () => maintainChannels('nightly', now), null);
+    const result = { connections, followUps, retried, secrets, leases, rebaselined, channels };
     logger.info({ ...result, followUps: followUps ? 'done' : 'failed' }, 'Calendar nightly done');
     return result;
 }
@@ -374,16 +402,18 @@ export async function backfillDueInline(now: Date = new Date()): Promise<number>
 
 /**
  * The `calendar-poll` tick: pulls of every synced person (P2-5), the outbox sweep, due connection checks and lost
- * first-sync backfills (P2-3c). The cron covers whole hours, so a tick before a start minute or after an end minute
+ * first-sync backfills (P2-3c), and webhook channels to create or renew (P2-7). The cron covers whole hours, so a tick before a start minute or after an end minute
  * (e.g. 08:30-18:00) does nothing at all.
  */
 export async function runCalendarPoll(now: Date = new Date()) {
-    if (!isInsideSyncWindow(now)) return { pulls: 0, queued: 0, checks: 0, backfills: 0 };
+    if (!isInsideSyncWindow(now)) return { pulls: 0, queued: 0, checks: 0, backfills: 0, channels: 0 };
     const pulls = await step('pulls', () => enqueuePulls(now), 0);
     const queued = await step('outbox-sweep', () => sweepOutbox(now), 0);
     const checks = await step('due-checks', () => enqueueDueChecks(now), 0);
     const backfills = await step('backfill-recovery', () => enqueueDueBackfills(now), 0);
-    return { pulls, queued, checks, backfills };
+    // P2-7: missing / expiring webhook channels, ≤ 20 people per tick (nothing while webhooks are off).
+    const channels = await step('webhook-channels', async () => (webhooksLive() ? (await maintainChannels('poll', now)).ensured : 0), 0);
+    return { pulls, queued, checks, backfills, channels };
 }
 
 /**

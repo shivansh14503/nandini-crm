@@ -89,6 +89,31 @@ export interface ProviderSettings {
     tenantId?: string | null;
 }
 
+/**
+ * Calendar webhooks (P2-7). Server-wide: why they're off (null = on). Per provider card: unavailable (off server-wide),
+ * off (provider switched off), errors (some channels refused), starting (some synced people have none yet), live.
+ * Per person: active (a channel delivers until `expiresAt`), failed (the provider refused the last try), waiting.
+ */
+export const WEBHOOKS_OFF_REASONS = ['no_public_url', 'needs_https', 'disabled', 'sync_disabled'] as const;
+export type WebhooksOffReason = (typeof WEBHOOKS_OFF_REASONS)[number];
+export const PROVIDER_WEBHOOK_STATUSES = ['live', 'starting', 'errors', 'off', 'unavailable'] as const;
+export type ProviderWebhookStatus = (typeof PROVIDER_WEBHOOK_STATUSES)[number];
+export const PERSON_WEBHOOK_STATUSES = ['active', 'failed', 'waiting'] as const;
+export type PersonWebhookStatus = (typeof PERSON_WEBHOOK_STATUSES)[number];
+
+export interface ProviderWebhook {
+    status: ProviderWebhookStatus;
+    reason: WebhooksOffReason | null;
+    active: number;
+    failed: number;
+    waiting: number;
+}
+
+export interface PersonWebhook {
+    status: PersonWebhookStatus;
+    expiresAt: string | null;
+}
+
 export interface ProviderAdmin {
     provider: IntegrationProviderKey;
     label: string;
@@ -110,6 +135,8 @@ export interface ProviderAdmin {
     settings: ProviderSettings;
     domains: string[];
     webhookUrls: string[] | null;
+    /** P2-7: calendar providers only (null for Zoom). Optional for older servers. */
+    webhook?: ProviderWebhook | null;
     lastTest: { at: string; ok: boolean; message: string | null } | null;
     /** A passing app-level test since the last credentials change (needed to switch on). */
     appTested: boolean;
@@ -150,6 +177,10 @@ export interface IntegrationsAdmin {
     publicApiUrl: string | null;
     publicApiUrlConfigured: boolean;
     webhooksActive: boolean;
+    /** P2-7: why webhooks are off (null = on). Optional for older servers. */
+    webhooksOffReason?: WebhooksOffReason | null;
+    /** P2-7: the safety-net poll interval (minutes) for people with a working webhook. */
+    pollMinutesWithWebhooks?: number;
     /** The dev-only test calendar provider is on: People may pick "Test calendar". */
     fakeProvider: boolean;
     worker: { lastSeenAt: string } | null;
@@ -217,6 +248,8 @@ export interface PersonConnection {
     nextCheckAt: string | null;
     /** The admin sentence (+ provider words) of the last problem; null when fine. */
     lastErrorMessage: string | null;
+    /** P2-7: this person's webhook (ok rows while webhooks are on; else null). Optional for older servers. */
+    webhook?: PersonWebhook | null;
 }
 
 export interface PersonCalendarChoice {

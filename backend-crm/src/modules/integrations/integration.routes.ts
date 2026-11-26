@@ -27,8 +27,11 @@ import {
  * 409 DUPLICATE_RECORD (email), 429 RATE_LIMITED.
  *
  *   GET    /                           → { ready: { ok, reason }, keyStatus: ok|missing|unreadable, activeKeyId, publicApiUrl,
- *                                          publicApiUrlConfigured, webhooksActive, fakeProvider, worker, workerStatus
- *                                          (running|not_seen|no_redis), syncEnabled, providers: ProviderAdminDto[],
+ *                                          publicApiUrlConfigured, webhooksActive, webhooksOffReason (no_public_url|needs_https|
+ *                                          disabled|sync_disabled|null, P2-7), pollMinutesWithWebhooks, fakeProvider, worker,
+ *                                          workerStatus (running|not_seen|no_redis), syncEnabled, providers: ProviderAdminDto[]
+ *                                          (P2-7: + webhook { status: live|starting|errors|off|unavailable, reason, active,
+ *                                          failed, waiting } | null),
  *                                          settings: CalendarSyncSettings, syncTypes: [{ value, label, calendarSync, locked, lockReason? }] }
  *   PUT    /providers/:provider        { enabled?, serviceAccountKey? (google: the key file's text, write-only),
  *                                        clientId? (microsoft, zoom), clientSecret? (microsoft, zoom; write-only, ≥ 8 chars),
@@ -51,6 +54,7 @@ import {
  *   GET    /people                     ?search&issue=any|missing|duplicate|not_company|calendar_problem → active non-group users
  *                                        [{ username, fullName, department, role, email, emailIssue,
  *                                           calendar: { target, reason, connection, choice } }]
+ *                                        (P2-7: connection.webhook { status: active|failed|waiting, expiresAt } | null)
  *   PUT    /people/:username/email     { email (required; '' / null clears), allowOtherDomain? } → person row
  *                                        (users/userEmail.service.ts: lower-cased, unique among active non-group users,
  *                                        company domain unless allowOtherDomain; audited User UPDATE). The person's

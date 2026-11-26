@@ -14,7 +14,7 @@ import { CalendarSyncSettingsCard } from './CalendarSyncSettingsCard';
 import { PeopleTable, isPeopleFilter, type PeopleFilter } from './PeopleTable';
 import { ProviderCard } from './ProviderCard';
 import { SyncTypesCard } from './SyncTypesCard';
-import { CopyField, StatusChip, formatDateTime, hintSx } from './integrationUi';
+import { CopyField, StatusChip, WEBHOOKS_OFF_LABELS, formatDateTime, hintSx } from './integrationUi';
 
 /** The command the owner runs once to make the key (also in backend-crm/.env.example). */
 export const KEY_GENERATE_COMMAND = `node -e "console.log('k1:'+require('crypto').randomBytes(32).toString('base64'))"`;
@@ -111,8 +111,31 @@ function SyncWorkerFact({ data }: { data: IntegrationsAdmin }) {
     );
 }
 
-function ServerFacts({ data }: { data: IntegrationsAdmin }) {
+/** Calendar webhooks server-wide (P2-7): on, or why not; older servers send only `webhooksActive`. */
+function WebhooksFact({ data }: { data: IntegrationsAdmin }) {
+    if (data.webhooksActive) {
+        return (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, alignItems: 'flex-start' }}>
+                <StatusChip tone="success">Active</StatusChip>
+                {data.pollMinutesWithWebhooks !== undefined && (
+                    <Typography sx={hintSx}>Changes arrive in seconds; a safety check runs every {data.pollMinutesWithWebhooks} minutes.</Typography>
+                )}
+            </Box>
+        );
+    }
     const notHttps = Boolean(data.publicApiUrl && data.publicApiUrl.startsWith('http://'));
+    const reason = data.webhooksOffReason ?? (notHttps ? 'needs_https' : null);
+    if (!reason) return <Typography sx={hintSx}>Off</Typography>;
+    const words = WEBHOOKS_OFF_LABELS[reason];
+    return (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, alignItems: 'flex-start' }}>
+            <StatusChip tone={reason === 'needs_https' || reason === 'no_public_url' ? 'warning' : 'neutral'}>{words.chip}</StatusChip>
+            <Typography sx={hintSx}>{words.hint} Calendars still sync by polling.</Typography>
+        </Box>
+    );
+}
+
+function ServerFacts({ data }: { data: IntegrationsAdmin }) {
     return (
         <Box
             sx={{
@@ -146,15 +169,7 @@ function ServerFacts({ data }: { data: IntegrationsAdmin }) {
                 <SyncWorkerFact data={data} />
             </Fact>
             <Fact label="Webhooks">
-                {data.webhooksActive ? (
-                    <StatusChip tone="success">Active</StatusChip>
-                ) : notHttps ? (
-                    <StatusChip tone="warning" title="Google and Microsoft only call https addresses.">
-                        Needs HTTPS
-                    </StatusChip>
-                ) : (
-                    <Typography sx={hintSx}>Arrive with calendar sync</Typography>
-                )}
+                <WebhooksFact data={data} />
             </Fact>
         </Box>
     );

@@ -61,3 +61,16 @@ export function checkJobId(connectionId: string, now: Date): string {
 export function pullJobId(connectionId: string, now: Date): string {
     return `pull-${connectionId}-${Math.floor(now.getTime() / 10_000)}`;
 }
+
+/**
+ * `pull-<connectionId>-<10 s bucket>-n`: the one extra pull a finished pull queues when a webhook arrived while it ran
+ * (D26). The bucket is the next one, so it never equals the running job's id (BullMQ would drop it).
+ */
+export function followUpPullJobId(connectionId: string, now: Date): string {
+    return `${pullJobId(connectionId, new Date(now.getTime() + 10_000))}-n`;
+}
+
+/** `watch-<connectionId>-<op>-<minute>`: one webhook channel job per connection, operation and minute (P2-7). */
+export function watchJobId(connectionId: string, op: string, now: Date): string {
+    return `watch-${connectionId}-${op}-${Math.floor(now.getTime() / 60_000)}`;
+}

@@ -1,7 +1,7 @@
 # Nandini CRM — Database Design
 
-> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (91 migrations,
-> latest `20261128120000_booking_links`, Calendar Phase 4 booking links, as of 2026-11-26; before it `20261128100000_activity_calendar_sync`, Calendar Phase 2 P2-3b, whose columns P2-3c (first-sync backfill) and P2-5 (calendar → CRM pull) use without a migration of their own; P2-6 busy times needed no migration: it reads `Activity` through the existing `[isDeleted, startAt]` index and stores nothing). Update it in the same change as any schema migration.
+> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (92 migrations,
+> latest `20261215090000_calendar_watch_channels`, Calendar Phase 2 P2-7 webhooks, as of 2026-11-26; before it `20261128120000_booking_links`, Calendar Phase 4 booking links; before that `20261128100000_activity_calendar_sync`, Calendar Phase 2 P2-3b, whose columns P2-3c (first-sync backfill) and P2-5 (calendar → CRM pull) use without a migration of their own; P2-6 busy times needed no migration: it reads `Activity` through the existing `[isDeleted, startAt]` index and stores nothing). Update it in the same change as any schema migration.
 > Related: [System design](system-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
 ---
@@ -36,7 +36,7 @@
 | Audit & UI state | `AuditLog`, `AuditExport`, `AuditDigest`, `TableFilter`, `ModuleScorecard` |
 | Notifications & outgoing mail | `Notification` (navbar bell), `EmailLog` (every email the CRM sends) |
 | Email checks | `EmailValidationRun` |
-| Integrations | `IntegrationProvider` (Admin › API Integrations), `CalendarConnection` (an employee's company calendar sync state, P2-2b), `CalendarSyncUser` (admin's per-person calendar choice, P2-2b) |
+| Integrations | `IntegrationProvider` (Admin › API Integrations), `CalendarConnection` (an employee's company calendar sync state, P2-2b), `CalendarSyncUser` (admin's per-person calendar choice, P2-2b), `CalendarWatchChannel` (a person's calendar webhook channel, P2-7) |
 | Booking links | `BookingLink` (an employee's public scheduling page), `BookingLinkBooking` (one booking made on it), Calendar Phase 4 |
 
 ## 2. Design conventions
@@ -96,6 +96,7 @@ erDiagram
     Activity ||--o{ ActivityAttendee : attendees
     Activity ||--o{ ActivityExternalLink : "calendar copies"
     CalendarConnection ||--o{ ActivityExternalLink : "pushes"
+    CalendarConnection ||--o{ CalendarWatchChannel : "notifies through"
     Lead ||--o{ EntityEmail : emailAddress
     Referral ||--o{ EntityEmail : emailAddress
     Referral ||--o{ Lead : "referred"
@@ -776,6 +777,28 @@ exists only while something differs from the default (provider by email domain, 
 
 Audited as entity `CalendarSyncUser` (module `admin-integrations`) CREATE / UPDATE / DELETE.
 
+**`CalendarWatchChannel`** (migration `20261215090000_calendar_watch_channels`, as of 2026-11-26, Calendar Phase 2
+P2-7; new table only, empty on deploy): one Google push channel (`events.watch`) or Microsoft Graph subscription per
+synced person, so changes made in their calendar reach the CRM in seconds ([system design](system-design.md) §5.4
+Webhooks). Its own table because a Google renewal overlaps two channels for a while (Google has no renew call).
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | NVARCHAR(64) PK | Our channel id `w<8 hex of sha256(PUBLIC_API_URL)>-<uuid>` (Google `X-Goog-Channel-ID`); a channel made for another public address is replaced |
+| `connectionId` | NVARCHAR(50) → `CalendarConnection` | `NO ACTION` (connection rows are never deleted) |
+| `provider` | NVARCHAR(30) | `google` \| `microsoft` \| `fake` |
+| `externalId` | NVARCHAR(200) NULL | Google `resourceId` / Graph subscription id; NULL on a `failed` row |
+| `tokenKeyId` | NVARCHAR(8) | The `INTEGRATIONS_ENCRYPTION_KEY` ring key whose HKDF `webhook` subkey signs the Google channel token / Graph `clientState` (no secret is stored); an old key id → replaced |
+| `generation` | INT, default 1 | Graph: + 1 on each re-create (part of the signed `clientState`, so an old subscription's notifications are refused) |
+| `expiresAt` | DATETIME2 | The provider's expiry (Google ≤ 7 days, Graph ≤ 10,080 minutes); renewed 3 days before. On a `failed` row: when it was tried |
+| `status` | NVARCHAR(20), default `active` | `active` \| `stopped` \| `failed` (the provider refused the watch; retried after 6 h, nightly always) |
+| `createdAt` | DATETIME2, default now | `stopped` / `failed` rows are deleted 30 days after it (nightly) |
+
+Indexes: `(connectionId, status)` (a person's channels; People's webhook column), `(externalId)` (Graph notifications
+look up by subscription id), `(status, expiresAt)` (renewals, the safety-net poll's healthy set). No filtered index
+and no unique index: two `ensure` runs racing for one person can leave two active rows; the next run stops the older
+one (no unique-index error to handle, D45). Not audited (system bookkeeping, like `ActivityExternalLink`).
+
 ### 4.30 `UserPreference` (My Profile › Notifications)
 
 Migration `20261127100000_user_preferences` (Profile Phase 3, as of 2026-11-26; new table only). Module
@@ -916,11 +939,12 @@ also on the activity as an attendee and in its remarks).
 | User added / edited (Admin › Users) | App locks (username, email address, reports-to chain, admin roster as needed; the per-user lock on edits) → checks → INSERT / UPDATE `Users` → `AuditLog` CREATE / UPDATE; user lookup caches dropped after commit |
 | User deactivated / reset (Admin › Users) | App lock on the user → `isActive = 0, deactivatedAt = now` (or new hash + `mustChangePassword = 1`) → `AuditLog` STATUS_CHANGE / PASSWORD_RESET; after commit every Redis session of the user is deleted |
 | Nightly retention (00:20) | Hard delete of old `Notification` and `EmailLog` rows (see §4.26) |
-| Calendar nightly (00:25, P2-3b, as of 2026-11-26) | Reconcile everyone's `CalendarConnection` enrolment, run due health checks, write the admins' `calendar_sync_issue` digest when someone's calendar went to `error` that day (moved from 00:20), the follow-up activity backfill (moved from 00:20), mark `error` links of activities that haven't ended dirty again (`pending`, attempts 0; `cancelled` / `removed_remote` links whose restore was refused are dirtied keeping their state), `integration_secret_expiring` notifications, clear expired `CalendarConnection` leases |
+| Calendar nightly (00:25, P2-3b, as of 2026-11-26) | Reconcile everyone's `CalendarConnection` enrolment, run due health checks, write the admins' `calendar_sync_issue` digest when someone's calendar went to `error` that day (moved from 00:20), the follow-up activity backfill (moved from 00:20), mark `error` links of activities that haven't ended dirty again (`pending`, attempts 0; `cancelled` / `removed_remote` links whose restore was refused are dirtied keeping their state), `integration_secret_expiring` notifications, clear expired `CalendarConnection` leases; since P2-7 webhook channels: create / renew / retry failed, Graph existence check, stop strays (all of them while webhooks are off), delete `stopped` / `failed` rows older than 30 days |
 | Activity saved (P2-3b) | Inside its transaction: the owner's `ActivityExternalLink` inserted or `dirtyAt` set (only with a live connection). After commit: pushed; success writes the link's ids, etag, base and clears `dirtyAt` only if it didn't change meanwhile. A deletion in the calendar cancels the activity (system write) unless it is Completed or a follow-up activity (link `removed_remote`) |
 | Calendar enrolment reconcile (P2-2b) | App lock `calendar-connection:user:<username>` → read user, choice, providers → INSERT `pending` / UPDATE to `stopped` → `AuditLog` ENROL / STOP; a new row's first health check runs after commit |
 | Public booking (Phase 4) | Company calendar re-read (no transaction) → transaction: app lock `booking:owner:<username>` → `tokenHash` pre-read → CRM activities re-read → day count → INSERT `Activity` (+ attendee, `AuditLog` CREATE by `system`, route `public:booking`) → INSERT `BookingLinkBooking` → INSERT `Notification` `booking_created`; a P2002 aborts and the booking is retried once (D45) |
 | Booking link saved | App lock (`booking:links:<owner>` on create, `booking:link:<id>` on change) → INSERT / UPDATE `BookingLink` → `AuditLog`; `cache:booking-link:<slug>` dropped after commit |
+| Calendar webhook channel (P2-7) | No transaction: the provider's watch call, then INSERT `CalendarWatchChannel` (`active`, or `failed` when refused); an insert that fails after the provider created the channel stops it there. Renewal UPDATEs `expiresAt` (Graph) or inserts the new row before marking the old `stopped` (Google). A stopped connection row marks its channels `stopped` after the enrolment transaction commits, then stops them at the provider |
 | People calendar choice | Upsert / delete `CalendarSyncUser` → `AuditLog` → reconcile the person after commit |
 
 ## 7. Migrations and seeding

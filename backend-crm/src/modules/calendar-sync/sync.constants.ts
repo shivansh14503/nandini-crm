@@ -54,6 +54,8 @@ export const CALENDAR_SYNC_JOBS = {
     check: 'check',
     /** Pull one connection's calendar changes (P2-5, §8.7): poll, Sync now, calendar page, nightly re-baseline. */
     pull: 'pull',
+    /** Webhook channel of one connection (P2-7, sync.channels.ts): ensure | renew | recreate | stop. */
+    watch: 'watch',
     poll: 'poll',
     nightly: 'nightly',
 } as const;
@@ -150,8 +152,11 @@ export const LOCATION_MAX = 250;
 
 // ── Pull (Calendar → CRM, P2-5, spec §8.7–§8.11) ───────────────────────────────────────────────────────────────
 
-/** Reasons a pull runs (job data, logs). */
-export const PULL_REASONS = ['poll', 'manual', 'page', 'admin', 'rebaseline', 'enrolled'] as const;
+/**
+ * Reasons a pull runs (job data, logs). P2-7: `webhook` (a verified Google / Graph change notification) and `missed`
+ * (Graph said notifications were missed or the subscription was removed; the delta cursor covers the gap).
+ */
+export const PULL_REASONS = ['poll', 'manual', 'page', 'admin', 'rebaseline', 'enrolled', 'webhook', 'missed'] as const;
 export type PullReason = (typeof PULL_REASONS)[number];
 
 /** Full sync window: from now − 7 days (Google `timeMin`; Graph `startDateTime`) … */

@@ -587,7 +587,7 @@ describe('scheduled pulls (poll fallback, nightly re-baseline)', () => {
     it('the poll tick does nothing outside the sync hours (a cron tick before a start minute that falls mid-hour)', async () => {
         install([conn()]);
         const night = zonedWallClockToInstant(`${zonedDayOf(new Date(), ENV.BUSINESS_TIMEZONE)}T03:00`, ENV.BUSINESS_TIMEZONE);
-        assert.deepEqual(await runCalendarPoll(night), { pulls: 0, queued: 0, checks: 0, backfills: 0 });
+        assert.deepEqual(await runCalendarPoll(night), { pulls: 0, queued: 0, checks: 0, backfills: 0, channels: 0 });
         assert.deepEqual(state.calls, []);
     });
 
