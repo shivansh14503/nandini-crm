@@ -1,11 +1,11 @@
 'use client';
 
-import { Suspense, useEffect, useMemo } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useMemo } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Box, Container } from '@mui/material';
 import { useAuth } from '@/context/AuthContext';
+import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { useFreshOnReturn } from '@/hooks/useFreshOnReturn';
-import { ROUTES } from '@/config/constants';
 import { Navbar } from '@/components/layout/Navbar';
 import { LoadingScreen } from '@/components/common/LoadingScreen';
 import ActivityForm from '@/components/activities/ActivityForm';
@@ -20,9 +20,8 @@ import { isDay, isWallClock } from '@/utils/zonedTime';
  * first so its label, organization and contact come with it.
  */
 function NewActivityContent() {
-    const router = useRouter();
     const searchParams = useSearchParams();
-    const { user, loading, isAuthenticated } = useAuth();
+    const { user, loading } = useAuth();
     // Next keeps this page alive (cacheComponents) and keeps its state when only the query string changes: the form
     // starts over on every return and for every query string, so a new slot or record is never shown with old values.
     const viewKey = useFreshOnReturn();
@@ -64,11 +63,7 @@ function NewActivityContent() {
         };
     }, [type, status, subject, allDay, start, end, relatedModule, relatedId, related.target]);
 
-    useEffect(() => {
-        if (!loading && !isAuthenticated) {
-            router.push(ROUTES.LOGIN);
-        }
-    }, [isAuthenticated, loading, router]);
+    useRequireAuth();
 
     if (loading || related.loading) return <LoadingScreen message="Loading..." />;
     if (!user) return null;

@@ -1,10 +1,8 @@
 "use client";
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { Box, Container } from '@mui/material';
 import { useAuth } from '@/context/AuthContext';
-import { ROUTES } from '@/config/constants';
+import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { Navbar } from '@/components/layout/Navbar';
 import { AppBreadcrumbs } from '@/components/common/AppBreadcrumbs';
 import { AccountDetailsCard } from '@/components/dashboard/AccountDetailsCard';
@@ -12,14 +10,9 @@ import { LoadingScreen } from '@/components/common/LoadingScreen';
 import { ErrorAlert } from '@/components/common/ErrorAlert';
 
 export default function DashboardPage() {
-    const router = useRouter();
-    const { user, loading, error, clearError, isAuthenticated } = useAuth();
+    const { user, loading, error, clearError } = useAuth();
 
-    useEffect(() => {
-        if (!loading && !isAuthenticated) {
-            router.push(ROUTES.LOGIN);
-        }
-    }, [isAuthenticated, loading, router]);
+    useRequireAuth();
 
     if (loading) {
         return <LoadingScreen message="Loading dashboard..." />;

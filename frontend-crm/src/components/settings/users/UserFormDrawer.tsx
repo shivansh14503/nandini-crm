@@ -13,7 +13,6 @@ import {
     Drawer,
     FormControlLabel,
     IconButton,
-    Switch,
     TextField,
     Tooltip,
     Typography,
@@ -26,6 +25,8 @@ import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
 import TuneRoundedIcon from '@mui/icons-material/TuneRounded';
 import EventBusyOutlinedIcon from '@mui/icons-material/EventBusyOutlined';
 import { FormField, FormGrid, RhfPhoneField, RhfTextField, ReadOnlyField, fieldSx } from '@/components/forms';
+import { PasswordRulesChecklist } from '@/components/common/PasswordRulesChecklist';
+import { SwitchRow } from '@/components/common/SwitchRow';
 import { UserAvatar } from '@/components/common/UserAvatar';
 import { UnsavedChangesModal } from '@/components/common/UnsavedChangesModal';
 import { PasswordInput } from '@/components/profile/ChangePasswordCard';
@@ -47,13 +48,15 @@ import {
     type UpdateAdminUserPayload,
 } from '@/types/userAdmin.types';
 import { ROLE_NAME_MAX_LENGTH } from '@/utils/roleAccess';
+import { adminPasswordIssue } from '@/utils/passwordPolicy';
 import { USERNAME_MAX_LENGTH } from '@/utils/username';
 import { needsOtherDomain, userFormSchema, type UserFormData, type UserFormOutput } from '@/validations/userAdmin.schema';
 import { getFirstErrorMessage } from '@/validations/common';
 import { formatPersonName } from '@/utils/personName';
+import { holdUnsavedWork } from '@/utils/unsavedWork';
 import { formatDayRange } from '@/utils/userAvailability';
 import { PasswordModeChoice } from './ResetPasswordDialog';
-import { PasswordRulesChecklist, RoleAccessBadges, adminPasswordIssue, apiErrorCode, apiFieldErrors, roleAccessHint, userLabel } from './userAdminUi';
+import { RoleAccessBadges, apiErrorCode, apiFieldErrors, roleAccessHint, userLabel } from './userAdminUi';
 
 const FORM_FIELDS = [
     'firstName',
@@ -183,35 +186,6 @@ function Section({ icon, title, children }: { icon: React.ReactNode; title: stri
     );
 }
 
-/** A switch with its label and a hint, the whole row tappable. */
-function SwitchRow({ checked, onChange, label, hint, disabled }: { checked: boolean; onChange: (v: boolean) => void; label: string; hint: string; disabled?: boolean }) {
-    return (
-        <FormControlLabel
-            disabled={disabled}
-            control={<Switch checked={checked} onChange={(e) => onChange(e.target.checked)} />}
-            labelPlacement="start"
-            label={
-                <Box sx={{ minWidth: 0 }}>
-                    <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--crm-slate-900)' }}>{label}</Typography>
-                    <Typography sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)', lineHeight: 1.45 }}>{hint}</Typography>
-                </Box>
-            }
-            sx={{
-                m: 0,
-                py: 0.75,
-                px: 1.25,
-                gap: 1,
-                justifyContent: 'space-between',
-                borderRadius: '10px',
-                border: '1px solid var(--mui-palette-border-main)',
-                backgroundColor: 'var(--mui-palette-background-paper)',
-                minHeight: 48,
-                '& .MuiFormControlLabel-label': { flex: 1, minWidth: 0 },
-            }}
-        />
-    );
-}
-
 /** A manager choice; the current manager stays listed (disabled) when no longer pickable. */
 type ManagerOption = AdminManagerOption & { inactive?: boolean; note?: string };
 
@@ -280,6 +254,10 @@ export function UserFormDrawer({
     }, [meta, user, methods]);
 
     useLeaveGuard(open && isDirty && !saving, LEAVE_MESSAGE);
+    // The leave prompt is off while saving, but the draft still counts as unsaved work until the save lands: a Save
+    // answered 401 (the session ended) then opens the sign-in dialog over the drawer instead of unmounting it.
+    const holdDraft = open && isDirty;
+    useEffect(() => (holdDraft ? holdUnsavedWork() : undefined), [holdDraft]);
 
     const roleOptions = useMemo(() => (meta?.roles ?? []).map((r) => r.name), [meta?.roles]);
     const roleCounts = useMemo(() => new Map((meta?.roles ?? []).map((r) => [r.name, r.userCount])), [meta?.roles]);
@@ -516,7 +494,12 @@ export function UserFormDrawer({
                                                             />
                                                         )}
                                                     />
-                                                    <PasswordRulesChecklist id={checklistId} password={password ?? ''} username={(username ?? '').trim().toLowerCase()} />
+                                                    <PasswordRulesChecklist
+                                                        id={checklistId}
+                                                        audience="admin"
+                                                        password={password ?? ''}
+                                                        context={{ username: (username ?? '').trim().toLowerCase() }}
+                                                    />
                                                 </>
                                             ) : (
                                                 <Typography sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)', lineHeight: 1.5 }}>

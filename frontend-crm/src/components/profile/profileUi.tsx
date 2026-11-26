@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Box, Button, CircularProgress, FormControlLabel, Switch, Typography } from '@mui/material';
+import { Box, Button, CircularProgress, Typography } from '@mui/material';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { primaryButtonSx, secondaryButtonSx, surfaceSx } from '@/components/settings/form-customization/builderUi';
 import { relativeTime } from '@/components/settings/audit-log/auditLogUi';
@@ -99,54 +99,6 @@ export function ProfileCard({
             </Box>
             <Box sx={{ px: { xs: 2, md: 2.5 }, py: { xs: 2, md: 2.5 } }}>{children}</Box>
         </Box>
-    );
-}
-
-/**
- * A switch with its label and a hint, the whole row tappable (48 px min height). The switch takes the theme's brand
- * track (blue / green). Same look as Admin › Users' Flags rows.
- */
-export function SwitchRow({
-    checked,
-    onChange,
-    label,
-    hint,
-    disabled,
-}: {
-    checked: boolean;
-    onChange: (checked: boolean) => void;
-    label: string;
-    hint?: React.ReactNode;
-    disabled?: boolean;
-}) {
-    return (
-        <FormControlLabel
-            disabled={disabled}
-            control={<Switch checked={checked} onChange={(e) => onChange(e.target.checked)} />}
-            labelPlacement="start"
-            label={
-                <Box sx={{ minWidth: 0 }}>
-                    <Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--crm-slate-900)' }}>{label}</Typography>
-                    {hint && (
-                        <Typography component="div" sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)', lineHeight: 1.45 }}>
-                            {hint}
-                        </Typography>
-                    )}
-                </Box>
-            }
-            sx={{
-                m: 0,
-                py: 0.75,
-                px: 1.25,
-                gap: 1,
-                justifyContent: 'space-between',
-                borderRadius: '10px',
-                border: '1px solid var(--mui-palette-border-main)',
-                backgroundColor: 'var(--mui-palette-background-paper)',
-                minHeight: 48,
-                '& .MuiFormControlLabel-label': { flex: 1, minWidth: 0 },
-            }}
-        />
     );
 }
 

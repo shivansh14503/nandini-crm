@@ -8,6 +8,8 @@ import type { SeriesModule } from '../document-series/documentSeries.format.js';
 import { companyFormatsService } from '../company-formats/companyFormats.service.js';
 import { DEFAULT_DISPLAY_FORMATS, type DisplayFormats } from '../company-formats/core/displayFormats.js';
 import { formConfigService } from '../form-configs/formConfig.service.js';
+import { OUT_OF_OFFICE_SELECT } from '../preferences/preferences.dto.js';
+import { businessToday } from '../../validators/notInPast.js';
 import { displayTime, parseChanges } from './audit.format.js';
 import {
     actionLabel,
@@ -482,7 +484,7 @@ export const auditAdminService = {
         const range = resolveAggregateRange(from, to, TZ());
         const [directory, bounds, formats] = await Promise.all([
             prisma.user.findMany({
-                select: { username: true, fullName: true, role: true, department: true, email: true, isActive: true, isGroupUser: true, onLeave: true, lastLoginAt: true, photo: { select: { id: true } } },
+                select: { username: true, fullName: true, role: true, department: true, email: true, isActive: true, isGroupUser: true, onLeave: true, lastLoginAt: true, photo: { select: { id: true } }, preference: { select: OUT_OF_OFFICE_SELECT } },
             }),
             idBounds(range),
             companyFormatsService.load(),
@@ -498,6 +500,6 @@ export const auditAdminService = {
                   GROUP BY [changedBy], [category]`)
             : [];
         const last = await lastActivity(activityUsernames(directory, rangeRows));
-        return { ...rangeDto(range), users: buildUserActivity(directory, rangeRows, last, (date) => displayTime(date, formats)) };
+        return { ...rangeDto(range), users: buildUserActivity(directory, rangeRows, last, businessToday(), (date) => displayTime(date, formats)) };
     },
 };

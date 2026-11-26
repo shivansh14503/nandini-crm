@@ -187,7 +187,34 @@ SQL Server is the only source of truth; Redis only ever holds derived or disposa
   stays `{ id, username, role }` and a profile edit shows at once; a token whose user row is gone gets 401. If the
   database can't answer (an outage, a paused Azure SQL resuming), it answers from the JWT with no name or photo and
   logs a warning, so a database blip never signs anyone out. The login response's `user` has the same shape. The
-  frontend's `refreshUser()` drops the user only on a 401.
+  frontend's `refreshUser()` treats only a 401 as the session ending (handled as below).
+- **Frontend sign-in redirects** (`hooks/useRequireAuth.ts`, `context/AuthContext.tsx`, `utils/safeNextPath.ts`): every
+  signed-in page calls `useRequireAuth()`. Signed out, it `replace`s the page with `/login?next=<path+query+hash>`
+  (`loginPathWithNext()`), and the login page / form go to `safeNextPath(next)` after sign-in (CRM paths only, no open
+  redirect: the normalized path is checked too, so dot segments like `/.//evil.example` can't become `//evil.example`; a must-change password still goes to My Profile › Security first). Any API 401 other than a wrong
+  password at sign-in (`INVALID_CREDENTIALS`), including a background poll's, means the session ended on its own
+  (expired after the 8 h TTL, revoked, signed out in another tab). What happens depends on whether unsaved edits are on
+  screen (`utils/unsavedWork.ts`: `useFormDraftGuard`, `useLeaveGuard` and Document Series hold a claim while dirty):
+  - **Unsaved edits**: `AuthContext` keeps the user and sets `sessionExpired`, so the page and its draft stay mounted,
+    and `components/auth/SessionExpiredDialog` (root layout, blocking) asks for the password of the same account and
+    signs in again in place (`reauthenticate`, which also checks the returned user id); the user then saves. Signing in
+    from another tab also clears it (checked on tab focus, same user id only). Either way every active React Query is
+    refetched (`invalidateQueries`). While the dialog is up, `apiClient` holds the session (`setSessionOnHold`): every
+    request except `POST /api/auth/login` and `GET /api/auth/me` is refused locally with a 401 (`SESSION_ON_HOLD`)
+    before it reaches the network, so a cookie from another account signed in elsewhere in the browser can neither
+    load data into this tab's cache nor save this draft (e.g. Ctrl+S behind the dialog). File and PDF fetches
+    (`fetchWithSession`, `pdfTemplate.service` `fetchBinary`) are held the same way and report their errors to the
+    same listeners (`notifyApiError`), so their 401s end the session too. If the sign-in answers with a must-change
+    password (an admin reset it), the dialog says the draft can't be saved and only continues to My Profile › Security
+    when the user confirms. If the unsaved work goes away while the dialog is up (the browser's Back button), it falls
+    through to the next case (`subscribeUnsavedWork`). **Discard changes** (`endExpiredSession`) does too.
+  - **Nothing unsaved**: `AuthContext` drops the user and sets the "session expired" note, and the guard sends the
+    user to `/login?next=<this page>`, returning them to the page after sign-in.
+
+  A 401 while nobody is signed in (the initial check, the login page, a late answer after Sign out) is ignored. An
+  explicit **Sign out** sets `signedOutByUser` in the same render as clearing the user, so guards go to plain `/login`
+  (never `?next=`), matching the navbar's own navigation. `utils/safeNextPath.ts` has no imports (its login path
+  mirrors `ROUTES.LOGIN`) because the backend contract test loads it with tsx, which can't resolve the `@/` alias.
 - **Change password** (`POST /api/auth/change-password`, My Profile › Security): the current password is checked like a
   sign-in (bcrypt, or a legacy plain-text row), the new one against `modules/auth/passwordPolicy.ts` (8–128
   characters, a letter and a digit, not the username, not the current password; the frontend's live checklist uses a

@@ -1,6 +1,7 @@
 import { displayTime } from './audit.format.js';
 import { actionLabel, moduleLabel } from './auditAdmin.present.js';
 import { photoUrlOf } from '../profile/profile.dto.js';
+import { outOfOfficeOf, type OutOfOfficeColumns, type OutOfOfficeDto } from '../preferences/preferences.dto.js';
 
 /**
  * Admin › Audit Log › Users: one row per person who can appear in the log, with what they did in the chosen range
@@ -20,6 +21,8 @@ export interface DirectoryUser {
     lastLoginAt: Date | null;
     /** Only the profile photo's id (never the bytes); absent or null when the user has none. */
     photo?: { id: string } | null;
+    /** The out-of-office columns of their UserPreference (`OUT_OF_OFFICE_SELECT`); absent or null when never saved. */
+    preference?: OutOfOfficeColumns | null;
 }
 
 /** Entries of one user and category in the range. */
@@ -53,6 +56,8 @@ export interface AuditUserActivity {
     email: string | null;
     status: AuditUserStatus;
     onLeave: boolean;
+    /** Their out-of-office as Admin › Users shows it: null when unset or ended (and for `system` / `unknown`). */
+    outOfOffice: OutOfOfficeDto | null;
     isGroupUser: boolean;
     /** `/api/user-photos/<id>`; null when the user has no photo (and for `system` / `unknown`). */
     photoUrl: string | null;
@@ -88,12 +93,14 @@ export function activityUsernames(directory: DirectoryUser[], rangeRows: UserRan
 /**
  * One row per user: everyone in the user list (group accounts only when they did something), the background jobs
  * once they have entries, and usernames with entries in the range that aren't users any more. Most active first,
- * then the most recently active, then by name.
+ * then the most recently active, then by name. `today`: the business day (`YYYY-MM-DD`) an ended out-of-office is
+ * dropped by.
  */
 export function buildUserActivity(
     directory: DirectoryUser[],
     rangeRows: UserRangeRow[],
     lastRows: UserLastRow[],
+    today: string,
     format: (date: Date) => string = displayTime,
 ): AuditUserActivity[] {
     const counts = new Map<string, Pick<AuditUserActivity, 'total' | 'data' | 'config' | 'security' | 'signIns' | 'failedSignIns'>>();
@@ -141,6 +148,7 @@ export function buildUserActivity(
             email: user.email,
             status: user.isActive ? 'active' : 'inactive',
             onLeave: user.onLeave,
+            outOfOffice: outOfOfficeOf(user.preference, today),
             isGroupUser: user.isGroupUser,
             photoUrl: photoUrlOf(user.photo?.id),
             lastLoginAt: user.lastLoginAt ? user.lastLoginAt.toISOString() : null,
@@ -148,11 +156,11 @@ export function buildUserActivity(
         });
     }
     if (counts.has(SYSTEM_USER) || last.get(SYSTEM_USER)?.lastAt) {
-        add({ username: SYSTEM_USER, name: 'System', role: 'Background jobs', department: null, email: null, status: 'system', onLeave: false, isGroupUser: false, photoUrl: null, lastLoginAt: null, lastLogin: null });
+        add({ username: SYSTEM_USER, name: 'System', role: 'Background jobs', department: null, email: null, status: 'system', onLeave: false, outOfOffice: null, isGroupUser: false, photoUrl: null, lastLoginAt: null, lastLogin: null });
     }
     for (const [k, username] of rangeNames) {
         if (seen.has(k)) continue;
-        add({ username, name: username, role: null, department: null, email: null, status: 'unknown', onLeave: false, isGroupUser: false, photoUrl: null, lastLoginAt: null, lastLogin: null });
+        add({ username, name: username, role: null, department: null, email: null, status: 'unknown', onLeave: false, outOfOffice: null, isGroupUser: false, photoUrl: null, lastLoginAt: null, lastLogin: null });
     }
 
     return result.sort(

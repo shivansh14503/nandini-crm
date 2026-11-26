@@ -9,7 +9,8 @@ import { errorMessage, secondaryButtonSx } from '@/components/settings/form-cust
 import { useUpdatePreferences } from '@/hooks/queries/useProfile';
 import type { PreferencesDto } from '@/types/preferences.types';
 import type { Notify } from './ProfileView';
-import { CardSaveFooter, ProfileCard, ProfileNote, SwitchRow, cardButtonLayoutSx } from './profileUi';
+import { SwitchRow } from '@/components/common/SwitchRow';
+import { CardSaveFooter, ProfileCard, ProfileNote, cardButtonLayoutSx } from './profileUi';
 
 /**
  * My Profile › Notifications › Morning summary email: the user's switch for the 9 AM email, a preview, and why it
