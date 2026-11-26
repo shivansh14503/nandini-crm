@@ -1656,15 +1656,19 @@ model EmailValidationRun {
 /// entries, and the activity forms warn when something is scheduled on one. One row per (date, occasion): the unique
 /// index (case-insensitive under the database collation) stops the same holiday being added or imported twice.
 model Holiday {
-  id          String   @id @default(uuid()) @db.NVarChar(50)
-  occasion    String   @db.NVarChar(100)
-  holidayDate DateTime @db.Date
+  id            String   @id @default(uuid()) @db.NVarChar(50)
+  occasion      String   @db.NVarChar(100)
+  /// The day. A yearly holiday (repeatsYearly) is stored on its day and month in 1904 (YEARLY_ANCHOR_YEAR, a leap
+  /// year below the accepted range, so 29 Feb fits and no one-off date can match it); the API shows it as MM-DD.
+  holidayDate   DateTime @db.Date
+  /// Repeats every year on the same day and month (29 Feb falls on 28 Feb in other years).
+  repeatsYearly Boolean  @default(false)
   /// Active | Inactive, the same Status options as Referrals. Only Active holidays reach the calendar.
-  status      String   @default("Active") @db.NVarChar(30)
-  createdBy   String   @db.NVarChar(50)
-  updatedBy   String?  @db.NVarChar(50)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  status        String   @default("Active") @db.NVarChar(30)
+  createdBy     String   @db.NVarChar(50)
+  updatedBy     String?  @db.NVarChar(50)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   @@unique([holidayDate, occasion])
   @@index([status, holidayDate])

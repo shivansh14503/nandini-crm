@@ -11,6 +11,11 @@ export const OCCASION_MAX_LENGTH = 100;
 export const MIN_HOLIDAY_YEAR = 2000;
 export const MAX_HOLIDAY_YEAR = 2100;
 export const MAX_HOLIDAY_IMPORT_ROWS = 1000;
+/**
+ * A holiday that repeats every year is stored on its day and month in this (leap) year, so 29 Feb fits. It is below
+ * MIN_HOLIDAY_YEAR, so no one-off holiday can share its date, and the API never shows it: it reports `MM-DD`.
+ */
+export const YEARLY_ANCHOR_YEAR = 1904;
 /** The calendar asks for at most this many days at once (a month grid is 42). */
 export const MAX_CALENDAR_RANGE_DAYS = 400;
 
@@ -26,15 +31,51 @@ const caseInsensitive = <const T extends readonly string[]>(values: T) => (value
     return values.find((option) => option.toLowerCase() === trimmed.toLowerCase()) ?? trimmed;
 };
 
-const holidayDate = requiredDate('Holiday Date').refine(inYearRange, {
-    message: `Holiday Date must be between ${MIN_HOLIDAY_YEAR} and ${MAX_HOLIDAY_YEAR}.`,
-});
+const MONTH_DAY_PATTERN = /^\d{2}-\d{2}$/;
 
-export const holidayInputSchema = z.object({
-    occasion: requiredText('Occasion', OCCASION_MAX_LENGTH).transform((value) => value.replace(/\s+/g, ' ')),
-    holidayDate,
-    status: z.preprocess(caseInsensitive(HOLIDAY_STATUSES), enumWithDefault('Status', HOLIDAY_STATUSES, ACTIVE_HOLIDAY_STATUS)),
-});
+/** `MM-DD` that is a day of some year (29 Feb included). */
+export const isMonthDay = (value: string): boolean => MONTH_DAY_PATTERN.test(value) && isCalendarDate(`2000-${value}`);
+
+const isLeapYear = (year: number) => (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+
+/** The day a yearly holiday (`MM-DD`) falls on in `year`: 29 Feb is kept on 28 Feb in other years. */
+export const yearlyDateIn = (monthDay: string, year: number): string =>
+    `${String(year).padStart(4, '0')}-${monthDay === '02-29' && !isLeapYear(year) ? '02-28' : monthDay}`;
+
+/** Yes / No cells and flags: true, false, or undefined when blank. Anything else is left for the schema to refuse. */
+export function readYesNo(value: unknown): unknown {
+    if (typeof value === 'boolean' || value === undefined || value === null) return value ?? undefined;
+    const text = String(value).trim().toLowerCase();
+    if (!text) return undefined;
+    if (['yes', 'y', 'true', '1', 'yearly', 'every year', 'annual', 'annually'].includes(text)) return true;
+    if (['no', 'n', 'false', '0', 'once', 'one-off', 'one off'].includes(text)) return false;
+    return value;
+}
+
+export const holidayInputSchema = z
+    .object({
+        occasion: requiredText('Occasion', OCCASION_MAX_LENGTH).transform((value) => value.replace(/\s+/g, ' ')),
+        /** `YYYY-MM-DD`; for a yearly holiday `MM-DD` (a full date is accepted too, and its year dropped). */
+        holidayDate: z.preprocess((value) => (typeof value === 'string' ? value.trim() : value ?? ''), z.string({ error: 'Holiday Date is required.' }).min(1, { message: 'Holiday Date is required.' })),
+        repeatsYearly: z.preprocess(readYesNo, z.boolean({ error: 'Repeats Every Year must be Yes or No.' }).optional()).transform((value) => value ?? false),
+        status: z.preprocess(caseInsensitive(HOLIDAY_STATUSES), enumWithDefault('Status', HOLIDAY_STATUSES, ACTIVE_HOLIDAY_STATUS)),
+    })
+    .transform((value, ctx) => {
+        const raw = value.holidayDate;
+        const issue = (message: string) => {
+            ctx.addIssue({ code: 'custom', message, path: ['holidayDate'] });
+            return z.NEVER;
+        };
+        if (value.repeatsYearly) {
+            const monthDay = isCalendarDate(raw.slice(0, 10)) ? raw.slice(5, 10) : raw;
+            if (!isMonthDay(monthDay)) return issue('Holiday Date must be a day and month (MM-DD) for a holiday that repeats every year.');
+            return { ...value, holidayDate: monthDay };
+        }
+        const day = raw.slice(0, 10);
+        if (!isCalendarDate(day)) return issue('Holiday Date must be a valid date (YYYY-MM-DD).');
+        if (!inYearRange(day)) return issue(`Holiday Date must be between ${MIN_HOLIDAY_YEAR} and ${MAX_HOLIDAY_YEAR}.`);
+        return { ...value, holidayDate: day };
+    });
 export type HolidayInput = z.infer<typeof holidayInputSchema>;
 
 export const HOLIDAY_SORT_FIELDS = ['holidayDate', 'occasion', 'status', 'updatedAt'] as const;
@@ -77,6 +118,7 @@ export const holidayImportSchema = z.object({
                 values: z.object({
                     occasion: importCell.optional(),
                     holidayDate: importCell.optional(),
+                    repeatsYearly: importCell.optional(),
                     status: importCell.optional(),
                 }),
             }),
@@ -135,6 +177,35 @@ export function parseImportDate(raw: string | undefined | null): string | null {
     if (m) {
         const month = MONTHS.indexOf(m[1].slice(0, 3).toLowerCase());
         return month < 0 ? null : dayOf(Number(m[3]), month + 1, Number(m[2]));
+    }
+    return null;
+}
+
+/**
+ * A day and month without a year, as `MM-DD`, or null: `26/01`, `26-01`, `26.01`, `26 Jan`, `26-Jan`, `Jan 26`,
+ * `26th January`. Day first, like `parseImportDate`. A row with such a date is a holiday that repeats every year.
+ */
+export function parseImportMonthDay(raw: string | undefined | null): string | null {
+    const value = (raw ?? '').trim().replace(/\s+/g, ' ');
+    if (!value) return null;
+    const monthDay = (month: number, day: number) => {
+        const md = `${pad(month)}-${pad(day)}`;
+        return month >= 1 && month <= 12 && isMonthDay(md) ? md : null;
+    };
+
+    let m = /^(\d{1,2})[/.-](\d{1,2})$/.exec(value);
+    if (m) return monthDay(Number(m[2]), Number(m[1]));
+
+    m = /^(\d{1,2})(?:st|nd|rd|th)?[ -]([A-Za-z]{3,9})\.?$/.exec(value);
+    if (m) {
+        const month = MONTHS.indexOf(m[2].slice(0, 3).toLowerCase());
+        return month < 0 ? null : monthDay(month + 1, Number(m[1]));
+    }
+
+    m = /^([A-Za-z]{3,9})\.? (\d{1,2})(?:st|nd|rd|th)?$/.exec(value);
+    if (m) {
+        const month = MONTHS.indexOf(m[1].slice(0, 3).toLowerCase());
+        return month < 0 ? null : monthDay(month + 1, Number(m[2]));
     }
     return null;
 }

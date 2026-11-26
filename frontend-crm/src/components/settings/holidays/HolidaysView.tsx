@@ -50,7 +50,7 @@ import {
 } from '@/types/holiday.types';
 import { HolidayFormDialog } from './HolidayFormDialog';
 import { HolidayImportDialog } from './HolidayImportDialog';
-import { HolidayStatusPill, formatHolidayDate, holidayWeekday } from './holidayDisplay';
+import { HolidayStatusPill, RepeatsYearlyPill, formatHolidayDate, holidayWeekday } from './holidayDisplay';
 
 const ALL = 'all';
 
@@ -430,8 +430,15 @@ export function HolidaysView() {
                                                     {row.occasion}
                                                 </Box>
                                             </TableCell>
-                                            <TableCell sx={{ ...cellSx, whiteSpace: 'nowrap' }}>{formatHolidayDate(row.holidayDate)}</TableCell>
-                                            <TableCell sx={{ ...cellSx, color: 'var(--mui-palette-text-secondary)', whiteSpace: 'nowrap' }}>{holidayWeekday(row.holidayDate)}</TableCell>
+                                            <TableCell sx={{ ...cellSx, whiteSpace: 'nowrap' }}>
+                                                <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
+                                                    {formatHolidayDate(row.holidayDate)}
+                                                    {row.repeatsYearly && <RepeatsYearlyPill />}
+                                                </Box>
+                                            </TableCell>
+                                            <TableCell sx={{ ...cellSx, color: 'var(--mui-palette-text-secondary)', whiteSpace: 'nowrap' }}>
+                                                {row.repeatsYearly ? 'Varies' : holidayWeekday(row.holidayDate)}
+                                            </TableCell>
                                             <TableCell sx={cellSx}>
                                                 <HolidayStatusPill status={row.status} />
                                             </TableCell>
@@ -446,7 +453,7 @@ export function HolidaysView() {
                                                         size="small"
                                                         sx={dangerIconButtonSx}
                                                         aria-label={`Delete ${row.occasion}`}
-                                                        onClick={() => setConfirmDelete({ ids: [row.id], label: `${row.occasion} (${formatHolidayDate(row.holidayDate)})` })}
+                                                        onClick={() => setConfirmDelete({ ids: [row.id], label: `${row.occasion} (${formatHolidayDate(row.holidayDate)}${row.repeatsYearly ? ', every year' : ''})` })}
                                                     >
                                                         <DeleteOutlineRoundedIcon sx={{ fontSize: 18 }} />
                                                     </IconButton>
