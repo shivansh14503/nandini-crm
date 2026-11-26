@@ -1,3 +1,4 @@
+import { ENV } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
 import { prisma } from '../../config/prisma.js';
 import { secretBox } from '../../services/secretBox.js';
@@ -7,6 +8,7 @@ import { CALENDAR_PROVIDER_LABELS, isCalendarProvider, LIVE_CONNECTION_STATUSES,
 import { loadEnrolmentContext, NOT_SYNCED_REASON_FOR, reconcileAllQuietly, resolveTarget, runDueChecks } from './enrolment.js';
 import { loadProviderAccess } from './providers/registry.js';
 import { adminRecipients, userIssuesDigest } from './syncIssue.notifications.js';
+import { syncHoursLabel } from './syncHours.js';
 
 /**
  * An employee's own calendar sync, read-only (addendum §5.2), the nightly calendar steps, and
@@ -24,6 +26,22 @@ export interface OwnCalendarDto {
     since: string;
     /** max(lastPushedAt, lastPulledAt); null until sync has run. */
     lastSyncedAt: string | null;
+    /** The first-sync backfill (P2-3c): upcoming CRM activities copied to the calendar when it was first connected. */
+    backfill: OwnBackfillDto;
+}
+
+/**
+ * `waiting`: not run yet (the row waits for its first check, or the copy is under way); `done`: `copied` activities were
+ * copied at `at` (private copies when they have guests: nobody was invited); `off`: not done and calendar sync is
+ * switched off on the server (CALENDAR_SYNC_ENABLED=false), so nothing is being copied (the card says nothing and
+ * doesn't poll). `sending`: copies (and other changes) of this calendar still waiting to be sent, so the card can say
+ * "12 of 40 still being copied".
+ */
+export interface OwnBackfillDto {
+    state: 'waiting' | 'done' | 'off';
+    at: string | null;
+    copied: number | null;
+    sending: number;
 }
 
 /** GET /api/calendar-connections. */
@@ -33,6 +51,8 @@ export interface OwnCalendarSyncDto {
     /** Null = not synced (see `reason`). */
     calendar: OwnCalendarDto | null;
     reason: NotSyncedReason | null;
+    /** When changes made in the calendar come back by themselves (P2-5 poll): office hours and interval. */
+    syncHours: { start: string; end: string; everyMinutes: number };
 }
 
 const latest = (...dates: (Date | null | undefined)[]): string | null => {
@@ -47,15 +67,22 @@ export const connectionService = {
             prisma.user.findUnique({ where: { id: user.id }, select: { email: true, isActive: true, isGroupUser: true } }),
             prisma.calendarConnection.findFirst({
                 where: { username: user.username, status: { in: [...LIVE_CONNECTION_STATUSES] } },
-                select: { provider: true, accountEmail: true, status: true, enrolledAt: true, lastPushedAt: true, lastPulledAt: true },
+                select: { id: true, provider: true, accountEmail: true, status: true, enrolledAt: true, lastPushedAt: true, lastPulledAt: true, backfilledAt: true, backfillCount: true },
             }),
             prisma.calendarSyncUser.findUnique({ where: { username: user.username }, select: { provider: true, excluded: true } }),
             loadEnrolmentContext(),
         ]);
         // A real provider needs the encryption key; the dev-only fake has no secrets (as in withCalendarAccess).
         const ready = context.providers.some((p) => p.enabled && p.configured && (p.key === 'fake' ? context.fakeOn : secretBox.ready()));
+        const syncHours = syncHoursLabel();
         if (live && isCalendarProvider(live.provider)) {
-            const access = await loadProviderAccess(live.provider);
+            const [access, sending] = await Promise.all([
+                loadProviderAccess(live.provider),
+                // [connectionId, state] index: links waiting to be sent.
+                prisma.activityExternalLink.count({ where: { connectionId: live.id, state: 'pending' } }),
+            ]);
+            // Done once its count is written (sync.backfill.ts: `backfilledAt` is the run stamp, set when it starts).
+            const done = live.backfillCount !== null;
             const paused = !access.enabled || !access.configured || access.healthStatus === 'error';
             return {
                 ready,
@@ -66,13 +93,20 @@ export const connectionService = {
                     status: paused ? 'paused' : (live.status as OwnCalendarStatus),
                     since: live.enrolledAt.toISOString(),
                     lastSyncedAt: latest(live.lastPushedAt, live.lastPulledAt),
+                    backfill: {
+                        state: done ? 'done' : ENV.INTEGRATIONS.SYNC_ENABLED ? 'waiting' : 'off',
+                        at: done && live.backfilledAt ? live.backfilledAt.toISOString() : null,
+                        copied: done ? live.backfillCount : null,
+                        sending,
+                    },
                 },
                 reason: null,
+                syncHours,
             };
         }
         const target = account ? resolveTarget(account, choice, context.providers, context.companyDomains, context.fakeOn) : ({ none: 'inactive' } as const);
         // A target without a live row yet: enrolment runs after the admin's save, or tonight.
-        return { ready, calendar: null, reason: 'none' in target ? NOT_SYNCED_REASON_FOR[target.none] : null };
+        return { ready, calendar: null, reason: 'none' in target ? NOT_SYNCED_REASON_FOR[target.none] : null, syncHours };
     },
 };
 

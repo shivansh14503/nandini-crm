@@ -7,7 +7,7 @@ import { calendarSyncFromMeta } from '../integrations/calendarSyncSettings.js';
 import { isActivityOnlyFollowupType } from '../shared/followupTypes.js';
 import { LIVE_CONNECTION_STATUSES } from './connection.constants.js';
 import { isFakeProviderEnabled } from './providers/fakeSwitch.js';
-import { parseHeld, resolveAttendeeEmails, serializeHeld } from './sync.attendees.js';
+import { heldKeyOf, isHeldIdentity, parseHeld, resolveAttendeeEmails, serializeHeld } from './sync.attendees.js';
 import { CREATE_ELIGIBLE_PAST_MS, type LinkInvites } from './sync.constants.js';
 import { requestedIdFor } from './sync.keys.js';
 import { parseBase } from './sync.shapes.js';
@@ -249,15 +249,19 @@ interface HeldChange {
 type LinkRow = Awaited<ReturnType<OutboxDb['activityExternalLink']['findMany']>>[number];
 
 /**
- * D41 on existing links: new invitations leave the owner's mailbox only on the owner's own action. Decided by
- * addresses, not attendee identities (a contact row's address can change), and on every link that sends invitations
- * whatever its state or whether the owner's row is live right now (provider switched off, row stopped: the push after
- * the re-activation must not invite the people added meanwhile).
- * - An address no longer on the activity leaves every held list.
- * - The actor isn't the owner: every address the write put on the activity is held on every `send` link.
+ * D41 on existing links: new invitations leave the owner's mailbox only on the owner's own action. Decided by held
+ * keys (sync.attendees.ts `heldKeyOf`: a colleague's or contact's identity, an outside email's address), so a contact
+ * added without an address, or whose address changes later, is still held when the address arrives; and on every link
+ * that sends invitations whatever its state or whether the owner's row is live right now (provider switched off, row
+ * stopped: the push after the re-activation must not invite the people added meanwhile).
+ * - An entry whose attendee is no longer on the activity leaves every held list (identities by identity, plain
+ *   addresses of older entries by address).
+ * - The actor isn't the owner: every guest the write put on the activity (a new identity, or a known one now
+ *   resolving to an address that wasn't on it) is held on every `send` link.
  * - The owner changed and the actor isn't the new owner: the new owner's own earlier link is a new copy for them. With
- *   its event still in the calendar, every address not already on that event (`base.crm`) is held; with the event gone
- *   (cancelled, removed in the calendar, never created) it becomes a private copy (`withhold`), as a new link would.
+ *   its event still in the calendar, every guest not already on that event (`base.crm`; guests without an address
+ *   too) is held; with the event gone (cancelled, removed in the calendar, never created) it becomes a private copy
+ *   (`withhold`), as a new link would.
  */
 async function heldChanges(db: OutboxDb, links: readonly LinkRow[], before: ActivityRow | null, after: ActivityRow, actorIsOwner: boolean): Promise<Map<string, HeldChange>> {
     const out = new Map<string, HeldChange>();
@@ -267,15 +271,19 @@ async function heldChanges(db: OutboxDb, links: readonly LinkRow[], before: Acti
     const attendeesChanged = attendeeKeys(before) !== attendeeKeys(after);
     const ownerChanged = !sameUser(before.assignedTo, owner);
     if (!attendeesChanged && !(ownerChanged && !actorIsOwner)) return out;
-    // The owner's own edit only ever releases held addresses (it holds nothing).
+    // The owner's own edit only ever releases held entries (it holds nothing).
     if (actorIsOwner && sendLinks.every((l) => !l.heldAttendeesJson)) return out;
 
     const resolved = await resolveAttendeeEmails(db, [...before.attendees, ...after.attendees], owner);
-    const emailsOf = (rows: ActivityRow['attendees']) => new Set(rows.map((a) => resolved.emailOf.get(a) ?? '').filter(Boolean));
-    const was = emailsOf(before.attendees);
-    const now = emailsOf(after.attendees);
-    const added = [...now].filter((email) => !was.has(email));
-    const removed = new Set([...was].filter((email) => !now.has(email)));
+    const isGuest = (a: ActivityRow['attendees'][number]) => !(a.kind === 'user' && sameUser(a.username, owner));
+    const emailOf = (a: ActivityRow['attendees'][number]) => resolved.emailOf.get(a) ?? '';
+    const guestsNow = after.attendees.filter(isGuest);
+    const wasEmails = new Set(before.attendees.map(emailOf).filter(Boolean));
+    const wasKeys = new Set(before.attendees.map(heldKeyOf).filter(Boolean));
+    const nowEmails = new Set(guestsNow.map(emailOf).filter(Boolean));
+    const nowKeys = new Set(guestsNow.map(heldKeyOf).filter(Boolean));
+    const addedKeys = guestsNow.filter((a) => !wasKeys.has(heldKeyOf(a)) || (emailOf(a) !== '' && !wasEmails.has(emailOf(a)))).map(heldKeyOf).filter(Boolean);
+    const stillOn = (entry: string) => (isHeldIdentity(entry) ? nowKeys.has(entry) : nowEmails.has(entry));
 
     let ownersCalendar = new Set<string>();
     if (ownerChanged && !actorIsOwner) {
@@ -285,13 +293,13 @@ async function heldChanges(db: OutboxDb, links: readonly LinkRow[], before: Acti
 
     for (const link of sendLinks) {
         const current = parseHeld(link.heldAttendeesJson);
-        let held = current.filter((email) => !removed.has(email));
+        let held = current.filter(stillOn);
         let invites: LinkInvites = 'send';
         if (!actorIsOwner) {
-            let hold = added;
+            let hold = addedKeys;
             if (ownersCalendar.has(link.connectionId)) {
                 const base = parseBase(link.baseJson);
-                if (hasLiveEvent(link) && base) hold = [...hold, ...[...now].filter((email) => !(email in base.crm.attendees))];
+                if (hasLiveEvent(link) && base) hold = [...hold, ...guestsNow.filter((a) => !(emailOf(a) in base.crm.attendees)).map(heldKeyOf).filter(Boolean)];
                 else invites = 'withhold';
             }
             if (invites === 'send') held = [...new Set([...held, ...hold])];

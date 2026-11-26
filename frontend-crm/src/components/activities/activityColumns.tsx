@@ -1,20 +1,61 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import { Box, Typography } from '@mui/material';
+import { Box, Tooltip, Typography } from '@mui/material';
+import EventAvailableOutlinedIcon from '@mui/icons-material/EventAvailableOutlined';
+import EventBusyOutlinedIcon from '@mui/icons-material/EventBusyOutlined';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutlined';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import SyncOutlinedIcon from '@mui/icons-material/SyncOutlined';
 import { RecordLink } from '../common/RecordLink';
 import { type DataTableColumn } from '../common/DataTable';
 import { ROUTES } from '@/config/constants';
 import { findCrmUser } from '@/services/masterData.store';
 import { useDropdownOptionLabel } from '@/hooks/queries/useFormConfigs';
 import { CUSTOMER_RESPONSE_CATEGORY } from '@/components/forms/FollowUpDecision';
-import type { Activity } from '@/types/activity.types';
+import type { Activity, ActivityCalendarState } from '@/types/activity.types';
 import { isFollowUpActivity, isVideoProvider, NOTE_TYPE, PLANNED_STATUS, VIDEO_PROVIDER_LABELS } from '@/types/activity.types';
 import { ActivityStatusPill, ActivityTypeChip, ActivityTypeIcon, FollowUpChip } from './ActivityBadges';
 import { attendeeLabel } from './RhfAttendeesField';
 import { formatActivityWhen, formatBusinessInstant, formatDayLabel, isActivityOverdue, useBusinessClock } from './activityTime';
 import { relatedModuleLabel, relatedRecordHref } from './activityLinks';
 import { JoinMeetingActions } from './VideoMeeting';
+
+/**
+ * The Calendar column's cell (P2-3c): the activity's copy in its owner's calendar, as one icon and a word. Null
+ * `calendar` (not synced, or a type that never goes to calendars) → "-".
+ */
+function calendarCell(calendar: ActivityCalendarState | null | undefined): { icon: React.ReactNode; label: string; title: string } | null {
+    if (!calendar) return null;
+    const iconSx = { fontSize: 16, flexShrink: 0 } as const;
+    if (calendar.state === 'error') {
+        return { icon: <ErrorOutlineIcon sx={{ ...iconSx, color: 'var(--mui-palette-error-main)' }} />, label: 'Error', title: "The calendar refused the last change: open the activity to retry." };
+    }
+    if (calendar.state === 'removed_remote' || calendar.state === 'cancelled' || calendar.state === 'unsupported') {
+        const label = calendar.state === 'unsupported' ? 'Not updated' : 'Not in calendar';
+        return { icon: <EventBusyOutlinedIcon sx={{ ...iconSx, color: 'var(--mui-palette-text-muted)' }} />, label, title: label };
+    }
+    if (calendar.pending || calendar.state === 'pending') {
+        return { icon: <SyncOutlinedIcon sx={{ ...iconSx, color: 'var(--mui-palette-text-secondary)' }} />, label: 'Sending', title: 'A change is being sent to the calendar.' };
+    }
+    if (calendar.invites === 'withhold' && calendar.invitesWaiting) {
+        return {
+            icon: <LockOutlinedIcon sx={{ ...iconSx, color: 'var(--crm-text-blue-600)' }} />,
+            label: 'Private copy',
+            title: 'In the calendar without its guests: they are invited when the owner presses Send invitations.',
+        };
+    }
+    if (calendar.heldCount > 0) {
+        // An invited copy with guests someone else added since (D41): the others are invited, these wait.
+        const guests = `${calendar.heldCount} guest${calendar.heldCount === 1 ? '' : 's'}`;
+        return {
+            icon: <LockOutlinedIcon sx={{ ...iconSx, color: 'var(--crm-text-blue-600)' }} />,
+            label: 'Guests waiting',
+            title: `In the calendar; ${guests} added by someone else ${calendar.heldCount === 1 ? "isn't" : "aren't"} invited until the owner presses Send invitations.`,
+        };
+    }
+    return { icon: <EventAvailableOutlinedIcon sx={{ ...iconSx, color: 'var(--mui-palette-success-main)' }} />, label: 'Synced', title: 'In the owner\'s calendar.' };
+}
 
 const userName = (username: string | undefined) => (username ? findCrmUser(username)?.name || username : '');
 
@@ -253,6 +294,28 @@ export function useActivityColumns(openRecord: (record: Activity) => void): Data
                         {a.attendees.length > 0 ? a.attendees.map(attendeeLabel).join(', ') : '-'}
                     </Typography>
                 ),
+            },
+            {
+                // Its copy in the owner's calendar (P2-3c). Not sortable: the state lives on the sync link, not the activity.
+                id: 'calendar',
+                label: 'CALENDAR',
+                sortable: false,
+                minWidth: 130,
+                defaultHidden: true,
+                render: (a) => {
+                    const cell = calendarCell(a.calendar);
+                    if (!cell) return <Typography sx={plainCellSx}>-</Typography>;
+                    return (
+                        <Tooltip title={cell.title}>
+                            <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.6, minWidth: 0 }}>
+                                {cell.icon}
+                                <Typography noWrap sx={plainCellSx}>
+                                    {cell.label}
+                                </Typography>
+                            </Box>
+                        </Tooltip>
+                    );
+                },
             },
             {
                 id: 'createdAt',

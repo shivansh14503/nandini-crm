@@ -47,6 +47,17 @@ import { activityController } from './activity.controller.js';
  *   POST   /:id/response  { responseStatus: accepted | tentative | declined } (invited colleagues only; audited RSVP)
  *   POST   /:id/conference/retry → activity view: asks the calendar again for a video link that failed (owner, creator
  *                           or a global role; 409 NOTHING_TO_RETRY unless it failed, 409 VIDEO_PROVIDER_NOT_CONNECTED)
+ *   POST   /:id/calendar-sync/retry        (owner or editor; Calendar Phase 2 P2-3c) → activity view. Pushes the copy in
+ *                           the owner's calendar again now (attempts reset; a refused push goes back to pending). For an
+ *                           event deleted in the calendar (`removed_remote`) it is "Add again": a new copy, upcoming
+ *                           planned activities only
+ *   POST   /:id/calendar-sync/send-invites (owner only, 403 otherwise: invitations leave a mailbox only on its owner's
+ *                           action) → activity view. Sends the invitations of a private copy and every held guest:
+ *                           invites='send', held guests released, pushed now (an outside guest also clears the internal
+ *                           description in the same calendar request). Audited SEND_INVITES. Nothing held: unchanged
+ *                           Both: 409 CALENDAR_NOT_SYNCED (no copy in the owner's calendar), 409
+ *                           CALENDAR_SYNC_NOT_RETRYABLE (a repeating series in the calendar; Add again on an activity
+ *                           that is no longer upcoming and planned), 503 CALENDAR_SYNC_DISABLED (kill switch off)
  */
 const router = Router();
 router.use(authenticate);
@@ -59,6 +70,8 @@ router.get('/link-targets', activityController.linkTargets);
 router.get('/video-options', activityController.videoOptions);
 router.post('/:id/response', validateRequest({ params: idParamSchema }), activityController.respond);
 router.post('/:id/conference/retry', validateRequest({ params: idParamSchema }), activityController.retryConference);
+router.post('/:id/calendar-sync/retry', validateRequest({ params: idParamSchema }), activityController.retryCalendarSync);
+router.post('/:id/calendar-sync/send-invites', validateRequest({ params: idParamSchema }), activityController.sendCalendarInvites);
 registerCrudRoutes(router, activityController);
 
 export default router;

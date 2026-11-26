@@ -95,6 +95,41 @@ export function parseHeld(json: string | null | undefined): string[] {
 
 export const serializeHeld = (emails: readonly string[]): string | null => (emails.length > 0 ? JSON.stringify([...new Set(emails.map(lc))].sort()) : null);
 
+/**
+ * Held entries (D41) are kept by **identity** where the attendee has one: `user:<username>` for a colleague,
+ * `contact:<contactId>` for a contact, and the address for an outside email. A contact (or colleague) added by
+ * someone other than the owner while they had no address is still held when the address arrives later, and a
+ * contact whose address changes stays held under the new one, until the owner presses Send invitations. Older
+ * entries that are plain addresses keep working (they match by address).
+ */
+const IDENTITY_PREFIXES = ['user:', 'contact:'] as const;
+
+/** Whether a held entry is an identity (`user:…` / `contact:…`) rather than an address. Pure. */
+export const isHeldIdentity = (entry: string): boolean => IDENTITY_PREFIXES.some((prefix) => entry.startsWith(prefix));
+
+/** The held-list key of one stored attendee row (lower-cased): its identity, or its address for an outside email. Pure. */
+export function heldKeyOf(row: Pick<PushAttendeeRow, 'kind' | 'username' | 'contactId' | 'email'>): string {
+    if (row.kind === 'user' && lc(row.username)) return `user:${lc(row.username)}`;
+    if (row.kind === 'contact' && lc(row.contactId)) return `contact:${lc(row.contactId)}`;
+    return lc(row.email);
+}
+
+/**
+ * The addresses held on a link right now (pure): plain held addresses, plus the address each held identity resolves
+ * to among the activity's attendees (`emailOf`, from `resolveAttendeeEmails`). What the push leaves off the event.
+ */
+export function heldEmailsOf(heldJson: string | null | undefined, rows: readonly PushAttendeeRow[], emailOf: ReadonlyMap<PushAttendeeRow, string>): string[] {
+    const held = parseHeld(heldJson);
+    if (held.length === 0) return [];
+    const identities = new Set(held.filter(isHeldIdentity));
+    const out = new Set(held.filter((entry) => !isHeldIdentity(entry)));
+    for (const row of rows) {
+        const email = emailOf.get(row);
+        if (email && identities.has(heldKeyOf(row))) out.add(email);
+    }
+    return [...out];
+}
+
 /** `attendees` minus the held addresses. */
 export function withoutHeld(attendees: Record<string, CrmAttendee>, held: readonly string[]): Record<string, CrmAttendee> {
     if (held.length === 0) return attendees;

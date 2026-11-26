@@ -1,4 +1,4 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { activityService } from '@/services/activity.service';
 import type { PaginationParams } from '@/types/api.types';
 import type { ActivityMeta, ActivityRelatedModule, BusyTimes, BusyTimesParams, CalendarFeed, CalendarFeedParams, VideoOptions } from '@/types/activity.types';
@@ -14,6 +14,15 @@ export const useCreateActivity = activityHooks.useCreate;
 export const useUpdateActivity = activityHooks.useUpdate;
 export const useDeleteActivity = activityHooks.useDelete;
 export const useBulkDeleteActivities = activityHooks.useBulkDelete;
+
+/** Bulk delete that returns the API's answer (`skipped` follow-up activities), for the list's toast. */
+export function useBulkDeleteActivitiesWithResult() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (ids: string[]) => activityService.bulkDelete(ids),
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.activities.all }),
+    });
+}
 
 /** Business timezone, default durations, reminders and statuses: fixed for the session, so never refetched. */
 export function useActivityMeta() {

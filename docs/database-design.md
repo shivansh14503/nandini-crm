@@ -1,8 +1,7 @@
 # Nandini CRM — Database Design
 
-> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (91 migrations,
-> latest `20261128150000_activity_conference`, Calendar Phase 3 P3-1 video meetings, as of 2026-11-26; before it
-> `20261128120000_booking_links`, Calendar Phase 4 booking links; before that `20261128100000_activity_calendar_sync`, Calendar Phase 2 P2-3b; P2-6 busy times needed no migration: it reads `Activity` through the existing `[isDeleted, startAt]` index and stores nothing). Update it in the same change as any schema migration.
+> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (92 migrations,
+> latest `20261215100000_activity_conference`, Calendar Phase 3 P3-1 video meetings, as of 2026-11-26; before it `20261215090000_calendar_watch_channels`, Calendar Phase 2 P2-7 webhooks; before that `20261128120000_booking_links`, Calendar Phase 4 booking links; before that `20261128100000_activity_calendar_sync`, Calendar Phase 2 P2-3b, whose columns P2-3c (first-sync backfill) and P2-5 (calendar → CRM pull) use without a migration of their own; P2-6 busy times needed no migration: it reads `Activity` through the existing `[isDeleted, startAt]` index and stores nothing). Update it in the same change as any schema migration.
 > Related: [System design](system-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
 ---
@@ -37,7 +36,7 @@
 | Audit & UI state | `AuditLog`, `AuditExport`, `AuditDigest`, `TableFilter`, `ModuleScorecard` |
 | Notifications & outgoing mail | `Notification` (navbar bell), `EmailLog` (every email the CRM sends) |
 | Email checks | `EmailValidationRun` |
-| Integrations | `IntegrationProvider` (Admin › API Integrations), `CalendarConnection` (an employee's company calendar sync state, P2-2b), `CalendarSyncUser` (admin's per-person calendar choice, P2-2b) |
+| Integrations | `IntegrationProvider` (Admin › API Integrations), `CalendarConnection` (an employee's company calendar sync state, P2-2b), `CalendarSyncUser` (admin's per-person calendar choice, P2-2b), `CalendarWatchChannel` (a person's calendar webhook channel, P2-7) |
 | Booking links | `BookingLink` (an employee's public scheduling page), `BookingLinkBooking` (one booking made on it), Calendar Phase 4 |
 
 ## 2. Design conventions
@@ -97,6 +96,7 @@ erDiagram
     Activity ||--o{ ActivityAttendee : attendees
     Activity ||--o{ ActivityExternalLink : "calendar copies"
     CalendarConnection ||--o{ ActivityExternalLink : "pushes"
+    CalendarConnection ||--o{ CalendarWatchChannel : "notifies through"
     Lead ||--o{ EntityEmail : emailAddress
     Referral ||--o{ EntityEmail : emailAddress
     Referral ||--o{ Lead : "referred"
@@ -565,7 +565,7 @@ Calendar columns (migration `20261128100000_activity_calendar_sync`, as of 2026-
 rows): `iCalUid` (NVARCHAR(1024), the event's calendar identity), `syncKey` (NVARCHAR(64), sha256 hex of
 `iCalUid + '|'`, the indexed key), `organizerEmail` (NVARCHAR(254)), `organizerName` (NVARCHAR(200)),
 `externalOrganizer` (BIT, default 0: a meeting someone outside the CRM organizes; the organizer columns are filled
-from P2-8), `externalUpdatedAt` (DATETIME2, the last calendar-side change applied). Set by the sync engine only (system
+from P2-8), `externalUpdatedAt` (DATETIME2, the last calendar-side change applied; set by the P2-5 pull, as of 2026-11-26, without moving `updatedAt`). Set by the sync engine only (system
 write path), never by a form; not in the audited DTO yet.
 Video meeting columns (migration `20261128150000_activity_conference`, as of 2026-11-26, Calendar Phase 3 P3-1; NULL /
 0 on existing rows): `conferenceProvider` (NVARCHAR(20): `meet` / `teams` / `zoom` / NULL, the form's Video meeting
@@ -628,8 +628,8 @@ sync-made activity changes are audited under route `job:calendar-sync:<provider>
 | `provider` | NVARCHAR(30) | The connection's provider |
 | `role` | NVARCHAR(10), default `organizer` | `organizer` \| `attendee` (P2-5) |
 | `state` | NVARCHAR(20), default `pending` | `pending` \| `synced` \| `error` \| `cancelled` \| `removed_remote` \| `unsupported` \| `detached`. An error on a link whose event is gone keeps `cancelled` / `removed_remote` (with `lastErrorCode`), so the next try restores rather than patches |
-| `invites` | NVARCHAR(10), default `send` | `send` \| `withhold` (a private copy without attendees: saved by someone other than the owner, D41) |
-| `heldAttendeesJson` | NVARCHAR(MAX) NULL | Lower-cased emails a non-owner added to an event that invites (by resolved address, also while the link is `detached`), or that were not on the event when someone other than the new owner re-assigned the activity: held until the owner sends them (D41) |
+| `invites` | NVARCHAR(10), default `send` | `send` \| `withhold` (a private copy without attendees: saved by someone other than the owner, D41, or copied by the first-sync backfill with guests, D23; `send` again when the owner presses Send invitations, P2-3c) |
+| `heldAttendeesJson` | NVARCHAR(MAX) NULL | Guests a non-owner added to an event that invites (also while the link is `detached`), or that were not on the event when someone other than the new owner re-assigned the activity: held until the owner sends them (D41). JSON array of keys (as of 2026-11-26, P2-3c): `user:<username>` / `contact:<contactId>` (lower-cased) for CRM people, so a contact who gets an email later stays held, and lower-cased addresses for typed emails and entries written before P2-3c; the push resolves them to today's addresses. Null after Send invitations |
 | `generation` | INT, default 0 | Re-create counter |
 | `requestedId` | NVARCHAR(64) | Google event id we ask for / Graph `transactionId`: `crm` + 40 hex of sha256(activityId:connectionId:generation), so a retried create never duplicates |
 | `externalEventId`, `externalEventKey` | NVARCHAR(1024) / NVARCHAR(64) | The provider's event id and its sha256 hex (the indexed key) |
@@ -637,8 +637,8 @@ sync-made activity changes are audited under route `job:calendar-sync:<provider>
 | `baseJson`, `crmSyncedAt` | NVARCHAR(MAX) / DATETIME2 | `{ crm, provider }`: the last state both sides agreed on (three-way merge on a 412) |
 | `dirtyAt` | DATETIME2 NULL | **Outbox**: set inside the activity write's own transaction, cleared by the push with compare-and-set |
 | `nextAttemptAt`, `attempts` | | Backoff after a failure / gate (null = now) |
-| `lastErrorCode`, `lastErrorMessage` (≤ 300), `lastWarning` (≤ 500), `lastConflictAt`, `lastSyncedAt` | | Status shown in `ActivityView.calendar`; the message to the owner / editors only |
-| `createdAt`, `updatedAt` | | |
+| `lastErrorCode`, `lastErrorMessage` (≤ 300), `lastWarning` (≤ 500), `lastConflictAt`, `lastSyncedAt` | | Status shown in `ActivityView.calendar`; the message to the owner / editors only. P2-5 (as of 2026-11-26): `lastErrorCode = 'too_long'` on a `synced` link whose event is longer than 31 days in the calendar (its time isn't taken); `lastWarning` starting `Follow-ups keep a time` after a follow-up was made all-day there (shown for 7 days after `Activity.externalUpdatedAt`; a push drops it once older, or at once when the CRM moved the follow-up itself) |
+| `createdAt`, `updatedAt` | | A link made by the first-sync backfill has `createdAt` = its connection's `backfilledAt` (the run stamp, the same across runs; P2-3c: how the drawer says "copied when your calendar was connected") |
 
 Indexes: unique `(activityId, connectionId)`, `(connectionId, state)`, `(dirtyAt, nextAttemptAt)` (the outbox sweep:
 `dirtyAt IS NOT NULL AND dirtyAt < now − 2 min AND (nextAttemptAt IS NULL OR nextAttemptAt <= now)`), and the
@@ -754,8 +754,8 @@ to `Users`.
 | `statusReason` | NVARCHAR(50) NULL | `error`: `user_not_found`, `user_unavailable`, `calendar_unavailable`, `mailbox_out_of_scope`, `no_mailbox`; `stopped`: `excluded`, `user_inactive`, `email_changed`, `provider_changed`, `provider_removed`, `no_email`, `oauth_retired` (P2-2's OAuth rows; never reactivated) |
 | `source` | NVARCHAR(10), default `domain` | How the provider was chosen: `domain` \| `override` |
 | `calendarId` | NVARCHAR(200), default `primary` | `primary` (Google) / `''` = default calendar (Graph) |
-| `syncCursor`, `syncWindowStart`, `syncWindowEnd`, `fullSyncAt` | | P2-5 (Google sync token / Graph delta link: never logged) |
-| `backfilledAt`, `backfillCount` | | P2-3c |
+| `syncCursor`, `syncWindowStart`, `syncWindowEnd`, `fullSyncAt` | | The pull (P2-5, as of 2026-11-26): Google sync token / Graph delta link (never logged; stored only when every change of the run applied; null = the next pull is a full sync), the full sync's window (now − 7 days … now + 400 days; an Outlook window is re-baselined nightly 30 days after its full sync, i.e. once `syncWindowStart` is older than 37 days), the last full sync |
+| `backfilledAt`, `backfillCount` | | The first-sync backfill (as of 2026-11-26, P2-3c): `backfilledAt` = its run stamp, claimed when the first run starts (`WHERE backfilledAt IS NULL`) and reused by a run started again; `backfillCount` = how many activities it copied (links on the row carrying the stamp), written last (`WHERE backfillCount IS NULL`). `backfillCount` null = not done (the `enrolled` job and the poll re-queue it). Never reset, so it runs once per row |
 | `lastPulledAt`, `lastPushedAt`, `lastSuccessAt`, `lastCheckedAt` | | Sync health |
 | `nextCheckAt` | DATETIME2 NULL | Earliest next health check after a user-level error (backoff 15 min → 1 h → 6 h → 24 h) |
 | `lastErrorAt`, `lastErrorCode`, `lastErrorMessage` (≤ 300), `consecutiveFailures` | | `lastErrorMessage`: provider text for admins only (never shown to the employee, never logged at info) |
@@ -791,6 +791,28 @@ exists only while something differs from the default (provider by email domain, 
 | `updatedBy`, `createdAt`, `updatedAt` | | |
 
 Audited as entity `CalendarSyncUser` (module `admin-integrations`) CREATE / UPDATE / DELETE.
+
+**`CalendarWatchChannel`** (migration `20261215090000_calendar_watch_channels`, as of 2026-11-26, Calendar Phase 2
+P2-7; new table only, empty on deploy): one Google push channel (`events.watch`) or Microsoft Graph subscription per
+synced person, so changes made in their calendar reach the CRM in seconds ([system design](system-design.md) §5.4
+Webhooks). Its own table because a Google renewal overlaps two channels for a while (Google has no renew call).
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | NVARCHAR(64) PK | Our channel id `w<8 hex of sha256(PUBLIC_API_URL)>-<uuid>` (Google `X-Goog-Channel-ID`); a channel made for another public address is replaced |
+| `connectionId` | NVARCHAR(50) → `CalendarConnection` | `NO ACTION` (connection rows are never deleted) |
+| `provider` | NVARCHAR(30) | `google` \| `microsoft` \| `fake` |
+| `externalId` | NVARCHAR(200) NULL | Google `resourceId` / Graph subscription id; NULL on a `failed` row |
+| `tokenKeyId` | NVARCHAR(8) | The `INTEGRATIONS_ENCRYPTION_KEY` ring key whose HKDF `webhook` subkey signs the Google channel token / Graph `clientState` (no secret is stored); an old key id → replaced |
+| `generation` | INT, default 1 | Graph: + 1 on each re-create (part of the signed `clientState`, so an old subscription's notifications are refused) |
+| `expiresAt` | DATETIME2 | The provider's expiry (Google ≤ 7 days, Graph ≤ 10,080 minutes); renewed 3 days before. On a `failed` row: when it was tried |
+| `status` | NVARCHAR(20), default `active` | `active` \| `stopped` \| `failed` (the provider refused the watch; retried after 6 h, nightly always) |
+| `createdAt` | DATETIME2, default now | `stopped` / `failed` rows are deleted 30 days after it (nightly) |
+
+Indexes: `(connectionId, status)` (a person's channels; People's webhook column), `(externalId)` (Graph notifications
+look up by subscription id), `(status, expiresAt)` (renewals, the safety-net poll's healthy set). No filtered index
+and no unique index: two `ensure` runs racing for one person can leave two active rows; the next run stops the older
+one (no unique-index error to handle, D45). Not audited (system bookkeeping, like `ActivityExternalLink`).
 
 ### 4.30 `UserPreference` (My Profile › Notifications)
 
@@ -932,11 +954,12 @@ also on the activity as an attendee and in its remarks).
 | User added / edited (Admin › Users) | App locks (username, email address, reports-to chain, admin roster as needed; the per-user lock on edits) → checks → INSERT / UPDATE `Users` → `AuditLog` CREATE / UPDATE; user lookup caches dropped after commit |
 | User deactivated / reset (Admin › Users) | App lock on the user → `isActive = 0, deactivatedAt = now` (or new hash + `mustChangePassword = 1`) → `AuditLog` STATUS_CHANGE / PASSWORD_RESET; after commit every Redis session of the user is deleted |
 | Nightly retention (00:20) | Hard delete of old `Notification` and `EmailLog` rows (see §4.26) |
-| Calendar nightly (00:25, P2-3b, as of 2026-11-26) | Reconcile everyone's `CalendarConnection` enrolment, run due health checks, write the admins' `calendar_sync_issue` digest when someone's calendar went to `error` that day (moved from 00:20), the follow-up activity backfill (moved from 00:20), mark `error` links of activities that haven't ended dirty again (`pending`, attempts 0; `cancelled` / `removed_remote` links whose restore was refused are dirtied keeping their state), `integration_secret_expiring` notifications, clear expired `CalendarConnection` leases |
+| Calendar nightly (00:25, P2-3b, as of 2026-11-26) | Reconcile everyone's `CalendarConnection` enrolment, run due health checks, write the admins' `calendar_sync_issue` digest when someone's calendar went to `error` that day (moved from 00:20), the follow-up activity backfill (moved from 00:20), mark `error` links of activities that haven't ended dirty again (`pending`, attempts 0; `cancelled` / `removed_remote` links whose restore was refused are dirtied keeping their state), `integration_secret_expiring` notifications, clear expired `CalendarConnection` leases; since P2-7 webhook channels: create / renew / retry failed, Graph existence check, stop strays (all of them while webhooks are off), delete `stopped` / `failed` rows older than 30 days |
 | Activity saved (P2-3b) | Inside its transaction: the owner's `ActivityExternalLink` inserted or `dirtyAt` set (only with a live connection). After commit: pushed; success writes the link's ids, etag, base and clears `dirtyAt` only if it didn't change meanwhile. A deletion in the calendar cancels the activity (system write) unless it is Completed or a follow-up activity (link `removed_remote`) |
 | Calendar enrolment reconcile (P2-2b) | App lock `calendar-connection:user:<username>` → read user, choice, providers → INSERT `pending` / UPDATE to `stopped` → `AuditLog` ENROL / STOP; a new row's first health check runs after commit |
 | Public booking (Phase 4) | Company calendar re-read (no transaction) → transaction: app lock `booking:owner:<username>` → `tokenHash` pre-read → CRM activities re-read → day count → INSERT `Activity` (+ attendee, `AuditLog` CREATE by `system`, route `public:booking`) → INSERT `BookingLinkBooking` → INSERT `Notification` `booking_created`; a P2002 aborts and the booking is retried once (D45) |
 | Booking link saved | App lock (`booking:links:<owner>` on create, `booking:link:<id>` on change) → INSERT / UPDATE `BookingLink` → `AuditLog`; `cache:booking-link:<slug>` dropped after commit |
+| Calendar webhook channel (P2-7) | No transaction: the provider's watch call, then INSERT `CalendarWatchChannel` (`active`, or `failed` when refused); an insert that fails after the provider created the channel stops it there. Renewal UPDATEs `expiresAt` (Graph) or inserts the new row before marking the old `stopped` (Google). A stopped connection row marks its channels `stopped` after the enrolment transaction commits, then stops them at the provider |
 | People calendar choice | Upsert / delete `CalendarSyncUser` → `AuditLog` → reconcile the person after commit |
 
 ## 7. Migrations and seeding

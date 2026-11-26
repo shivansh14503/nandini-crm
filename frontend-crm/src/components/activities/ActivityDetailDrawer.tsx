@@ -44,6 +44,9 @@ import { useActivity, useDeleteActivity } from '@/hooks/queries/useActivities';
 import { useDropdownOptionLabel, useModuleFormConfig } from '@/hooks/queries/useFormConfigs';
 import { activityService } from '@/services/activity.service';
 import { ActivityBusyTimes } from './ActivityBusyTimes';
+import { ActivityCalendarNotes } from './ActivityCalendarNotes';
+import { ActivitySyncStatus, calendarRemovalNote, showsSyncStatus } from './ActivitySyncStatus';
+import { useAuth } from '@/context/AuthContext';
 import { findCrmUser } from '@/services/masterData.store';
 import { UserAvatar } from '@/components/common/UserAvatar';
 import { getModuleColor } from '@/theme/moduleColors';
@@ -373,7 +376,8 @@ export function ActivityDetailDrawer({ activity, activityId, open, onClose, onEd
     const theme = useTheme();
     const isPhone = useMediaQuery(theme.breakpoints.down('sm'));
     const id = activity?.id ?? activityId ?? undefined;
-    const { data: fresh } = useActivity(open && id ? id : undefined);
+    const { data: fresh, refetch } = useActivity(open && id ? id : undefined);
+    const { user } = useAuth();
     const a = fresh ?? activity ?? null;
     const clock = useBusinessClock();
     const typeLabel = useActivityTypeLabel();
@@ -420,11 +424,11 @@ export function ActivityDetailDrawer({ activity, activityId, open, onClose, onEd
         }
     };
     const cancelActivity = () => {
-        if (!window.confirm(`Cancel "${a.subject}"? It stays in the list as Cancelled.`)) return;
+        if (!window.confirm(`Cancel "${a.subject}"? It stays in the list as Cancelled.${calendarRemovalNote(a, user?.username, 'cancel')}`)) return;
         void run(() => activityService.update(a.id, { status: CANCELLED_STATUS }), 'Activity cancelled.', 'Failed to cancel the activity.');
     };
     const deleteActivity = () => {
-        if (!window.confirm(`Delete "${a.subject}"? This can't be undone.`)) return;
+        if (!window.confirm(`Delete "${a.subject}"? This can't be undone.${calendarRemovalNote(a, user?.username, 'delete')}`)) return;
         void (async () => {
             try {
                 await deleteMutation.mutateAsync(a.id);
@@ -467,6 +471,7 @@ export function ActivityDetailDrawer({ activity, activityId, open, onClose, onEd
                             : `Follow-up history of ${a.relatedCode || `this ${followUpRecord}`}: kept with the ${followUpRecord}.`}
                     </Typography>
                 )}
+                <ActivityCalendarNotes calendar={a.calendar} timeZone={timeZone} besideStatus={showsSyncStatus(a, user?.username)} />
                 {(a.reminder || a.completedAt) && (
                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mt: 1.2 }}>
                         {a.reminder && (
@@ -482,6 +487,7 @@ export function ActivityDetailDrawer({ activity, activityId, open, onClose, onEd
                         )}
                     </Box>
                 )}
+                <ActivitySyncStatus activity={a} onRefresh={refetch} onNotify={notify} />
             </DrawerSectionCard>
 
             {(a.relatedTo || a.organizationName || a.contact) && (

@@ -47,11 +47,15 @@ export const SYNC_ERROR_CODES = {
 export const CALENDAR_SYNC_JOBS = {
     /** Push one dirty link (§8.3 step 5). */
     push: 'push',
-    /** A connection row first reached `ok`: push its dirty links (admin model: replaces the per-user `connect` job;
-     * the first-sync backfill is P2-3c). */
+    /** A connection row reached `ok`: the first-sync backfill when it has none yet (P2-3c, sync.backfill.ts), then push
+     * its dirty links (admin model: replaces the per-user `connect` job). */
     enrolled: 'enrolled',
     /** Health check of one connection row (enrolment.ts `checkConnection`). */
     check: 'check',
+    /** Pull one connection's calendar changes (P2-5, §8.7): poll, Sync now, calendar page, nightly re-baseline. */
+    pull: 'pull',
+    /** Webhook channel of one connection (P2-7, sync.channels.ts): ensure | renew | recreate | stop. */
+    watch: 'watch',
     poll: 'poll',
     nightly: 'nightly',
     /** Read the event again until its video link is ready (Calendar Phase 3 P3-1, spec §16.3; sync.conference.ts). */
@@ -83,8 +87,17 @@ export const OUTBOX_SWEEP_GRACE_MS = 2 * 60_000;
 export const OUTBOX_SWEEP_LIMIT = 200;
 /** Links pushed inline per fallback tick while Redis is down (§10.2). */
 export const FALLBACK_PUSH_LIMIT = 20;
-/** Dirty links of one connection pushed per `enrolled` job round (§8.12). */
+/** Dirty links of one connection pushed per `enrolled` job round (§8.12; spec's CONNECT_PUSH_BATCH). */
 export const ENROLLED_PUSH_BATCH = 100;
+/** Upcoming activities read per page by the first-sync backfill (P2-3c, sync.backfill.ts). */
+export const BACKFILL_PAGE_SIZE = 200;
+/**
+ * A row that reached `ok` this long ago without a backfill (its `enrolled` job was lost: Redis restarted, the worker
+ * was down) gets the job again from the poll tick (P2-3c; addendum §8.1 "lost-connect recovery").
+ */
+export const BACKFILL_RECOVERY_GRACE_MS = 10 * 60_000;
+/** Rows re-queued per poll tick by that recovery; one is backfilled in-process per fallback tick while Redis is down. */
+export const BACKFILL_RECOVERY_LIMIT = 50;
 /** A link whose connection can't push right now (row in error, provider off or unhealthy, user inactive) is put back
  * this long, so the sweep doesn't retry it every tick. The `enrolled` job ignores it. */
 export const GATED_RETRY_MS = 15 * 60_000;
@@ -112,12 +125,14 @@ export const ALL_DAY_REMINDER_OFFSET_MINUTES = 9 * 60;
 export const MAX_REMINDER_MINUTES = 40_320;
 
 /**
- * Background sync window, business timezone (spec D24 / §10.4): the poll scheduler and the Redis-down fallback tick
- * run only inside it, so Azure SQL serverless can pause overnight. Fixed at 07:00–22:00 until P2-5 makes it the
- * `CALENDAR_SYNC_HOURS` setting.
+ * Default background sync window, business timezone (spec D24 / §10.4). Since P2-5 the window is the
+ * `CALENDAR_SYNC_HOURS` setting (syncHours.ts); this is its default.
  */
 export const SYNC_WINDOW = { startMinute: 7 * 60, endMinute: 22 * 60 } as const;
-/** `calendar-poll` scheduler: every 5 minutes 07:00–21:55 (P2-3b: outbox sweep + due connection checks only). */
+/**
+ * Default `calendar-poll` pattern (every 5 minutes 07:00–21:55). Since P2-5 the worker builds it from
+ * `CALENDAR_SYNC_HOURS` / `CALENDAR_POLL_MINUTES` (`pollCron()`); each tick pulls, sweeps the outbox and runs due checks.
+ */
 export const POLL_PATTERN = '*/5 7-21 * * *';
 /** `calendar-nightly` scheduler: 00:25, right after `reminder-nightly` (00:20), inside the existing 00:05–00:25 nightly wake. */
 export const NIGHTLY_PATTERN = '25 0 * * *';
@@ -140,3 +155,42 @@ export const GRAPH_MARKER_PROPERTY_ID = 'String {00020329-0000-0000-C000-0000000
 /** Display limits on the provider side (Google `summary` / Graph `subject` and `location`). */
 export const SUBJECT_MAX = 200;
 export const LOCATION_MAX = 250;
+
+// ── Pull (Calendar → CRM, P2-5, spec §8.7–§8.11) ───────────────────────────────────────────────────────────────
+
+/**
+ * Reasons a pull runs (job data, logs). P2-7: `webhook` (a verified Google / Graph change notification) and `missed`
+ * (Graph said notifications were missed or the subscription was removed; the delta cursor covers the gap).
+ */
+export const PULL_REASONS = ['poll', 'manual', 'page', 'admin', 'rebaseline', 'enrolled', 'webhook', 'missed'] as const;
+export type PullReason = (typeof PULL_REASONS)[number];
+
+/** Full sync window: from now − 7 days (Google `timeMin`; Graph `startDateTime`) … */
+export const PULL_PAST_DAYS = 7;
+/** … to now + 400 days (Graph `endDateTime`; Google lists without an end). */
+export const PULL_FUTURE_DAYS = 400;
+/** Graph delta windows are re-baselined by the nightly job (a new full sync) this many days after their full sync. */
+export const GRAPH_REBASELINE_DAYS = 30;
+/** Full sync safety (§8.11): unseen synced links are read back one by one, at most this many per run. */
+export const VERIFY_MISSING_LIMIT = 50;
+/** Pages of one pull (a runaway change stream stops here; the cursor isn't advanced, the next pull continues). */
+export const MAX_PULL_PAGES = 200;
+/** Connections pulled in-process per fallback tick while Redis is down (§10.2). */
+export const FALLBACK_PULL_LIMIT = 5;
+/** "Sync now" (the employee's own, and the admin's per person): a pull no sooner than this after the last one. */
+export const MANUAL_PULL_MIN_INTERVAL_MS = 30_000;
+/** Opening the calendar page pulls silently at most once per this long per person. */
+export const PAGE_PULL_MIN_INTERVAL_MS = 3 * 60_000;
+/** A pull whose events keep failing to apply holds its cursor back this many runs, then moves on (logged). */
+export const PULL_HOLD_CURSOR_RUNS = 3;
+
+/** Link `lastErrorCode` for a calendar event longer than 31 days (D20: the CRM keeps its times; the link stays synced). */
+export const TOO_LONG_CODE = 'too_long';
+export const TOO_LONG_MESSAGE = 'Longer than 31 days in the calendar; the CRM keeps its own times.';
+/** Start of the link note when a follow-up activity was made all-day in the calendar (§11.5; kept through pushes for a week). */
+export const FOLLOW_UP_TIME_KEPT_PREFIX = 'Follow-ups keep a time';
+export const FOLLOW_UP_NOTE_DAYS = 7;
+
+/** Answers of an on-demand pull (Sync now, the page pull, the admin's Sync now); mirrored by the frontend (contract test). */
+export const PULL_REQUEST_STATUSES = ['queued', 'done', 'recent', 'busy', 'not_synced', 'not_ready', 'failed', 'off'] as const;
+export type PullRequestStatus = (typeof PULL_REQUEST_STATUSES)[number];

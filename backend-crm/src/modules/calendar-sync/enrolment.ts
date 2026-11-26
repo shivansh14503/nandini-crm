@@ -213,7 +213,7 @@ const STOP_DATA = (reason: StopReason, by: string, now: Date) => ({
 
 async function stopRow(tx: TransactionClient, row: PlanRow & { username: string }, reason: StopReason, by: string, now: Date): Promise<void> {
     await tx.calendarConnection.update({ where: { id: row.id }, data: STOP_DATA(reason, by, now) });
-    // Its links do nothing from now on (events stay in the calendar); P2-7 stops its watch channel here too.
+    // Its links do nothing from now on (events stay in the calendar); its webhook channel stops after the commit (P2-7).
     await tx.activityExternalLink.updateMany({ where: { connectionId: row.id, state: { not: 'detached' } }, data: { state: 'detached', dirtyAt: null, nextAttemptAt: null } });
     await auditService.record(tx, {
         entityType: 'CalendarConnection',
@@ -309,7 +309,7 @@ export interface ReconcileOptions {
     now?: Date;
 }
 
-type TxOutcome = ReconcileResult & { conflictWith?: string };
+type TxOutcome = ReconcileResult & { conflictWith?: string; stoppedId?: string };
 
 /**
  * Applies the plan for one person (see the file header). Runs after the triggering change has committed; never inside
@@ -348,7 +348,7 @@ export async function reconcileUser(username: string, reason: string, options: R
         }
         if (plan.action === 'stop') {
             await stopRow(tx, live!, plan.reason, by, now);
-            return { action: 'stop', stopReason: plan.reason };
+            return { action: 'stop', stopReason: plan.reason, stoppedId: live!.id };
         }
         const start = target as Extract<Target, { provider: CalendarProvider }>;
         const reactivate = plan.action === 'reactivate' ? plan.id : plan.action === 'replace' && typeof plan.then === 'object' ? plan.then.reactivate : null;
@@ -360,7 +360,7 @@ export async function reconcileUser(username: string, reason: string, options: R
         if (holder) return { action: 'none', conflictWith: holder.username };
         if (plan.action === 'replace') await stopRow(tx, live!, plan.reason, by, now);
         const id = await startRow(tx, owner, start, reactivate, by, reason, now);
-        return { action: plan.action, connectionId: id, ...(plan.action === 'replace' ? { stopReason: plan.reason } : {}) };
+        return { action: plan.action, connectionId: id, ...(plan.action === 'replace' ? { stopReason: plan.reason, stoppedId: live!.id } : {}) };
     });
 
     if (outcome.conflictWith) {
@@ -370,6 +370,11 @@ export async function reconcileUser(username: string, reason: string, options: R
         }
         await reconcileUser(outcome.conflictWith, reason, { ...options, context }, true);
         return reconcileUser(username, reason, { ...options, context }, true);
+    }
+    if (outcome.stoppedId) {
+        // P2-7: the stopped row's webhook channel stops too (best effort, after the commit; loaded on demand).
+        const { stopChannelsQuietly } = await import('./sync.channels.js');
+        await stopChannelsQuietly(outcome.stoppedId);
     }
     if (outcome.connectionId && outcome.action !== 'none' && outcome.action !== 'stop') {
         // A new identity: drop any grant or remembered error of that subject, then check it.

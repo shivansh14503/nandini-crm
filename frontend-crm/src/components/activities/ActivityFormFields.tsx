@@ -20,7 +20,9 @@ import {
     useRhfForm,
     withDropdownDefaults,
 } from '@/components/forms';
-import { getFormConfigs } from '@/services/masterData.store';
+import { findCrmUser, getFormConfigs } from '@/services/masterData.store';
+import { useAuth } from '@/context/AuthContext';
+import { useOwnCalendarSync } from '@/components/integrations/useCalendarConnections';
 import { useFormMode } from '@/context/FormModeContext';
 import { DynamicModuleCustomFields } from '@/components/forms/DynamicModuleCustomFields';
 import { CUSTOMER_RESPONSE_CATEGORY, CUSTOMER_RESPONSES } from '@/components/forms/FollowUpDecision';
@@ -36,6 +38,7 @@ import {
     PLANNED_STATUS,
     TASK_TYPE,
     type Activity,
+    type ActivityCalendarState,
     type ActivityLinkTarget,
     type ActivityRelatedModule,
 } from '@/types/activity.types';
@@ -60,6 +63,7 @@ import { RhfRelatedRecordField } from './RhfRelatedRecordField';
 import { RhfAttendeesField } from './RhfAttendeesField';
 import { ActivityBusyTimes } from './ActivityBusyTimes';
 import { RhfVideoMeetingField, useTypeOffersVideo } from './VideoMeeting';
+import { calendarProviderName } from './ActivitySyncStatus';
 
 /** A blank activity (Start / End are filled in from the business clock when the form opens). */
 export const DEFAULT_ACTIVITY_FORM: ActivityFormValues = {
@@ -270,6 +274,41 @@ export interface ActivityFormFieldsProps {
     activityId?: string;
     /** The loaded activity (edit / view): its saved video meeting, the Teams lock and the join link. */
     activity?: Activity;
+    /** The loaded activity's copy in its owner's calendar (P2-3c): the Attendees field says where invitations come from. */
+    calendar?: ActivityCalendarState | null;
+    /** The loaded activity's saved owner (the calendar copy belongs to them). */
+    savedOwner?: string;
+}
+
+const lcName = (value: string | null | undefined) => (value ?? '').trim().toLowerCase();
+
+/**
+ * The Attendees field's line on invitations (P2-3c, D41): who sends them and from which calendar. Undefined when the
+ * owner isn't synced (or the form doesn't know yet).
+ */
+export function attendeesInvitationHint(args: {
+    assignedTo: string;
+    viewer: string | null | undefined;
+    calendar?: ActivityCalendarState | null;
+    savedOwner?: string;
+    /** Creating: the viewer's own calendar provider when it is set up (ok / pending), else null. */
+    ownProvider?: string | null;
+}): string | undefined {
+    const { assignedTo, viewer, calendar, savedOwner, ownProvider } = args;
+    const mine = Boolean(assignedTo) && lcName(assignedTo) === lcName(viewer);
+    if (calendar) {
+        if (calendar.state === 'unsupported' || calendar.state === 'removed_remote' || lcName(assignedTo) !== lcName(savedOwner)) return undefined;
+        const where = calendarProviderName(calendar.provider);
+        const owner = findCrmUser(assignedTo)?.name || assignedTo;
+        if (calendar.invites === 'withhold') {
+            return mine
+                ? `This is a private copy in your ${where}: guests are invited when you press Send invitations in the activity.`
+                : `This is a private copy in ${owner}'s ${where}: guests are invited when ${owner} sends the invitations.`;
+        }
+        return mine ? `Invitations go out from your ${where}.` : `Guests you add wait for ${owner} to send the invitations from their ${where}.`;
+    }
+    if (ownProvider && mine) return `Invitations go out from your ${calendarProviderName(ownProvider)}.`;
+    return undefined;
 }
 
 /**
@@ -277,7 +316,7 @@ export interface ActivityFormFieldsProps {
  * seeded section, each control named after its field key. Fields a Followup Type doesn't use
  * (`ACTIVITY_NOT_APPLICABLE`) aren't rendered. Render inside the form's FormProvider.
  */
-export function ActivityFormFields({ clock, durationOf, compact = false, onOpenRelated, lockedFields, lockReason, activityId, activity }: ActivityFormFieldsProps) {
+export function ActivityFormFields({ clock, durationOf, compact = false, onOpenRelated, lockedFields, lockReason, activityId, activity, calendar, savedOwner }: ActivityFormFieldsProps) {
     const { control, getValues, setValue, watch, getFieldState, trigger } = useFormContext<ActivityFormValues>();
     const formConfig = useModuleFormConfig('activities');
     const { getOptions } = formConfig;
@@ -310,6 +349,17 @@ export function ActivityFormFields({ clock, durationOf, compact = false, onOpenR
         if (!configsLoaded) return;
         if (videoMeeting && videoMeeting !== savedVideo && (!offersVideo || status !== PLANNED_STATUS)) setValue('videoMeeting', '', { shouldDirty: true });
     }, [configsLoaded, videoMeeting, savedVideo, offersVideo, status, setValue]);
+    // Where invitations come from (P2-3c): the saved activity's calendar copy, or (creating) the viewer's own calendar.
+    const { user } = useAuth();
+    const { data: ownSync } = useOwnCalendarSync(!activityId);
+    const ownCalendar = ownSync?.calendar ?? null;
+    const attendeesHint = attendeesInvitationHint({
+        assignedTo,
+        viewer: user?.username,
+        calendar: activityId ? calendar : null,
+        savedOwner,
+        ownProvider: !activityId && ownCalendar && (ownCalendar.status === 'ok' || ownCalendar.status === 'pending') ? ownCalendar.provider : null,
+    });
 
     const notApplicable = useMemo(() => new Set(ACTIVITY_NOT_APPLICABLE[followupType] ?? []), [followupType]);
     const locked = useMemo(() => new Set(lockedFields ?? []), [lockedFields]);
@@ -588,7 +638,7 @@ export function ActivityFormFields({ clock, durationOf, compact = false, onOpenR
                         )}
                         {shows('attendees') && (
                             <FormGridItem span="full">
-                                <RhfAttendeesField name="attendees" label="Attendees" organizationId={organizationId} />
+                                <RhfAttendeesField name="attendees" label="Attendees" organizationId={organizationId} hint={attendeesHint} />
                             </FormGridItem>
                         )}
                         {/* Busy times of the owner and invited colleagues (timed, planned meetings; not Tasks or Notes). */}

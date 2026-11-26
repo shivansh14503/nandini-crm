@@ -53,8 +53,22 @@ function itemColors(item: CalendarItem) {
  * contract renewals), its type icon, time and title. Completed entries fade with a check; cancelled ones are struck
  * through; overdue planned ones turn red.
  */
+/** A red dot on an activity whose calendar copy was refused (P2-3c; `syncState` is sent to its owner and editors only). */
+function SyncErrorDot({ size }: { size: number }) {
+    return (
+        <Box
+            component="span"
+            role="img"
+            aria-label="Calendar sync error"
+            title="The calendar refused the last change: open the activity to retry."
+            sx={{ width: size, height: size, borderRadius: '50%', backgroundColor: 'var(--mui-palette-error-main)', flexShrink: 0 }}
+        />
+    );
+}
+
 export function EventContent({ item, Icon, timeText, list = false, compact = false }: EventContentProps) {
     const colors = itemColors(item);
+    const syncError = item.module === 'activities' && item.syncState === 'error';
     const completed = item.module === 'activities' && item.status === COMPLETED_STATUS;
     const cancelled = item.module === 'activities' && item.status === CANCELLED_STATUS;
     const StatusIcon = completed ? CheckCircleOutlinedIcon : null;
@@ -131,6 +145,7 @@ export function EventContent({ item, Icon, timeText, list = false, compact = fal
                         </Typography>
                     )}
                 </Box>
+                {syncError && <SyncErrorDot size={8} />}
                 {joinUrl && !cancelled && (
                     <Box sx={{ flexShrink: 0 }}>
                         <JoinMeetingActions url={joinUrl} provider={providerOfJoinUrl(joinUrl)} compact />
@@ -188,7 +203,12 @@ export function EventContent({ item, Icon, timeText, list = false, compact = fal
                         {item.title}
                     </Box>
                 ) : null}
-                {StatusIcon && <StatusIcon sx={{ fontSize: 12, color: 'var(--mui-palette-success-main)', flexShrink: 0, ml: 'auto' }} />}
+                {syncError && (
+                    <Box component="span" sx={{ display: 'inline-flex', ml: 'auto', flexShrink: 0 }}>
+                        <SyncErrorDot size={7} />
+                    </Box>
+                )}
+                {StatusIcon && <StatusIcon sx={{ fontSize: 12, color: 'var(--mui-palette-success-main)', flexShrink: 0, ml: syncError ? 0 : 'auto' }} />}
             </Box>
             {!compact && !item.allDay && (
                 <Box component="span" sx={{ ...titleSx, whiteSpace: 'normal', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' }}>

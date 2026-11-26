@@ -5,7 +5,7 @@ import { Box, IconButton, Tooltip, Typography } from '@mui/material';
 import ContentCopyRoundedIcon from '@mui/icons-material/ContentCopyRounded';
 import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
 import { ApiClientError } from '@/services/apiClient';
-import type { IntegrationProviderKey, NotSyncedReason } from '@/types/integration.types';
+import type { IntegrationProviderKey, NotSyncedReason, PersonWebhookStatus, ProviderWebhookStatus, WebhooksOffReason } from '@/types/integration.types';
 import { fmtDay, fmtInstant, fmtInstantDay } from '@/utils/formats';
 
 /** Shared pieces of Admin › API Integrations: status chips, copyable read-only values, provider marks. */
@@ -186,4 +186,39 @@ export const NOT_SYNCED_LABELS: Record<NotSyncedReason, string> = {
     excluded: 'Excluded',
     inactive: 'Inactive',
     group: 'Shared login',
+};
+
+/**
+ * Why calendar webhooks are off server-wide (P2-7), as admins read it. `polling`: calendars still sync by polling
+ * meanwhile (false when sync itself can't run: switched off, or no encryption key to open the provider credentials).
+ */
+export const WEBHOOKS_OFF_LABELS: Record<WebhooksOffReason, { chip: string; hint: string; polling: boolean }> = {
+    no_public_url: { chip: 'No public address', hint: 'Set PUBLIC_API_URL to the API’s https address.', polling: true },
+    needs_https: { chip: 'Needs HTTPS', hint: 'Google and Microsoft only call https addresses. Set PUBLIC_API_URL to https://….', polling: true },
+    disabled: { chip: 'Switched off', hint: 'CALENDAR_WEBHOOKS_ENABLED=false on the server.', polling: true },
+    sync_disabled: { chip: 'Off', hint: 'Calendar sync is switched off on the server.', polling: false },
+    key_missing: { chip: 'Key missing', hint: 'Set INTEGRATIONS_ENCRYPTION_KEY on the server.', polling: false },
+};
+
+/** The admin-facing sentence for a webhooks-off reason, with the polling note only when calendars still sync. */
+export function webhooksOffSentence(reason: WebhooksOffReason | null | undefined, pollingNote: string): string {
+    const words = reason ? WEBHOOKS_OFF_LABELS[reason] : undefined;
+    if (!words) return pollingNote;
+    return words.polling ? `${words.hint} ${pollingNote}` : words.hint;
+}
+
+/** A provider card's webhook line (P2-7). */
+export const PROVIDER_WEBHOOK_LABELS: Record<ProviderWebhookStatus, { label: string; tone: ChipTone }> = {
+    live: { label: 'Live', tone: 'success' },
+    starting: { label: 'Starting', tone: 'info' },
+    errors: { label: 'Some refused', tone: 'warning' },
+    off: { label: 'Off', tone: 'neutral' },
+    unavailable: { label: 'Not available', tone: 'neutral' },
+};
+
+/** A person's webhook in the People table (P2-7). */
+export const PERSON_WEBHOOK_LABELS: Record<PersonWebhookStatus, { label: string; tone: ChipTone }> = {
+    active: { label: 'Instant', tone: 'success' },
+    failed: { label: 'Polling only', tone: 'warning' },
+    waiting: { label: 'Starting', tone: 'neutral' },
 };

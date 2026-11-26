@@ -237,9 +237,11 @@ export interface DoubleState {
     cacheInvalidations: string[];
     /** Form-config payload served to loadCalendarSettings (company domains live in moduleSettings.activities.calendarSync). */
     configs: FormConfigsPayload;
+    /** CalendarWatchChannel rows (P2-7 webhooks). */
+    channels: Row[];
 }
 
-const DELEGATES = ['user', 'calendarConnection', 'calendarSyncUser', 'integrationProvider', 'notification', 'userPreference', 'activityExternalLink', 'activity', '$transaction'] as const;
+const DELEGATES = ['user', 'calendarConnection', 'calendarSyncUser', 'integrationProvider', 'notification', 'userPreference', 'activityExternalLink', 'activity', 'calendarWatchChannel', '$transaction'] as const;
 const realDelegates = new Map<string, unknown>();
 
 function stub(name: (typeof DELEGATES)[number], fake: unknown): void {
@@ -320,6 +322,7 @@ export function installConnectionDouble(
         configs?: FormConfigsPayload;
         links?: Row[];
         activities?: ActivityRowState[];
+        channels?: Row[];
     } = {},
 ): DoubleState {
     dropProviderCredentialsCache();
@@ -345,6 +348,7 @@ export function installConnectionDouble(
         locks: [],
         cacheInvalidations: [],
         configs: seed.configs ?? configsWithDomains(['nandiniinfosys.com']),
+        channels: (seed.channels ?? []).map((c) => ({ generation: 1, status: 'active', externalId: null, createdAt: new Date(0), ...c })),
     };
 
     let clock = 0;
@@ -478,6 +482,7 @@ export function installConnectionDouble(
 
     const activityExternalLink = {
         findMany: async (args: ManyArgs = {}) => findManyOf(state.links, args),
+        count: async ({ where }: { where?: Where } = {}) => state.links.filter((l) => matchesWhere(l, where)).length,
         updateMany: async ({ where, data }: { where: Where; data: Row }) => {
             const rows = state.links.filter((l) => matchesWhere(l, where));
             for (const row of rows) Object.assign(row, data, { updatedAt: touch() });
@@ -486,6 +491,33 @@ export function installConnectionDouble(
     };
     const activity = {
         findMany: async (args: ManyArgs = {}) => findManyOf(state.activities as unknown as Row[], args),
+    };
+
+    const calendarWatchChannel = {
+        findUnique: async ({ where, select }: { where: { id: string }; select?: Record<string, boolean> }) => {
+            const row = state.channels.find((c) => c.id === where.id);
+            return row ? pick(row, select) : null;
+        },
+        findFirst: async ({ where, select, orderBy }: { where?: Where; select?: Record<string, boolean>; orderBy?: unknown }) =>
+            findManyOf(state.channels, { where, select, orderBy, take: 1 })[0] ?? null,
+        findMany: async (args: ManyArgs = {}) => findManyOf(state.channels, args),
+        count: async ({ where }: { where?: Where } = {}) => state.channels.filter((c) => matchesWhere(c, where)).length,
+        create: async ({ data }: { data: Row }) => {
+            if (state.channels.some((c) => c.id === data.id)) throw P2002();
+            const row = { generation: 1, status: 'active', externalId: null, createdAt: touch(), ...data };
+            state.channels.push(row);
+            return { ...row };
+        },
+        updateMany: async ({ where, data }: { where: Where; data: Row }) => {
+            const rows = state.channels.filter((c) => matchesWhere(c, where));
+            for (const row of rows) Object.assign(row, data);
+            return { count: rows.length };
+        },
+        deleteMany: async ({ where }: { where: Where }) => {
+            const before = state.channels.length;
+            state.channels = state.channels.filter((c) => !matchesWhere(c, where));
+            return { count: before - state.channels.length };
+        },
     };
 
     const takeSnapshot = () => ({
@@ -504,6 +536,7 @@ export function installConnectionDouble(
         notification,
         activityExternalLink,
         activity,
+        calendarWatchChannel,
         $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
             void strings;
             // acquireLocks passes its keys as one JSON array of `crm:<key>` resources.
@@ -536,6 +569,7 @@ export function installConnectionDouble(
     stub('userPreference', { findMany: async () => [] });
     stub('activityExternalLink', activityExternalLink);
     stub('activity', activity);
+    stub('calendarWatchChannel', calendarWatchChannel);
 
     mock.method(auditService, 'record', async (_tx: unknown, entry: AuditEntry) => {
         state.audits.push(entry);

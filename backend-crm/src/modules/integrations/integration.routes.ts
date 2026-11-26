@@ -27,7 +27,12 @@ import {
  * 409 DUPLICATE_RECORD (email), 429 RATE_LIMITED.
  *
  *   GET    /                           → { ready: { ok, reason }, keyStatus: ok|missing|unreadable, activeKeyId, publicApiUrl,
- *                                          publicApiUrlConfigured, webhooksActive, fakeProvider, worker, providers: ProviderAdminDto[],
+ *                                          publicApiUrlConfigured, webhooksActive, webhooksOffReason (no_public_url|needs_https|
+ *                                          disabled|sync_disabled|key_missing|null, P2-7), pollMinutesWithWebhooks (the larger of
+ *                                          CALENDAR_POLL_MINUTES_WITH_WEBHOOKS and CALENDAR_POLL_MINUTES), fakeProvider, worker,
+ *                                          workerStatus (running|not_seen|no_redis), syncEnabled, providers: ProviderAdminDto[]
+ *                                          (P2-7: + webhook { status: live|starting|errors|off|unavailable, reason, active,
+ *                                          failed, waiting } | null),
  *                                          settings: CalendarSyncSettings, syncTypes: [{ value, label, calendarSync, videoMeeting, locked, lockReason? }] }
  *   PUT    /providers/:provider        { enabled?, serviceAccountKey? (google: the key file's text, write-only),
  *                                        clientId? (microsoft, zoom), clientSecret? (microsoft, zoom; write-only, ≥ 8 chars),
@@ -52,6 +57,7 @@ import {
  *   GET    /people                     ?search&issue=any|missing|duplicate|not_company|calendar_problem → active non-group users
  *                                        [{ username, fullName, department, role, email, emailIssue,
  *                                           calendar: { target, reason, connection, choice } }]
+ *                                        (P2-7: connection.webhook { status: active|failed|waiting, expiresAt } | null)
  *   PUT    /people/:username/email     { email (required; '' / null clears), allowOtherDomain? } → person row
  *                                        (users/userEmail.service.ts: lower-cased, unique among active non-group users,
  *                                        company domain unless allowOtherDomain; audited User UPDATE). The person's
@@ -60,6 +66,9 @@ import {
  *                                        (CalendarSyncUser, audited; the person is reconciled at once)
  *   POST   /people/:username/calendar/check → person row + { check: ok|user_error|provider_unhealthy|transient|skipped }
  *                                        ("Check now"; 409 CALENDAR_NOT_SYNCED without a live row; same rate limit as tests)
+ *   POST   /people/:username/calendar/sync  → person row + { sync: { status: queued|done|recent|busy|not_ready|failed|off,
+ *                                        changed?, lastSyncedAt } } (P2-5 "Sync now": pull the person's calendar changes
+ *                                        now; 409 CALENDAR_NOT_SYNCED without a live row; same rate limit as tests)
  *
  * Removed in P2-2b: GET /connections and POST /connections/:id/disconnect (the People tab covers both).
  */
@@ -149,6 +158,10 @@ router.put('/people/:username/calendar', validateRequest({ params: usernameParam
 
 router.post('/people/:username/calendar/check', validateRequest({ params: usernameParamSchema }), testLimiter, async (req: Request, res: Response) => {
     sendSuccess(res, await integrationService.checkPersonCalendar(String(req.params.username)));
+});
+
+router.post('/people/:username/calendar/sync', validateRequest({ params: usernameParamSchema }), testLimiter, async (req: Request, res: Response) => {
+    sendSuccess(res, await integrationService.syncPersonCalendar(String(req.params.username)));
 });
 
 export default router;

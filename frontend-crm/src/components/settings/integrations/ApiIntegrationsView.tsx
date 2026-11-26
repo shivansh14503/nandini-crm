@@ -14,7 +14,7 @@ import { CalendarSyncSettingsCard } from './CalendarSyncSettingsCard';
 import { PeopleTable, isPeopleFilter, type PeopleFilter } from './PeopleTable';
 import { ProviderCard } from './ProviderCard';
 import { SyncTypesCard } from './SyncTypesCard';
-import { CopyField, StatusChip, formatDateTime, hintSx } from './integrationUi';
+import { CopyField, StatusChip, WEBHOOKS_OFF_LABELS, formatDateTime, hintSx, webhooksOffSentence } from './integrationUi';
 
 /** The command the owner runs once to make the key (also in backend-crm/.env.example). */
 export const KEY_GENERATE_COMMAND = `node -e "console.log('k1:'+require('crypto').randomBytes(32).toString('base64'))"`;
@@ -68,8 +68,75 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
     );
 }
 
-function ServerFacts({ data }: { data: IntegrationsAdmin }) {
+/** "40 s ago" / "2 min ago" for the worker heartbeat (written every minute, kept 2 minutes). */
+function secondsAgo(iso: string): string {
+    const seconds = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 1000));
+    if (Number.isNaN(seconds)) return '';
+    return seconds < 90 ? `${seconds} s ago` : `${Math.round(seconds / 60)} min ago`;
+}
+
+/**
+ * The calendar sync worker (P2-3c): running (its heartbeat, written every minute), not running (Redis is up but no worker
+ * wrote a heartbeat in 2 minutes: calendar changes wait), or unknown without Redis (a running worker's fallback tick pushes
+ * then). Older servers send only `worker`.
+ */
+function SyncWorkerFact({ data }: { data: IntegrationsAdmin }) {
+    const status = data.workerStatus ?? (data.worker ? 'running' : 'not_seen');
+    return (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, minWidth: 0 }}>
+            {status === 'running' && data.worker ? (
+                <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <StatusChip tone="success">Running</StatusChip>
+                    <Typography sx={hintSx} title={formatDateTime(data.worker.lastSeenAt)}>
+                        last seen {secondsAgo(data.worker.lastSeenAt)}
+                    </Typography>
+                </Box>
+            ) : status === 'no_redis' ? (
+                <>
+                    <StatusChip tone="neutral">Unknown (no Redis)</StatusChip>
+                    <Typography sx={hintSx}>Without Redis there is no heartbeat to read; a running worker still pushes calendar changes about once a minute.</Typography>
+                </>
+            ) : (
+                <>
+                    <StatusChip tone="warning">Not running</StatusChip>
+                    <Typography sx={hintSx}>
+                        Calendar changes wait until it runs. Start it with <code>npm run worker</code>, or <code>RUN_WORKERS=true</code> on the API.
+                    </Typography>
+                </>
+            )}
+            {data.syncEnabled === false && (
+                <Typography sx={{ ...hintSx, color: 'var(--mui-palette-warning-main)' }}>Calendar sync is switched off on the server (CALENDAR_SYNC_ENABLED=false).</Typography>
+            )}
+        </Box>
+    );
+}
+
+/** Calendar webhooks server-wide (P2-7): on, or why not; older servers send only `webhooksActive`. */
+function WebhooksFact({ data }: { data: IntegrationsAdmin }) {
+    if (data.webhooksActive) {
+        return (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, alignItems: 'flex-start' }}>
+                <StatusChip tone="success">Active</StatusChip>
+                {data.pollMinutesWithWebhooks !== undefined && (
+                    <Typography sx={hintSx}>Changes arrive in seconds; a safety check runs every {data.pollMinutesWithWebhooks} minutes.</Typography>
+                )}
+            </Box>
+        );
+    }
     const notHttps = Boolean(data.publicApiUrl && data.publicApiUrl.startsWith('http://'));
+    const reason = data.webhooksOffReason ?? (notHttps ? 'needs_https' : null);
+    if (!reason) return <Typography sx={hintSx}>Off</Typography>;
+    const words = WEBHOOKS_OFF_LABELS[reason];
+    if (!words) return <Typography sx={hintSx}>Off</Typography>;
+    return (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, alignItems: 'flex-start' }}>
+            <StatusChip tone={reason === 'needs_https' || reason === 'no_public_url' || reason === 'key_missing' ? 'warning' : 'neutral'}>{words.chip}</StatusChip>
+            <Typography sx={hintSx}>{webhooksOffSentence(reason, 'Calendars still sync by polling.')}</Typography>
+        </Box>
+    );
+}
+
+function ServerFacts({ data }: { data: IntegrationsAdmin }) {
     return (
         <Box
             sx={{
@@ -100,22 +167,10 @@ function ServerFacts({ data }: { data: IntegrationsAdmin }) {
                 )}
             </Fact>
             <Fact label="Sync worker">
-                {data.worker ? (
-                    <Typography sx={{ fontSize: '0.82rem' }}>Last seen {formatDateTime(data.worker.lastSeenAt)}</Typography>
-                ) : (
-                    <Typography sx={hintSx}>Arrives with calendar sync</Typography>
-                )}
+                <SyncWorkerFact data={data} />
             </Fact>
             <Fact label="Webhooks">
-                {data.webhooksActive ? (
-                    <StatusChip tone="success">Active</StatusChip>
-                ) : notHttps ? (
-                    <StatusChip tone="warning" title="Google and Microsoft only call https addresses.">
-                        Needs HTTPS
-                    </StatusChip>
-                ) : (
-                    <Typography sx={hintSx}>Arrive with calendar sync</Typography>
-                )}
+                <WebhooksFact data={data} />
             </Fact>
         </Box>
     );
@@ -289,6 +344,7 @@ export function ApiIntegrationsView() {
                                 onDirtyChange={onProviderDirty}
                                 onToast={showToast}
                                 onShowProblems={p.kind === 'calendar' ? showProblems : undefined}
+                                backfillDays={data.settings.backfillDays}
                             />
                         ))}
                     </Box>

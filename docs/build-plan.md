@@ -1,7 +1,7 @@
 # Nandini CRM — Build Plan
 
 > **Status:** living document. Part 1 records what has been built (reconstructed from git history, 115 commits
-> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-26, Calendar Phase 2 P2-1, P2-2, P2-2b (admin-managed calendar connections), P2-3a, P2-3b (calendar push engine), P2-4 and P2-6 (busy times), Calendar Phase 4 booking links, Profile Phase 1: My Profile, Profile Phase 2: Admin › Users, Profile Phase 3: notifications & preferences, Profile Phase 4: connected accounts and Profile Phase 5 PR5a + PR5b: company formats, which completes Phase 17; Calendar Phase 3 P3-1: Google Meet and Microsoft Teams links). Part 2
+> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-26, Calendar Phase 2 P2-1, P2-2, P2-2b (admin-managed calendar connections), P2-3a, P2-3b (calendar push engine), P2-3c (backfill, send invitations, sync status), P2-4, P2-5 (calendar → CRM pull), P2-6 (busy times) and P2-7 (webhooks), Calendar Phase 4 booking links, Profile Phase 1: My Profile, Profile Phase 2: Admin › Users, Profile Phase 3: notifications & preferences, Profile Phase 4: connected accounts and Profile Phase 5 PR5a + PR5b: company formats, which completes Phase 17; Calendar Phase 3 P3-1: Google Meet and Microsoft Teams links). Part 2
 > is the roadmap. Tick
 > items off and add new ones as work lands.
 > Related: [System design](system-design.md) · [Database design](database-design.md) · [API plan](api-plan.md)
@@ -402,12 +402,33 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         job per recovery, a row stopped mid-push leaves the link `detached`. Notification kinds `calendar_sync_error`, `calendar_invites_held`, `integration_secret_expiring` (system,
         always deliver; bell icons). `ActivityView.calendar` (data only). `CALENDAR_SYNC_ENABLED`. Deviations: the
         `enrolled` job (replaces the per-user connect job) pushes dirty links only; the backfill of existing
-        activities is P2-3c; a follow-up activity moved in the calendar is moved back (the write-back to the record is
+        activities is P2-3c (done); a follow-up activity moved in the calendar is moved back (the write-back to the record is
         P2-5); the organizer columns stay out of the audited DTO and deleted `origin = 'calendar'` activities have no
         push rule yet (both P2-8); activities created while a row was stopped get no link until the P2-3c backfill.
         Tested against the fake provider, recorded Google / Graph answers and in-memory doubles; not run against a
         real SQL Server, Google or Microsoft.
-  - [ ] **P2-3c: backfill, send invitations, sync status UI**
+  - [x] **P2-3c: backfill, send invitations, sync status UI** (2026-11-26, admin-managed model, addendum §8.3) — no
+        migration. First-sync backfill (`sync.backfill.ts`): the `enrolled` job of a row that is `ok` with
+        `backfillCount` null copies the owner's Planned, create-eligible activities that aren't over and start within
+        `backfillDays` (keyset pages of 200, short transactions under the activity locks, D45 retry outside the
+        transaction), activities with guests as private copies (`invites='withhold'`, D23), then pushes them 100 per
+        round (`ENROLLED_PUSH_BATCH` = the spec's CONNECT_PUSH_BATCH); `backfilledAt` = a run stamp claimed first and reused by a re-run, `backfillCount` (links with the stamp) written last;
+        the poll tick re-queues rows `ok` without a backfill after a 10-minute grace, the Redis-down fallback tick
+        backfills one per tick. `POST /api/activities/:id/calendar-sync/retry` (owner / editors; Add again = a new
+        generation for an event deleted in the calendar; a non-owner's Add again on an activity with guests makes a
+        private copy, D41) and `/send-invites` (owner only, D41; refused while the event is gone; audited
+        `SEND_INVITES`). Held guests are kept by identity (`user:` / `contact:` keys), so a contact who gets an email
+        later stays held. `ActivityView.calendar.invitesWaiting` / `copyReason`, `CalendarItem.syncState`, own
+        calendar `backfill` progress, admin `workerStatus` / `syncEnabled`. UI: `ActivitySyncStatus` in the activity
+        drawer (state line, private copy / held boxes, Send invitations, Waiting for <owner>, Retry / Add again,
+        Open in Google Calendar / Outlook), calendar-aware delete / cancel / owner-change confirmations, the
+        Attendees hint, the list's hidden Calendar column, server skips in the bulk-delete toast, the calendar's
+        error dot, the admin Sync worker fact, the provider switch-on confirmation and the profile card's backfill
+        line. Deviations: Add again resets the link to a new generation (no `force` flag in job data); a backfilled
+        copy is told from others by `link.createdAt = connection.backfilledAt` (no column; done = `backfillCount` set); the `enrolled` job fires
+        on every recovery (P2-3b's push on recovery kept), the backfill runs only once; no per-activity notification
+        for backfilled private copies (the profile card shows the count). Tested with in-memory doubles and the
+        fake provider; not run against a real SQL Server, Google or Microsoft.
   - [x] **P2-4: follow-ups create activities** (2026-11-26) — migration `20261127130000_followup_activities`
         (`Activity.origin` `crm` / `followup` / `calendar`, hand-written filtered unique index
         `UX_Activity_openFollowUp`). `activity.followUp.ts`: pure planner `planFollowUpChange`,
@@ -429,7 +450,20 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         (`renameOrganizationFollowUps`); a follow-up activity whose slot already passed is written with its reminder
         marked sent (`quietPastReminder`, no reminder burst on the deploy-day backfill); the Activities tab's Next
         follow-up box uses the record's own date while the switch is off.
-  - [ ] **P2-5: calendar → CRM (polling)**
+  - [x] **P2-5: calendar → CRM (polling)** (2026-11-26) — no migration (uses `syncCursor` / `syncWindow*` /
+        `fullSyncAt` / `lastPulledAt`, `Activity.externalUpdatedAt`, link `etag` / `baseJson`). Adapter method
+        `listChanges` (Google `events.list` + sync token, full resync on 410; Graph `calendarView/delta`, monthly
+        re-baseline), `pull` jobs on `crm-calendar-sync` (poll fan-out inside `CALENDAR_SYNC_HOURS` every
+        `CALENDAR_POLL_MINUTES`, Redis-down fallback ≤ 5 per tick, nightly Outlook re-baseline), `pullConnection`
+        (lease, classify, three-way merge, deletions / reconfirm, relinks by marker / syncKey, verify-missing on full
+        syncs, cursor held while changes fail), follow-up moves written to the lead / opportunity
+        (`rescheduleRecordFromCalendar`, timed → all-day keeps the time with a 7-day note). `POST
+        /api/calendar-connections/sync` (Sync now / page pull, 6 / min / user) and admin `POST
+        /people/:username/calendar/sync`. UI: Sync now on the Company calendar card and in the admin's calendar dialog,
+        the silent pull on opening the calendar page, "Updated from Google Calendar / Outlook" and unsupported /
+        too long / follow-up notes in the activity drawer. Recurring and > 31-day events are skipped with a reason
+        (R20, owner decision). Tested with the fake provider and hand-written provider answers; no real SQL Server,
+        Google or Microsoft call.
   - [x] **P2-6: busy times** (2026-11-26) — no migration. `GET /api/activities/busy?users&from&to&exclude&suggest`
         (`modules/calendar-sync/busy.*`): up to 20 people, ≤ 31 days, times only (D11). CRM part: Planned activities
         (owner, or invited colleague not declined; Site Visit all-day → `away`), cached 30 s and dropped by activity
@@ -448,7 +482,29 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         calendar "Show busy times" background bands in week / 3-day / day views. Not run against a real SQL Server,
         Google or Microsoft (fake provider and recorded-shape `fakeFetch` tests only). Owner check before relying on
         Microsoft: `getSchedule` under the Exchange RBAC scope (first-run check F7).
-  - [ ] **P2-7: webhooks and HTTPS go-live**
+  - [x] **P2-7: webhooks and HTTPS go-live** (2026-11-26) — migration `20261215090000_calendar_watch_channels`
+        (`CalendarWatchChannel`). Adapter methods `watch` / `renewWatch` / `stopWatch` / `watchExists` (optional on the
+        interface): Google `events.watch` on `primary` as the person (7-day ttl) and `channels.stop`; Graph app-only
+        subscriptions on `users/{mailbox}/events` (10,000 of the documented 10,080 minutes, lifecycle URL) with
+        `PATCH` / `DELETE` / `GET`; the fake provider too. `sync.channels.ts`: ensure / renew (Google: new channel then
+        stop the old; Graph: `PATCH`, 404 → re-create) / stop / lifecycle, token and `clientState` = HMAC with the key
+        ring's HKDF `webhook` subkey (no secret column; every ring key verifies, so rotation works), channel ids tagged
+        with the public address so an address change replaces them; created after enrolment, by the poll (≤ 20 per
+        tick) and nightly (Graph existence check, strays stopped, old rows deleted); a refused watch leaves a `failed`
+        row retried after 6 h and never marks the person or provider. Stopped best effort when a row stops or the
+        provider is switched off, and nightly while webhooks are off. `/api/webhooks/google/calendar`,
+        `/microsoft/calendar`, `/microsoft/lifecycle` (no sign-in, HMAC-verified, own body limits, 600 / min / IP,
+        answer first then work; forged Google pings and Graph notifications refused before any database read, Graph
+        `clientState` = `<conn>.<generation>.<HMAC>`). D26: a ping stamps Redis and queues `pull-<conn>-w<10 s bucket>`
+        (2 s delay) unless that job is still pending; while it runs the stamp queues `pull-<conn>-n<stamp ms>` after
+        it, once finished a fresh `…-w<bucket>-<ms>`. A refused replace backs off 6 h while the old channel delivers.
+        Outside `CALENDAR_SYNC_HOURS` change notifications are dropped unread (Azure SQL sleeps; the morning poll
+        covers them), lifecycle ones handled at any hour. Safety-net poll every `CALENDAR_POLL_MINUTES_WITH_WEBHOOKS`
+        (default 30) for people with a healthy channel. `CALENDAR_WEBHOOKS_ENABLED` (default true), live only with an
+        https `PUBLIC_API_URL`. Admin › API Integrations: server-wide state and interval, a webhook line per provider
+        card, a per-person chip on People. Go-live checklist and runbook: system design §9.2.2. Tested with the fake
+        provider, hand-written Google / Graph answers and in-memory doubles; no real SQL Server, Google or Microsoft
+        call.
   - [ ] **P2-8: customer meetings from the calendar + replies both ways** (optional, off by default)
 - [ ] **Calendar Phase 3: video meetings** (spec §16, adapted to admin-managed connections)
   - [x] **P3-1: Google Meet + Microsoft Teams links** (2026-11-26) — migration `20261128150000_activity_conference`

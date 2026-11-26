@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, it } from 'node:test';
+import { ENV } from '../../config/env.js';
 import { configureSecretBox } from '../../services/secretBox.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { connectionService, hasActiveCalendarConnection, runCalendarConnectionNightly } from './connection.service.js';
@@ -35,6 +36,39 @@ afterEach(() => {
 });
 
 describe('getOwn', () => {
+    it('backfill progress (P2-3c): copied count and the copies still being sent', async () => {
+        const asha = user(1, 'asha');
+        const at = new Date(now.getTime() - 60_000);
+        state = installConnectionDouble({ users: [asha], connections: [fakeRow('c1', 'asha', { status: 'ok', backfilledAt: at, backfillCount: 3 })] });
+        state.links.push(
+            { id: 'l1', connectionId: 'c1', state: 'pending' } as unknown as (typeof state.links)[number],
+            { id: 'l2', connectionId: 'c1', state: 'synced' } as unknown as (typeof state.links)[number],
+            { id: 'l3', connectionId: 'other', state: 'pending' } as unknown as (typeof state.links)[number],
+        );
+        const own = await connectionService.getOwn(authOf(asha));
+        assert.deepEqual(own.calendar?.backfill, { state: 'done', at: at.toISOString(), copied: 3, sending: 1 });
+    });
+
+    it('backfill "off" while CALENDAR_SYNC_ENABLED=false: nothing is being copied (the card neither claims it nor polls)', async () => {
+        const asha = user(1, 'asha');
+        state = installConnectionDouble({ users: [asha], connections: [fakeRow('c1', 'asha', { status: 'ok', backfilledAt: new Date(now.getTime() - 60_000), backfillCount: null })] });
+        const integrations = ENV.INTEGRATIONS as { SYNC_ENABLED: boolean };
+        const was = integrations.SYNC_ENABLED;
+        integrations.SYNC_ENABLED = false;
+        try {
+            assert.deepEqual((await connectionService.getOwn(authOf(asha))).calendar?.backfill, { state: 'off', at: null, copied: null, sending: 0 });
+        } finally {
+            integrations.SYNC_ENABLED = was;
+        }
+        integrations.SYNC_ENABLED = true;
+        try {
+            // Started (stamp written) but not finished: still under way.
+            assert.equal((await connectionService.getOwn(authOf(asha))).calendar?.backfill.state, 'waiting');
+        } finally {
+            integrations.SYNC_ENABLED = was;
+        }
+    });
+
     it('a live row: provider label, mailbox, status, since, last synced; never an error code or provider text', async () => {
         const asha = user(1, 'asha');
         state = installConnectionDouble({
@@ -54,6 +88,7 @@ describe('getOwn', () => {
             status: 'error',
             since: now.toISOString(),
             lastSyncedAt: new Date(now.getTime() - 1000).toISOString(),
+            backfill: { state: 'waiting', at: null, copied: null, sending: 0 },
         });
         const text = JSON.stringify(own);
         assert.ok(!text.includes('calendar_unavailable') && !text.includes('Provider words'));

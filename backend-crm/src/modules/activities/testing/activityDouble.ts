@@ -63,6 +63,12 @@ export interface LeadRow {
     assignedTo: string | null;
     createdBy: string;
     isDeleted: boolean;
+    /** Calendar write-back (P2-5 rescheduleRecordFromCalendar). */
+    nextFollowupDate?: Date | null;
+    nextFollowupTime?: string | null;
+    updatedBy?: string | null;
+    /** A Converted lead keeps its follow-up date (rescheduleRecordFromCalendar). */
+    status?: string | null;
 }
 
 export interface OpportunityRow {
@@ -109,32 +115,13 @@ export interface ActivityDoubleState {
 
 type Where = Record<string, unknown>;
 
-const instant = (value: unknown) => (value instanceof Date ? value.getTime() : (value as number));
 
+/**
+ * Prisma `where` matching (the connection double's: equality case-insensitive on text, instants by time, `in` / `not`
+ * / `notIn` / `gt(e)` / `lt(e)`, `OR` / `AND`; anything else throws, so a new query shape is noticed).
+ */
 function matches(row: Record<string, unknown>, where: Where = {}): boolean {
-    for (const [key, expected] of Object.entries(where)) {
-        if (key === 'OR') {
-            if (!(expected as Where[]).some((w) => matches(row, w))) return false;
-            continue;
-        }
-        const actual = row[key];
-        if (expected !== null && typeof expected === 'object' && !(expected instanceof Date)) {
-            const ops = expected as Record<string, unknown>;
-            for (const [op, operand] of Object.entries(ops)) {
-                if (op === 'in') {
-                    if (!(operand as unknown[]).some((value) => same(actual, value))) return false;
-                } else if (op === 'gt' || op === 'lt') {
-                    if (actual === null || actual === undefined) return false;
-                    if (op === 'gt' ? !(instant(actual) > instant(operand)) : !(instant(actual) < instant(operand))) return false;
-                } else {
-                    throw new Error(`activityDouble: unsupported operator ${key}.${op}`);
-                }
-            }
-            continue;
-        }
-        if (!same(actual, expected)) return false;
-    }
-    return true;
+    return matchesWhere(row, where);
 }
 
 /** SQL Server's default collation compares text case-insensitively; instants compare by time. */
@@ -406,7 +393,10 @@ export function installActivityDouble(
     const user = {
         findMany: async (args: { where: Where; select?: Record<string, unknown> }) => {
             call('user.findMany');
-            return state.users.filter((u) => matches(u as unknown as Record<string, unknown>, args.where)).map((u) => pick(u, args.select));
+            return state.users
+                .map((u) => ({ isGroupUser: false, ...u }))
+                .filter((u) => matches(u as unknown as Record<string, unknown>, args.where))
+                .map((u) => pick(u, args.select));
         },
         findFirst: async (args: { where: Where; select?: Record<string, unknown> }) => {
             call('user.findFirst');
@@ -454,7 +444,14 @@ export function installActivityDouble(
         findUnique: async (args: { where: { id: string }; select?: Record<string, unknown> }) => {
             call('lead.findUnique');
             const row = state.leads.find((l) => l.id === args.where.id);
-            return row ? pick(row, args.select) : null;
+            return row ? pick({ nextFollowupDate: null, nextFollowupTime: null, ...row }, args.select) : null;
+        },
+        update: async (args: { where: { id: string }; data: Partial<LeadRow> }) => {
+            call('lead.update');
+            const row = state.leads.find((l) => l.id === args.where.id);
+            if (!row) throw Object.assign(new Error('Record to update not found'), { code: 'P2025' });
+            Object.assign(row, args.data);
+            return { ...row };
         },
     };
 
@@ -467,6 +464,13 @@ export function installActivityDouble(
         findMany: async (args: { where: Where; select?: Record<string, unknown> }) => {
             call('opportunity.findMany');
             return state.opportunities.filter((o) => matches(o as unknown as Record<string, unknown>, args.where)).map((o) => pick(o, args.select));
+        },
+        update: async (args: { where: { id: string }; data: Partial<OpportunityRow> }) => {
+            call('opportunity.update');
+            const row = state.opportunities.find((o) => o.id === args.where.id);
+            if (!row) throw Object.assign(new Error('Record to update not found'), { code: 'P2025' });
+            Object.assign(row, args.data);
+            return { ...row };
         },
     };
 

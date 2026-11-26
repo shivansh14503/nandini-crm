@@ -161,8 +161,8 @@ export const CALENDAR_LINK_INVITES = ['send', 'withhold'] as const;
 export type CalendarLinkInvites = (typeof CALENDAR_LINK_INVITES)[number];
 
 /**
- * The activity in its owner's company calendar (Calendar Phase 2; data only for now, the drawer's status line comes
- * with P2-3c). Null when the owner isn't synced or the type never goes to calendars.
+ * The activity in its owner's company calendar (Calendar Phase 2; the drawer's ActivitySyncStatus, the list's Calendar
+ * column and the calendar's error dot, P2-3c). Null when the owner isn't synced or the type never goes to calendars.
  */
 export interface ActivityCalendarState {
     provider: string;
@@ -174,6 +174,16 @@ export interface ActivityCalendarState {
     heldCount: number;
     /** The viewer is the owner and there is someone to invite. */
     canSendInvites: boolean;
+    /**
+     * Someone waits for the owner to send invitations (whoever views it): others see "Waiting for <owner>". False while
+     * the event is gone (`cancelled`, `removed_remote`): there is nothing to send until it's back.
+     */
+    invitesWaiting?: boolean;
+    /**
+     * Why a private copy has no guests: `connected` = copied when the owner's calendar was first connected; `assigned` =
+     * saved or reassigned by someone other than the owner. Null when invitations are sent.
+     */
+    copyReason?: 'connected' | 'assigned' | null;
     lastSyncedAt: string | null;
     /** "Open in Google Calendar" (owner / editors only). */
     htmlLink: string | null;
@@ -305,7 +315,24 @@ export interface CalendarItem {
     activityId?: string | null;
     /** `Activity.origin` of an activity item ('followup' for a follow-up activity); null for derived items. */
     origin?: string | null;
+    /**
+     * State of the activity's copy in its owner's calendar (`CalendarLinkState`), for the owner and editors only; null
+     * otherwise. The calendar shows an error dot on `error`.
+     */
+    syncState?: CalendarLinkState | null;
 }
+
+/** POST /api/activities/bulk-delete. `skipped`: live activities left alone, with why (lead / opportunity follow-ups). */
+export interface ActivityBulkDeleteResult {
+    deleted: number;
+    ids: string[];
+    notFound: string[];
+    skipped?: { id: string; reason: string }[];
+}
+
+/** Error codes of the calendar-sync actions (POST /api/activities/:id/calendar-sync/retry | send-invites). */
+export const CALENDAR_NOT_SYNCED = 'CALENDAR_NOT_SYNCED';
+export const CALENDAR_SYNC_NOT_RETRYABLE = 'CALENDAR_SYNC_NOT_RETRYABLE';
 
 export interface CalendarFeed {
     timeZone: string;
