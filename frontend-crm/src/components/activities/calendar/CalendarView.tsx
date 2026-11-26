@@ -153,6 +153,7 @@ interface ShownRange {
 
 /** A calendar entry as FullCalendar takes it. All-day entries use days (the end exclusive); timed ones instants. */
 function toEventInput(item: CalendarItem, timeZone: string, coarsePointer: boolean): EventInput {
+    // A follow-up activity (source leadFollowup / opportunityFollowup) moves with its record: never dragged here.
     const draggable = item.editable && item.source === 'activity';
     const base: EventInput = {
         id: item.key,
@@ -407,8 +408,9 @@ export default function CalendarView() {
         const item = info.event.extendedProps.item as CalendarItem | undefined;
         // Holidays have no record to open.
         if (!item) return;
-        if (item.source === 'activity') {
-            setActivityId(item.recordId);
+        // Activities, lead / opportunity follow-up activities (P2-4) included, open the activity.
+        if (item.module === 'activities') {
+            setActivityId(item.activityId ?? item.recordId);
             return;
         }
         // Follow-ups and renewals belong to their record: open it.

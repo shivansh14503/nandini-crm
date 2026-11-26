@@ -24,6 +24,21 @@ import { resolveReferredBy, type ReferredByValue } from '../shared/referredBy.js
 import { toOpportunityData, toOpportunityDto, type OpportunityDto } from './opportunity.mapper.js';
 import { assertRecordFile } from '../files/recordFile.service.js';
 import { OPPORTUNITY_DOCUMENT_INCLUDE, syncOpportunityDocument } from '../documents/document.sync.js';
+import { loadFollowUpContext } from '../activities/activity.system.js';
+import type { ActivityCommitRow } from '../activities/activity.service.js';
+import {
+    afterFollowUpCommit,
+    cancelRecordFollowUps,
+    followUpSubject,
+    NO_OUTCOME,
+    OPPORTUNITY_FOLLOW_UP_SELECT,
+    opportunityFollowUpTarget,
+    reconcileRecordFollowUp,
+    relinkFollowUpActivity,
+    retryOnceOnUniqueViolation,
+    type FollowUpOutcome,
+    type RecordFollowUpWrite,
+} from '../activities/activity.followUp.js';
 import {
     documentationIssues,
     payeeBankIssues,
@@ -132,6 +147,13 @@ function assertPayeeBank(input: OpportunityInput): void {
 }
 const PAYEE_BANK_TRIGGER_KEYS = ['commission', 'commissionAmount', 'commissionType', ...PAYEE_BANK_FIELDS.map((f) => f.key)];
 
+/**
+ * The follow-up activity of a newly created opportunity (Calendar Phase 2 P2-4): with `followUp` (create, import,
+ * Convert Lead) it is created, or with `relinkFrom` (Convert Lead) the lead's open one is moved over first and then
+ * aligned with the opportunity, so the calendar event carries on instead of being cancelled and re-created.
+ */
+export type OpportunityFollowUpWrite = RecordFollowUpWrite & { relinkFrom?: { module: 'leads'; id: string } };
+
 export async function createOpportunityRecord(
     tx: TransactionClient,
     input: OpportunityInput,
@@ -139,6 +161,7 @@ export async function createOpportunityRecord(
     lookups: PrefetchedLookups = {},
     /** Convert Lead: the lead's own Referred By, which carries over even when it is a legacy typed name. */
     referredByFrom?: ReferredByValue,
+    followUp?: OpportunityFollowUpWrite,
 ): Promise<OpportunityDto> {
     // Code first: its counter row lock queues concurrent creates before they take any other lock.
     const opportunityCode = await generateEntityCode(tx, 'OPP');
@@ -157,7 +180,32 @@ export async function createOpportunityRecord(
 
     const dto = toOpportunityDto(await tx.opportunity.findUniqueOrThrow({ where: { id: row.id }, include }));
     await auditService.record(tx, { entityType: 'Opportunity', entityId: row.id, action: 'CREATE', changedBy: user.username, changes: dto });
+    if (followUp) {
+        const now = new Date();
+        const target = opportunityFollowUpTarget(row);
+        if (followUp.relinkFrom) followUp.rows.push(...(await relinkFollowUpActivity(tx, followUp.relinkFrom, target, user.username, now, followUp)).rows);
+        followUp.rows.push(...(await reconcileRecordFollowUp(tx, target, NO_OUTCOME, user.username, now, followUp)).rows);
+    }
     return dto;
+}
+
+/**
+ * What an opportunity save recorded, for its follow-up activity (spec §11.2): a response with a new slot → `new`;
+ * a response that clears the follow-up (Do Not Contact) → `closed` (the activity is completed with it); a response
+ * keeping the slot → `keep`; a closed stage (planOpportunityFollowUp stores no response there) or no response → none
+ * (a closed stage then cancels the open activity, as the opportunity is no longer open).
+ */
+export function opportunityFollowUpOutcome(
+    responseRecorded: boolean,
+    plan: FollowUpPlan,
+    salesStage: string,
+    before: { nextFollowupDate: string | null; nextFollowupTime: string },
+    remarks: string,
+): FollowUpOutcome {
+    if (!responseRecorded || !plan.customerResponse || CLOSED_STAGES.has(salesStage.trim())) return NO_OUTCOME;
+    const sameSlot = (plan.nextFollowupDate ?? '') === (before.nextFollowupDate ?? '') && plan.nextFollowupTime.trim() === before.nextFollowupTime.trim();
+    const decision = plan.followUpCleared ? 'closed' : sameSlot ? 'keep' : 'new';
+    return { kind: 'recorded', response: plan.customerResponse, remarks, decision };
 }
 
 export const opportunityService = {
@@ -232,14 +280,23 @@ export const opportunityService = {
         assertNotInPast(opportunityPastChecks(input));
         // Task and Note are Followup Types of Activities only.
         throwFieldIssues(activityOnlyTypeIssues(input.followupType));
-        const created = await runInTransaction((tx) => createOpportunityRecord(tx, input, user));
+        const context = await loadFollowUpContext();
+        const { created, rows } = await retryOnceOnUniqueViolation(() =>
+            runInTransaction(async (tx) => {
+                const rows: ActivityCommitRow[] = [];
+                const created = await createOpportunityRecord(tx, input, user, {}, undefined, { context, notify: true, rows });
+                return { created, rows };
+            }),
+        );
         await cacheService.invalidateEntityCaches('opportunities');
+        await afterFollowUpCommit(rows, user);
         return created;
     },
 
     async update(id: string, patch: Record<string, unknown>, user: AuthUser): Promise<OpportunityDto> {
         const fieldConfig = await loadModuleFieldConfig('opportunities');
-        const updated = await runInTransaction(async (tx) => {
+        const context = await loadFollowUpContext();
+        const { updated, rows } = await retryOnceOnUniqueViolation(() => runInTransaction(async (tx) => {
             await lockRecords(tx, 'opportunity', [id]);
             const existing = await tx.opportunity.findFirst({ where: { id, isDeleted: false }, include });
             if (!existing) throw notFound();
@@ -291,28 +348,45 @@ export const opportunityService = {
             if ('lineItems' in patch) await replaceLineItems(tx, id, input, computed);
             await syncOpportunityDocument(tx, id, input, user);
 
-            const after = toOpportunityDto(await tx.opportunity.findUniqueOrThrow({ where: { id }, include }));
+            const saved = await tx.opportunity.findUniqueOrThrow({ where: { id }, include });
+            const after = toOpportunityDto(saved);
             const changes = diffRecords(before, after);
             if (Object.keys(changes).length > 0) {
                 await auditService.record(tx, { entityType: 'Opportunity', entityId: id, action: 'UPDATE', changedBy: user.username, changes });
             }
-            return after;
-        });
+
+            // The follow-up activity follows the save (activity.followUp.ts).
+            const outcome = opportunityFollowUpOutcome(
+                responseRecorded,
+                plan,
+                input.salesStage,
+                { nextFollowupDate: before.nextFollowupDate || null, nextFollowupTime: before.nextFollowupTime ?? '' },
+                input.remarks ?? '',
+            );
+            const target = { ...opportunityFollowUpTarget(saved), derivedSubjectBefore: followUpSubject(opportunityFollowUpTarget(existing)) };
+            const { rows } = await reconcileRecordFollowUp(tx, target, outcome, user.username, new Date(), { context, notify: true });
+            return { updated: after, rows };
+        }));
 
         await cacheService.invalidateEntityCaches('opportunities');
+        await afterFollowUpCommit(rows, user);
         return updated;
     },
 
     async remove(id: string, user: AuthUser): Promise<void> {
-        await runInTransaction(async (tx) => {
+        const context = await loadFollowUpContext();
+        const { rows } = await runInTransaction(async (tx) => {
             await lockRecords(tx, 'opportunity', [id]);
             const existing = await tx.opportunity.findFirst({ where: { id, isDeleted: false }, select: OWNER_SELECT });
             if (!existing) throw notFound();
             assertRecordAccess(user, existing);
             await tx.opportunity.update({ where: { id }, data: softDeleteData(user) });
             await auditService.record(tx, { entityType: 'Opportunity', entityId: id, action: 'DELETE', changedBy: user.username });
+            // A deleted opportunity's open follow-up activity is cancelled (a restore re-creates one).
+            return cancelRecordFollowUps(tx, 'opportunities', [id], user.username, new Date(), { context, notify: true });
         });
         await cacheService.invalidateEntityCaches('opportunities');
+        await afterFollowUpCommit(rows, user);
     },
 
     /**
@@ -320,17 +394,24 @@ export const opportunityService = {
      * Writes a RESTORE entry pointing at the DELETE it reverses (`revertsId`).
      */
     async restore(id: string, user: AuthUser, revertsId?: string): Promise<void> {
-        await runInTransaction(async (tx) => {
-            await lockRecords(tx, 'opportunity', [id]);
-            assertDeletedRow(await tx.opportunity.findUnique({ where: { id }, select: { isDeleted: true } }), 'Opportunity');
-            await tx.opportunity.update({ where: { id }, data: restoreData(user) });
-            await auditService.record(tx, { entityType: 'Opportunity', entityId: id, action: 'RESTORE', changedBy: user.username, revertsId });
-        });
+        const context = await loadFollowUpContext();
+        const { rows } = await retryOnceOnUniqueViolation(() =>
+            runInTransaction(async (tx) => {
+                await lockRecords(tx, 'opportunity', [id]);
+                assertDeletedRow(await tx.opportunity.findUnique({ where: { id }, select: { isDeleted: true } }), 'Opportunity');
+                const restored = await tx.opportunity.update({ where: { id }, data: restoreData(user), select: OPPORTUNITY_FOLLOW_UP_SELECT });
+                await auditService.record(tx, { entityType: 'Opportunity', entityId: id, action: 'RESTORE', changedBy: user.username, revertsId });
+                // Re-creates the follow-up activity when the opportunity is open with a slot (the cancelled one stays as history).
+                return reconcileRecordFollowUp(tx, opportunityFollowUpTarget(restored), NO_OUTCOME, user.username, new Date(), { context, notify: true });
+            }),
+        );
         await cacheService.invalidateEntityCaches('opportunities');
+        await afterFollowUpCommit(rows, user);
     },
 
     async bulkRemove(ids: string[], user: AuthUser): Promise<BulkDeleteResult> {
-        const result = await runInTransaction(async (tx) => {
+        const context = await loadFollowUpContext();
+        const { result, rows } = await runInTransaction(async (tx) => {
             await lockRecords(tx, 'opportunity', ids);
             const live = await tx.opportunity.findMany({ where: { id: { in: ids }, isDeleted: false }, select: { id: true, ...OWNER_SELECT } });
             for (const row of live) assertRecordAccess(user, row);
@@ -342,10 +423,12 @@ export const opportunityService = {
                     liveIds.map((entityId) => ({ entityType: 'Opportunity' as const, entityId, action: 'DELETE' as const, changedBy: user.username })),
                 );
             }
-            return { deleted: liveIds.length, ids: liveIds, notFound: ids.filter((id) => !liveIds.includes(id)) };
+            const { rows } = await cancelRecordFollowUps(tx, 'opportunities', liveIds, user.username, new Date(), { context, notify: true });
+            return { result: { deleted: liveIds.length, ids: liveIds, notFound: ids.filter((id) => !liveIds.includes(id)) }, rows };
         });
 
         if (result.deleted > 0) await cacheService.invalidateEntityCaches('opportunities');
+        await afterFollowUpCommit(rows, user);
         return result;
     },
 };

@@ -202,6 +202,18 @@ export function computeRemindAt(input: ReminderInput, timeZone: string): Date | 
 
 const sameInstant = (a: Date | null | undefined, b: Date | null | undefined) => (a?.getTime() ?? null) === (b?.getTime() ?? null);
 
+/**
+ * `reminderSentAt` of a reminder a system write (re)armed with `quietPastReminder` (P2-4 follow-up activities): when
+ * the event's own moment has already passed (a timed start, or 09:00 business time of an all-day day) the reminder is
+ * stored as sent at `now`, so the backfill, a restore or a follow-up saved in the past never sends a burst of late
+ * reminders (the activity just shows as overdue). A reminder whose event is still ahead is left to fire as usual.
+ */
+export function quietPastReminderSentAt(input: ReminderInput, remindAt: Date | null, now: Date, timeZone: string): Date | null {
+    if (!remindAt) return null;
+    const moment = computeRemindAt({ ...input, reminder: 'At start time' }, timeZone);
+    return moment && moment.getTime() <= now.getTime() ? now : null;
+}
+
 /** `reminderSentAt` after a write: a reschedule (another `remindAt`) re-arms the reminder. */
 export function nextReminderSentAt(before: { remindAt: Date | null; reminderSentAt: Date | null }, remindAt: Date | null): Date | null {
     return sameInstant(before.remindAt, remindAt) ? before.reminderSentAt : null;

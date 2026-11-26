@@ -107,6 +107,11 @@ export interface UndoField {
     /** Value on the record now. */
     current: string;
     status: UndoFieldStatus;
+    /**
+     * Why a `blocked` field can't be put back, when the API says (e.g. a follow-up activity's date, which moves with
+     * its lead / opportunity, or a change made from a calendar).
+     */
+    reason?: string;
 }
 
 export interface UndoPreview {

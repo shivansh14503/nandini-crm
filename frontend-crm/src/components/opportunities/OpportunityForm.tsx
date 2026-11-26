@@ -15,6 +15,7 @@ import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 import { type BreadcrumbItem } from '../common/AppBreadcrumbs';
 import { AppToast } from '../common/AppToast';
 import { setSaveFlash, useSaveFlash } from '@/utils/saveFlash';
+import { useFollowUpActivitiesOn, withFollowUpActivityFlash } from '@/utils/followUpActivities';
 import { CommonFormLayout } from '../common/CommonFormLayout';
 import { type FormTabDefinition } from '../common/Drawer';
 import { useRhfForm } from '../forms/rhf';
@@ -154,6 +155,7 @@ export default function OpportunityForm({
     const savedFollowupType = useRef('');
     // Sales Stage → Customer Response → follow-up (utils/opportunityResponseRules): read at validation time.
     const responseRules = useOpportunityResponseConfig();
+    const followUpActivities = useFollowUpActivitiesOn();
     const responseRulesRef = useRef(responseRules);
     useEffect(() => {
         responseRulesRef.current = responseRules;
@@ -246,14 +248,17 @@ export default function OpportunityForm({
             let saved: { id: string } | undefined;
             let message = '';
             if (mode === 'create') {
-                saved = await opportunityService.create(followUpKind(values, responseRules).closed ? { ...values, nextFollowupDate: '', nextFollowupTime: '' } : values);
-                message = 'Opportunity created successfully! Added to your sales pipeline.';
+                const { closed } = followUpKind(values, responseRules);
+                saved = await opportunityService.create(closed ? { ...values, nextFollowupDate: '', nextFollowupTime: '' } : values);
+                // The save created the opportunity's follow-up activity (P2-4) when it has a next follow-up.
+                message = withFollowUpActivityFlash('Opportunity created successfully! Added to your sales pipeline.', followUpActivities, !closed && Boolean(values.nextFollowupDate));
             } else if (mode === 'edit' && opportunityId) {
                 // A closed deal stores no response; it and a "no follow-up" response store no next follow-up.
                 const { closed, noFollowUp } = followUpKind(values, responseRules);
                 const cleared = noFollowUp ? { ...values, ...(closed ? { customerResponse: '' } : {}), nextFollowupDate: '', nextFollowupTime: '' } : values;
                 saved = await opportunityService.update(opportunityId, withFreshLinks(cleared, formState.defaultValues ?? {}));
-                message = 'Opportunity details updated successfully!';
+                const recorded = Boolean(values.customerResponse?.trim());
+                message = withFollowUpActivityFlash('Opportunity details updated successfully!', followUpActivities, recorded && !noFollowUp && Boolean(values.nextFollowupDate));
             }
 
             reset(values);

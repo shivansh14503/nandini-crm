@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { activityRangeWhere } from '../activities/activity.calendar.js';
-import { morningSummarySkipReason, overdueActivitiesWhere } from './morningSummary.service.js';
+import { morningSummarySkipReason, NOT_FOLLOW_UP_ACTIVITY, overdueActivitiesWhere, todayActivitiesWhere } from './morningSummary.service.js';
 
 type TimeRow = { startAt: Date; endAt: Date | null };
 type Bounds = { lt?: Date; lte?: Date; gt?: Date; gte?: Date };
@@ -86,5 +86,19 @@ describe('morningSummarySkipReason', () => {
         assert.equal(morningSummarySkipReason(user, '2026-12-01'), 'out_of_office');
         assert.equal(morningSummarySkipReason(user, '2026-12-05'), 'out_of_office');
         assert.equal(morningSummarySkipReason(user, '2026-12-06'), null);
+    });
+});
+
+describe('follow-up activities stay out of the morning email (P2-4 guard)', () => {
+    // The email lists lead / opportunity follow-ups from the records; their activities would list them twice.
+    it('leaves follow-up activities out of the overdue section', () => {
+        const overdue = overdueActivitiesWhere('palak', dayStart) as Record<string, unknown>;
+        assert.deepEqual(overdue.origin, { not: 'followup' });
+    });
+
+    it("leaves follow-up activities out of today's schedule", () => {
+        const today = todayActivitiesWhere({ id: 1, username: 'palak', role: 'user' }, dayStart, dayEnd) as { AND: unknown[] };
+        assert.deepEqual(today.AND.at(-1), NOT_FOLLOW_UP_ACTIVITY);
+        assert.deepEqual(NOT_FOLLOW_UP_ACTIVITY, { origin: { not: 'followup' } });
     });
 });

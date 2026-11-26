@@ -1,8 +1,13 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { afterEach, describe, it, mock } from 'node:test';
+import { prisma } from '../../config/prisma.js';
 import type { AuthUser } from '../../types/user.types.js';
+import { formConfigService, type FormConfigsPayload } from '../form-configs/formConfig.service.js';
 import {
     activityCalendarWhere,
+    activitySource,
+    calendarFeed,
+    calendarOriginWhere,
     activityRangeWhere,
     activityToCalendarItem,
     capRows,
@@ -15,6 +20,7 @@ import {
     mergeCalendarItems,
     opportunityFollowupToCalendarItem,
     opportunityFollowupWhere,
+    openFollowUpActivitiesWhere,
     overlaps,
     renewalRange,
     type ActivityCalendarRow,
@@ -115,6 +121,123 @@ describe('where builders', () => {
     });
 });
 
+describe('follow-up activities in the feed (P2-4)', () => {
+    it('splits activities by origin: CRM ones under the activity source, follow-up ones under their follow-up source', () => {
+        const all = new Set(['activity', 'leadFollowup', 'opportunityFollowup', 'contractRenewal'] as const);
+        assert.deepEqual(calendarOriginWhere(all, true), {
+            OR: [{ origin: { not: 'followup' } }, { origin: 'followup', relatedModule: { in: ['leads', 'opportunities'] } }],
+        });
+        assert.deepEqual(calendarOriginWhere(new Set(['leadFollowup'] as const), true), { origin: 'followup', relatedModule: { in: ['leads'] } });
+        assert.deepEqual(calendarOriginWhere(new Set(['activity'] as const), true), { origin: { not: 'followup' } });
+        // Switch off: follow-up activities stay out of the feed (the derived items show instead).
+        assert.deepEqual(calendarOriginWhere(all, false), { origin: { not: 'followup' } });
+        assert.equal(calendarOriginWhere(new Set(['opportunityFollowup', 'contractRenewal'] as const), false), null);
+    });
+
+    it('scopes the dedupe query to the activities the caller can see', () => {
+        assert.deepEqual(openFollowUpActivitiesWhere(exec, 'leads', ['l1', 'l2']), {
+            AND: [
+                { OR: [{ assignedTo: 'palak' }, { createdBy: 'palak' }, { attendees: { some: { username: 'palak' } } }] },
+                { origin: 'followup', status: 'Planned', isDeleted: false, relatedModule: 'leads', relatedId: { in: ['l1', 'l2'] } },
+            ],
+        });
+    });
+
+    it('maps a follow-up activity under its follow-up source, never draggable', () => {
+        const row: ActivityCalendarRow = {
+            id: 'fa1',
+            subject: 'Call follow-up: OPP-0007 ACME',
+            followupType: 'Call',
+            status: 'Planned',
+            startAt: new Date('2026-11-27T05:30:00.000Z'),
+            endAt: new Date('2026-11-27T06:00:00.000Z'),
+            allDay: false,
+            timeZone: IST,
+            assignedTo: 'palak',
+            createdBy: 'palak',
+            relatedModule: 'opportunities',
+            relatedId: 'o1',
+            relatedTo: 'ACME',
+            relatedCode: 'OPP-0007',
+            location: null,
+            origin: 'followup',
+            attendees: [],
+        };
+        assert.equal(activitySource(row), 'opportunityFollowup');
+        assert.equal(activitySource({ origin: 'followup', relatedModule: 'leads' }), 'leadFollowup');
+        assert.equal(activitySource({ origin: 'crm', relatedModule: 'leads' }), 'activity');
+        const item = activityToCalendarItem(row, exec, NOW);
+        assert.equal(item.source, 'opportunityFollowup');
+        assert.equal(item.module, 'activities');
+        assert.equal(item.activityId, 'fa1');
+        assert.equal(item.origin, 'followup');
+        assert.equal(item.editable, false, 'its times move with the opportunity');
+        assert.equal(activityToCalendarItem({ ...row, origin: 'crm' }, exec, NOW).editable, true);
+    });
+
+    describe('calendarFeed', () => {
+        const real = { activity: prisma.activity, opportunity: prisma.opportunity };
+        const replace = (name: 'activity' | 'opportunity', value: unknown) => Object.defineProperty(prisma, name, { value, configurable: true, writable: true });
+        afterEach(() => {
+            replace('activity', real.activity);
+            replace('opportunity', real.opportunity);
+            mock.restoreAll();
+        });
+
+        const opportunityRow = (id: string) => ({
+            id,
+            opportunityCode: id.toUpperCase(),
+            opportunityName: null,
+            organizationName: 'ACME',
+            followupType: 'Call',
+            salesStage: 'Proposal',
+            assignedTo: 'palak',
+            nextFollowupDate: date('2026-11-27'),
+            nextFollowupTime: '11:00 AM',
+        });
+
+        function install(followUpActivities: boolean) {
+            const configs = {
+                categories: [],
+                fieldsByModule: {},
+                moduleTabs: {},
+                moduleSettings: { activities: { calendarSync: { followUpActivities } } },
+            } as unknown as FormConfigsPayload;
+            mock.method(formConfigService, 'getAllConfigs', async () => configs);
+            const activityQueries: unknown[] = [];
+            replace('activity', {
+                findMany: async (args: { where: unknown; select: Record<string, unknown> }) => {
+                    activityQueries.push(args.where);
+                    // The dedupe query (select relatedId only): o1 has an open follow-up activity the caller sees.
+                    if (Object.keys(args.select).length === 1) return [{ relatedId: 'o1' }];
+                    return [];
+                },
+            });
+            replace('opportunity', { findMany: async () => [opportunityRow('o1'), opportunityRow('o2')] });
+            return activityQueries;
+        }
+
+        const query = { from: '2026-11-23T00:00:00.000Z', to: '2026-11-30T00:00:00.000Z', sources: ['activity', 'opportunityFollowup'] } as Parameters<typeof calendarFeed>[0];
+
+        it('drops the derived item of a record whose follow-up activity the caller sees', async () => {
+            const queries = install(true);
+            const feed = await calendarFeed(query, exec, NOW);
+            assert.deepEqual(
+                feed.items.map((item) => item.recordId),
+                ['o2'],
+            );
+            assert.equal(queries.length, 2);
+        });
+
+        it('keeps every derived item while the switch is off (no dedupe query)', async () => {
+            const queries = install(false);
+            const feed = await calendarFeed(query, exec, NOW);
+            assert.deepEqual(feed.items.map((item) => item.recordId).sort(), ['o1', 'o2']);
+            assert.equal(queries.length, 1);
+        });
+    });
+});
+
 describe('items', () => {
     const activity: ActivityCalendarRow = {
         id: 'a1',
@@ -130,7 +253,9 @@ describe('items', () => {
         relatedModule: 'leads',
         relatedId: 'l1',
         relatedTo: 'Asha',
+        relatedCode: 'LD-0001',
         location: null,
+        origin: 'crm',
         attendees: [
             { kind: 'user', username: 'palak', responseStatus: 'accepted' },
             { kind: 'email', username: null, responseStatus: 'needsAction' },

@@ -49,6 +49,7 @@ import { useFormMode } from '@/context/FormModeContext';
 import { useIsCodedDefaultsHarvest } from '@/context/CodedFieldDefaultsContext';
 import { upperCase, useUndoSafeSanitizer } from '@/components/forms/undoSafeInput';
 import { CUSTOMER_RESPONSES, FieldGlow, useFollowUpDecision, type FollowUpDecision } from '@/components/forms/FollowUpDecision';
+import { FOLLOW_UP_ACTIVITY_HINT, FOLLOW_UP_ACTIVITY_SHORT_HINT, useFollowUpActivitiesOn } from '@/utils/followUpActivities';
 import { useLeadRatingConfig } from '@/utils/leadRating';
 import { activeOptionValues } from '@/utils/formConfig';
 import { Typography } from '@mui/material';
@@ -123,6 +124,7 @@ export function LeadOverviewSection({ leadId, notify, onDecisionPendingChange, o
     // The list the leads field is linked to (its options carry the Rating rules), not a hard-coded key.
     const customerResponseOptions = activeOptionValues(responseCategory, CUSTOMER_RESPONSES);
     const followUpLocked = isEdit && !response.trim();
+    const followUpActivities = useFollowUpActivitiesOn();
 
     // Informational only: lists (and links to) the records that already use the mobile / email; never blocks the save.
     const mobile = useWatch({ control, name: 'mobile' });
@@ -310,7 +312,15 @@ export function LeadOverviewSection({ leadId, notify, onDecisionPendingChange, o
                                 label="Next Followup Date"
                                 required
                                 disabled={followUpLocked}
-                                hint={followUpLocked ? 'Pick a Customer Response to change it' : 'Date & time'}
+                                hint={
+                                    followUpLocked ? (
+                                        'Pick a Customer Response to change it'
+                                    ) : followUpActivities ? (
+                                        <span title={FOLLOW_UP_ACTIVITY_HINT}>{FOLLOW_UP_ACTIVITY_SHORT_HINT}</span>
+                                    ) : (
+                                        'Date & time'
+                                    )
+                                }
                             />
                         </FieldGlow>
                     )}

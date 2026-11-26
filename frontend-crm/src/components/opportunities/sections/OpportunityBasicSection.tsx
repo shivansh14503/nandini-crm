@@ -54,6 +54,7 @@ import { useFormMode } from '@/context/FormModeContext';
 import { useIsCodedDefaultsHarvest } from '@/context/CodedFieldDefaultsContext';
 import { CUSTOMER_RESPONSES, FieldGlow, useFollowUpDecision } from '@/components/forms/FollowUpDecision';
 import { CLOSED_STAGES, useOpportunityResponseConfig } from '@/utils/opportunityResponseRules';
+import { FOLLOW_UP_ACTIVITY_HINT, FOLLOW_UP_ACTIVITY_SHORT_HINT, useFollowUpActivitiesOn } from '@/utils/followUpActivities';
 
 type F = OpportunityFormData;
 
@@ -98,6 +99,7 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
     const response = useWatch({ control, name: 'customerResponse' }) ?? '';
     const closed = editable && CLOSED_STAGES.has(stage);
     const skipsFollowUp = isEdit && !closed && responseRules.noFollowUp(response);
+    const followUpActivities = useFollowUpActivitiesOn();
     const { setAnchor: setResponseAnchor, onResponseChange, onSuspendChange, glow: followUpGlow, popper: followUpPopper } = useFollowUpDecision({
         enabled: isEdit,
         notify,
@@ -338,7 +340,7 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
                             timeName="nextFollowupTime"
                             label="Next Followup Date"
                             required
-                            hint="Next touchpoint"
+                            hint={followUpActivities ? <span title={FOLLOW_UP_ACTIVITY_HINT}>{FOLLOW_UP_ACTIVITY_SHORT_HINT}</span> : 'Next touchpoint'}
                         />
                     </FieldGlow>
                 )}

@@ -185,6 +185,12 @@ function todayWhen(row: SummaryActivityRow, day: string, formats: DisplayFormats
     return hasEnd && row.endAt && zonedDayOf(row.endAt, row.timeZone) === day ? `${start} – ${formatTime(row.endAt, row.timeZone, formats)}` : start;
 }
 
+/*
+ * Parked by the owner (Calendar Phase 2): follow-up activities (origin 'followup', P2-4) are kept out of the activity
+ * sections by morningSummary.service.ts (NOT_FOLLOW_UP_ACTIVITY), so the email lists each follow-up once, from its
+ * lead / opportunity. When the email is picked up again: list follow-up activities here instead of the derived ones,
+ * and hide the "Add to Google Calendar" link for owners whose calendar is synced.
+ */
 function activityItem(row: SummaryActivityRow, input: MorningSummaryInput, when: string, withCalendarLink: boolean): SummaryItem {
     const related = relatedLabel(row);
     const href = crmUrl(input.appUrl, recordPath('activities', row.id));

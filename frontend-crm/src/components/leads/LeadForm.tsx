@@ -5,6 +5,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useResetTab } from '@/hooks/useResetTab';
 import { followUpEditIssues, followUpSlotIssues, type FollowUpDecision } from '../forms/FollowUpDecision';
 import { useLeadRatingConfig } from '@/utils/leadRating';
+import { useFollowUpActivitiesOn, withFollowUpActivityFlash } from '@/utils/followUpActivities';
 import { useRouter } from 'next/navigation';
 import { FormProvider, type Path } from 'react-hook-form';
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
@@ -140,6 +141,7 @@ export default function LeadForm({
 
     // Rating rules (closing statuses) and the saved lead's status / Rating; read when the form validates.
     const ratingConfig = useLeadRatingConfig();
+    const followUpActivities = useFollowUpActivitiesOn();
     const ratingConfigRef = useRef(ratingConfig);
     useEffect(() => {
         ratingConfigRef.current = ratingConfig;
@@ -249,13 +251,15 @@ export default function LeadForm({
             const result = editing ? await leadService.update(leadId!, payload) : await leadService.create(values);
             reset(values);
             const rated = result?.rating ? ` Rating: ${result.rating}.` : '';
+            // The save created / moved the lead's follow-up activity (P2-4) when it set a next follow-up on an open lead.
+            const nextFollowUp = !isClosing && (!editing || response) && Boolean(values.nextFollowupDate);
             setSaveFlash({
                 listPath: ROUTES.LEADS,
-                message: editing
-                    ? response
-                        ? `Follow-up recorded.${rated}`
-                        : 'Lead details updated successfully!'
-                    : `Lead created successfully! Added to your sales pipeline.${rated}`,
+                message: withFollowUpActivityFlash(
+                    editing ? (response ? `Follow-up recorded.${rated}` : 'Lead details updated successfully!') : `Lead created successfully! Added to your sales pipeline.${rated}`,
+                    followUpActivities,
+                    nextFollowUp
+                ),
                 severity: 'success',
                 recordId: result?.id ?? leadId,
             });

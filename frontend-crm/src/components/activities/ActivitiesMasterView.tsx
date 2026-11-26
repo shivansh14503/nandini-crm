@@ -28,7 +28,7 @@ import { useSaveFlash } from '@/utils/saveFlash';
 import { ROUTES } from '@/config/constants';
 import { useAuth } from '@/context/AuthContext';
 import { findCrmUser } from '@/services/masterData.store';
-import { NOTE_TYPE, TASK_TYPE, type Activity } from '@/types/activity.types';
+import { isFollowUpActivity, NOTE_TYPE, TASK_TYPE, type Activity } from '@/types/activity.types';
 import { useActivities, useBulkDeleteActivities, useDeleteActivity } from '@/hooks/queries/useActivities';
 import { addDays, instantToZonedWallClock, zonedStartOfDay } from '@/utils/zonedTime';
 import { useSearchScope, useSearchScopedRows } from '../search/SearchScope';
@@ -182,19 +182,42 @@ export function ActivitiesMasterView({ mine = false, type = '', status = '' }: A
     };
 
     const handleBulkDelete = async () => {
-        // Activities the user was only invited to are left out: one of them would fail the whole batch (403).
+        // Left out: activities the user was only invited to (one would fail the whole batch, 403), and lead /
+        // opportunity follow-up activities (P2-4), which stay with their record (the API skips them too).
         const byId = new Map(allActivities.map((a) => [a.id, a]));
+        let invited = 0;
+        let followUps = 0;
         const ids = selectedIds.filter((id) => {
             const row = byId.get(id);
-            return !row || canChange(row);
+            if (!row) return true;
+            if (isFollowUpActivity(row)) {
+                followUps++;
+                return false;
+            }
+            if (!canChange(row)) {
+                invited++;
+                return false;
+            }
+            return true;
         });
-        const skipped = selectedIds.length - ids.length;
+        const skipped = invited + followUps;
         const count = ids.length;
         const plural = (n: number) => `activit${n === 1 ? 'y' : 'ies'}`;
-        const skippedNote = skipped > 0 ? ` ${skipped} ${plural(skipped)} you were only invited to can't be deleted and will be kept.` : '';
+        const reasons = [
+            invited > 0 ? `${invited} ${plural(invited)} you were only invited to` : '',
+            followUps > 0 ? `${followUps} lead / opportunity follow-up ${plural(followUps)} (they stay with their record)` : '',
+        ].filter(Boolean);
+        const skippedNote = skipped > 0 ? ` ${reasons.join(' and ')} can't be deleted and will be kept.` : '';
         if (count === 0) {
             if (skipped > 0) {
-                setToast({ open: true, message: `You were only invited to the selected ${plural(skipped)}: only the owner can delete them.`, severity: 'warning' });
+                setToast({
+                    open: true,
+                    message:
+                        followUps > 0
+                            ? `The selected ${plural(skipped)} can't be deleted: follow-up activities stay with their lead / opportunity${invited > 0 ? ', and only the owner deletes the ones you were invited to' : ''}.`
+                            : `You were only invited to the selected ${plural(skipped)}: only the owner can delete them.`,
+                    severity: 'warning',
+                });
             }
             return;
         }
@@ -205,7 +228,7 @@ export function ActivitiesMasterView({ mine = false, type = '', status = '' }: A
             setSelectedIds([]);
             setToast({
                 open: true,
-                message: `${count} ${plural(count)} deleted successfully.${skipped > 0 ? ` ${skipped} skipped: you were only invited.` : ''}`,
+                message: `${count} ${plural(count)} deleted successfully.${skipped > 0 ? ` ${skipped} kept.` : ''}`,
                 severity: 'success',
             });
         } catch (err: unknown) {
@@ -415,7 +438,7 @@ export function ActivitiesMasterView({ mine = false, type = '', status = '' }: A
             onView={(a) => router.push(ROUTES.ACTIVITY_DETAIL(a.id))}
             getEditHref={(a) => (canChange(a) ? ROUTES.ACTIVITY_EDIT(a.id) : undefined)}
             onDelete={handleDelete}
-            canDeleteRow={canChange}
+            canDeleteRow={(a) => canChange(a) && !isFollowUpActivity(a)}
             getRowHref={(a) => ROUTES.ACTIVITY_DETAIL(a.id)}
             onRowClick={(a) => setDrawerId(a.id)}
             activeRowId={drawerActivity?.id}

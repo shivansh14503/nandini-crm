@@ -93,6 +93,12 @@ A rejected save changes nothing: no Rating, counter or history change.
 | **Convert** (Purchased) | Same as closing: work out the current Rating, keep it, clear ageing. |
 | **Import** | Rows are new leads: Rating from the new-lead rule, import date → the row's follow-up date. The template has no follow-up column, so imported leads are due today and rate Hot under the default rule (a past or missing date would give Warm). |
 
+**Follow-up activities** (as of 2026-11-26, Calendar Phase 2 P2-4). A save that sets, moves, keeps or clears the lead's
+next follow-up also writes the lead's follow-up activity (Activities, reminders, the calendar). Rating, `ratingReason`,
+the unanswered-call counter and the nightly ageing keep reading the lead's own fields: the follow-up activity, and a
+move of it in a calendar (P2-5, written back to `nextFollowupDate` / `nextFollowupTime` without a Follow-up History
+row), never change the Rating.
+
 ### Nightly ageing
 
 A BullMQ repeatable job at **00:05 IST** re-rates open leads whose `ratingAgeingFrom` is set (Hot → Warm → Cold by

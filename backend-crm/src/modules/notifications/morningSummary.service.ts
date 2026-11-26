@@ -175,6 +175,21 @@ export function overdueActivitiesWhere(username: string, dayStart: Date): Prisma
         followupType: { not: NOTE_TYPE },
         startAt: { lt: dayStart },
         OR: [{ endAt: { lte: dayStart } }, { endAt: null }],
+        ...NOT_FOLLOW_UP_ACTIVITY,
+    };
+}
+
+/**
+ * Lead / opportunity follow-up activities (Calendar Phase 2 P2-4) are left out of the activity sections: the email
+ * already lists those follow-ups from the records themselves, so it stays exactly as before (no follow-up twice).
+ * The morning email is parked by the owner; see the hook note at morningSummary.sections.ts `activityItem`.
+ */
+export const NOT_FOLLOW_UP_ACTIVITY = { origin: { not: 'followup' } } as const satisfies Prisma.ActivityWhereInput;
+
+/** Today's schedule: activities of the day the user owns or attends (not declined), follow-up activities left out. */
+export function todayActivitiesWhere(user: AuthUser, dayStart: Date, dayEnd: Date): Prisma.ActivityWhereInput {
+    return {
+        AND: [activityCalendarWhere(user, { users: [user.username], statuses: [PLANNED_STATUS] }, dayStart, dayEnd), attendingWhere(user.username), NOT_FOLLOW_UP_ACTIVITY],
     };
 }
 
@@ -199,9 +214,7 @@ const totalOf = (rows: readonly unknown[], cap: number, count: () => Promise<num
 export async function loadMorningSummaryInput(recipient: SummaryRecipient, ctx: SummaryContext): Promise<MorningSummaryInput> {
     const user: AuthUser = { id: recipient.id, username: recipient.username, role: recipient.role };
     const users = [recipient.username];
-    const todayWhere: Prisma.ActivityWhereInput = {
-        AND: [activityCalendarWhere(user, { users, statuses: [PLANNED_STATUS] }, ctx.dayStart, ctx.dayEnd), attendingWhere(recipient.username)],
-    };
+    const todayWhere = todayActivitiesWhere(user, ctx.dayStart, ctx.dayEnd);
     const overdueWhere = overdueActivitiesWhere(recipient.username, ctx.dayStart);
     const today = fromDateOnly(ctx.day);
     const leadsToday = leadFollowupWhere(user, { users }, ctx.closingStatuses, { gte: today, lte: today });

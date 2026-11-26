@@ -12,12 +12,13 @@ import { ROUTES } from '@/config/constants';
 import { useRecordActivities } from '@/hooks/queries/useActivities';
 import { findCrmUser } from '@/services/masterData.store';
 import { getModuleColor } from '@/theme/moduleColors';
-import { COMPLETED_STATUS, NOTE_TYPE, PLANNED_STATUS, TASK_TYPE, type Activity } from '@/types/activity.types';
+import { COMPLETED_STATUS, isFollowUpActivity, NOTE_TYPE, PLANNED_STATUS, TASK_TYPE, type Activity } from '@/types/activity.types';
 import type { ActivityFormValues } from '@/validations/activity.schema';
 import { instantToZonedWallClock } from '@/utils/zonedTime';
+import { useFollowUpActivitiesOn } from '@/utils/followUpActivities';
 import { ActivityDetailDrawer } from '@/components/activities/ActivityDetailDrawer';
 import { ActivityQuickCreateDialog } from '@/components/activities/ActivityQuickCreateDialog';
-import { ActivityStatusPill, ActivityTypeIcon, useActivityTypeLabel } from '@/components/activities/ActivityBadges';
+import { ActivityStatusPill, ActivityTypeIcon, FollowUpChip, useActivityTypeLabel } from '@/components/activities/ActivityBadges';
 import { activitySortTime, formatActivityWhen, isActivityOverdue, useBusinessClock } from '@/components/activities/activityTime';
 import { formatFollowUpSlot } from '@/components/forms/FollowUpDecision';
 import { NestedDrawerLayer } from '../RaisedLayer';
@@ -140,7 +141,8 @@ function ActivityRow({ activity, now, timeZone, onOpen }: { activity: Activity; 
                 )}
             </Box>
             {!isNote && (
-                <Box sx={{ flexShrink: 0 }}>
+                <Box sx={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    {isFollowUpActivity(activity) && <FollowUpChip relatedModule={activity.relatedModule} relatedCode={activity.relatedCode} compact />}
                     <ActivityStatusPill status={activity.status} overdue={overdue} />
                 </Box>
             )}
@@ -152,7 +154,11 @@ function ActivityRow({ activity, now, timeZone, onOpen }: { activity: Activity; 
  * A record's Activities tab (lead, opportunity, contact, organization, quotation, ticket, contract): overdue, upcoming
  * and past activities and the notes, with buttons that log a call, schedule a meeting, add a task or a note already
  * related to the record. Organizations and contacts roll up the activities that carry them. Leads and opportunities
- * also show their current next follow-up (rescheduled on their own form).
+ * also show their current next follow-up (rescheduled on their own form): its follow-up activity when there is one
+ * (Calendar Phase 2 P2-4; it opens like any activity and is left out of the Upcoming / Overdue lists), else the
+ * record's own date (the nightly backfill hasn't run yet). While the "Follow-ups create activities" switch is off the
+ * box always shows the record's own date: saves no longer move the follow-up activity, so an old one stays in the
+ * normal lists like any other activity.
  */
 export function RecordActivitiesPanel({ module, id, label, organizationId, organizationName, contactId, contact, nextFollowUp }: RecordActivitiesContext) {
     const router = useRouter();
@@ -161,6 +167,17 @@ export function RecordActivitiesPanel({ module, id, label, organizationId, organ
     const [openActivity, setOpenActivity] = useState<Activity | null>(null);
     const [prefill, setPrefill] = useState<Partial<ActivityFormValues> | null>(null);
     const followUpTypeLabel = useActivityTypeLabel();
+    const followUpActivitiesOn = useFollowUpActivitiesOn();
+
+    // The record's open follow-up activity (leads / opportunities): shown in the Next follow-up box instead of a list.
+    // Switch off (D44): saves leave it where it was, so the record's own date is the next follow-up.
+    const openFollowUp = useMemo(
+        () =>
+            followUpActivitiesOn
+                ? (activities.find((a) => isFollowUpActivity(a) && a.status === PLANNED_STATUS && a.relatedModule === module && a.relatedId === id) ?? null)
+                : null,
+        [activities, module, id, followUpActivitiesOn]
+    );
 
     const sections = useMemo<Section[]>(() => {
         const now = clock.now();
@@ -169,6 +186,7 @@ export function RecordActivitiesPanel({ module, id, label, organizationId, organ
         const upcoming: Activity[] = [];
         const past: Activity[] = [];
         for (const a of activities) {
+            if (a === openFollowUp) continue;
             if (a.followupType === NOTE_TYPE) notes.push(a);
             else if (a.status !== PLANNED_STATUS) past.push(a);
             else if (isActivityOverdue(a, now)) overdue.push(a);
@@ -182,7 +200,7 @@ export function RecordActivitiesPanel({ module, id, label, organizationId, organ
             { key: 'past', title: 'Past', rows: past.sort(desc) },
             { key: 'notes', title: 'Notes', rows: notes.sort((x, y) => Date.parse(y.createdAt) - Date.parse(x.createdAt)) },
         ].filter((s) => s.rows.length > 0);
-    }, [activities, clock]);
+    }, [activities, clock, openFollowUp]);
 
     // New activities start related to this record (an organization or a contact is also filled in as itself).
     const startNew = (type: string, status: string) => {
@@ -208,7 +226,7 @@ export function RecordActivitiesPanel({ module, id, label, organizationId, organ
 
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-            {nextFollowUp?.date && (
+            {(openFollowUp || nextFollowUp?.date) && (
                 <Box
                     sx={{
                         display: 'flex',
@@ -222,16 +240,51 @@ export function RecordActivitiesPanel({ module, id, label, organizationId, organ
                     }}
                 >
                     <EventRepeatOutlinedIcon sx={{ fontSize: 20, color: 'var(--crm-text-blue-600)' }} />
-                    <Box sx={{ minWidth: 0, flex: 1 }}>
-                        <Typography sx={{ ...sectionTitleSx, color: 'var(--crm-text-blue-900)' }}>Next follow-up</Typography>
-                        <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--crm-slate-900)' }}>
-                            {formatFollowUpSlot({ date: nextFollowUp.date, time: nextFollowUp.time ?? '' })}
-                            {nextFollowUp.type ? ` · ${followUpTypeLabel(nextFollowUp.type) || nextFollowUp.type}` : ''}
-                        </Typography>
-                    </Box>
-                    <RecordLink href={nextFollowUp.editHref} onOpen={() => router.push(nextFollowUp.editHref)} sx={{ fontSize: '0.8rem', fontWeight: 600 }}>
-                        Reschedule
-                    </RecordLink>
+                    {openFollowUp ? (
+                        <ButtonBase
+                            onClick={() => setOpenActivity(openFollowUp)}
+                            aria-label={`Open the next follow-up: ${openFollowUp.subject}`}
+                            sx={{
+                                minWidth: 0,
+                                flex: 1,
+                                display: 'block',
+                                textAlign: 'left',
+                                borderRadius: '6px',
+                                minHeight: 40,
+                                '&:focus-visible': { outline: 'none', boxShadow: '0 0 0 3px rgb(var(--crm-accent-rgb) / 0.22)' },
+                            }}
+                        >
+                            <Typography sx={{ ...sectionTitleSx, color: 'var(--crm-text-blue-900)' }}>Next follow-up</Typography>
+                            <Typography
+                                sx={{
+                                    fontSize: '0.85rem',
+                                    fontWeight: 700,
+                                    color: isActivityOverdue(openFollowUp, clock.now()) ? 'var(--mui-palette-error-main)' : 'var(--crm-slate-900)',
+                                    overflowWrap: 'anywhere',
+                                }}
+                            >
+                                {formatActivityWhen(openFollowUp, openFollowUp.timeZone || clock.timeZone, clock.now())}
+                                {` · ${followUpTypeLabel(openFollowUp.followupType) || openFollowUp.followupType}`}
+                                {openFollowUp.assignedTo ? ` · ${userName(openFollowUp.assignedTo)}` : ''}
+                            </Typography>
+                            {isActivityOverdue(openFollowUp, clock.now()) && (
+                                <Typography sx={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--mui-palette-error-main)' }}>Overdue</Typography>
+                            )}
+                        </ButtonBase>
+                    ) : (
+                        <Box sx={{ minWidth: 0, flex: 1 }}>
+                            <Typography sx={{ ...sectionTitleSx, color: 'var(--crm-text-blue-900)' }}>Next follow-up</Typography>
+                            <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--crm-slate-900)' }}>
+                                {formatFollowUpSlot({ date: nextFollowUp?.date ?? '', time: nextFollowUp?.time ?? '' })}
+                                {nextFollowUp?.type ? ` · ${followUpTypeLabel(nextFollowUp.type) || nextFollowUp.type}` : ''}
+                            </Typography>
+                        </Box>
+                    )}
+                    {nextFollowUp?.editHref && (
+                        <RecordLink href={nextFollowUp.editHref} onOpen={() => router.push(nextFollowUp.editHref)} sx={{ fontSize: '0.8rem', fontWeight: 600 }}>
+                            Reschedule
+                        </RecordLink>
+                    )}
                 </Box>
             )}
 

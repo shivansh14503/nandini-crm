@@ -1,7 +1,7 @@
 # Nandini CRM — Database Design
 
-> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (86 migrations,
-> latest `20261127120000_company_formats`, as of 2026-11-26). Update it in the same change as any schema migration.
+> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (88 migrations,
+> latest `20261127130000_followup_activities`, as of 2026-11-26). Update it in the same change as any schema migration.
 > Related: [System design](system-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
 ---
@@ -553,7 +553,18 @@ schedule (`startAt`, `endAt`, `allDay`, `timeZone` default `Asia/Kolkata`, `loca
 `reminderSentAt` (set by the reminder job, Phase 1 PR3; cleared when `remindAt` changes), outcome
 (`customerResponse`, `remarks`, `completedAt`, `completedBy`), `revision` (+1 on every schedule-relevant change:
 subject, type, times, all-day, location, owner, status, attendees added or removed), `customDataJson`,
-audit/soft-delete.
+`origin` (NVARCHAR(20), default `crm`; who made the row: `crm` = the CRM, `followup` = a lead / opportunity follow-up
+activity, `calendar` = brought in from a calendar (P2-8); set on insert by the system write path only, never by a form;
+migration `20261127130000_followup_activities`, as of 2026-11-26, Calendar Phase 2 P2-4), audit/soft-delete.
+
+**Follow-up activities** (P2-4, `activities/activity.followUp.ts`): every open lead / opportunity with a next
+follow-up has exactly one row with `origin = 'followup'`, `status = 'Planned'`, `relatedModule` / `relatedId` = the
+record. The record's `nextFollowupDate` / `nextFollowupTime` stay the source of truth (Lead Rating reads them); the
+row mirrors them, is written in the record's own transaction under its lock, and is guarded by the hand-written
+filtered unique index `UX_Activity_openFollowUp (relatedModule, relatedId) WHERE origin = N'followup' AND status =
+N'Planned' AND isDeleted = 0` (a second open follow-up activity of one record is refused; the save rolls back and is
+retried once). Completed / Cancelled follow-up activities stay as the record's follow-up history. Its `createdBy` is
+the record's creator (so whoever can see the record sees it).
 
 Schedule rules (API): `startAt` / `endAt` are UTC instants; `endAt` ≥ `startAt` and at most 31 days after it; a Note
 has neither (and no reminder or attendees). All-day activities store business-timezone midnight of the first day →
@@ -572,7 +583,9 @@ Indexes: `Activity` `(isDeleted, startAt)`, `(isDeleted, assignedTo, startAt)` (
 `ActivityAttendee` `activityId`, `username`, `contactId`, `email`, plus three hand-written **filtered unique** indexes
 (one row per colleague, contact and outside email of an activity): `UX_ActivityAttendee_user (activityId, username)
 WHERE username IS NOT NULL`, `UX_ActivityAttendee_contact (activityId, contactId) WHERE contactId IS NOT NULL`,
-`UX_ActivityAttendee_email (activityId, email) WHERE kind = 'email'`.
+`UX_ActivityAttendee_email (activityId, email) WHERE kind = 'email'`; and `UX_Activity_openFollowUp` on `Activity`
+(above; not in `schema.prisma`, as Prisma can't express a filtered index: `prisma migrate diff` from the schema never
+shows it, so don't drop it in a later migration).
 
 Dropdowns (`DropdownCategory.module = 'activities'`): `activity_status` (fixed system options `Planned`, `Completed`,
 `Cancelled`; default `Planned`) and `activity_reminder` (fixed system options; value = label, e.g. `15 minutes before`;

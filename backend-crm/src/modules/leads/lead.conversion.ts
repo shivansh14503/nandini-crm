@@ -27,6 +27,9 @@ import { assertNotInPast, businessToday, nextFollowupCheck } from '../../validat
 import { toDateOnly } from '../../utils/mappers.js';
 import { frozenRatingColumns } from './lead.followUp.js';
 import { queueEmailVerification } from '../email-verification/emailVerification.service.js';
+import { loadFollowUpContext } from '../activities/activity.system.js';
+import type { ActivityCommitRow } from '../activities/activity.service.js';
+import { afterFollowUpCommit, LEAD_FOLLOW_UP_SELECT, leadFollowUpTarget, NO_OUTCOME, reconcileRecordFollowUp, retryOnceOnUniqueViolation } from '../activities/activity.followUp.js';
 
 /** `LeadConversionResult` from frontend-crm/src/services/leadConversion.service.ts. */
 export interface LeadConversionResult {
@@ -101,6 +104,8 @@ function checkConvertRecord(
 }
 
 const NEW_OPPORTUNITY_STAGE = 'Qualification';
+/** Converted always closes a lead (no need to read the "Closes the lead" statuses for its follow-up activity). */
+const CONVERTED_ONLY: ReadonlySet<string> = new Set([CONVERTED_STATUS]);
 const NEW_OPPORTUNITY_COMMISSION = 'No';
 
 /** Leads and organizations share one Registration Type dropdown (shared_registration_type): carried over as-is. */
@@ -203,13 +208,15 @@ export async function convertLead(leadId: string, body: unknown, user: AuthUser)
     // The new opportunity's follow-up is a fresh value, so it can't be in the past.
     if (values.createOpportunity) assertNotInPast([nextFollowupCheck(values)]);
     // Loaded before the transaction (a cache miss queries through the shared client).
-    const [contactConfig, organizationConfig, opportunityConfig] = await Promise.all([
+    const [contactConfig, organizationConfig, opportunityConfig, followUpContext] = await Promise.all([
         loadModuleFieldConfig('contacts'),
         loadModuleFieldConfig('organizations'),
         loadModuleFieldConfig('opportunities'),
+        loadFollowUpContext(),
     ]);
 
-    const result = await runSerializable(async (tx) => {
+    const { result, followUpRows } = await retryOnceOnUniqueViolation(() => runSerializable(async (tx) => {
+        const followUpRows: ActivityCommitRow[] = [];
         await lockRecords(tx, 'lead', [leadId]);
         const lead = await tx.lead.findFirst({ where: { id: leadId, isDeleted: false }, include: leadInclude });
         if (!lead) throw leadNotFound();
@@ -286,6 +293,8 @@ export async function convertLead(leadId: string, body: unknown, user: AuthUser)
                   user,
                   {},
                   { referredBy: lead.referredBy, referredById: lead.referredById },
+                  // The lead's open follow-up activity moves to the opportunity (no calendar churn), then follows its slot.
+                  { context: followUpContext, notify: true, rows: followUpRows, relinkFrom: { module: 'leads', id: leadId } },
               )
             : null;
 
@@ -325,8 +334,15 @@ export async function convertLead(leadId: string, body: unknown, user: AuthUser)
             },
         });
 
-        return { organization, contact, opportunity, organizationCreated: !existingOrganization, contactCreated: !existingContact };
-    });
+        // The lead is closed now: its own reconcile finds nothing open (moved to the opportunity) or, when no
+        // opportunity was created, cancels its follow-up activity.
+        const converted = await tx.lead.findUniqueOrThrow({ where: { id: leadId }, select: LEAD_FOLLOW_UP_SELECT });
+        followUpRows.push(
+            ...(await reconcileRecordFollowUp(tx, leadFollowUpTarget(converted, CONVERTED_ONLY), NO_OUTCOME, user.username, new Date(), { context: followUpContext, notify: true })).rows,
+        );
+
+        return { result: { organization, contact, opportunity, organizationCreated: !existingOrganization, contactCreated: !existingContact }, followUpRows };
+    }));
 
     await Promise.all([
         cacheService.invalidateEntityCaches('leads'),
@@ -334,6 +350,7 @@ export async function convertLead(leadId: string, body: unknown, user: AuthUser)
         ...(result.organizationCreated ? [cacheService.invalidateEntityCaches('organizations')] : []),
         ...(result.contactCreated ? [cacheService.invalidateEntityCaches('contacts')] : []),
     ]);
+    await afterFollowUpCommit(followUpRows, user);
     if (result.organizationCreated) queueEmailVerification({ organizationId: result.organization.id });
     if (result.contactCreated) queueEmailVerification({ contactId: result.contact.id });
     return result;
