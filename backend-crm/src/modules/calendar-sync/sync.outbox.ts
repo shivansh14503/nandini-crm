@@ -180,19 +180,34 @@ export async function markActivityForSync(db: OutboxDb, event: ActivityWriteEven
 
     if (ownerConn && !ownerLink && eligible) {
         const invites: LinkInvites = actorIsOwner ? 'send' : 'withhold';
-        const created = await db.activityExternalLink.create({
-            data: {
-                activityId: after.id,
-                connectionId: ownerConn.id,
-                provider: ownerConn.provider,
-                role: 'organizer',
-                state: 'pending',
-                invites,
-                requestedId: requestedIdFor(after.id, ownerConn.id, 0),
-                dirtyAt: now,
-            },
-            select: { id: true },
-        });
+        // P2-8: the new owner was an invitee whose copy is linked (attendee role). One link per activity and calendar:
+        // that link becomes their organizer link, starting afresh (their invitation copy is the old owner's event).
+        const attendeeLink = before ? await db.activityExternalLink.findFirst({ where: { activityId: after.id, connectionId: ownerConn.id, role: 'attendee' }, select: { id: true } }) : null;
+        const fresh = { role: 'organizer', state: 'pending', invites, dirtyAt: now } as const;
+        const created = attendeeLink
+            ? await db.activityExternalLink.update({
+                  where: { id: attendeeLink.id },
+                  data: {
+                      ...fresh,
+                      externalEventId: null,
+                      externalEventKey: null,
+                      iCalUid: null,
+                      etag: null,
+                      htmlLink: null,
+                      baseJson: null,
+                      heldAttendeesJson: null,
+                      providerUpdatedAt: null,
+                      attempts: 0,
+                      nextAttemptAt: null,
+                      lastErrorCode: null,
+                      lastErrorMessage: null,
+                  },
+                  select: { id: true },
+              })
+            : await db.activityExternalLink.create({
+                  data: { activityId: after.id, connectionId: ownerConn.id, provider: ownerConn.provider, ...fresh, requestedId: requestedIdFor(after.id, ownerConn.id, 0) },
+                  select: { id: true },
+              });
         result.links.push({ id: created.id, dirtyAt: now });
         const guests = guestCount(after);
         if (invites === 'withhold' && guests > 0) result.notices.push({ activityId: after.id, owner, actor, subject: after.subject, guests, newCopy: true });

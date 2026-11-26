@@ -72,7 +72,7 @@ export interface FakeProviderState {
     listCalls: { mailbox: string; cursor: string | null; pageToken?: string }[];
 }
 
-export type FakeEventOp = 'create' | 'patch' | 'cancel' | 'get' | 'undelete';
+export type FakeEventOp = 'create' | 'patch' | 'cancel' | 'get' | 'undelete' | 'find' | 'respond';
 
 export const fakeProviderState: FakeProviderState = {
     userFailures: new Map(),
@@ -161,6 +161,14 @@ const FAKE_CURSOR_PREFIX = 'fake-seq-';
 const inCalendarOf = (event: GoogleEventWire, mailbox: string) =>
     (event.organizer?.email ?? '').toLowerCase() === mailbox || (event.attendees ?? []).some((a) => (a.email ?? '').toLowerCase() === mailbox);
 
+/** A stored event as `mailbox` reads it: Google's `self` flags are the reader's (the store keeps the writer's). */
+function viewAs(event: GoogleEventWire, mailbox: string): GoogleEventWire {
+    const me = mailbox.toLowerCase();
+    const organizer = event.organizer ? { ...event.organizer, self: (event.organizer.email ?? '').toLowerCase() === me } : event.organizer;
+    const attendees = event.attendees?.map((a) => ({ ...a, self: (a.email ?? '').toLowerCase() === me }));
+    return { ...event, organizer, ...(attendees ? { attendees } : {}) };
+}
+
 /** The fake's change stream: a full sync lists live events from the window start, a cursor lists what changed since. */
 function fakeListChanges(ctx: CallCtx, request: ListChangesRequest): ChangePage {
     const state = fakeProviderState;
@@ -191,7 +199,7 @@ function fakeListChanges(ctx: CallCtx, request: ListChangesRequest): ChangePage 
     const page = all.slice(offset, offset + state.listPageSize);
     const more = offset + state.listPageSize < all.length;
     return {
-        events: page.map((e) => normalizeGoogle(e, ctx.accountEmail)),
+        events: page.map((e) => normalizeGoogle(viewAs(e, mailbox), ctx.accountEmail)),
         removedIds: [],
         unreadable: 0,
         ...(more ? { nextPageToken: String(offset + state.listPageSize) } : { nextCursor: `${FAKE_CURSOR_PREFIX}${state.changeSeq}` }),
@@ -252,11 +260,65 @@ export function createFakeAdapter(options: { now?: () => Date } = {}): CalendarP
 
         ...fakeEventOps(now),
 
+        ...fakeRsvpOps(now),
+
         async listChanges(ctx, request) {
             return fakeListChanges(ctx, request);
         },
 
         ...fakeWatchOps(now),
+    };
+}
+
+/**
+ * Replies both ways (P2-8): `findByICalUid` answers the live single copy of that meeting in the mailbox's calendar,
+ * `respond` sets the mailbox's own attendee `responseStatus` (like Google's attendee PATCH; the organizer's copy is
+ * refused 400 `organizer_copy`, someone not on the list 400 `not_invited`). Both honour `failNext.find` / `failNext.respond`.
+ */
+function fakeRsvpOps(now: () => Date): Pick<CalendarProviderAdapter, 'findByICalUid' | 'respond'> {
+    const state = fakeProviderState;
+    const begin = async (ctx: CallCtx, op: FakeEventOp, id: string) => {
+        state.eventCalls.push({ op, mailbox: ctx.mailbox.toLowerCase(), id });
+        checkToken(ctx, `${op}-event`);
+        if (state.onCall) await state.onCall(op);
+        const error = state.failNext[op];
+        if (error) {
+            delete state.failNext[op];
+            throw error;
+        }
+    };
+    return {
+        async findByICalUid(ctx, iCalUid) {
+            await begin(ctx, 'find', iCalUid);
+            const mailbox = ctx.mailbox.toLowerCase();
+            const match = [...state.events.values()].find(
+                (e) => e.iCalUID === iCalUid && e.status !== 'cancelled' && !(e.recurrence?.length || e.recurringEventId) && inCalendarOf(e, mailbox),
+            );
+            return match ? normalizeGoogle(viewAs(match, mailbox), ctx.accountEmail) : null;
+        },
+
+        async respond(ctx, id, reply) {
+            await begin(ctx, 'respond', id);
+            const mailbox = ctx.mailbox.toLowerCase();
+            const existing = state.events.get(id);
+            if (!existing || existing.status === 'cancelled') throw notFound('rsvp');
+            if ((existing.organizer?.email ?? '').toLowerCase() === mailbox) {
+                throw new ProviderBadRequestError({ provider: 'fake', operation: 'rsvp', status: 400, code: 'organizer_copy' });
+            }
+            const attendees = existing.attendees ?? [];
+            if (!attendees.some((a) => (a.email ?? '').toLowerCase() === mailbox)) {
+                throw new ProviderBadRequestError({ provider: 'fake', operation: 'rsvp', status: 400, code: 'not_invited' });
+            }
+            const event: GoogleEventWire = {
+                ...existing,
+                attendees: attendees.map((a) => ((a.email ?? '').toLowerCase() === mailbox ? { ...a, responseStatus: reply } : a)),
+                etag: nextEtag(),
+                updated: now().toISOString(),
+            };
+            state.events.set(id, event);
+            bumpChange(id);
+            return normalizeGoogle(viewAs(event, mailbox), ctx.accountEmail);
+        },
     };
 }
 
@@ -330,7 +392,7 @@ function fakeEventOps(now: () => Date): Pick<CalendarProviderAdapter, 'createEve
         async getEvent(ctx, id) {
             await begin(ctx, 'get', { id });
             const existing = state.events.get(id);
-            return existing ? normalizeGoogle(existing, ctx.accountEmail) : null;
+            return existing ? normalizeGoogle(viewAs(existing, ctx.mailbox), ctx.accountEmail) : null;
         },
 
         async undeleteEvent(ctx, id, input) {

@@ -47,6 +47,12 @@ describe('planPush (§8.5)', () => {
         assert.deepEqual(plan({}, { externalEventId: null, state: 'pending', base: null }, { isDeleted: true }), { action: 'noop', state: 'cancelled' });
     });
 
+    it('P2-8: an imported meeting deleted in the CRM detaches (the calendar event stays); a CRM one is cancelled', () => {
+        assert.deepEqual(plan({}, {}, { isDeleted: true, origin: 'calendar' }), { action: 'detach' });
+        assert.deepEqual(plan({}, {}, { isDeleted: true, origin: 'crm' }), { action: 'cancel' });
+        assert.deepEqual(plan({}, {}, { status: 'Cancelled', origin: 'calendar' }), { action: 'cancel' }, 'Cancel on an imported organizer copy cancels it for everyone (§13.2)');
+    });
+
     it('create when there is no event and it is eligible; restore a cancelled one; removed_remote only on a new slot', () => {
         assert.deepEqual(plan({}, { externalEventId: null, base: null, state: 'pending' }), { action: 'create', restore: false, newGeneration: false });
         assert.deepEqual(plan({ createEligible: false }, { externalEventId: null, base: null, state: 'pending' }), { action: 'noop', state: 'cancelled' });

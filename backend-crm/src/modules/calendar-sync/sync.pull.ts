@@ -36,6 +36,7 @@ import {
 } from './sync.constants.js';
 import { capInboundAttendees, inboundCrmNow, planInbound } from './sync.inbound.js';
 import { eventKeyOf, requestedIdFor, syncKeyOf } from './sync.keys.js';
+import { MeetingImporter, type ImportOutcome } from './sync.import.js';
 import { claimLease, type Lease } from './sync.lease.js';
 import type { DirtyLink } from './sync.outbox.js';
 import { parseBase, type CrmShape, type ProviderEvent, type ProviderShape, type SyncBase } from './sync.shapes.js';
@@ -58,7 +59,9 @@ import { wakePushes } from './sync.wake.js';
  *   by id and counted; the run goes on. The new cursor is stored only after every item was applied (a run with
  *   failures keeps the old cursor and replays, which is harmless; after PULL_HOLD_CURSOR_RUNS such runs it moves on).
  * - Unlinked events (personal appointments, customer meetings made in the calendar) are read in the stream but never
- *   stored or logged (counted only); P2-8 imports customer meetings behind its own switches. Events the CRM wrote
+ *   stored or logged (counted only), unless P2-8's import takes them (sync.import.ts, behind the company switch and the
+ *   person's `importMeetings`): customer meetings become activities, invitation copies of meetings the CRM holds get
+ *   an attendee link, and attendee links bring their person's reply back (spec §13). Events the CRM wrote
  *   whose link was lost are linked again by their private marker (Google) or iCalUID (`syncKey`), for activities this
  *   person owns.
  * - After each page: reminders re-armed and participants notified for the changed activities (no push), the
@@ -145,7 +148,7 @@ interface Applied {
     rows: ActivityCommitRow[];
     wake: DirtyLink[];
     records: FollowUpModule[];
-    outcome: 'applied' | 'unchanged' | 'deleted' | 'relinked' | 'unsupported' | 'ignored';
+    outcome: 'applied' | 'unchanged' | 'deleted' | 'relinked' | 'unsupported' | 'ignored' | 'imported' | 'attended';
 }
 
 const NOTHING: Applied = { rows: [], wake: [], records: [], outcome: 'unchanged' };
@@ -153,6 +156,8 @@ const NOTHING: Applied = { rows: [], wake: [], records: [], outcome: 'unchanged'
 class ConnectionPull {
     private settings!: CalendarSyncSettings;
     private config!: ActivityConfig;
+    /** P2-8: customer meetings and invitation copies (sync.import.ts). */
+    private importer!: MeetingImporter;
     private readonly provider: CalendarProvider;
     private readonly adapter: CalendarProviderAdapter;
     private readonly counts = emptyPullCounts();
@@ -174,6 +179,8 @@ class ConnectionPull {
 
     async run(): Promise<PullResult> {
         [this.settings, this.config] = await Promise.all([loadCalendarSettings(), loadActivityConfig()]);
+        this.importer = new MeetingImporter(this.connection, this.settings, this.config, this.clock);
+        await this.importer.init();
         const startedAt = this.clock();
         const window = pullWindow(startedAt);
         let full = Boolean(this.options.full) || !this.connection.syncCursor || this.reason === 'rebaseline';
@@ -213,7 +220,8 @@ class ConnectionPull {
         if (full && nextCursor) await this.verifyMissing(seen, window);
         await this.finish(full, nextCursor, window);
         const result = { status: 'done', full, counts: { ...this.counts } } as const;
-        const level = this.counts.failed > 0 ? 'warn' : this.counts.applied + this.counts.deleted + this.counts.relinked + this.counts.unsupported > 0 ? 'info' : 'debug';
+        const changed = this.counts.applied + this.counts.deleted + this.counts.relinked + this.counts.unsupported + this.counts.imported + this.counts.attended;
+        const level = this.counts.failed > 0 ? 'warn' : changed > 0 ? 'info' : 'debug';
         logger[level]({ connectionId: this.connection.id, reason: this.reason, full, ...this.counts }, 'Calendar pull done');
         return result;
     }
@@ -244,6 +252,7 @@ class ConnectionPull {
             : [];
         const activityById = new Map(activities.map((a) => [a.id, a as { id: string; isDeleted: boolean; status: string }]));
         const matches = await this.findMatches(page.events.filter((e) => !linkByKey.has(keys.get(e.id) as string)));
+        await this.importer.preparePage(page.events.filter((e) => !linkByKey.has(keys.get(e.id) as string) && !matches.has(e.id)));
 
         const rows: ActivityCommitRow[] = [];
         const wake: DirtyLink[] = [];
@@ -325,6 +334,8 @@ class ConnectionPull {
         else if (outcome === 'relinked') this.counts.relinked += 1;
         else if (outcome === 'unsupported') this.counts.unsupported += 1;
         else if (outcome === 'ignored') this.counts.ignored += 1;
+        else if (outcome === 'imported') this.counts.imported += 1;
+        else if (outcome === 'attended') this.counts.attended += 1;
         else this.counts.skipped += 1;
     }
 
@@ -333,8 +344,9 @@ class ConnectionPull {
             case 'ignore':
                 return { ...NOTHING, outcome: 'ignored' };
             case 'unlinked':
-                this.counts.skippedUnlinked += 1;
-                return { ...NOTHING, outcome: 'ignored' };
+                return this.imported(await this.importer.applyUnlinked(event));
+            case 'attendee':
+                return this.imported(await this.importer.applyAttendeeLink(event, link as ActivityExternalLink));
             case 'skip':
                 return NOTHING;
             case 'unsupported':
@@ -348,6 +360,15 @@ class ConnectionPull {
             case 'relink':
                 return this.merge(event, action.activityId, null, { tooLong: action.tooLong, relink: true });
         }
+    }
+
+    /** An import / attendee-link result as the page collects it (P2-8). */
+    private imported(result: ImportOutcome): Applied {
+        if (result.outcome === 'skippedUnlinked') {
+            this.counts.skippedUnlinked += 1;
+            return { ...NOTHING, outcome: 'ignored' };
+        }
+        return { ...NOTHING, rows: result.rows, outcome: result.outcome };
     }
 
     // ── Applying ────────────────────────────────────────────────────────────────────────────────────────────
@@ -497,8 +518,15 @@ class ConnectionPull {
             }
 
             const rows: ActivityCommitRow[] = [];
-            if (Object.keys(patch).length > 0) {
-                const written = await applySystemPatch(tx, activityId, patch, this.connection.username, now, { activityConfig: this.config, markSync: false, notify: true });
+            // P2-8: the organizer's own copy linked at last: the meeting is theirs (two-way, unlocked) from now on.
+            const upgrade = Boolean(mode.relink && activity.externalOrganizer);
+            if (Object.keys(patch).length > 0 || upgrade) {
+                const written = await applySystemPatch(tx, activityId, patch, this.connection.username, now, {
+                    activityConfig: this.config,
+                    markSync: false,
+                    notify: true,
+                    ...(upgrade ? { rowData: { externalOrganizer: false } } : {}),
+                });
                 await this.stampExternal(tx, activityId, written.after.updatedAt, now);
                 rows.push(written);
             }
@@ -600,6 +628,8 @@ class ConnectionPull {
         }
         const activity = await prisma.activity.findUnique({ where: { id: link.activityId }, select: { isDeleted: true, status: true } });
         if (!event) {
+            // An invitation copy that's gone is that person's copy only (sync.import.ts), never a deletion of the meeting.
+            if (link.role === 'attendee') return this.applySafely({ ...placeholderEvent(link), isOrganizerCopy: false }, link, { kind: 'attendee' });
             const applied = activity && !activity.isDeleted ? await this.applySafely({ ...placeholderEvent(link), status: 'cancelled' }, link, { kind: 'remoteDelete' }) : NOTHING;
             return applied;
         }

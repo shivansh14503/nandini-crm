@@ -11,7 +11,7 @@ import { ROUTES } from '@/config/constants';
 import { setSaveFlash } from '@/utils/saveFlash';
 import { CommonFormLayout, AppToast } from '@/components/forms';
 import { FormConfigProvider } from '@/context/FormConfigContext';
-import { isFollowUpActivity, PLANNED_STATUS, type Activity } from '@/types/activity.types';
+import { isExternallyOrganized, isFollowUpActivity, PLANNED_STATUS, type Activity } from '@/types/activity.types';
 import type { ActivityFormValues } from '@/validations/activity.schema';
 import { ActivityFormFields, useActivityForm } from './ActivityFormFields';
 import { ActivityTypeIcon } from './ActivityBadges';
@@ -109,9 +109,11 @@ export default function ActivityForm({ mode = 'create', activityId, initialData,
             ? activity.status === PLANNED_STATUS
                 ? `The next follow-up of ${activity.relatedCode || `this ${record}`}. Its type, date, time, status and owner change on the ${record} (Record follow-up); the subject, location, attendees and remarks can be edited here.`
                 : `Follow-up history of ${activity.relatedCode || `this ${record}`}: its type, times, status and owner are kept with the ${record}.`
-            : lockedFields?.length
-              ? 'Some fields of this activity can only change where it came from.'
-              : undefined;
+            : activity && isExternallyOrganized(activity)
+              ? `Organized by ${activity.organizerEmail || 'someone outside the CRM'} in their calendar. The title, times, place, attendees and owner can only be changed there; the related record, remarks, customer response and status can be edited here.`
+              : lockedFields?.length
+                ? 'Some fields of this activity can only change where it came from.'
+                : undefined;
 
     return (
         <FormProvider {...methods}>

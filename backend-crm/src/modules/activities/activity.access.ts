@@ -71,8 +71,29 @@ export const FOLLOW_UP_ACTIVITY_LOCKED = 'FOLLOW_UP_ACTIVITY_LOCKED';
  */
 export const FOLLOW_UP_LOCKED_FIELDS = ['followupType', 'startAt', 'endAt', 'allDay', 'status', 'assignedTo', 'relatedModule', 'relatedId', 'relatedTo'] as const;
 
-/** What the lock reads from a row. */
-export type ActivityLockRow = Pick<Activity, 'origin' | 'status' | 'relatedModule' | 'relatedCode'>;
+/** What the lock reads from a row (`externalOrganizer` / `organizerEmail`: P2-8; rows read without them are unlocked by it). */
+export type ActivityLockRow = Pick<Activity, 'origin' | 'status' | 'relatedModule' | 'relatedCode'> & Partial<Pick<Activity, 'externalOrganizer' | 'organizerEmail'>>;
+
+export const EXTERNAL_EVENT_LOCKED = 'EXTERNAL_EVENT_LOCKED';
+
+/**
+ * What a meeting organized outside the CRM takes from the organizer's calendar (spec §8.13, P2-8): changed there, never
+ * here. The related record, remarks, customer response, Completed and custom fields stay editable; it may be deleted
+ * (removed from the CRM only, the calendar event stays).
+ */
+export const EXTERNAL_LOCKED_FIELDS = ['subject', 'startAt', 'endAt', 'allDay', 'location', 'attendees', 'assignedTo'] as const;
+
+/** The lock of an externally organized meeting (`externalOrganizer`), or null for any other row. */
+export function externalOrganizerLockOf(row: ActivityLockRow): ActivityLock | null {
+    if (!row.externalOrganizer) return null;
+    const who = row.organizerEmail ? `Organized by ${row.organizerEmail}` : 'Organized by someone outside the CRM';
+    return {
+        fields: EXTERNAL_LOCKED_FIELDS,
+        code: EXTERNAL_EVENT_LOCKED,
+        message: `${who} in their calendar. Times, title, place and attendees can only be changed there.`,
+        deleteRefusedReason: null,
+    };
+}
 
 const RECORD_NOUN: Readonly<Record<string, string>> = { leads: 'lead', opportunities: 'opportunity' };
 
@@ -96,12 +117,12 @@ export function followUpLockOf(row: ActivityLockRow): ActivityLock | null {
 
 export const activityLocks = {
     /**
-     * The lock on a stored row, or null. P2-4: follow-up activities (`followUpLockOf`); P2-8 adds externally organized
-     * meetings here. `activity.service.ts` enforces it in `update`, `remove` and `bulkRemove`; the calendar feed reads
-     * it for `editable`. Tests replace it with `mock.method`.
+     * The lock on a stored row, or null. P2-4: follow-up activities (`followUpLockOf`); P2-8: externally organized
+     * meetings (`externalOrganizerLockOf`). `activity.service.ts` enforces it in `update`, `remove` and `bulkRemove`;
+     * the calendar feed reads it for `editable`. Tests replace it with `mock.method`.
      */
     lockFor(row: ActivityLockRow): ActivityLock | null {
-        return followUpLockOf(row);
+        return followUpLockOf(row) ?? externalOrganizerLockOf(row);
     },
 };
 

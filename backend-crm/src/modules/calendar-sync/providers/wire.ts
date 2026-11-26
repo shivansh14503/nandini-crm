@@ -81,6 +81,8 @@ export const graphEventSchema = z.object({
         )
         .nullish(),
     isReminderOn: flag,
+    /** The mailbox owner's own reply on their copy (P2-8: an invitation copy's `self` answer). */
+    responseStatus: z.object({ response: text, time: text }).nullish(),
     reminderMinutesBeforeStart: z.number().nullish(),
     singleValueExtendedProperties: z.array(z.object({ id: z.string(), value: text })).nullish(),
 });

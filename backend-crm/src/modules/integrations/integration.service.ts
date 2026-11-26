@@ -1004,6 +1004,12 @@ export const integrationService = {
         const target = await prisma.user.findUnique({ where: { username }, select: { username: true } });
         if (!target) throw HttpError.notFound(`User '${username}' not found.`);
         const owner = target.username;
+        if (input.importMeetings === true) {
+            // P2-8: the per-person switch needs the company switch (Admin › API Integrations › Calendar sync settings).
+            if (!(await loadCalendarSettings()).allowMeetingImport) {
+                throw conflict('Turn on "Bring in meetings with customers" in the calendar sync settings first.', 'MEETING_IMPORT_OFF', ['importMeetings']);
+            }
+        }
 
         await runInTransaction(async (tx) => {
             await acquireLocks(tx, [calendarConnectionUserLockKey(owner)]);
@@ -1012,7 +1018,7 @@ export const integrationService = {
                 provider: input.provider !== undefined ? input.provider : (before?.provider ?? null),
                 excluded: input.excluded ?? before?.excluded ?? false,
                 note: input.note !== undefined ? input.note : (before?.note ?? null),
-                importMeetings: before?.importMeetings ?? false,
+                importMeetings: input.importMeetings ?? before?.importMeetings ?? false,
             };
             const snapshot = (v: typeof next | null) => ({ provider: v?.provider ?? null, excluded: v?.excluded ?? false, note: v?.note ?? null, importMeetings: v?.importMeetings ?? false });
             const from = snapshot(before);

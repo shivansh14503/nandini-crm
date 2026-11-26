@@ -368,11 +368,19 @@ export function ActivitySyncStatus({ activity, onRefresh, onNotify }: ActivitySy
  * in from the calendar that its owner organizes; only deleting such an imported meeting leaves the event there. ''
  * when there is no event to cancel (not in a calendar, already cancelled or removed there, a repeating series).
  */
-export function calendarRemovalNote(activity: Pick<Activity, 'calendar' | 'origin' | 'assignedTo' | 'attendees'>, viewerUsername: string | null | undefined, verb: 'delete' | 'cancel'): string {
+export function calendarRemovalNote(
+    activity: Pick<Activity, 'calendar' | 'origin' | 'assignedTo' | 'attendees' | 'importedFrom' | 'externalOrganizer'>,
+    viewerUsername: string | null | undefined,
+    verb: 'delete' | 'cancel',
+): string {
     const calendar = activity.calendar;
+    // P2-8: an imported meeting is only removed from the CRM (its event stays, and it is never brought in again); a
+    // meeting organized outside the CRM is never written to the calendar at all.
+    const source = calendar?.provider ?? activity.importedFrom;
+    if (activity.origin === 'calendar' && verb === 'delete' && source) return ` Removes it from the CRM only: the event stays in the ${calendarProviderName(source)}.`;
+    if (activity.externalOrganizer && verb === 'cancel') return ' Cancels it in the CRM only: the meeting stays in the calendar.';
     if (!calendar || calendar.state === 'unsupported' || calendar.state === 'removed_remote' || calendar.state === 'cancelled') return '';
     const where = calendarProviderName(calendar.provider);
-    if (activity.origin === 'calendar' && verb === 'delete') return ` Removes it from the CRM only: the event stays in the ${where}.`;
     const whose = lc(activity.assignedTo) === lc(viewerUsername) ? 'your' : `${personName(activity.assignedTo)}'s`;
     const invited = calendar.invites === 'send' && (activity.attendees ?? []).some((a) => !(a.kind === 'user' && lc(a.username) === lc(activity.assignedTo)));
     return ` This also cancels it in ${whose} ${where}${invited ? ' and notifies the attendees' : ''}.`;

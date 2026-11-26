@@ -4,6 +4,7 @@ import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
 import { reconcileAllQuietly } from '../calendar-sync/enrolment.js';
 import { FOLLOWUP_TYPE_CATEGORY_KEY } from '../form-configs/formConfig.defaults.js';
+import { isActivityOnlyFollowupType } from '../shared/followupTypes.js';
 import { formConfigService, type FormConfigsPayload } from '../form-configs/formConfig.service.js';
 import {
     CALENDAR_SYNC_DEFAULTS,
@@ -20,7 +21,8 @@ import {
  * second cache key; saves go through `formConfigService.updateModuleSetting`, which validates, audits
  * (`ModuleSetting UPDATE`) and drops that cache, so `loadActivityConfig` and calendar sync see the change at once.
  * A company domain a calendar provider still serves can't be removed (409 DOMAIN_IN_USE); a change of the company
- * domains re-runs calendar enrolment (P2-2b).
+ * domains re-runs calendar enrolment (P2-2b). The type of imported meetings (P2-8) must be an active, calendar-able
+ * Followup Type (400 otherwise).
  */
 
 /** Type for imported meetings when none is stored: the active Followup Type whose meta.icon is 'meeting', else 'Meeting'. */
@@ -54,6 +56,21 @@ export async function providerDomainsInUse(): Promise<{ provider: string; domain
     });
 }
 
+/**
+ * P2-8: the type of imported meetings must be an active Followup Type that can sit in a calendar (never Task / Note,
+ * which are activity-only). 400 on `importFollowupType` otherwise.
+ */
+function assertImportType(configs: Pick<FormConfigsPayload, 'categories'>, value: string): void {
+    const category = configs.categories.find((c) => c.key === FOLLOWUP_TYPE_CATEGORY_KEY);
+    const option = category?.options.find((o) => o.isActive && o.value.trim().toLowerCase() === value.trim().toLowerCase());
+    const message = isActivityOnlyFollowupType(value)
+        ? `${value} activities never go to calendars. Pick another type for imported meetings.`
+        : 'Pick an active Followup Type for imported meetings.';
+    if (!option || isActivityOnlyFollowupType(value)) {
+        throw new HttpError(message, StatusCodes.BAD_REQUEST, { code: 'VALIDATION_ERROR', errors: [{ message, path: ['importFollowupType'] }] });
+    }
+}
+
 const PROVIDER_NAMES: Record<string, string> = { google: 'Google Workspace', microsoft: 'Microsoft 365' };
 
 /**
@@ -63,8 +80,10 @@ const PROVIDER_NAMES: Record<string, string> = { google: 'Google Workspace', mic
  */
 export async function saveCalendarSettings(patch: unknown, user: AuthUser): Promise<CalendarSyncSettings> {
     const changes = calendarSyncSettingsPatchSchema.parse(patch);
-    const before = await loadCalendarSettings();
+    const configs = await formConfigService.getAllConfigs();
+    const before = calendarSettingsFrom(configs);
     const merged = calendarSyncSettingsSchema.parse({ ...before, ...changes });
+    if (changes.importFollowupType !== undefined) assertImportType(configs, merged.importFollowupType);
     const domainsChanged = changes.companyDomains !== undefined && JSON.stringify([...before.companyDomains].sort()) !== JSON.stringify([...merged.companyDomains].sort());
     if (domainsChanged) {
         const kept = new Set(merged.companyDomains);

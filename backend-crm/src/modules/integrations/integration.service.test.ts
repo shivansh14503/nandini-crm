@@ -453,6 +453,16 @@ describe('settings and sync types', () => {
         assert.equal(settingSaves.length, 0);
     });
 
+    it('P2-8: the type of imported meetings must be an active, calendar-able Followup Type (400 otherwise)', async () => {
+        const { settingSaves } = setup();
+        const saved = await saveCalendarSettings({ allowMeetingImport: true, importFollowupType: 'Call' }, admin);
+        assert.equal(saved.allowMeetingImport, true);
+        assert.equal(saved.importFollowupType, 'Call');
+        await expectHttp(saveCalendarSettings({ importFollowupType: 'Task' }, admin), 400, 'VALIDATION_ERROR');
+        await expectHttp(saveCalendarSettings({ importFollowupType: 'Fax' }, admin), 400, 'VALIDATION_ERROR');
+        assert.equal(settingSaves.length, 1);
+    });
+
     it('lists Followup Types with Task / Note locked off; saves real changes through the option update', async () => {
         const { optionUpdates, state } = setup({ configs: followupConfigs([{ value: 'Call', meta: { icon: 'call' } }, { value: 'WhatsApp', meta: { calendarSync: false } }, { value: 'Task' }]) });
         assert.deepEqual(await integrationService.getSyncTypes(), [
@@ -593,6 +603,21 @@ describe('People', () => {
         assert.equal(back.calendar.connection?.provider, 'google');
         assert.equal(state.syncUsers.length, 0);
         assert.equal(state.audits.filter((a) => a.entityType === 'CalendarSyncUser').at(-1)?.action, 'DELETE');
+    });
+
+    it('P2-8: Import customer meetings is set by admins, only while the company switch is on (409 MEETING_IMPORT_OFF)', async () => {
+        const { state } = setup({ users });
+        await expectHttp(integrationService.setPersonCalendar('asha', { importMeetings: true }, admin), 409, 'MEETING_IMPORT_OFF');
+        await saveCalendarSettings({ allowMeetingImport: true }, admin);
+        const on = await integrationService.setPersonCalendar('asha', { importMeetings: true }, admin);
+        assert.equal(on.calendar.choice?.importMeetings, true);
+        assert.equal(state.syncUsers.find((u) => u.username === 'asha')?.importMeetings, true);
+        const audit = state.audits.filter((a) => a.entityType === 'CalendarSyncUser').at(-1);
+        assert.deepEqual(audit?.changes, { username: 'asha', importMeetings: { from: false, to: true } });
+        // Turning it off never needs the company switch; back to the default deletes the choice row.
+        await saveCalendarSettings({ allowMeetingImport: false }, admin);
+        await integrationService.setPersonCalendar('asha', { importMeetings: false }, admin);
+        assert.equal(state.syncUsers.length, 0);
     });
 
     it('calendar choice: the test calendar only while the fake is on (400); unknown person 404; unknown field 400', async () => {

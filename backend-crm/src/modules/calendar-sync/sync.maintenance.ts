@@ -359,7 +359,9 @@ export async function runCalendarNightly(now: Date = new Date()) {
     const leases = await step('expired-leases', () => clearExpiredLeases(now), 0);
     const rebaselined = await step('graph-rebaseline', () => rebaselineGraphWindows(now), 0);
     const channels = await step('webhook-channels', () => maintainChannels('nightly', now), null);
-    const result = { connections, followUps, retried, secrets, leases, rebaselined, channels };
+    // P2-8 (§10.1 step 6): imported meetings nobody filed under a record stop counting as overdue.
+    const autoCompleted = await step('auto-complete-imported', async () => (await import('./sync.import.js')).autoCompleteImported(now), 0);
+    const result = { connections, followUps, retried, secrets, leases, rebaselined, channels, autoCompleted };
     logger.info({ ...result, followUps: followUps ? 'done' : 'failed' }, 'Calendar nightly done');
     return result;
 }

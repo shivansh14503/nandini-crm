@@ -109,6 +109,11 @@ export interface ProviderEvent {
     eventType: string;
     isPrivate: boolean;
     htmlLink?: string;
+    /**
+     * P2-8: the connected person's own reply on an invitation copy (Google: the attendee marked `self` / with the
+     * account's address; Graph: the event's `responseStatus`). Absent on the organizer's copy.
+     */
+    selfResponse?: AttendeeResponse;
 }
 
 // ── CRM side ──────────────────────────────────────────────────────────────────────────────────────────────────
@@ -289,13 +294,15 @@ export function normalizeGoogle(raw: GoogleEventWire, accountEmail: string): Pro
         organizerEmail,
     };
     const marker = raw.extendedProperties?.private?.crmActivityId;
+    const isOrganizerCopy = raw.organizer?.self === true || (organizerEmail !== '' && organizerEmail === lc(accountEmail));
+    const self = isOrganizerCopy ? undefined : (raw.attendees ?? []).find((a) => a.self === true) ?? (raw.attendees ?? []).find((a) => lc(a.email) === lc(accountEmail) && lc(accountEmail) !== '');
     return {
         id: raw.id,
         iCalUid: raw.iCalUID ?? '',
         etag: raw.etag ?? '',
         updated: iso(raw.updated),
         status,
-        isOrganizerCopy: raw.organizer?.self === true || (organizerEmail !== '' && organizerEmail === lc(accountEmail)),
+        isOrganizerCopy,
         organizerEmail,
         ...(raw.organizer?.displayName ? { organizerName: raw.organizer.displayName } : {}),
         shape,
@@ -304,6 +311,7 @@ export function normalizeGoogle(raw: GoogleEventWire, accountEmail: string): Pro
         eventType: raw.eventType || 'default',
         isPrivate: raw.visibility === 'private' || raw.visibility === 'confidential',
         ...(raw.htmlLink ? { htmlLink: raw.htmlLink } : {}),
+        ...(self ? { selfResponse: googleResponse(self.responseStatus) } : {}),
     };
 }
 
@@ -326,8 +334,11 @@ export function graphBodyText(body: GraphEventWire['body']): string {
         .trim();
 }
 
-/** A Graph event as the engine compares it (read with `Prefer: outlook.timezone="<business Windows zone>"`). */
-export function normalizeGraph(raw: GraphEventWire): ProviderEvent {
+/**
+ * A Graph event as the engine compares it (read with `Prefer: outlook.timezone="<business Windows zone>"`).
+ * `accountEmail` (the mailbox) only matters for an invitation copy without `responseStatus`: its own attendee entry.
+ */
+export function normalizeGraph(raw: GraphEventWire, accountEmail = ''): ProviderEvent {
     const allDay = Boolean(raw.isAllDay);
     let when: ProviderWhen;
     if (!raw.start) when = { allDay, start: '', end: '' };
@@ -378,7 +389,17 @@ export function normalizeGraph(raw: GraphEventWire): ProviderEvent {
         eventType: 'default',
         isPrivate: Boolean(raw.sensitivity) && lc(raw.sensitivity) !== 'normal',
         ...(raw.webLink ? { htmlLink: raw.webLink } : {}),
+        ...(raw.isOrganizer === true ? {} : graphSelfResponse(raw, accountEmail)),
     };
+}
+
+/** An invitation copy's own reply: `responseStatus`, else the mailbox's attendee entry (P2-8). */
+function graphSelfResponse(raw: GraphEventWire, accountEmail: string): { selfResponse?: AttendeeResponse } {
+    const own = raw.responseStatus?.response;
+    if (own && lc(own) !== 'organizer') return { selfResponse: graphResponse(own) };
+    const mailbox = lc(accountEmail);
+    const entry = mailbox ? (raw.attendees ?? []).find((a) => lc(a.emailAddress?.address) === mailbox) : undefined;
+    return entry ? { selfResponse: graphResponse(entry.status?.response) } : {};
 }
 
 /** The CRM-side reading of a provider shape (what an inbound apply would write): resources and the organizer left out. */

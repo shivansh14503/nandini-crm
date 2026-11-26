@@ -37,6 +37,15 @@ export interface EntityEmailRow {
     sortOrder: number;
 }
 
+/** Admin calendar choices of one employee (P2-8 reads `importMeetings`). */
+export interface CalendarSyncUserRow {
+    username: string;
+    provider: string | null;
+    excluded: boolean;
+    note: string | null;
+    importMeetings: boolean;
+}
+
 export interface ProviderRow {
     provider: string;
     enabled: boolean;
@@ -111,6 +120,7 @@ export interface ActivityDoubleState {
     providers: ProviderRow[];
     entityEmails: EntityEmailRow[];
     notifications: NotificationRowState[];
+    calendarSyncUsers: CalendarSyncUserRow[];
 }
 
 type Where = Record<string, unknown>;
@@ -235,6 +245,7 @@ const DELEGATES = [
     'entityEmail',
     'notification',
     'userPreference',
+    'calendarSyncUser',
     '$transaction',
 ] as const;
 const realDelegates = new Map<string, unknown>();
@@ -269,6 +280,7 @@ export function installActivityDouble(
         links?: ActivityExternalLink[];
         providers?: ProviderRow[];
         entityEmails?: EntityEmailRow[];
+        calendarSyncUsers?: Partial<CalendarSyncUserRow>[];
     } = {},
 ): ActivityDoubleState {
     const state: ActivityDoubleState = {
@@ -289,6 +301,7 @@ export function installActivityDouble(
         providers: (seed.providers ?? []).map((row) => ({ ...row })),
         entityEmails: (seed.entityEmails ?? []).map((row) => ({ ...row })),
         notifications: [],
+        calendarSyncUsers: (seed.calendarSyncUsers ?? []).map((row) => ({ username: '', provider: null, excluded: false, note: null, importMeetings: false, ...row })),
     };
 
     let clock = 0;
@@ -342,6 +355,8 @@ export function installActivityDouble(
         create: async (args: { data: Record<string, unknown> & { attendees?: { create: Omit<ActivityAttendee, 'id' | 'activityId' | 'createdAt'>[] } }; include?: unknown }) => {
             call('activity.create');
             const { attendees, ...data } = args.data;
+            // UX_Activity_syncKey (soft-deleted rows included).
+            if (data.syncKey && state.activities.some((a) => a.syncKey === data.syncKey)) throw Object.assign(new Error('Unique constraint failed'), { code: 'P2002' });
             const stamp = touch();
             const row = blankActivity({ id: randomUUID(), createdAt: stamp, updatedAt: stamp, ...(data as Partial<Activity>) } as Activity);
             state.activities.push(row);
@@ -581,6 +596,13 @@ export function installActivityDouble(
         },
     };
     const userPreference = { findMany: async () => [] };
+    const calendarSyncUser = {
+        findUnique: async (args: { where: { username: string }; select?: Record<string, unknown> }) => {
+            const row = state.calendarSyncUsers.find((u) => same(u.username, args.where.username));
+            return row ? pick(row, args.select) : null;
+        },
+        findMany: async (args: FindArgs = {}) => findAll(state.calendarSyncUsers, args),
+    };
 
     const snapshot = () => ({
         activities: state.activities.map((row) => ({ ...row })),
@@ -607,6 +629,7 @@ export function installActivityDouble(
             entityEmail,
             notification,
             userPreference,
+            calendarSyncUser,
             $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
                 void strings;
                 // acquireLocks passes its keys as one JSON array of `crm:<key>` resources.
@@ -644,6 +667,7 @@ export function installActivityDouble(
     stub('entityEmail', entityEmail);
     stub('notification', notification);
     stub('userPreference', userPreference);
+    stub('calendarSyncUser', calendarSyncUser);
 
     mock.method(auditService, 'record', async (_tx: unknown, entry: AuditEntry) => {
         state.audits.push(entry);

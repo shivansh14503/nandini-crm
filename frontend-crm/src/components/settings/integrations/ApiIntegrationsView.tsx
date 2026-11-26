@@ -350,7 +350,7 @@ export function ApiIntegrationsView() {
                     </Box>
 
                     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0,1fr)', lg: 'minmax(0,3fr) minmax(0,2fr)' }, gap: 2, alignItems: 'stretch' }}>
-                        <CalendarSyncSettingsCard settings={data.settings} onDirtyChange={onSettingsDirty} onToast={showToast} />
+                        <CalendarSyncSettingsCard settings={data.settings} syncTypes={data.syncTypes} onDirtyChange={onSettingsDirty} onToast={showToast} />
                         <SyncTypesCard types={data.syncTypes} onDirtyChange={onSyncTypesDirty} onToast={showToast} />
                     </Box>
 
@@ -361,6 +361,7 @@ export function ApiIntegrationsView() {
                         companyDomains={data.settings.companyDomains}
                         providers={data.providers}
                         fakeProvider={data.fakeProvider}
+                        meetingImport={data.settings.allowMeetingImport}
                         initialFilter={people.filter}
                         onToast={showToast}
                     />

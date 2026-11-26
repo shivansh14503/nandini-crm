@@ -81,20 +81,38 @@ function assertCanEdit(user: AuthUser, row: ActivityAccessRow): void {
  * The DTO plus what the caller may do with it (`viewer`, `lockedFields` and `calendar` sit outside the audited record).
  * `links`: the owners' calendar links (calendar-sync/sync.view.ts); without them `calendar` is null.
  */
-export function toActivityView(row: ActivityRow, user: AuthUser, links: CalendarLinksByActivity = NO_CALENDAR_LINKS): ActivityView {
+export function toActivityView(
+    row: ActivityRow,
+    user: AuthUser,
+    links: CalendarLinksByActivity = NO_CALENDAR_LINKS,
+    importedFrom: ReadonlyMap<string, string> = NO_IMPORT_SOURCES,
+): ActivityView {
     const canEdit = canEditActivity(user, row);
     return {
         ...toActivityDto(row),
         viewer: { canEdit, myResponse: myResponseOf(user, row) },
         lockedFields: lockedFieldsFor(row),
         calendar: calendarViewOf(row, links.get(row.id), user.username, canEdit),
+        importedFrom: row.origin === 'calendar' ? (importedFrom.get(row.id) ?? null) : null,
     };
+}
+
+const NO_IMPORT_SOURCES: ReadonlyMap<string, string> = new Map();
+
+/** P2-8: the provider each imported activity came from (its first link, whatever its role or state). */
+export async function loadImportSources(rows: readonly ActivityRow[]): Promise<ReadonlyMap<string, string>> {
+    const ids = rows.filter((row) => row.origin === 'calendar').map((row) => row.id);
+    if (ids.length === 0) return NO_IMPORT_SOURCES;
+    const links = await prisma.activityExternalLink.findMany({ where: { activityId: { in: ids } }, select: { activityId: true, provider: true }, orderBy: { createdAt: 'asc' } });
+    const out = new Map<string, string>();
+    for (const link of links) if (!out.has(link.activityId)) out.set(link.activityId, link.provider);
+    return out;
 }
 
 /** Views of committed rows with their calendar state (one link read per call, a second only when links exist). */
 async function toActivityViews(rows: readonly ActivityRow[], user: AuthUser): Promise<ActivityView[]> {
-    const links = await loadOwnerCalendarLinks(rows);
-    return rows.map((row) => toActivityView(row, user, links));
+    const [links, sources] = await Promise.all([loadOwnerCalendarLinks(rows), loadImportSources(rows)]);
+    return rows.map((row) => toActivityView(row, user, links, sources));
 }
 
 const toOneView = async (row: ActivityRow, user: AuthUser): Promise<ActivityView> => (await toActivityViews([row], user))[0];
@@ -749,6 +767,7 @@ export const activityService = {
      */
     async respond(id: string, body: unknown, user: AuthUser): Promise<ActivityView> {
         const { responseStatus } = respondSchema.parse(body);
+        const respondedAt = new Date();
         const { existing, row } = await runInTransaction(async (tx) => {
             await lockRecords(tx, 'activity', [id]);
             const existing = await tx.activity.findFirst({ where: { id, isDeleted: false }, include: WITH_ATTENDEES });
@@ -757,7 +776,7 @@ export const activityService = {
             if (!mine || existing.followupType === NOTE_TYPE) throw HttpError.forbidden(RSVP_FORBIDDEN_MESSAGE);
 
             const before = toActivityDto(existing);
-            await tx.activityAttendee.update({ where: { id: mine.id }, data: { responseStatus, respondedAt: new Date() } });
+            await tx.activityAttendee.update({ where: { id: mine.id }, data: { responseStatus, respondedAt } });
             const row = await tx.activity.findUniqueOrThrow({ where: { id }, include: WITH_ATTENDEES });
             const changes = diffRecords(before, toActivityDto(row));
             if (Object.keys(changes).length > 0) {
@@ -768,6 +787,13 @@ export const activityService = {
         await cacheService.invalidateEntityCaches('activities');
         // A reply changes no owner or invitation; this only re-arms the reminder (a no-op for a pending one).
         await runActivityPostCommit([{ before: existing, after: row }], user);
+        try {
+            // P2-8: the same reply to their own calendar copy when it syncs replies (dynamic: no import cycle).
+            const { enqueueRsvp } = await import('../calendar-sync/sync.rsvp.js');
+            await enqueueRsvp(id, user.username, respondedAt);
+        } catch (err) {
+            logger.warn({ err: (err as Error).message, activityId: id }, 'Could not queue the calendar reply');
+        }
         return toOneView(row, user);
     },
 

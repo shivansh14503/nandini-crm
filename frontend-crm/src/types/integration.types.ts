@@ -288,6 +288,8 @@ export interface PersonCalendarPayload {
     provider?: string | null;
     excluded?: boolean;
     note?: string | null;
+    /** P2-8: bring this person's customer meetings into the CRM (needs `allowMeetingImport`; 409 MEETING_IMPORT_OFF). */
+    importMeetings?: boolean;
 }
 
 export type CalendarCheckOutcome = 'ok' | 'user_error' | 'provider_unhealthy' | 'transient' | 'skipped';

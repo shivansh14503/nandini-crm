@@ -1,7 +1,7 @@
 # Nandini CRM — Build Plan
 
 > **Status:** living document. Part 1 records what has been built (reconstructed from git history, 115 commits
-> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-26, Calendar Phase 2 P2-1, P2-2, P2-2b (admin-managed calendar connections), P2-3a, P2-3b (calendar push engine), P2-3c (backfill, send invitations, sync status), P2-4 and P2-6 (busy times), Calendar Phase 4 booking links, Profile Phase 1: My Profile, Profile Phase 2: Admin › Users, Profile Phase 3: notifications & preferences, Profile Phase 4: connected accounts and Profile Phase 5 PR5a + PR5b: company formats, which completes Phase 17). Part 2
+> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-26, Calendar Phase 2 P2-1, P2-2, P2-2b (admin-managed calendar connections), P2-3a, P2-3b (calendar push engine), P2-3c (backfill, send invitations, sync status), P2-4, P2-6 (busy times), P2-8 (customer meetings from the calendar, replies both ways), Calendar Phase 4 booking links, Profile Phase 1: My Profile, Profile Phase 2: Admin › Users, Profile Phase 3: notifications & preferences, Profile Phase 4: connected accounts and Profile Phase 5 PR5a + PR5b: company formats, which completes Phase 17). Part 2
 > is the roadmap. Tick
 > items off and add new ones as work lands.
 > Related: [System design](system-design.md) · [Database design](database-design.md) · [API plan](api-plan.md)
@@ -403,8 +403,8 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         always deliver; bell icons). `ActivityView.calendar` (data only). `CALENDAR_SYNC_ENABLED`. Deviations: the
         `enrolled` job (replaces the per-user connect job) pushes dirty links only; the backfill of existing
         activities is P2-3c (done); a follow-up activity moved in the calendar is moved back (the write-back to the record is
-        P2-5); the organizer columns stay out of the audited DTO and deleted `origin = 'calendar'` activities have no
-        push rule yet (both P2-8); activities created while a row was stopped get no link until the P2-3c backfill.
+        P2-5); the organizer columns joined the audited DTO and deleted `origin = 'calendar'` activities detach their
+        links (both in P2-8, as of 2026-11-26); activities created while a row was stopped get no link until the P2-3c backfill.
         Tested against the fake provider, recorded Google / Graph answers and in-memory doubles; not run against a
         real SQL Server, Google or Microsoft.
   - [x] **P2-3c: backfill, send invitations, sync status UI** (2026-11-26, admin-managed model, addendum §8.3) — no
@@ -505,7 +505,31 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         card, a per-person chip on People. Go-live checklist and runbook: system design §9.2.2. Tested with the fake
         provider, hand-written Google / Graph answers and in-memory doubles; no real SQL Server, Google or Microsoft
         call.
-  - [ ] **P2-8: customer meetings from the calendar + replies both ways** (optional, off by default)
+  - [x] **P2-8: customer meetings from the calendar + replies both ways** (2026-11-26; optional, off by default) — no
+        migration (the `Activity` organizer / `syncKey` columns, `ActivityExternalLink.role = 'attendee'` and
+        `CalendarSyncUser.importMeetings` already existed). Pull (`sync.import.ts`): with the company switch
+        `allowMeetingImport` and the admin-set per-person "Import customer meetings" on, a customer meeting (D17:
+        timed, single, not private, not declined, not too long, now − 1 day … now + 180 days, a known contact among
+        the guests) becomes an activity with `origin = 'calendar'`, type `importFollowupType`, `createdBy =
+        'calendar-sync'`. D18: a colleague organizer who imports owns it; an outside organizer → the person owns it,
+        `externalOrganizer`, organizer columns, CRM locks on subject / times / all-day / location / attendees / owner
+        (`409 EXTERNAL_EVENT_LOCKED`; related record, remarks, customer response, Completed and custom fields stay
+        editable; undo / revert refused). D45: two colleagues on one meeting share one activity (pre-read `syncKey`
+        holder) with one link each (the second an `attendee` link); a deleted imported activity keeps its `syncKey`
+        and detaches its links (never imported again). Replies both ways: an attendee copy's own reply comes in
+        three-way against `baseJson { self }`, audited `RSVP` by that person; a CRM reply queues the `rsvp` job
+        (`rsvp-<activityId>-<username>-<respondedAtMs>`): Google GET + PATCH `attendees` with `If-Match` and
+        `sendUpdates=all`, Graph `accept` / `tentativelyAccept` / `decline` with `sendResponse: true` (app-only),
+        the copy found lazily by iCalUID; a refusal (F3) is recorded on the link (`rsvp_refused`) and marks nothing
+        unhealthy. The nightly completes past imported meetings with no related record. Handing a meeting to an
+        invitee turns their attendee link into their organizer link. Admin › API Integrations: the company switch and
+        the import type (active, not Task / Note); People dialog: "Import customer meetings" (admins only, `409
+        MEETING_IMPORT_OFF` while the company switch is off; no self-service). Drawer: "Imported from …" / "Organized
+        by …" caption, an Organizer field, no Reschedule or time edits for outside meetings; the form shows the
+        locked fields. No new wake-up (imports ride the pulls, the auto-complete the 00:25 nightly). Owner steps:
+        run first-run check F3 (a Google reply to an invitation copy); if refused, decide on the broader
+        `calendar.events` scope (code + Admin console). Tested with the fake provider, hand-written Google / Graph
+        answers and in-memory doubles; no real SQL Server, Google or Microsoft call.
 - [ ] **Phase 4 (later; spec §17)**: booking links, recurring activities, email logging.
   - [x] **Booking links (public scheduling page on free/busy)** (2026-11-26) — migration `20261128120000_booking_links`
         (`BookingLink`, `BookingLinkBooking`; `Activity.origin` gains `booking`, notification kind `booking_created`).

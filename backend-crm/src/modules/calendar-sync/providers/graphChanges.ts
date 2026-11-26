@@ -79,7 +79,7 @@ export function graphChangeOps(fetchImpl?: FetchImpl): Pick<CalendarProviderAdap
                     continue;
                 }
                 const parsed = graphEventSchema.safeParse(item);
-                if (parsed.success) events.push(normalizeGraph(parsed.data));
+                if (parsed.success) events.push(normalizeGraph(parsed.data, ctx.accountEmail));
                 else unreadable += 1;
             }
             const next = json['@odata.nextLink'] ?? null;

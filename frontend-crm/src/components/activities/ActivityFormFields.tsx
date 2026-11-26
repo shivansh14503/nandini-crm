@@ -241,7 +241,8 @@ export function useActivityForm({ mode, activityId, prefill }: UseActivityFormOp
 
 /**
  * A field the API won't let anyone change on this activity (`Activity.lockedFields`: a lead / opportunity follow-up
- * activity's type, times, status, owner and related record move with the record). Shown greyed out and `inert`
+ * activity's type, times, status, owner and related record move with the record; a meeting organized outside the CRM
+ * takes its title, times, place, attendees and owner from the organizer's calendar, P2-8). Shown greyed out and `inert`
  * (no focus, no clicks, no typing); the title says why. Keeps `children`, so the Form Builder's field lookup still
  * finds the control inside.
  */
@@ -496,13 +497,15 @@ export function ActivityFormFields({ clock, durationOf, compact = false, onOpenR
                     <RhfSelect<ActivityFormValues> name="followupType" label="Followup Type" required options={typeOptions} placeholder="Select Followup Type" />
                 </LockedField>
                 {shows('subject') && (
-                    <RhfTextField<ActivityFormValues>
-                        name="subject"
-                        label="Subject"
-                        required
-                        maxLength={FIELD_MAX_LENGTH.title}
-                        placeholder={isNote ? 'e.g. Pricing discussed with the owner' : 'e.g. Demo of TallyPrime Server'}
-                    />
+                    <LockedField locked={isLocked('subject')} reason={lockReason}>
+                        <RhfTextField<ActivityFormValues>
+                            name="subject"
+                            label="Subject"
+                            required
+                            maxLength={FIELD_MAX_LENGTH.title}
+                            placeholder={isNote ? 'e.g. Pricing discussed with the owner' : 'e.g. Demo of TallyPrime Server'}
+                        />
+                    </LockedField>
                 )}
                 {shows('status') && (
                     <LockedField locked={isLocked('status')} reason={lockReason}>
@@ -600,16 +603,20 @@ export function ActivityFormFields({ clock, durationOf, compact = false, onOpenR
                             />
                         )}
                         {shows('location') && (
-                            <RhfTextField<ActivityFormValues>
-                                name="location"
-                                label="Location"
-                                maxLength={FIELD_MAX_LENGTH.address}
-                                placeholder="Address, meeting room or video link"
-                            />
+                            <LockedField locked={isLocked('location')} reason={lockReason}>
+                                <RhfTextField<ActivityFormValues>
+                                    name="location"
+                                    label="Location"
+                                    maxLength={FIELD_MAX_LENGTH.address}
+                                    placeholder="Address, meeting room or video link"
+                                />
+                            </LockedField>
                         )}
                         {shows('attendees') && (
                             <FormGridItem span="full">
-                                <RhfAttendeesField name="attendees" label="Attendees" organizationId={organizationId} hint={attendeesHint} />
+                                <LockedField locked={isLocked('attendees')} reason={lockReason}>
+                                    <RhfAttendeesField name="attendees" label="Attendees" organizationId={organizationId} hint={attendeesHint} />
+                                </LockedField>
                             </FormGridItem>
                         )}
                         {/* Busy times of the owner and invited colleagues (timed, planned meetings; not Tasks or Notes). */}

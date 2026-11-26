@@ -22,6 +22,8 @@ export interface PlanInput {
         status: string;
         hasSchedule: boolean;
         externalOrganizer: boolean;
+        /** P2-8: `calendar` = brought in from the calendar; deleting it in the CRM never deletes the calendar event. */
+        origin?: string;
     };
     link: {
         state: string;
@@ -55,6 +57,8 @@ export function planPush(input: PlanInput): PushPlan {
 
     if (!input.connectionLive) return { action: 'detach' };
     if (!input.ownersConnection) return cancelOrNothing;
+    // §13.2: an imported meeting removed from the CRM stays in the calendar; the link stops (syncKey kept: never re-imported).
+    if (activity.isDeleted && activity.origin === 'calendar') return { action: 'detach' };
     if (activity.isDeleted) return cancelOrNothing;
     if (activity.status === 'Cancelled') return cancelOrNothing;
     if (!input.typeSyncable || !activity.hasSchedule) return cancelOrNothing;

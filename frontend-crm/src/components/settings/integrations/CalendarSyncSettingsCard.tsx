@@ -5,12 +5,15 @@ import { Alert, Box, Button, Chip, FormControlLabel, MenuItem, Switch, TextField
 import { errorMessage, inputSx, panelHeaderSx, primaryButtonSx, secondaryButtonSx, surfaceSx } from '@/components/settings/form-customization/builderUi';
 import { useSaveCalendarSettings } from '@/hooks/queries/useIntegrationsAdmin';
 import { ACTIVITY_REMINDERS, type ActivityReminder } from '@/types/activity.types';
-import { BACKFILL_DAY_CHOICES, MAX_COMPANY_DOMAINS, type BackfillDays, type CalendarSyncSettings } from '@/types/integration.types';
+import { BACKFILL_DAY_CHOICES, MAX_COMPANY_DOMAINS, type BackfillDays, type CalendarSyncSettings, type SyncType } from '@/types/integration.types';
 import { fieldErrorsOf, fieldLabelSx, hintSx } from './integrationUi';
 
-/** The fields this card edits today. Meeting import (P2-8) joins with its PR. */
-type EditedSettings = Pick<CalendarSyncSettings, 'companyDomains' | 'followUpActivities' | 'followUpReminder' | 'backfillDays' | 'eventVisibility'>;
-const EDITED_KEYS: (keyof EditedSettings)[] = ['companyDomains', 'followUpActivities', 'followUpReminder', 'backfillDays', 'eventVisibility'];
+/** The fields this card edits (meeting import: P2-8). */
+type EditedSettings = Pick<
+    CalendarSyncSettings,
+    'companyDomains' | 'followUpActivities' | 'followUpReminder' | 'backfillDays' | 'eventVisibility' | 'allowMeetingImport' | 'importFollowupType'
+>;
+const EDITED_KEYS: (keyof EditedSettings)[] = ['companyDomains', 'followUpActivities', 'followUpReminder', 'backfillDays', 'eventVisibility', 'allowMeetingImport', 'importFollowupType'];
 
 const pick = (s: CalendarSyncSettings): EditedSettings => ({
     companyDomains: s.companyDomains,
@@ -19,6 +22,8 @@ const pick = (s: CalendarSyncSettings): EditedSettings => ({
     followUpReminder: s.followUpReminder,
     backfillDays: s.backfillDays,
     eventVisibility: s.eventVisibility,
+    allowMeetingImport: s.allowMeetingImport ?? false,
+    importFollowupType: s.importFollowupType,
 });
 const sameValue = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 const sameSettings = (a: EditedSettings, b: EditedSettings) => EDITED_KEYS.every((k) => sameValue(a[k], b[k]));
@@ -30,10 +35,13 @@ const NO_REMINDER = '__none__';
 /** Company-wide calendar sync settings (ModuleSetting activities / calendarSync). */
 export function CalendarSyncSettingsCard({
     settings,
+    syncTypes = [],
     onDirtyChange,
     onToast,
 }: {
     settings: CalendarSyncSettings;
+    /** Followup Types (the Sync types card's list): imported meetings get one that can sit in a calendar. */
+    syncTypes?: SyncType[];
     onDirtyChange: (dirty: boolean) => void;
     onToast: (message: string, severity?: 'success' | 'error') => void;
 }) {
@@ -112,6 +120,9 @@ export function CalendarSyncSettingsCard({
             onToast(errorMessage(err, 'Could not save the settings.'), 'error');
         }
     };
+
+    // Task and Note never go to calendars, so they can't be the type of an imported meeting.
+    const importTypes = syncTypes.filter((t) => !t.locked);
 
     const domainsError = domainError || errors.companyDomains || Object.entries(errors).find(([k]) => k.startsWith('companyDomains.'))?.[1] || '';
 
@@ -258,6 +269,46 @@ export function CalendarSyncSettingsCard({
                         only if the company wants colleagues to read meeting titles (customer names) in their calendar app. Check the Google Workspace setting
                         &quot;Internal sharing options for primary calendars&quot; first.
                     </Typography>
+                </Box>
+
+                {/* Customer meetings from the calendar (P2-8) */}
+                <Box sx={{ minWidth: 0 }}>
+                    <FormControlLabel
+                        control={
+                            <Switch
+                                checked={form.allowMeetingImport}
+                                onChange={(e) => set('allowMeetingImport', e.target.checked)}
+                                disabled={save.isPending}
+                                slotProps={{ input: { 'aria-describedby': 'meeting-import-hint' } }}
+                            />
+                        }
+                        label={<Typography sx={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--crm-slate-900)' }}>Bring in meetings with customers</Typography>}
+                        sx={{ ml: 0, gap: 0.5, alignItems: 'center' }}
+                    />
+                    <Typography id="meeting-import-hint" sx={{ ...hintSx, mt: 0.25 }}>
+                        Meetings made in Google Calendar or Outlook that include a CRM contact become activities, and replies to invitations go both ways. Only for
+                        the people you turn it on for under People (Import customer meetings). Private, repeating and all-day events are never brought in; removing
+                        an imported activity leaves the calendar event alone.
+                    </Typography>
+                    {form.allowMeetingImport && (
+                        <TextField
+                            select
+                            size="small"
+                            label="Type of imported meetings"
+                            value={importTypes.some((t) => t.value === form.importFollowupType) ? form.importFollowupType : ''}
+                            onChange={(e) => set('importFollowupType', e.target.value)}
+                            disabled={save.isPending}
+                            error={Boolean(errors.importFollowupType)}
+                            helperText={errors.importFollowupType || 'Imported meetings get this Followup Type.'}
+                            sx={{ ...inputSx, mt: 1.5, width: { xs: '100%', sm: 320 }, maxWidth: '100%' }}
+                        >
+                            {importTypes.map((t) => (
+                                <MenuItem key={t.value} value={t.value} sx={{ fontSize: '0.85rem' }}>
+                                    {t.label}
+                                </MenuItem>
+                            ))}
+                        </TextField>
+                    )}
                 </Box>
 
                 {errors[''] && <Alert severity="error">{errors['']}</Alert>}

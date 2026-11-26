@@ -259,6 +259,8 @@ export const ACTIVITY_CALENDAR_SELECT = {
     relatedCode: true,
     location: true,
     origin: true,
+    /** P2-8: a meeting organized outside the CRM can't be dragged (its times are locked). */
+    externalOrganizer: true,
     attendees: { select: { kind: true, username: true, responseStatus: true } },
 } as const;
 
@@ -279,6 +281,7 @@ export interface ActivityCalendarRow {
     relatedCode: string | null;
     location: string | null;
     origin: string;
+    externalOrganizer?: boolean;
     attendees: { kind: string; username: string | null; responseStatus: string }[];
 }
 

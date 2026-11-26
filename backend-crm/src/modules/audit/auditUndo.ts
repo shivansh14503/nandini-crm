@@ -42,6 +42,7 @@ export interface UndoBlock {
 export const CALENDAR_SYNC_ROUTE_PREFIX = 'job:calendar-sync';
 export const CALENDAR_CHANGE_REASON = 'Changed from the calendar: change it in Google / Outlook or on the record.';
 export const FOLLOW_UP_LOCK_REASON = 'A follow-up activity follows its lead / opportunity: change it on the record (Record a follow-up).';
+export const EXTERNAL_LOCK_REASON = "Organized outside the CRM: change it in the organizer's calendar.";
 
 /** DTO keys that move together with a locked field (the days of an all-day start / end, the related record's code). */
 const LOCK_COMPANIONS: Readonly<Record<string, readonly string[]>> = {
@@ -64,7 +65,8 @@ export function undoBlockFor(entry: { entityType: string; route?: string | null 
     }
     if (entry.entityType === 'Activity' && Array.isArray(record.lockedFields) && record.lockedFields.length > 0) {
         const locked = record.lockedFields.filter((key): key is string => typeof key === 'string');
-        return { fields: new Set(locked.flatMap((key) => [key, ...(LOCK_COMPANIONS[key] ?? [])])), reason: FOLLOW_UP_LOCK_REASON };
+        const reason = record.externalOrganizer === true && record.origin !== 'followup' ? EXTERNAL_LOCK_REASON : FOLLOW_UP_LOCK_REASON;
+        return { fields: new Set(locked.flatMap((key) => [key, ...(LOCK_COMPANIONS[key] ?? [])])), reason };
     }
     return null;
 }

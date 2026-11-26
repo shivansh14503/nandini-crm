@@ -90,3 +90,11 @@ export function followUpPullJobId(connectionId: string, stampMs: number): string
 export function watchJobId(connectionId: string, op: string, now: Date): string {
     return `watch-${connectionId}-${op}-${Math.floor(now.getTime() / 60_000)}`;
 }
+
+/**
+ * `rsvp-<activityId>-<username>-<respondedAtMs>` (P2-8, spec §10.1): one reply job per reply; a newer reply gets its own
+ * id, so it is never swallowed by an older job BullMQ still keeps. No ':' (BullMQ refuses it in custom ids).
+ */
+export function rsvpJobId(activityId: string, username: string, respondedAt: Date): string {
+    return `rsvp-${activityId}-${username.trim().toLowerCase().replace(/[^a-z0-9._-]/g, '_')}-${respondedAt.getTime()}`;
+}
