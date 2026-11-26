@@ -566,7 +566,8 @@ async function resolveTabLabel(tx: TransactionClient, module: CrmModuleKey, tabK
 export const formConfigService = {
     /** Every category (with options) and every field grouped by module. Inactive rows only with `includeInactive`. */
     async getAllConfigs(includeInactive = false): Promise<FormConfigsPayload> {
-        return cacheService.getOrSet(configCacheKey(includeInactive), CONFIG_TTL_SECONDS, async () => {
+        // Guarded: every config write drops `cache:lookups:form-configs*`, so a payload read while one commits is not cached.
+        return cacheService.getOrSetGuarded(configCacheKey(includeInactive), CONFIG_TTL_SECONDS, async () => {
             const [categories, allRows, settingRows] = await Promise.all([
                 prisma.dropdownCategory.findMany({
                     where: { deletedAt: null },

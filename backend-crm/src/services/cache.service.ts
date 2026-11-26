@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { Redis } from 'ioredis';
 import { isRedisReady, redis } from '../config/redis.js';
 import { logger } from '../config/logger.js';
 
@@ -16,7 +17,12 @@ const SCAN_BATCH_SIZE = 200;
 
 /** Prefix of the placeholder a guarded read-through writes while it reads the source (never valid JSON). */
 const GUARD_PREFIX = 'pending:';
-/** A placeholder outlives the source read it guards (a paused Azure SQL Serverless database takes up to a minute to resume). */
+/**
+ * Default placeholder lifetime: longer than one database read can take (a cold connect is up to 30 s, the driver's
+ * request timeout 15 s, and a paused Azure SQL Serverless database takes up to a minute to resume). A read that
+ * outlives its placeholder is simply not cached (the compare-and-set finds no placeholder or another reader's); a
+ * placeholder left behind by a crash keeps that one key uncached, never stale, until it expires.
+ */
 const GUARD_TTL_SECONDS = 90;
 /** KEYS[1] = key; ARGV = expected placeholder, new value ('' deletes), TTL. Atomic compare-and-set. */
 const SWAP_IF_GUARD = `if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
@@ -32,16 +38,37 @@ export interface GuardStore {
     swap(key: string, expected: string, value: string | null, ttlSeconds: number): Promise<boolean>;
 }
 
-const sharedGuardStore: GuardStore = {
-    get: (key) => redis.get(key),
-    put: async (key, value, ttlSeconds, onlyIfAbsent) =>
-        (onlyIfAbsent ? await redis.set(key, value, 'EX', ttlSeconds, 'NX') : await redis.set(key, value, 'EX', ttlSeconds)) === 'OK',
-    swap: async (key, expected, value, ttlSeconds) => (await redis.eval(SWAP_IF_GUARD, 1, key, expected, value ?? '', String(ttlSeconds))) === 1,
-};
+/** A `GuardStore` on an ioredis client (the shared one below; tests pass their own). */
+export function redisGuardStore(client: Redis): GuardStore {
+    return {
+        get: (key) => client.get(key),
+        put: async (key, value, ttlSeconds, onlyIfAbsent) =>
+            (onlyIfAbsent ? await client.set(key, value, 'EX', ttlSeconds, 'NX') : await client.set(key, value, 'EX', ttlSeconds)) === 'OK',
+        swap: async (key, expected, value, ttlSeconds) => (await client.eval(SWAP_IF_GUARD, 1, key, expected, value ?? '', String(ttlSeconds))) === 1,
+    };
+}
+
+const sharedGuardStore = redisGuardStore(redis);
+
+/**
+ * Deletes every key matching a glob pattern with `SCAN` + `UNLINK` (never `KEYS`, so Redis is never blocked). SCAN
+ * matches key names whatever they hold, so a guarded read's placeholder is deleted with the values; one written
+ * after the scan started belongs to a read that began after the write committed, so missing it is harmless.
+ */
+export async function unlinkMatching(client: Pick<Redis, 'scan' | 'unlink'>, pattern: string): Promise<void> {
+    let cursor = '0';
+    do {
+        const [nextCursor, keys] = await client.scan(cursor, 'MATCH', pattern, 'COUNT', SCAN_BATCH_SIZE);
+        cursor = nextCursor;
+        if (keys.length > 0) await client.unlink(...keys);
+    } while (cursor !== '0');
+}
 
 export interface GuardedReadOptions {
     /** Skip the cached value: read the source and cache what it says now (still guarded). */
     refresh?: boolean;
+    /** Placeholder lifetime (default 90 s, see `GUARD_TTL_SECONDS`); longer for a source read that can take longer. */
+    placeholderTtlSeconds?: number;
 }
 
 /**
@@ -66,7 +93,7 @@ export async function guardedReadThrough<T>(
             if (cached !== null && !cached.startsWith(GUARD_PREFIX)) return JSON.parse(cached) as T;
             if (cached === null) {
                 const token = `${GUARD_PREFIX}${randomUUID()}`;
-                if (await store.put(key, token, GUARD_TTL_SECONDS, !options.refresh)) guard = token;
+                if (await store.put(key, token, options.placeholderTtlSeconds ?? GUARD_TTL_SECONDS, !options.refresh)) guard = token;
             }
         } catch (err) {
             logger.warn({ err: (err as Error).message, key }, 'Cache read failed; using database');
@@ -93,9 +120,17 @@ export async function guardedReadThrough<T>(
 /**
  * Redis-backed cache that never takes the API down: when Redis is unreachable every call logs at debug level
  * and falls through to the source of truth (the fetcher / database).
+ *
+ * Pick the read by the key, and read a key only one way: `getOrSetGuarded` for anything a CRM write invalidates
+ * (lookups, form configs, search, unread counts), `getOrSet` for keys only their TTL expires (data the CRM never
+ * writes, such as DNS answers). A plain read of a guarded key would overwrite its placeholder.
  */
 export const cacheService = {
-    /** Returns the cached JSON value for `key`, or runs `fetcher`, caches its result for `ttlSeconds` and returns it. */
+    /**
+     * Returns the cached JSON value for `key`, or runs `fetcher`, caches its result for `ttlSeconds` and returns it.
+     * Not safe for a key that writes invalidate: a value read just before a write can be cached just after its
+     * invalidation and served until the TTL. Use `getOrSetGuarded` there.
+     */
     async getOrSet<T>(key: string, ttlSeconds: number, fetcher: () => Promise<T>): Promise<T> {
         if (isRedisReady()) {
             try {
@@ -119,7 +154,8 @@ export const cacheService = {
 
     /**
      * `getOrSet` for a value whose writers invalidate it: a source read that overlaps an invalidation is not cached
-     * (see `guardedReadThrough`). Only for keys read this way (they briefly hold a placeholder).
+     * (see `guardedReadThrough`). Only for keys read this way (they briefly hold a placeholder). Costs one more round
+     * trip than `getOrSet` on a miss (the placeholder); a hit is the same single `GET`.
      */
     getOrSetGuarded<T>(key: string, ttlSeconds: number, fetcher: () => Promise<T>, options: GuardedReadOptions = {}): Promise<T> {
         return guardedReadThrough(sharedGuardStore, isRedisReady, key, ttlSeconds, fetcher, options);
@@ -134,16 +170,11 @@ export const cacheService = {
         }
     },
 
-    /** Deletes every key matching a glob pattern (e.g. `cache:lookups:*`), using SCAN so Redis is never blocked. */
+    /** Deletes every key matching a glob pattern (e.g. `cache:lookups:*`), placeholders included (`unlinkMatching`). */
     async invalidatePattern(pattern: string): Promise<void> {
         if (!isRedisReady()) return;
         try {
-            let cursor = '0';
-            do {
-                const [nextCursor, keys] = await redis.scan(cursor, 'MATCH', pattern, 'COUNT', SCAN_BATCH_SIZE);
-                cursor = nextCursor;
-                if (keys.length > 0) await redis.unlink(...keys);
-            } while (cursor !== '0');
+            await unlinkMatching(redis, pattern);
         } catch (err) {
             logger.warn({ err: (err as Error).message, pattern }, 'Cache pattern invalidation failed');
         }

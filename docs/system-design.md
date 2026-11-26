@@ -1,6 +1,6 @@
 # Nandini CRM — System Design
 
-> **Status:** living document. Describes the system as built (code as of 2026-11-25; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Referrals module; Documents module; Activities data model and API, Calendar Phase 1 PR1; Activities screens and Calendar, PR2; notifications, reminders and mail workers, navbar bell and the morning summary email, PR3, with its review fixes).
+> **Status:** living document. Describes the system as built (code as of 2026-11-26; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Referrals module; Documents module; Activities data model and API, Calendar Phase 1 PR1; Activities screens and Calendar, PR2; notifications, reminders and mail workers, navbar bell and the morning summary email, PR3, with its review fixes; guarded cache reads for lookups, form configs and search).
 > Update it in the same change that alters architecture, infrastructure, Redis usage, queues or security.
 > Related: [Database design](database-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
@@ -234,12 +234,15 @@ commands fail immediately instead of hanging, and reconnects in the background (
 | `ratelimit:login:{ip}` | counter | `LOGIN_RATE_LIMIT_WINDOW_SECONDS` (15 min) | failed logins only | Brute-force protection (default 10 failures / window); reset on success |
 | `ratelimit:pdf:{module}:user:{id}` | counter | 60 s | `GET /:id/pdf` | 30 PDF renders / min / user |
 | `ratelimit:pdf-preview:user:{id}` | counter | 60 s | `POST /api/pdf-templates/preview` | 20 previews / min / user |
-| `cache:lookups:users:{all\|active}` | JSON | 5 min | lookups | User picker list |
-| `cache:lookups:organizations:{limit}` / `contacts:{limit}` / `products:{limit}` | JSON | 5 min | lookups (no search term only) | Lookup dialogs' default lists |
-| `cache:lookups:nature-of-calls` / `partner-companies` / `partner-contacts` | JSON | 1 h | lookups | Master lists |
-| `cache:lookups:form-configs:{all\|active}` | JSON | 1 h | `formConfig.service` | Whole form/dropdown configuration |
-| `cache:address-master…` | JSON | 24 h | lookups | Countries, states, cities by state |
-| `cache:search:{limit}:{sha256}` | JSON | 30 s | global search | Search results; hash covers the user's access scope + query |
+| `cache:lookups:users:{all\|active}` | JSON | 5 min | lookups (plain read) | User picker list; TTL only (no CRM write changes users) |
+| `cache:lookups:organizations:{limit}` / `contacts:{limit}` / `products:{limit}` | JSON, guarded ¹ | 5 min | lookups (no search term only) | Lookup dialogs' default lists |
+| `cache:lookups:partner-companies` / `partner-contacts` | JSON, guarded ¹ | 1 h | lookups | Partner master lists; dropped by partner company writes |
+| `cache:lookups:nature-of-calls` | JSON | 1 h | lookups (plain read) | Seeded master list; TTL only |
+| `cache:lookups:form-configs:{all\|active}` | JSON, guarded ¹ | 1 h | `formConfig.service` | Whole form/dropdown configuration |
+| `cache:address-master` / `cache:address-master:{country}` | JSON | 24 h | lookups (plain read) | Countries and states (seeded ISO data); TTL only |
+| `cache:address-master:cities:{state}:{limit}` | JSON, guarded ¹ | 24 h | lookups | A state's biggest cities; dropped by city admin writes |
+| `cache:search:{category\|all}:{page}:{limit}:{t\|-}:{i\|-}:d{minDigits}:{sha256}` | JSON, guarded ¹ (180 s placeholder) | 30 s | global search | Search results; everyone sees the same results, so one entry per query (hashed, so user text never reaches a key or SCAN pattern) |
+| `cache:email-domain:{domain}` | JSON string (`mx`, `a_only`, `null_mx`, `not_found`) | 24 h | email checks (plain read) | DNS answer for a domain; TTL only (an `unknown` answer is dropped at once) |
 | `cache:notifications:unread:{username}` | number (briefly a `pending:<uuid>` placeholder while it is read) | 24 h (a safety net: it is dropped long before) | `GET /api/notifications/unread-count`; the list reads SQL and re-caches it | The bell's unread count (username lowercased), so a minute's polling from every open tab doesn't wake SQL Server; dropped by every write to that user's notifications, by the 00:20 nightly job and on every Redis reconnect (§4.2) |
 | `pdf:{MODULE}:{sha256}` | binary (PDF) | `PDF_CACHE_TTL_SECONDS` (600 s) | PDF render | Rendered PDFs; key covers template id + version, record id + `updatedAt`, custom-field definitions |
 | `recent:{userId}:{entity}` | sorted set (score = view time) | 30 days | `GET /api/organizations/:id` | "Recently viewed" (max 20 per user per entity) |
@@ -251,22 +254,48 @@ commands fail immediately instead of hanging, and reconnects in the background (
 | `bull:crm-reminders:*` | BullMQ internals (2 job schedulers, delayed jobs, runs) | 1 day / 1000 jobs (completed) / 7 days (failed) | activity saves, reminders worker | Delayed job per activity reminder (job id `reminder-<activityId>-<remindAtMs>`), schedulers `reminder-sweep`, `reminder-nightly` (§5.1) |
 | `bull:crm-mail:*` | BullMQ internals (job scheduler + runs) | 7 days / 100 jobs (completed) / 30 days (failed) | mail worker | Scheduler `morning-summary`, catch-up jobs `morning-catchup-<day>` (§5.2) |
 
-`cache:dashboard:*` is defined and invalidated but nothing writes it yet (no dashboard API).
+¹ Read with `cacheService.getOrSetGuarded`, so the key briefly holds a `pending:<uuid>` placeholder while it is read
+(§4.2). `cache:dashboard:*` is defined and invalidated but nothing writes it yet (no dashboard API).
 
 ### 4.2 Cache invalidation
 
-Caches are read-through (`cacheService.getOrSet`). After a write **commits**, the service calls
+Caches are read-through. After a write **commits**, the service calls
 `cacheService.invalidateEntityCaches(entity)`, which deletes `cache:lookups:{entity}*`, every `cache:search:*` and
 every `cache:dashboard:*` using `SCAN` + `UNLINK` (never `KEYS`, so Redis isn't blocked). Form-config writes drop
-`cache:lookups:form-configs*`. PDF cache entries never need invalidation: any change to the template or the record
-changes the key. A user's `cache:notifications:unread:{username}` is deleted whenever notifications are written for
+`cache:lookups:form-configs*`, partner company writes also `cache:lookups:partner-contacts*`, city admin writes
+`cache:address-master:cities:*`. PDF cache entries never need invalidation: any change to the template or the record
+changes the key.
+
+Every key a CRM write invalidates is read with **`cacheService.getOrSetGuarded`** (lookups of organizations,
+contacts, products, partner companies and partner contacts, cities, form configs, global search, unread counts). A
+plain read-through can cache a value it read just before a write *after* that write's invalidation, and serve it until
+the TTL (an hour for form configs, a day for cities). The guarded read closes that gap: on a miss it first writes a
+`pending:<uuid>` placeholder (`SET NX`), reads the source, then swaps the placeholder for the value only if the
+placeholder is still there (Lua compare-and-set). An invalidation in between deletes the placeholder (`SCAN MATCH`
+matches key names whatever they hold), so the swap does nothing and the next read goes to the source. A placeholder
+written after the scan started belongs to a read that began after the commit, so missing it is harmless. A reader
+that finds another's placeholder reads the source and does not cache (it is never handed the placeholder). A read
+that outlives its placeholder is not cached either: the swap finds no placeholder or another reader's. Placeholders
+live 90 s (a cold connect is up to 30 s, the driver's request timeout 15 s, a paused Azure SQL Serverless database
+takes up to a minute to resume); search's live 180 s, because a search runs a document series query and then up to 27
+queries on a 10-connection pool. A placeholder left behind by a crash only keeps that key uncached, never stale,
+until it expires. Cost: one more round trip on a miss; a hit is the same single `GET`. Values are JSON (`null` and
+empty lists are cached; `undefined` is not). Redis down or a failed Redis call: the source, uncached, no error.
+Keys only their TTL expires stay on the plain `cacheService.getOrSet`: users, nature of calls and countries/states
+(no CRM write changes them; the seed drops `cache:*`), and DNS answers. A key is read one way only: a plain read of a
+guarded key would overwrite its placeholder.
+
+Invalidations made while a process cannot reach Redis are lost, so a value cached before an outage can outlive a write
+made during it until its TTL: every `cache:*` key is dropped only on the first `ready` after start-up (unread counts
+on every reconnect, below).
+
+A user's `cache:notifications:unread:{username}` is deleted whenever notifications are written for
 them (producer, also when a later insert chunk fails) and whenever they mark one or all read (even when nothing changed, so a user can always clear a wrong
 badge); every `cache:notifications:unread:*` is deleted by the 00:20 nightly job and on every `ready` of the shared
 Redis client in each API and worker process (`dropUnreadCountsOnRedisReady`), because an invalidation made while
-Redis was unreachable is lost. The count is read with `cacheService.getOrSetGuarded`: on a miss it first writes a
-`pending:<uuid>` placeholder (`SET NX`, 90 s), counts in SQL, then swaps the placeholder for the count only if it is
-still there (Lua compare-and-set), so a count read just before a new notification and its invalidation is never
-cached. The list (`GET /api/notifications`, when the bell opens) always counts in SQL and re-caches that the same way.
+Redis was unreachable is lost. The count is read with `cacheService.getOrSetGuarded` (above), so a count read just
+before a new notification and its invalidation is never cached. The list (`GET /api/notifications`, when the bell
+opens) always counts in SQL and re-caches that the same way.
 
 ### 4.3 Degraded mode (Redis down)
 
@@ -685,7 +714,7 @@ Retention: `NOTIFICATION_RETENTION_DAYS` (90), `EMAIL_LOG_RETENTION_DAYS` (180).
 | --- | --- |
 | No user management API/UI | Users come from the seed or direct DB edits. `ROUTES.ADMIN_USERS` exists in the frontend but has no page. `sessionService.revokeAll` is ready for deactivation / password change. |
 | Dashboard has no data API | The dashboard page is static; `cache:dashboard:*` is reserved. |
-| No automated frontend tests | Backend has 61 `node:test` files (pure logic: validators, numbering, PDF document, access control, audit, time zones, activities, referrals, documents, notifications, mail, cache). No integration/E2E tests. |
+| No automated frontend tests | Backend has 63 `node:test` files (pure logic: validators, numbering, PDF document, access control, audit, time zones, activities, referrals, documents, notifications, mail, cache). The guarded cache read's Redis tests (Lua compare-and-set, `SCAN` + `UNLINK`, placeholder expiry, 2 MB values) run only with `REDIS_TEST_URL` set. No integration/E2E tests. |
 | Notifications are polled, not pushed | The bell asks every minute (§8.4), so a reminder can show up to a minute late; background tabs don't poll. SSE through Redis pub/sub is the upgrade path. There are no browser / push notifications and no notification preferences yet. |
 | Reminders depend on a worker | No worker running = no reminders, renewals or morning email (§9.1). Off-hours contract renewals wait for the 07:00 sweep. With Redis down the fallback polls the database every minute. |
 | Morning email not yet proven against the relay | The mail layer, EmailLog claims and the summary are unit-tested (STARTTLS enforcement against a fake SMTP server), and the job schedulers and the guarded unread-count cache were checked against a local Redis, but no real SMTP send or SQL Server run has been done yet; the first real send should be an admin's "Send me a test". `MORNING_SUMMARY_CRON` is read with a small cron subset for the catch-up check (numbers, names, ranges, lists, steps). |

@@ -374,7 +374,8 @@ Limited responses carry `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Res
 1. Zod schema in `<module>.validator.ts` (mirror the frontend schema in `frontend-crm/src/validations`).
 2. Service function: use `runInTransaction`; lock existing records with `lockRecords`; check scope with
    `assertRecordAccess`; write `auditService.record(tx, …)` in the same transaction; call
-   `cacheService.invalidateEntityCaches` after commit.
+   `cacheService.invalidateEntityCaches` after commit. Cache a read of data that writes invalidate with
+   `cacheService.getOrSetGuarded`, not `getOrSet` ([system design §4.2](system-design.md#42-cache-invalidation)).
 3. Route: `authenticate` (router-level), `requireRole(...FORM_CONFIG_ADMIN_ROLES)` for admin features,
    `validateRequest({ params, query, body })`. Register custom paths **before** `registerCrudRoutes` so `/:id` doesn't
    capture them.
@@ -385,8 +386,8 @@ Limited responses carry `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Res
 
 | Endpoint | Purpose | Notes |
 | --- | --- | --- |
-| `/users` (CRUD, 🔐) | Create, edit, deactivate users; reset password | `ROUTES.ADMIN_USERS` already reserved in the frontend. Deactivation and password change must call `sessionService.revokeAll(userId)` and invalidate `cache:lookups:users*` |
+| `/users` (CRUD, 🔐) | Create, edit, deactivate users; reset password | `ROUTES.ADMIN_USERS` already reserved in the frontend. Deactivation and password change must call `sessionService.revokeAll(userId)` and invalidate `cache:lookups:users*`; switch the users lookup to `cacheService.getOrSetGuarded` then (it is TTL-only today) |
 | `POST /auth/change-password` | Self-service password change | Revoke other sessions |
-| `GET /dashboard/*` | KPI aggregates (pipeline value by stage, follow-ups due, open tickets, conversion rate) | Use the reserved `cache:dashboard:*` namespace, already invalidated on every entity write |
+| `GET /dashboard/*` | KPI aggregates (pipeline value by stage, follow-ups due, open tickets, conversion rate) | Use the reserved `cache:dashboard:*` namespace, already invalidated on every entity write; read it with `cacheService.getOrSetGuarded` |
 | `GET /opportunities/:id/pdf` etc. | PDFs for other modules | Follow the README "Adding a module" steps |
 | Export (`GET /<entity>/export`) | CSV/XLSX export of a filtered list | Stream; respect row-level scope |
