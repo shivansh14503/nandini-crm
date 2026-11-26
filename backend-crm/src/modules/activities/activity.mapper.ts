@@ -80,8 +80,38 @@ export interface ActivityViewer {
     myResponse: string | null;
 }
 
+/**
+ * The activity in its owner's calendar (Calendar Phase 2 spec §4.4, §14.5; data only in P2-3b, the drawer's status line
+ * is P2-3c), from the owner's organizer link on their live connection row; null when there is none (the owner isn't
+ * synced, or the type never syncs). Outside the audited DTO. `htmlLink` and `errorMessage` only for the owner and
+ * editors.
+ */
+export interface ActivityCalendarView {
+    provider: string;
+    /** calendar-sync/sync.constants.ts LINK_STATES (never `detached` here). */
+    state: string;
+    /** A CRM change is waiting to be pushed (the outbox `dirtyAt` is set). */
+    pending: boolean;
+    /** send | withhold (a private copy: attendees weren't invited, D41). */
+    invites: string;
+    /** Guests someone else added that wait for the owner (D41). */
+    heldCount: number;
+    /** The viewer is the owner and there is someone to invite (withheld copy with guests, or held guests). */
+    canSendInvites: boolean;
+    lastSyncedAt: string | null;
+    htmlLink: string | null;
+    errorCode: string | null;
+    errorMessage: string | null;
+    warning: string | null;
+    conflictAt: string | null;
+    /** When a calendar change was last applied to the activity. */
+    externalUpdatedAt: string | null;
+}
+
 export type ActivityView = ActivityDto & {
     viewer: ActivityViewer;
+    /** The activity in its owner's calendar; null when not synced. */
+    calendar: ActivityCalendarView | null;
     /**
      * ActivityDto keys a CRM `PUT` may not change (activity.access.ts `lockedFieldsFor`, spec §8.13): a follow-up
      * activity's schedule, type, status, owner and related record. `[]` when nothing is locked.

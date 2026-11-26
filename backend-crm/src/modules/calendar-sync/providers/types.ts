@@ -1,12 +1,14 @@
 import type { BusyKind } from '../busy.constants.js';
+import type { EventContext } from '../sync.mapping.google.js';
+import type { CrmShape, FieldGroup, ProviderAttendee, ProviderEvent } from '../sync.shapes.js';
 
 /**
  * Calendar provider adapters (Calendar Phase 2 spec §7.2; admin-managed connections: addendum §2, §8.1). Thin `fetch`
  * clients behind one interface, no SDKs (D1). Access tokens are minted per call from the company credentials
- * (tokenSource.ts) and handed to the adapter inside a `CallCtx`; minting is not on the adapter. P2-2b ships
- * `probeCalendar` (the per-row health check), P2-6 `freeBusy`; the event operations (create / patch / cancel / get) join
- * this interface with the push engine (P2-3b), pull / watch with P2-5 / P2-7. The engine never imports an adapter
- * directly: it goes through `getAdapter()` (providers/registry.ts), which tests replace with the in-memory fake.
+ * (tokenSource.ts) and handed to the adapter inside a `CallCtx`; minting is not on the adapter. P2-2b shipped
+ * `probeCalendar` (the per-row health check); P2-3b adds the event operations (create / patch / cancel / get /
+ * undelete) of the push engine, P2-6 `freeBusy`; pull / watch join with P2-5 / P2-7. The engine never imports an
+ * adapter directly: it goes through `getAdapter()` (providers/registry.ts), which tests replace with the in-memory fake.
  *
  * Nothing here is ever logged with its values: tokens stay inside these objects.
  */
@@ -36,10 +38,33 @@ export interface CallCtx {
     mailbox: string;
 }
 
-/**
- * The adapter interface. P2-3b adds `createEvent`, `patchEvent`, `cancelEvent`, `getEvent` and `undeleteEvent?`
- * (its `CallCtx` gains nothing more: Graph URLs use `ctx.mailbox`).
- */
+/** `createEvent` / `undeleteEvent` input: the CRM's event and who is invited. */
+export interface CreateEventInput {
+    crm: CrmShape;
+    event: EventContext;
+    /** Google `id` / Graph `transactionId` (sync.keys.ts `requestedIdFor`). */
+    requestedId: string;
+    /** Invited people (empty on a private copy). */
+    attendees: Record<string, ProviderAttendee>;
+    /** Google `sendUpdates=all` (else `none`); Graph has no switch (invitations go to whoever is listed). */
+    sendUpdates: boolean;
+}
+
+/** `patchEvent` input: only the changed groups are written. */
+export interface PatchEventInput {
+    groups: readonly FieldGroup[];
+    crm: CrmShape;
+    /** Zone the event is shown in (the provider event's own zone). */
+    timeZone: string;
+    /** The full attendee list the event should end up with, when `attendees` is among the groups. */
+    attendees?: Record<string, ProviderAttendee>;
+    /** Set (also to '') to write the description in the same request (D15 clear-on-external). */
+    description?: string;
+    /** `If-Match` (412 on mismatch). */
+    etag?: string;
+    sendUpdates: boolean;
+}
+
 /** One busy block of a calendar (times only: subjects, locations and privacy flags are never read into the CRM). */
 export interface ProviderBusyBlock {
     start: Date;
@@ -57,6 +82,10 @@ export interface FreeBusyRequest {
     end: Date;
 }
 
+/**
+ * The adapter interface: the health probe (P2-2b), the event operations of the push engine (P2-3b) and free/busy
+ * (P2-6). Pull (`listChanges`), watch and RSVP join with P2-5, P2-7 and P2-8. Graph URLs use `ctx.mailbox` (`/users/{mailbox}`).
+ */
 export interface CalendarProviderAdapter {
     readonly key: CalendarProviderKey;
     /**
@@ -65,6 +94,19 @@ export interface CalendarProviderAdapter {
      * rejects with a `ProviderError` (classified by `classifyApiError`).
      */
     probeCalendar(ctx: CallCtx): Promise<void>;
+    /**
+     * Creates the organizer copy. A retried create never duplicates: Google 409 on our id → the existing event is
+     * adopted when its marker is ours (re-written with the full body; a cancelled copy is undeleted), else
+     * `RequestedIdTakenError`; Graph dedupes on `transactionId`.
+     */
+    createEvent(ctx: CallCtx, input: CreateEventInput): Promise<ProviderEvent>;
+    patchEvent(ctx: CallCtx, id: string, input: PatchEventInput): Promise<ProviderEvent>;
+    /** Deletes the event (attendees get a cancellation when `sendUpdates`); `gone` when it no longer existed. */
+    cancelEvent(ctx: CallCtx, id: string, o: { sendUpdates: boolean }): Promise<'cancelled' | 'gone'>;
+    /** Null when the provider no longer has it (404 / 410); a Google event deleted in place comes back `cancelled`. */
+    getEvent(ctx: CallCtx, id: string): Promise<ProviderEvent | null>;
+    /** Google only [U]: brings a deleted event of ours back with the full body; null when it can't (404 / 400). */
+    undeleteEvent?(ctx: CallCtx, id: string, input: CreateEventInput): Promise<ProviderEvent | null>;
     /**
      * Busy times of `emails` in `[start, end)`, read **as `ctx`'s person** (P2-6; addendum §8.5): Google
      * `POST /freeBusy` with the impersonated token (`calendar.events.freebusy`), Graph

@@ -1,13 +1,14 @@
 import { z } from 'zod';
 import { GOOGLE_CALENDAR_API } from '../../integrations/integration.constants.js';
 import { BUSY_PROVIDER_TIMEOUT_MS } from '../busy.constants.js';
+import { googleEventOps } from './googleEvents.js';
 import { providerFetch } from './http.js';
 import type { CalendarProviderAdapter, CallCtx, FetchImpl, FreeBusyRequest, FreeBusyResult, ProviderBusyBlock } from './types.js';
 
 /**
  * Google Calendar v3 for one impersonated employee (addendum §2, §4.3). The token comes from the service account with
  * domain-wide delegation (googleServiceAccount.ts) and acts as the employee, so `calendars/primary` is theirs and
- * `ctx.mailbox` is not needed. The event operations join this adapter with the push engine (P2-3b).
+ * `ctx.mailbox` is not needed. The event operations of the push engine (P2-3b) live in googleEvents.ts.
  */
 
 export interface AdapterOptions {
@@ -72,5 +73,7 @@ export function createGoogleAdapter(options: AdapterOptions = {}): CalendarProvi
             const calendars = new Map(Object.entries(json.calendars ?? {}).map(([id, calendar]) => [id.toLowerCase(), calendar]));
             return new Map(emails.map((email) => [email, googleFreeBusyResult(calendars.get(email))]));
         },
+
+        ...googleEventOps(fetchImpl),
     };
 }

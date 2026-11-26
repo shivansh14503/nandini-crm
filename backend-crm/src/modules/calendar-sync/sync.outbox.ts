@@ -1,0 +1,304 @@
+import type { TransactionClient } from '../../config/prisma.js';
+import type { ActivityRow } from '../activities/activity.mapper.js';
+import type { ActivityConfig } from '../activities/activity.service.js';
+import type { ActivityWriteEvent } from '../activities/activity.writeHook.js';
+import { attendeeIdentity } from '../activities/activity.validator.js';
+import { calendarSyncFromMeta } from '../integrations/calendarSyncSettings.js';
+import { isActivityOnlyFollowupType } from '../shared/followupTypes.js';
+import { LIVE_CONNECTION_STATUSES } from './connection.constants.js';
+import { isFakeProviderEnabled } from './providers/fakeSwitch.js';
+import { parseHeld, resolveAttendeeEmails, serializeHeld } from './sync.attendees.js';
+import { CREATE_ELIGIBLE_PAST_MS, type LinkInvites } from './sync.constants.js';
+import { requestedIdFor } from './sync.keys.js';
+import { parseBase } from './sync.shapes.js';
+
+/**
+ * The durable push outbox (Calendar Phase 2 spec §8.3, D11, D41, D43). `markActivityForSync` runs inside every activity
+ * write's own transaction (through `activityWriteHook.onWrite`), so a committed change always leaves its calendar links
+ * dirty (`dirtyAt`) even if the process dies before the push: the after-commit wake-up is only an optimisation and the
+ * worker's sweep pushes anything left. It reads and writes only through `tx` and loads no configuration (the caller
+ * loaded the activity configuration before the transaction).
+ *
+ * 1. Nothing pushable changed (remarks, customer response, custom fields) → nothing happens.
+ * 2. The owner's connection (admin-managed, addendum §8): the owner's live CalendarConnection row (`pending`, `ok` or
+ *    `error`: a row in error keeps its links dirty and pushes after it recovers), its provider switched on, the
+ *    owner's user active and not a group login (D43). No live row → the user isn't synced: nothing is written.
+ * 3. No organizer link on that connection and the activity is create-eligible → a link is inserted, dirty, with
+ *    `invites='send'` only when the actor is the owner; otherwise `withhold` (a private copy, the owner is told,
+ *    D41). A `detached` link on that connection (the row was re-activated) is re-attached (`reattachedState`).
+ * 4. Every other organizer link (any connection: an owner change cancels on the old one) → dirty; `pending` unless
+ *    it is `cancelled` / `removed_remote` (the plan needs to know the event is gone). `detached` links stay inert and
+ *    `unsupported` ones are left alone.
+ *    D41 on existing links (`heldChanges`, by address): addresses a non-owner puts on the activity are held
+ *    (`heldAttendeesJson`) on every link that sends invitations, detached ones included, until the owner sends them;
+ *    an owner change by anyone but the new owner makes the new owner's earlier link a new copy (guests not already
+ *    on its event held, or `withhold` when its event is gone); an address removed in the CRM leaves the held lists.
+ * 5. The dirty links and any "invitations held" notice are remembered for `runActivityPostCommit` (keyed by the
+ *    written row object, so a rolled-back transaction leaves nothing behind).
+ */
+
+/** What `markActivityForSync` reads and writes: an interactive transaction. */
+export type OutboxDb = Pick<TransactionClient, 'calendarConnection' | 'activityExternalLink' | 'integrationProvider' | 'user' | 'entityEmail'>;
+
+/** One link left dirty by a write (the push job id carries `dirtyAt`). */
+export interface DirtyLink {
+    id: string;
+    dirtyAt: Date;
+}
+
+/** "Invitations held" (D41): someone other than the owner put invitable guests on the owner's calendar event. */
+export interface HeldNotice {
+    activityId: string;
+    owner: string;
+    actor: string;
+    subject: string;
+    /** How many guests wait for the owner. */
+    guests: number;
+    /** A new private copy (`withhold`) rather than guests added to an event already sent. */
+    newCopy: boolean;
+}
+
+export interface OutboxResult {
+    links: DirtyLink[];
+    notices: HeldNotice[];
+}
+
+/** Outbox results of written rows, read (and dropped) after commit by `takeOutboxResult`. */
+const pending = new WeakMap<object, OutboxResult>();
+
+/** The dirty links / notices a write left for this committed row (each row's result is handed out once). */
+export function takeOutboxResult(row: object): OutboxResult | null {
+    const result = pending.get(row) ?? null;
+    pending.delete(row);
+    return result;
+}
+
+const lc = (value: string | null | undefined) => (value ?? '').trim().toLowerCase();
+const sameUser = (a: string | null | undefined, b: string | null | undefined) => lc(a) !== '' && lc(a) === lc(b);
+const time = (value: Date | null | undefined) => value?.getTime() ?? null;
+
+const attendeeKeys = (row: ActivityRow) =>
+    row.attendees
+        .map((a) => `${attendeeIdentity(a)}|${lc(a.email)}`)
+        .sort()
+        .join(',');
+
+/**
+ * Whether a write changed something calendars show (pure): subject, type, times, all-day, location, status, owner,
+ * attendees (who, and a contact's address), reminder, related code / module (the description) or deletion. Remarks,
+ * customer response, custom fields and replies never reach calendars.
+ */
+export function pushableChanged(before: ActivityRow | null, after: ActivityRow): boolean {
+    if (!before) return true;
+    return (
+        before.subject !== after.subject ||
+        before.followupType !== after.followupType ||
+        time(before.startAt) !== time(after.startAt) ||
+        time(before.endAt) !== time(after.endAt) ||
+        before.allDay !== after.allDay ||
+        (before.location ?? '') !== (after.location ?? '') ||
+        before.status !== after.status ||
+        !sameUser(before.assignedTo, after.assignedTo) ||
+        (before.reminder ?? '') !== (after.reminder ?? '') ||
+        (before.relatedCode ?? '') !== (after.relatedCode ?? '') ||
+        (before.relatedModule ?? '') !== (after.relatedModule ?? '') ||
+        before.isDeleted !== after.isDeleted ||
+        attendeeKeys(before) !== attendeeKeys(after)
+    );
+}
+
+/**
+ * Whether a Followup Type goes to calendars (D5, §9.1): never Task / Note; otherwise its option's meta
+ * `calendarSync` (missing = on). Without the configuration (or an option no longer listed) only the Task / Note rule
+ * applies.
+ */
+export function isTypeSyncable(followupType: string, config: Pick<ActivityConfig, 'followupTypes'> | null): boolean {
+    const activityOnly = isActivityOnlyFollowupType(followupType);
+    if (activityOnly) return false;
+    const option = config?.followupTypes?.options.find((o) => lc(o.value) === lc(followupType));
+    return calendarSyncFromMeta(option?.meta, false);
+}
+
+/**
+ * Create-eligible (§8.3 step 3): Planned, live, a syncable type, a schedule, not organized outside the CRM, ends after
+ * now − 1 day (old activities are never sent: backfills, restores of old rows).
+ */
+export function isCreateEligible(row: ActivityRow, config: Pick<ActivityConfig, 'followupTypes'> | null, now: Date): boolean {
+    if (row.isDeleted || row.status !== 'Planned' || !row.startAt || row.externalOrganizer) return false;
+    if (!isTypeSyncable(row.followupType, config)) return false;
+    const end = (row.endAt ?? row.startAt).getTime();
+    return end > now.getTime() - CREATE_ELIGIBLE_PAST_MS;
+}
+
+/** The owner's live calendar connection row (§8.3 step 2), read through `tx`; null when the owner isn't synced. */
+export async function ownerConnectionOf(db: OutboxDb, owner: string): Promise<{ id: string; provider: string } | null> {
+    const conn = await db.calendarConnection.findFirst({
+        where: { username: owner, status: { in: [...LIVE_CONNECTION_STATUSES] } },
+        orderBy: { enrolledAt: 'desc' },
+        select: { id: true, provider: true },
+    });
+    if (!conn) return null;
+    if (conn.provider === 'fake') {
+        if (!isFakeProviderEnabled()) return null;
+    } else {
+        const provider = await db.integrationProvider.findUnique({ where: { provider: conn.provider }, select: { enabled: true } });
+        if (!provider?.enabled) return null;
+    }
+    const user = await db.user.findUnique({ where: { username: owner }, select: { isActive: true, isGroupUser: true } });
+    if (!user?.isActive || user.isGroupUser) return null;
+    return conn;
+}
+
+/** Attendees other than the owner (who could get an invitation). */
+const guestCount = (row: ActivityRow) => row.attendees.filter((a) => !(a.kind === 'user' && sameUser(a.username, row.assignedTo))).length;
+
+/** The calendar event of this link exists (it isn't gone: `cancelled` / `removed_remote` keep the id of a deleted one). */
+const hasLiveEvent = (link: { externalEventId: string | null; state: string }) => Boolean(link.externalEventId) && link.state !== 'cancelled' && link.state !== 'removed_remote';
+
+/**
+ * The state a `detached` link goes back to when its row is re-activated: `cancelled` when the CRM had deleted its
+ * event before the row stopped (an event id kept without a base, §8.6), else `pending`. A gone event must not be
+ * patched (a 404 there reads as a deletion in the calendar and would cancel the activity).
+ */
+export function reattachedState(link: { externalEventId: string | null; baseJson: string | null }): 'cancelled' | 'pending' {
+    return link.externalEventId && !link.baseJson ? 'cancelled' : 'pending';
+}
+
+export async function markActivityForSync(db: OutboxDb, event: ActivityWriteEvent): Promise<OutboxResult | null> {
+    const { before, after, actor, now, config } = event;
+    if (!event.markSync || !pushableChanged(before, after)) return null;
+
+    const owner = after.assignedTo;
+    const ownerConn = await ownerConnectionOf(db, owner);
+    const links = before ? await db.activityExternalLink.findMany({ where: { activityId: after.id, role: 'organizer' } }) : [];
+    if (!ownerConn && links.length === 0) return null;
+
+    const result: OutboxResult = { links: [], notices: [] };
+    const actorIsOwner = sameUser(actor, owner);
+    const eligible = isCreateEligible(after, config, now);
+    const ownerLink = ownerConn ? links.find((l) => l.connectionId === ownerConn.id) : undefined;
+
+    if (ownerConn && !ownerLink && eligible) {
+        const invites: LinkInvites = actorIsOwner ? 'send' : 'withhold';
+        const created = await db.activityExternalLink.create({
+            data: {
+                activityId: after.id,
+                connectionId: ownerConn.id,
+                provider: ownerConn.provider,
+                role: 'organizer',
+                state: 'pending',
+                invites,
+                requestedId: requestedIdFor(after.id, ownerConn.id, 0),
+                dirtyAt: now,
+            },
+            select: { id: true },
+        });
+        result.links.push({ id: created.id, dirtyAt: now });
+        const guests = guestCount(after);
+        if (invites === 'withhold' && guests > 0) result.notices.push({ activityId: after.id, owner, actor, subject: after.subject, guests, newCopy: true });
+    }
+
+    const held = await heldChanges(db, links, before, after, actorIsOwner);
+
+    for (const link of links) {
+        if (link.state === 'unsupported') continue;
+        const reattach = link.state === 'detached' && ownerConn !== null && link.connectionId === ownerConn.id && (eligible || Boolean(link.externalEventId));
+        const change = held.get(link.id);
+        if (link.state === 'detached' && !reattach) {
+            // Inert until its row is re-activated, but who added which guest is still recorded (D41), so the
+            // re-attach push never invites people the owner didn't.
+            if (change?.changed) await db.activityExternalLink.update({ where: { id: link.id }, data: change.data });
+            if (change?.notice) result.notices.push({ activityId: after.id, owner, actor, subject: after.subject, ...change.notice });
+            continue;
+        }
+        const keepState = link.state === 'cancelled' || link.state === 'removed_remote';
+        const state = reattach ? reattachedState(link) : keepState ? null : 'pending';
+        await db.activityExternalLink.update({
+            where: { id: link.id },
+            data: {
+                dirtyAt: now,
+                ...(state ? { state } : {}),
+                ...(change?.changed ? change.data : {}),
+                ...(reattach || link.state === 'error' ? { attempts: 0, nextAttemptAt: null } : {}),
+            },
+        });
+        result.links.push({ id: link.id, dirtyAt: now });
+        if (change?.notice) result.notices.push({ activityId: after.id, owner, actor, subject: after.subject, ...change.notice });
+    }
+
+    // One "invitations held" notice per write (a guest held on the old owner's link too is the same news).
+    if (result.notices.length > 1) {
+        const [first, ...rest] = result.notices;
+        result.notices = [{ ...first, guests: Math.max(...result.notices.map((n) => n.guests)), newCopy: [first, ...rest].some((n) => n.newCopy) }];
+    }
+    if (result.links.length === 0 && result.notices.length === 0) return null;
+    pending.set(after, result);
+    return result;
+}
+
+/** What a write changes on one existing link's invitations (D41). */
+interface HeldChange {
+    changed: boolean;
+    data: { heldAttendeesJson?: string | null; invites?: LinkInvites };
+    notice: Pick<HeldNotice, 'guests' | 'newCopy'> | null;
+}
+
+type LinkRow = Awaited<ReturnType<OutboxDb['activityExternalLink']['findMany']>>[number];
+
+/**
+ * D41 on existing links: new invitations leave the owner's mailbox only on the owner's own action. Decided by
+ * addresses, not attendee identities (a contact row's address can change), and on every link that sends invitations
+ * whatever its state or whether the owner's row is live right now (provider switched off, row stopped: the push after
+ * the re-activation must not invite the people added meanwhile).
+ * - An address no longer on the activity leaves every held list.
+ * - The actor isn't the owner: every address the write put on the activity is held on every `send` link.
+ * - The owner changed and the actor isn't the new owner: the new owner's own earlier link is a new copy for them. With
+ *   its event still in the calendar, every address not already on that event (`base.crm`) is held; with the event gone
+ *   (cancelled, removed in the calendar, never created) it becomes a private copy (`withhold`), as a new link would.
+ */
+async function heldChanges(db: OutboxDb, links: readonly LinkRow[], before: ActivityRow | null, after: ActivityRow, actorIsOwner: boolean): Promise<Map<string, HeldChange>> {
+    const out = new Map<string, HeldChange>();
+    const sendLinks = links.filter((l) => l.invites === 'send' && l.state !== 'unsupported');
+    if (!before || sendLinks.length === 0) return out;
+    const owner = after.assignedTo;
+    const attendeesChanged = attendeeKeys(before) !== attendeeKeys(after);
+    const ownerChanged = !sameUser(before.assignedTo, owner);
+    if (!attendeesChanged && !(ownerChanged && !actorIsOwner)) return out;
+    // The owner's own edit only ever releases held addresses (it holds nothing).
+    if (actorIsOwner && sendLinks.every((l) => !l.heldAttendeesJson)) return out;
+
+    const resolved = await resolveAttendeeEmails(db, [...before.attendees, ...after.attendees], owner);
+    const emailsOf = (rows: ActivityRow['attendees']) => new Set(rows.map((a) => resolved.emailOf.get(a) ?? '').filter(Boolean));
+    const was = emailsOf(before.attendees);
+    const now = emailsOf(after.attendees);
+    const added = [...now].filter((email) => !was.has(email));
+    const removed = new Set([...was].filter((email) => !now.has(email)));
+
+    let ownersCalendar = new Set<string>();
+    if (ownerChanged && !actorIsOwner) {
+        const conns = await db.calendarConnection.findMany({ where: { id: { in: [...new Set(sendLinks.map((l) => l.connectionId))] } }, select: { id: true, username: true } });
+        ownersCalendar = new Set(conns.filter((c) => sameUser(c.username, owner)).map((c) => c.id));
+    }
+
+    for (const link of sendLinks) {
+        const current = parseHeld(link.heldAttendeesJson);
+        let held = current.filter((email) => !removed.has(email));
+        let invites: LinkInvites = 'send';
+        if (!actorIsOwner) {
+            let hold = added;
+            if (ownersCalendar.has(link.connectionId)) {
+                const base = parseBase(link.baseJson);
+                if (hasLiveEvent(link) && base) hold = [...hold, ...[...now].filter((email) => !(email in base.crm.attendees))];
+                else invites = 'withhold';
+            }
+            if (invites === 'send') held = [...new Set([...held, ...hold])];
+        }
+        const heldJson = serializeHeld(held);
+        const changed = invites !== link.invites || heldJson !== (link.heldAttendeesJson ?? null);
+        const fresh = held.filter((email) => !current.includes(email)).length;
+        const guests = guestCount(after);
+        const notice = invites === 'withhold' ? (guests > 0 ? { guests, newCopy: true } : null) : fresh > 0 ? { guests: fresh, newCopy: false } : null;
+        out.set(link.id, { changed, data: { heldAttendeesJson: heldJson, ...(invites !== link.invites ? { invites } : {}) }, notice });
+    }
+    return out;
+}

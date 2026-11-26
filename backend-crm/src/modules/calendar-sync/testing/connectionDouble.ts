@@ -10,8 +10,8 @@ import { serviceAccountKeyJson, TEST_CLIENT_ID } from './serviceAccountKey.js';
 
 /**
  * Test double for admin-managed calendar sync (enrolment, calendarAccess, connection.service, the People API): in-memory
- * Users, CalendarConnection, CalendarSyncUser, IntegrationProvider and Notification rows behind the Prisma delegates the
- * code uses, a `$transaction` that rolls the rows back when its callback throws, audits / cache / form-config calls
+ * Users, CalendarConnection, CalendarSyncUser, IntegrationProvider and Notification rows (plus ActivityExternalLink and
+ * a read-only Activity list, for the link detach / re-attach of P2-3b) behind the Prisma delegates the code uses, a `$transaction` that rolls the rows back when its callback throws, audits / cache / form-config calls
  * captured. The live-row unique indexes (one live row per user, one per provider + mailbox) are enforced on create.
  * Only the `where` shapes these modules send are understood (anything else throws, so a new query shape is noticed).
  * Not a test file itself (the runner only loads *.test.ts).
@@ -104,8 +104,17 @@ function valueMatches(actual: unknown, expected: unknown): boolean {
             case 'not':
                 if (valueMatches(actual, operand)) return false;
                 break;
+            case 'notIn':
+                if ((operand as unknown[]).some((v) => valueMatches(actual, v))) return false;
+                break;
             case 'gt':
                 if (actual === null || actual === undefined || !(cmp(actual) > cmp(operand))) return false;
+                break;
+            case 'gte':
+                if (actual === null || actual === undefined || !(cmp(actual) >= cmp(operand))) return false;
+                break;
+            case 'lt':
+                if (actual === null || actual === undefined || !(cmp(actual) < cmp(operand))) return false;
                 break;
             case 'lte':
                 if (actual === null || actual === undefined || !(cmp(actual) <= cmp(operand))) return false;
@@ -204,9 +213,20 @@ export function blankConnection(over: Partial<ConnectionRowState> & Pick<Connect
     };
 }
 
+/** The Activity columns the link re-attach reads. */
+export interface ActivityRowState {
+    id: string;
+    assignedTo: string;
+    isDeleted: boolean;
+    endAt: Date | null;
+}
+
 export interface DoubleState {
     users: UserRow[];
     connections: ConnectionRowState[];
+    /** ActivityExternalLink rows (any columns the test needs; `id`, `connectionId`, `activityId`, `state`, `role`). */
+    links: Row[];
+    activities: ActivityRowState[];
     syncUsers: SyncUserRowState[];
     providers: Map<string, Row>;
     notifications: NotificationRowState[];
@@ -219,7 +239,7 @@ export interface DoubleState {
     configs: FormConfigsPayload;
 }
 
-const DELEGATES = ['user', 'calendarConnection', 'calendarSyncUser', 'integrationProvider', 'notification', 'userPreference', '$transaction'] as const;
+const DELEGATES = ['user', 'calendarConnection', 'calendarSyncUser', 'integrationProvider', 'notification', 'userPreference', 'activityExternalLink', 'activity', '$transaction'] as const;
 const realDelegates = new Map<string, unknown>();
 
 function stub(name: (typeof DELEGATES)[number], fake: unknown): void {
@@ -292,12 +312,22 @@ export function microsoftProviderRow(over: Row & { domains?: string[]; tenantId?
 export const P2002 = () => Object.assign(new Error('Unique constraint failed'), { code: 'P2002' });
 
 export function installConnectionDouble(
-    seed: { users?: UserRow[]; connections?: ConnectionRowState[]; syncUsers?: Partial<SyncUserRowState>[]; providers?: Row[]; configs?: FormConfigsPayload } = {},
+    seed: {
+        users?: UserRow[];
+        connections?: ConnectionRowState[];
+        syncUsers?: Partial<SyncUserRowState>[];
+        providers?: Row[];
+        configs?: FormConfigsPayload;
+        links?: Row[];
+        activities?: ActivityRowState[];
+    } = {},
 ): DoubleState {
     dropProviderCredentialsCache();
     const state: DoubleState = {
         users: (seed.users ?? []).map((u) => ({ ...u })),
         connections: (seed.connections ?? []).map((c) => ({ ...c })),
+        links: (seed.links ?? []).map((l) => ({ role: 'organizer', ...l })),
+        activities: (seed.activities ?? []).map((a) => ({ ...a })),
         syncUsers: (seed.syncUsers ?? []).map((s) => ({
             provider: null,
             excluded: false,
@@ -446,9 +476,22 @@ export function installConnectionDouble(
         },
     };
 
+    const activityExternalLink = {
+        findMany: async (args: ManyArgs = {}) => findManyOf(state.links, args),
+        updateMany: async ({ where, data }: { where: Where; data: Row }) => {
+            const rows = state.links.filter((l) => matchesWhere(l, where));
+            for (const row of rows) Object.assign(row, data, { updatedAt: touch() });
+            return { count: rows.length };
+        },
+    };
+    const activity = {
+        findMany: async (args: ManyArgs = {}) => findManyOf(state.activities as unknown as Row[], args),
+    };
+
     const takeSnapshot = () => ({
         users: state.users.map((u) => ({ ...u })),
         connections: state.connections.map((c) => ({ ...c })),
+        links: state.links.map((l) => ({ ...l })),
         syncUsers: state.syncUsers.map((s) => ({ ...s })),
         audits: [...state.audits],
     });
@@ -459,6 +502,8 @@ export function installConnectionDouble(
         calendarSyncUser,
         integrationProvider,
         notification,
+        activityExternalLink,
+        activity,
         $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
             void strings;
             // acquireLocks passes its keys as one JSON array of `crm:<key>` resources.
@@ -477,6 +522,7 @@ export function installConnectionDouble(
         } catch (err) {
             state.users = snapshot.users;
             state.connections = snapshot.connections;
+            state.links = snapshot.links;
             state.syncUsers = snapshot.syncUsers;
             state.audits = snapshot.audits;
             throw err;
@@ -488,6 +534,8 @@ export function installConnectionDouble(
     stub('integrationProvider', integrationProvider);
     stub('notification', notification);
     stub('userPreference', { findMany: async () => [] });
+    stub('activityExternalLink', activityExternalLink);
+    stub('activity', activity);
 
     mock.method(auditService, 'record', async (_tx: unknown, entry: AuditEntry) => {
         state.audits.push(entry);

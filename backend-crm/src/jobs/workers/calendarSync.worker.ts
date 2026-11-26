@@ -1,0 +1,167 @@
+import { DelayedError, Worker, type Job } from 'bullmq';
+import { ENV } from '../../config/env.js';
+import { logger } from '../../config/logger.js';
+import { redis } from '../../config/redis.js';
+import { checkConnection } from '../../modules/calendar-sync/calendarAccess.js';
+import {
+    CALENDAR_SYNC_JOBS,
+    LEASE_RETRY_DELAY_MS,
+    NIGHTLY_PATTERN,
+    NIGHTLY_SCHEDULER,
+    POLL_PATTERN,
+    POLL_SCHEDULER,
+    WORKER_HEARTBEAT_EVERY_MS,
+} from '../../modules/calendar-sync/sync.constants.js';
+import { runCalendarNightly, runCalendarPoll, runEnrolled, runFallbackTick, sweepOutbox } from '../../modules/calendar-sync/sync.maintenance.js';
+import { markPushExhausted, pushLink, type PushResult } from '../../modules/calendar-sync/sync.push.js';
+import { writeWorkerHeartbeat } from '../../modules/calendar-sync/workerHeartbeat.js';
+import { runWithAuditOrigin } from '../../services/auditContext.js';
+import { calendarSyncQueue, createQueueConnection, isQueueAvailable, QUEUE_NAMES } from '../queues.js';
+import { throttledLogger } from './throttledLogger.js';
+
+/**
+ * Calendar sync (Calendar Phase 2 spec §10, docs/system-design.md §5.4): the `crm-calendar-sync` queue.
+ *   push      one link (`push-<linkId>-<dirtyAtMs>`, the sweep adds `-s<minute>`), after a CRM save and by the sweep
+ *   enrolled  a connection row reached `ok`, first time or after an error
+ *             (`enrolled-<connectionId>-<enrolledAtMs>-r<readyAtMs>`): push its dirty links
+ *   check     a connection health check (`check-<connectionId>-<minute>`): new enrolments and due re-checks
+ *   poll      scheduler 'calendar-poll', every 5 minutes 07:00–21:55: outbox sweep + due checks (P2-5 adds pulls)
+ *   nightly   scheduler 'calendar-nightly', 00:25: reconcile + due checks + admin digest (from the reminders worker),
+ *             the follow-up activity backfill (from the reminders worker), error-link retries, client secrets
+ *             expiring, expired leases cleared
+ * All in the business timezone. A push that finds the connection's lease taken, or the provider rate-limiting, moves
+ * itself back without spending an attempt. Every Redis `ready` upserts the schedulers and runs one outbox sweep. While
+ * Redis is down a one-minute tick runs due checks and pushes due links in-process inside 07:00–22:00 only. A
+ * heartbeat key (`calendar:worker:heartbeat`, 2 min TTL, Redis only) tells Admin › API Integrations the worker is
+ * alive. CALENDAR_SYNC_ENABLED=false skips push / enrolled / the sweep; checks and the nightly connection steps run.
+ */
+
+const FALLBACK_TICK_MS = 60_000;
+const ORIGIN = { source: 'JOB', route: 'job:calendar-sync' } as const;
+
+const idOf = (data: unknown, key: string): string => {
+    const value = (data as Record<string, unknown> | null)?.[key];
+    return typeof value === 'string' ? value : '';
+};
+
+/** When a push that couldn't run now should run again (ms from now), or null when it is finished. Pure. */
+export function pushRetryDelay(result: PushResult, random: () => number = Math.random): number | null {
+    if (result.status === 'busy') return LEASE_RETRY_DELAY_MS + Math.floor(random() * 2_000);
+    if (result.status === 'rate_limited') return Math.max(1_000, result.retryAfterMs) + Math.floor(random() * 1_000);
+    return null;
+}
+
+/** Whether a failed job used its last attempt. Pure. */
+export const isLastAttempt = (job: Pick<Job, 'attemptsMade' | 'opts'>): boolean => job.attemptsMade >= (job.opts.attempts ?? 1);
+
+export async function processCalendarJob(job: Job, token?: string): Promise<unknown> {
+    return runWithAuditOrigin(ORIGIN, async () => {
+        switch (job.name) {
+            case CALENDAR_SYNC_JOBS.push: {
+                const linkId = idOf(job.data, 'linkId');
+                if (!linkId) return null;
+                const result = await pushLink(linkId);
+                const delay = pushRetryDelay(result);
+                if (delay !== null) {
+                    // Not an attempt: the lease holder or the provider asked us to wait.
+                    await job.moveToDelayed(Date.now() + delay, token);
+                    throw new DelayedError();
+                }
+                return result;
+            }
+            case CALENDAR_SYNC_JOBS.enrolled: {
+                const connectionId = idOf(job.data, 'connectionId');
+                return connectionId ? runEnrolled(connectionId) : null;
+            }
+            case CALENDAR_SYNC_JOBS.check: {
+                const connectionId = idOf(job.data, 'connectionId');
+                return connectionId ? { outcome: await checkConnection(connectionId) } : null;
+            }
+            case CALENDAR_SYNC_JOBS.poll:
+                return runCalendarPoll();
+            case CALENDAR_SYNC_JOBS.nightly:
+                return runCalendarNightly();
+            default:
+                logger.warn({ job: job.name }, 'Unknown calendar sync job');
+                return null;
+        }
+    });
+}
+
+async function scheduleJobs(): Promise<void> {
+    const queue = calendarSyncQueue();
+    const tz = ENV.BUSINESS_TIMEZONE;
+    await queue.upsertJobScheduler(POLL_SCHEDULER, { pattern: POLL_PATTERN, tz }, { name: CALENDAR_SYNC_JOBS.poll });
+    await queue.upsertJobScheduler(NIGHTLY_SCHEDULER, { pattern: NIGHTLY_PATTERN, tz }, { name: CALENDAR_SYNC_JOBS.nightly });
+}
+
+const step = async (label: string, fn: () => Promise<unknown>) => {
+    try {
+        await fn();
+    } catch (err) {
+        logger.warn({ err: (err as Error).message }, label);
+    }
+};
+
+let recovering = false;
+
+/** On every Redis `ready`: schedulers and one outbox sweep (pushes the fallback tick didn't get to). */
+async function recover(): Promise<void> {
+    if (recovering) return;
+    recovering = true;
+    try {
+        await runWithAuditOrigin(ORIGIN, async () => {
+            await step('Could not schedule the calendar sync jobs', scheduleJobs);
+            await step('Calendar outbox sweep after Redis came back failed', () => sweepOutbox());
+        });
+    } finally {
+        recovering = false;
+    }
+}
+
+let ticking = false;
+
+async function fallbackTick(): Promise<void> {
+    if (ticking || isQueueAvailable()) return;
+    ticking = true;
+    try {
+        await runWithAuditOrigin(ORIGIN, () => step('Calendar sync (Redis unavailable) failed', () => runFallbackTick()));
+    } finally {
+        ticking = false;
+    }
+}
+
+export function startCalendarSyncWorker(): Worker {
+    const worker = new Worker(QUEUE_NAMES.calendarSync, processCalendarJob, {
+        connection: createQueueConnection(),
+        concurrency: 4,
+        limiter: { max: 10, duration: 1_000 },
+    });
+    const warn = throttledLogger();
+    worker.on('failed', (job, err) => {
+        logger.error({ job: job?.name, jobId: job?.id, attempts: job?.attemptsMade, err: err.message }, 'Calendar sync job failed');
+        if (job?.name === CALENDAR_SYNC_JOBS.push && isLastAttempt(job)) {
+            void markPushExhausted(idOf(job.data, 'linkId')).catch((e: Error) => logger.warn({ err: e.message }, 'Could not mark a calendar push as failed'));
+        }
+    });
+    worker.on('error', (err) => warn(err.message, 'Calendar sync worker error'));
+
+    const onReady = () => {
+        void recover();
+        void writeWorkerHeartbeat();
+    };
+    redis.on('ready', onReady);
+    if (isQueueAvailable()) onReady();
+    else logger.warn('Redis is unavailable: calendar pushes fall back to a once-a-minute in-process check (07:00–22:00) until it is back');
+
+    const tick = setInterval(() => void fallbackTick(), FALLBACK_TICK_MS);
+    tick.unref();
+    const beat = setInterval(() => void writeWorkerHeartbeat(), WORKER_HEARTBEAT_EVERY_MS);
+    beat.unref();
+    worker.once('closing', () => {
+        clearInterval(tick);
+        clearInterval(beat);
+        redis.off('ready', onReady);
+    });
+    return worker;
+}

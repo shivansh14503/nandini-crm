@@ -92,6 +92,8 @@ function configsWithTypes() {
 
 function install(seed: { users?: UserRow[]; connections?: ConnectionRowState[]; providers?: Record<string, unknown>[] }) {
     state = installConnectionDouble({ ...seed, configs: configsWithTypes() });
+    // The double stubs `prisma.activity` too (P2-3b push engine); this file's own stub serves and counts the CRM reads.
+    stubActivities(activityRows);
 }
 
 const query = (users: string[], extra: Record<string, unknown> = {}) => busyQuerySchema.parse({ users: users.join(','), ...day, ...extra });

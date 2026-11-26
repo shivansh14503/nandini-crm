@@ -63,6 +63,7 @@ import {
     NOT_SYNCED_REASONS,
     OWN_CALENDAR_STATUSES,
 } from '../modules/calendar-sync/connection.constants.js';
+import { LINK_INVITES, LINK_STATES } from '../modules/calendar-sync/sync.constants.js';
 import { NOTIFICATION_KINDS } from '../modules/notifications/notification.producer.js';
 import { normalizeUsername, RESERVED_USERNAMES, USERNAME_MAX_LENGTH, USERNAME_MIN_LENGTH, USERNAME_PATTERN, usernameIssue } from '../modules/user-admin/username.js';
 import {
@@ -140,6 +141,8 @@ interface FrontendBusyContract {
 }
 
 interface FrontendActivityContract {
+    CALENDAR_LINK_STATES: readonly string[];
+    CALENDAR_LINK_INVITES: readonly string[];
     FOLLOW_UP_ORIGIN: string;
     FOLLOW_UP_ACTIVITY_LOCKED: string;
     ACTIVITY_MAX_ATTENDEES: number;
@@ -371,6 +374,9 @@ describe('backend ↔ frontend contract', { skip }, () => {
         // Follow-up activities (P2-4): their origin and the 409 code of a locked-field write.
         assert.equal(contract.FOLLOW_UP_ORIGIN, FOLLOW_UP_ORIGIN);
         assert.equal(contract.FOLLOW_UP_ACTIVITY_LOCKED, FOLLOW_UP_ACTIVITY_LOCKED);
+        // Calendar sync (P2-3b): ActivityView.calendar's state / invites vocabulary.
+        assert.deepEqual([...contract.CALENDAR_LINK_STATES], [...LINK_STATES]);
+        assert.deepEqual([...contract.CALENDAR_LINK_INVITES], [...LINK_INVITES]);
         // Busy times (P2-6): kinds, person statuses and the request limits the form's strip works within.
         const busy = frontend as unknown as FrontendBusyContract;
         assert.deepEqual([...busy.BUSY_KINDS], [...BUSY_KINDS]);

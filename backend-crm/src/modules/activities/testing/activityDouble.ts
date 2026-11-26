@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { mock } from 'node:test';
 import { prisma } from '../../../config/prisma.js';
-import type { Activity, ActivityAttendee } from '../../../generated/prisma/client.js';
+import type { Activity, ActivityAttendee, ActivityExternalLink } from '../../../generated/prisma/client.js';
 import { auditService, type AuditEntry } from '../../../services/audit.service.js';
 import { cacheService } from '../../../services/cache.service.js';
+import { matchesWhere, type ConnectionRowState, type NotificationRowState } from '../../calendar-sync/testing/connectionDouble.js';
 import { formConfigService, type FormConfigsPayload } from '../../form-configs/formConfig.service.js';
 import type { ActivityRow } from '../activity.mapper.js';
 
@@ -13,12 +14,32 @@ import type { ActivityRow } from '../activity.mapper.js';
  * delegates those paths use; a `$transaction` that rolls every row back when its callback throws; application locks,
  * audits, cache invalidations and form-config loads captured. Only the query shapes those paths send are understood
  * (anything else throws, so a new query shape is noticed). Not a test file itself (the runner only loads *.test.ts).
+ *
+ * Calendar sync (P2-3b): the write hook's outbox and the push engine read and write CalendarConnection,
+ * ActivityExternalLink, IntegrationProvider, EntityEmail and Notification rows; those delegates are here too (not
+ * recorded in `calls`), rolled back with the activity rows.
  */
 
 export interface UserRow {
     username: string;
     fullName: string;
     isActive: boolean;
+    email?: string | null;
+    isGroupUser?: boolean;
+}
+
+export interface EntityEmailRow {
+    id: string;
+    email: string;
+    contactId: string | null;
+    isPrimary: boolean;
+    isInvalidBounce: boolean;
+    sortOrder: number;
+}
+
+export interface ProviderRow {
+    provider: string;
+    enabled: boolean;
 }
 
 export interface ContactRow {
@@ -79,18 +100,35 @@ export interface ActivityDoubleState {
     calls: string[];
     /** The transaction client of the open `$transaction`, null outside one. */
     openTx: object | null;
+    connections: ConnectionRowState[];
+    links: ActivityExternalLink[];
+    providers: ProviderRow[];
+    entityEmails: EntityEmailRow[];
+    notifications: NotificationRowState[];
 }
 
 type Where = Record<string, unknown>;
 
+const instant = (value: unknown) => (value instanceof Date ? value.getTime() : (value as number));
+
 function matches(row: Record<string, unknown>, where: Where = {}): boolean {
     for (const [key, expected] of Object.entries(where)) {
+        if (key === 'OR') {
+            if (!(expected as Where[]).some((w) => matches(row, w))) return false;
+            continue;
+        }
         const actual = row[key];
         if (expected !== null && typeof expected === 'object' && !(expected instanceof Date)) {
             const ops = expected as Record<string, unknown>;
             for (const [op, operand] of Object.entries(ops)) {
-                if (op !== 'in') throw new Error(`activityDouble: unsupported operator ${key}.${op}`);
-                if (!(operand as unknown[]).some((value) => same(actual, value))) return false;
+                if (op === 'in') {
+                    if (!(operand as unknown[]).some((value) => same(actual, value))) return false;
+                } else if (op === 'gt' || op === 'lt') {
+                    if (actual === null || actual === undefined) return false;
+                    if (op === 'gt' ? !(instant(actual) > instant(operand)) : !(instant(actual) < instant(operand))) return false;
+                } else {
+                    throw new Error(`activityDouble: unsupported operator ${key}.${op}`);
+                }
             }
             continue;
         }
@@ -99,8 +137,9 @@ function matches(row: Record<string, unknown>, where: Where = {}): boolean {
     return true;
 }
 
-/** SQL Server's default collation compares text case-insensitively. */
-const same = (a: unknown, b: unknown) => (typeof a === 'string' && typeof b === 'string' ? a.toLowerCase() === b.toLowerCase() : a === b);
+/** SQL Server's default collation compares text case-insensitively; instants compare by time. */
+const same = (a: unknown, b: unknown) =>
+    typeof a === 'string' && typeof b === 'string' ? a.toLowerCase() === b.toLowerCase() : a instanceof Date && b instanceof Date ? a.getTime() === b.getTime() : a === b;
 
 const pick = <T extends object>(row: T, select?: Record<string, unknown>): Partial<T> =>
     select ? (Object.fromEntries(Object.keys(select).filter((key) => select[key]).map((key) => [key, (row as Record<string, unknown>)[key]])) as Partial<T>) : { ...row };
@@ -134,11 +173,49 @@ export function blankActivity(over: Partial<Activity> & Pick<Activity, 'id' | 's
         revision: 0,
         customDataJson: null,
         origin: 'crm',
+        iCalUid: null,
+        syncKey: null,
+        organizerEmail: null,
+        organizerName: null,
+        externalOrganizer: false,
+        externalUpdatedAt: null,
         updatedBy: null,
         createdAt: now,
         updatedAt: now,
         isDeleted: false,
         deletedAt: null,
+        ...over,
+    };
+}
+
+/** A stored calendar link with every column defaulted as the database would. */
+export function blankLink(over: Partial<ActivityExternalLink> & Pick<ActivityExternalLink, 'activityId' | 'connectionId' | 'provider' | 'requestedId'>): ActivityExternalLink {
+    const now = new Date('2026-11-20T00:00:00.000Z');
+    return {
+        id: randomUUID(),
+        role: 'organizer',
+        state: 'pending',
+        invites: 'send',
+        heldAttendeesJson: null,
+        generation: 0,
+        externalEventId: null,
+        externalEventKey: null,
+        iCalUid: null,
+        etag: null,
+        htmlLink: null,
+        providerUpdatedAt: null,
+        baseJson: null,
+        crmSyncedAt: null,
+        dirtyAt: null,
+        nextAttemptAt: null,
+        attempts: 0,
+        lastErrorCode: null,
+        lastErrorMessage: null,
+        lastWarning: null,
+        lastConflictAt: null,
+        lastSyncedAt: null,
+        createdAt: now,
+        updatedAt: now,
         ...over,
     };
 }
@@ -157,7 +234,22 @@ export function blankAttendee(over: Partial<ActivityAttendee> & Pick<ActivityAtt
     };
 }
 
-const DELEGATES = ['activity', 'activityAttendee', 'user', 'contact', 'organization', 'lead', 'opportunity', '$transaction'] as const;
+const DELEGATES = [
+    'activity',
+    'activityAttendee',
+    'user',
+    'contact',
+    'organization',
+    'lead',
+    'opportunity',
+    'calendarConnection',
+    'activityExternalLink',
+    'integrationProvider',
+    'entityEmail',
+    'notification',
+    'userPreference',
+    '$transaction',
+] as const;
 const realDelegates = new Map<string, unknown>();
 
 function stub(name: (typeof DELEGATES)[number], fake: unknown): void {
@@ -186,6 +278,10 @@ export function installActivityDouble(
         leads?: LeadRow[];
         opportunities?: OpportunityRow[];
         configs?: FormConfigsPayload;
+        connections?: ConnectionRowState[];
+        links?: ActivityExternalLink[];
+        providers?: ProviderRow[];
+        entityEmails?: EntityEmailRow[];
     } = {},
 ): ActivityDoubleState {
     const state: ActivityDoubleState = {
@@ -201,6 +297,11 @@ export function installActivityDouble(
         invalidated: [],
         calls: [],
         openTx: null,
+        connections: (seed.connections ?? []).map((row) => ({ ...row })),
+        links: (seed.links ?? []).map((row) => ({ ...row })),
+        providers: (seed.providers ?? []).map((row) => ({ ...row })),
+        entityEmails: (seed.entityEmails ?? []).map((row) => ({ ...row })),
+        notifications: [],
     };
 
     let clock = 0;
@@ -226,7 +327,8 @@ export function installActivityDouble(
                 (row as unknown as Record<string, unknown>)[key] = value;
             }
         }
-        row.updatedAt = touch();
+        // Like Prisma's @updatedAt: an explicit value wins (the calendar engine keeps updatedAt on its own writes).
+        if (!('updatedAt' in data)) row.updatedAt = touch();
     };
 
     const activity = {
@@ -305,6 +407,11 @@ export function installActivityDouble(
             const row = state.users.find((u) => matches(u as unknown as Record<string, unknown>, args.where));
             return row ? pick(row, args.select) : null;
         },
+        /** Calendar sync only (the owner's active / group flags); not recorded. */
+        findUnique: async (args: { where: { username: string }; select?: Record<string, unknown> }) => {
+            const row = state.users.find((u) => same(u.username, args.where.username));
+            return row ? pick({ email: null, isGroupUser: false, ...row }, args.select) : null;
+        },
     };
 
     const contact = {
@@ -357,10 +464,126 @@ export function installActivityDouble(
         },
     };
 
+    // ── Calendar sync delegates (not recorded in `calls`) ──
+    const rec = (row: object) => row as unknown as Record<string, unknown>;
+    const orderRows = <T extends object>(rows: T[], orderBy?: unknown): T[] => {
+        const orders = (Array.isArray(orderBy) ? orderBy : orderBy ? [orderBy] : []) as Record<string, 'asc' | 'desc'>[];
+        return [...rows].sort((a, b) => {
+            for (const order of orders) {
+                const [key, dir] = Object.entries(order)[0];
+                const av = rec(a)[key];
+                const bv = rec(b)[key];
+                const x = av instanceof Date ? av.getTime() : (av as string | number | null);
+                const y = bv instanceof Date ? bv.getTime() : (bv as string | number | null);
+                if (x === y) continue;
+                if (x === null || x === undefined) return dir === 'desc' ? 1 : -1;
+                if (y === null || y === undefined) return dir === 'desc' ? -1 : 1;
+                return (x < y ? -1 : 1) * (dir === 'desc' ? -1 : 1);
+            }
+            return 0;
+        });
+    };
+    type FindArgs = { where?: Where; select?: Record<string, unknown>; orderBy?: unknown; take?: number };
+    const findAll = <T extends object>(rows: T[], args: FindArgs = {}) =>
+        orderRows(
+            rows.filter((r) => matchesWhere(rec(r), args.where)),
+            args.orderBy,
+        )
+            .slice(0, args.take ?? undefined)
+            .map((r) => pick(r, args.select));
+
+    const calendarConnection = {
+        findFirst: async (args: FindArgs) => findAll(state.connections, { ...args, take: 1 })[0] ?? null,
+        findUnique: async (args: { where: { id: string }; select?: Record<string, unknown> }) => {
+            const row = state.connections.find((c) => c.id === args.where.id);
+            return row ? pick(row, args.select) : null;
+        },
+        findMany: async (args: FindArgs = {}) => findAll(state.connections, args),
+        count: async (args: FindArgs = {}) => state.connections.filter((c) => matchesWhere(rec(c), args.where)).length,
+        update: async (args: { where: { id: string }; data: Partial<ConnectionRowState> }) => {
+            const row = state.connections.find((c) => c.id === args.where.id);
+            if (!row) throw Object.assign(new Error('Record to update not found'), { code: 'P2025' });
+            Object.assign(row, args.data, { updatedAt: touch() });
+            return { ...row };
+        },
+        updateMany: async (args: { where: Where; data: Partial<ConnectionRowState> }) => {
+            const rows = state.connections.filter((c) => matchesWhere(rec(c), args.where));
+            for (const row of rows) Object.assign(row, args.data, { updatedAt: touch() });
+            return { count: rows.length };
+        },
+    };
+
+    const applyLinkData = (row: ActivityExternalLink, data: Record<string, unknown>) => {
+        for (const [key, value] of Object.entries(data)) {
+            if (value !== null && typeof value === 'object' && !(value instanceof Date) && 'increment' in value) {
+                (rec(row) as Record<string, number>)[key] += (value as { increment: number }).increment;
+            } else {
+                rec(row)[key] = value;
+            }
+        }
+        row.updatedAt = touch();
+    };
+    const activityExternalLink = {
+        findMany: async (args: FindArgs = {}) => findAll(state.links, args),
+        findFirst: async (args: FindArgs = {}) => findAll(state.links, { ...args, take: 1 })[0] ?? null,
+        findUnique: async (args: { where: { id: string }; select?: Record<string, unknown> }) => {
+            const row = state.links.find((l) => l.id === args.where.id);
+            return row ? pick(row, args.select) : null;
+        },
+        count: async (args: FindArgs = {}) => state.links.filter((l) => matchesWhere(rec(l), args.where)).length,
+        create: async (args: { data: Partial<ActivityExternalLink> & Pick<ActivityExternalLink, 'activityId' | 'connectionId' | 'provider' | 'requestedId'>; select?: Record<string, unknown> }) => {
+            if (state.links.some((l) => l.activityId === args.data.activityId && l.connectionId === args.data.connectionId)) {
+                throw Object.assign(new Error('Unique constraint failed'), { code: 'P2002' });
+            }
+            const stamp = touch();
+            const row = blankLink({ createdAt: stamp, updatedAt: stamp, ...args.data });
+            state.links.push(row);
+            return pick(row, args.select);
+        },
+        update: async (args: { where: { id: string }; data: Record<string, unknown>; select?: Record<string, unknown> }) => {
+            const row = state.links.find((l) => l.id === args.where.id);
+            if (!row) throw Object.assign(new Error('Record to update not found'), { code: 'P2025' });
+            applyLinkData(row, args.data);
+            return pick(row, args.select);
+        },
+        updateMany: async (args: { where: Where; data: Record<string, unknown> }) => {
+            const rows = state.links.filter((l) => matchesWhere(rec(l), args.where));
+            for (const row of rows) applyLinkData(row, args.data);
+            return { count: rows.length };
+        },
+    };
+
+    const integrationProvider = {
+        findUnique: async (args: { where: { provider: string }; select?: Record<string, unknown> }) => {
+            const row = state.providers.find((p) => p.provider === args.where.provider);
+            return row ? pick(row, args.select) : null;
+        },
+    };
+
+    const entityEmail = {
+        findMany: async (args: FindArgs = {}) => findAll(state.entityEmails, args),
+    };
+
+    const notification = {
+        findMany: async (args: { where: { dedupeKey: { in: string[] } } }) =>
+            state.notifications.filter((n) => args.where.dedupeKey.in.some((k) => same(k, n.dedupeKey))).map((n) => ({ dedupeKey: n.dedupeKey })),
+        createMany: async (args: { data: NotificationRowState[] }) => {
+            state.notifications.push(...args.data.map((d) => ({ ...d })));
+            return { count: args.data.length };
+        },
+        create: async (args: { data: NotificationRowState }) => {
+            state.notifications.push({ ...args.data });
+            return args.data;
+        },
+    };
+    const userPreference = { findMany: async () => [] };
+
     const snapshot = () => ({
         activities: state.activities.map((row) => ({ ...row })),
         attendees: state.attendees.map((row) => ({ ...row })),
         audits: [...state.audits],
+        connections: state.connections.map((row) => ({ ...row })),
+        links: state.links.map((row) => ({ ...row })),
     });
 
     stub('$transaction', async (fn: (tx: unknown) => Promise<unknown>) => {
@@ -374,6 +597,12 @@ export function installActivityDouble(
             organization,
             lead,
             opportunity,
+            calendarConnection,
+            activityExternalLink,
+            integrationProvider,
+            entityEmail,
+            notification,
+            userPreference,
             $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
                 void strings;
                 // acquireLocks passes its keys as one JSON array of `crm:<key>` resources.
@@ -391,6 +620,8 @@ export function installActivityDouble(
             state.activities = saved.activities;
             state.attendees = saved.attendees;
             state.audits = saved.audits;
+            state.connections = saved.connections;
+            state.links = saved.links;
             throw err;
         } finally {
             state.openTx = null;
@@ -403,6 +634,12 @@ export function installActivityDouble(
     stub('organization', organization);
     stub('lead', lead);
     stub('opportunity', opportunity);
+    stub('calendarConnection', calendarConnection);
+    stub('activityExternalLink', activityExternalLink);
+    stub('integrationProvider', integrationProvider);
+    stub('entityEmail', entityEmail);
+    stub('notification', notification);
+    stub('userPreference', userPreference);
 
     mock.method(auditService, 'record', async (_tx: unknown, entry: AuditEntry) => {
         state.audits.push(entry);

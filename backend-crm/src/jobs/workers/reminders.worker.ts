@@ -3,8 +3,6 @@ import { ENV } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
 import { redis } from '../../config/redis.js';
 import { armPendingReminders, deliverActivityReminder, runNightlyMaintenance, runReminderSweep } from '../../modules/notifications/notification.reminders.js';
-import { runCalendarConnectionNightly } from '../../modules/calendar-sync/connection.service.js';
-import { runFollowUpBackfillNightly } from '../../modules/activities/activity.followUpBackfill.js';
 import { runWithAuditOrigin } from '../../services/auditContext.js';
 import { createQueueConnection, isQueueAvailable, QUEUE_NAMES, remindersQueue } from '../queues.js';
 import { throttledLogger } from './throttledLogger.js';
@@ -13,10 +11,9 @@ import { throttledLogger } from './throttledLogger.js';
  * Reminders and notifications (docs/system-design.md §5.1): the `crm-reminders` queue.
  *   remind   delayed job per activity reminder, fires at `remindAt` (added after every committed activity save)
  *   sweep    scheduler 'reminder-sweep', every 15 minutes 07:00–21:45: missed reminders + contract renewals
- *   nightly  scheduler 'reminder-nightly', 00:20: notification / email log retention + re-arm pending reminders, then the
- *            calendar steps (reconcile everyone's enrolment, due health checks, the admins' calendar problem digest;
- *            P2-2b) and the follow-up activity backfill (P2-4: missing / out-of-line follow-up activities, audited under
- *            job:followup-backfill) until the calendar sync worker (Calendar Phase 2 P2-3b) takes them over
+ *   nightly  scheduler 'reminder-nightly', 00:20: notification / email log retention + re-arm pending reminders (the
+ *            calendar steps and the follow-up activity backfill it ran until P2-3b moved to the calendar sync worker's
+ *            'calendar-nightly' at 00:25, calendarSync.worker.ts)
  * All in the business timezone. Every Redis `ready` (start-up and each reconnect) upserts the schedulers, re-arms
  * pending reminders and runs one sweep. While Redis is down a one-minute in-process tick does the sweep instead; it
  * does nothing while Redis is up, so the database is only queried when something is due. The morning summary email
@@ -43,13 +40,8 @@ async function processJob(job: Job): Promise<unknown> {
             }
             case 'sweep':
                 return runReminderSweep();
-            case 'nightly': {
-                const result = await runNightlyMaintenance();
-                // Never throws (each step logs its own failure).
-                const calendar = await runCalendarConnectionNightly();
-                const followUps = await runFollowUpBackfillNightly();
-                return { ...result, calendar, followUps };
-            }
+            case 'nightly':
+                return runNightlyMaintenance();
             default:
                 logger.warn({ job: job.name }, 'Unknown reminders job');
                 return null;

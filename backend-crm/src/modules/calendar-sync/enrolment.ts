@@ -16,6 +16,9 @@ import {
     type StopReason,
 } from './connection.constants.js';
 import { isFakeProviderEnabled } from './providers/fakeSwitch.js';
+import { CREATE_ELIGIBLE_PAST_MS } from './sync.constants.js';
+import { reattachedState } from './sync.outbox.js';
+import { enqueueCheck } from './sync.wake.js';
 import { loadProviderAccess } from './providers/registry.js';
 import { tokenSource } from './tokenSource.js';
 
@@ -31,7 +34,10 @@ import { tokenSource } from './tokenSource.js';
  *   - `reconcileAll(reason)`: every person whose plan isn't "nothing to do", one `reconcileUser` each.
  *   - `runDueChecks`: health checks of rows that are pending or whose backoff is over.
  * Stopping a row never cancels anything: events already in the calendar stay (Phase-2 rule; deleting them would send
- * cancellations). From P2-3b, stopping also detaches the row's links and stops its watch channel (P2-7).
+ * cancellations). Stopping also detaches the row's links (P2-3b: `detached`, nothing pushed again) and, from P2-7,
+ * stops its watch channel. Re-activating a stopped row re-attaches the detached links of its owner's activities that
+ * are still current (dirty again: the push brings their events up to date, or cancels them when the activity was
+ * cancelled meanwhile).
  */
 
 // ── Pure rules ────────────────────────────────────────────────────────────────────────────────────────────────
@@ -165,20 +171,27 @@ export async function loadEnrolmentContext(): Promise<EnrolmentContext> {
     };
 }
 
-/** Runs a health check of a newly enrolled row after its transaction commits (P2-3b moves this onto the queue). */
-let scheduleCheck: (connectionId: string) => void = (connectionId) => {
+/** The in-process check (Redis down, or tests). */
+const checkInProcess = (connectionId: string) =>
     setImmediate(() => {
         void checkConnection(connectionId);
     });
+
+/**
+ * Runs a health check of a newly enrolled row after its transaction commits: a `check` job on the calendar queue
+ * (P2-3b), in-process when Redis is down. Never throws.
+ */
+let scheduleCheck: (connectionId: string) => void = (connectionId) => {
+    void enqueueCheck(connectionId)
+        .then((jobId) => {
+            if (jobId === null) checkInProcess(connectionId);
+        })
+        .catch(() => checkInProcess(connectionId));
 };
 /** Tests: capture (or run) the checks reconcile schedules; null = the default in-process scheduler. */
 export function setCheckSchedulerForTests(scheduler: ((connectionId: string) => void) | null): void {
     scheduleCheck =
-        scheduler ??
-        ((connectionId) =>
-            setImmediate(() => {
-                void checkConnection(connectionId);
-            }));
+        scheduler ?? checkInProcess;
 }
 
 export interface ReconcileResult {
@@ -200,7 +213,8 @@ const STOP_DATA = (reason: StopReason, by: string, now: Date) => ({
 
 async function stopRow(tx: TransactionClient, row: PlanRow & { username: string }, reason: StopReason, by: string, now: Date): Promise<void> {
     await tx.calendarConnection.update({ where: { id: row.id }, data: STOP_DATA(reason, by, now) });
-    // P2-3b: links of this row become `detached` here, and P2-7 stops its watch channel (best effort, after commit).
+    // Its links do nothing from now on (events stay in the calendar); P2-7 stops its watch channel here too.
+    await tx.activityExternalLink.updateMany({ where: { connectionId: row.id, state: { not: 'detached' } }, data: { state: 'detached', dirtyAt: null, nextAttemptAt: null } });
     await auditService.record(tx, {
         entityType: 'CalendarConnection',
         entityId: row.id,
@@ -235,6 +249,7 @@ async function startRow(
     if (reactivate) {
         id = reactivate;
         await tx.calendarConnection.update({ where: { id }, data: common });
+        await reattachLinks(tx, id, username, now);
     } else {
         id = randomUUID();
         await tx.calendarConnection.create({
@@ -249,6 +264,39 @@ async function startRow(
         changes: { username, provider: target.provider, accountEmail: target.email, source: target.source, trigger: reason, ...(reactivate ? { reactivated: true } : {}) },
     });
     return id;
+}
+
+/**
+ * A re-activated row: its detached organizer links of activities the user still owns, not deleted and ending after
+ * now − 1 day, become dirty again (the outbox sweep pushes them once the row is checked). Older ones stay detached.
+ * Guests a non-owner added meanwhile were held on the link by the outbox (D41), so the push doesn't invite them; a
+ * link whose event the CRM had deleted comes back `cancelled` (restored, never patched).
+ */
+async function reattachLinks(tx: TransactionClient, connectionId: string, username: string, now: Date): Promise<number> {
+    const detached = await tx.activityExternalLink.findMany({
+        where: { connectionId, state: 'detached', role: 'organizer' },
+        select: { id: true, activityId: true, externalEventId: true, baseJson: true },
+    });
+    if (detached.length === 0) return 0;
+    const current = await tx.activity.findMany({
+        where: { id: { in: detached.map((l) => l.activityId) }, assignedTo: username, isDeleted: false, endAt: { gt: new Date(now.getTime() - CREATE_ELIGIBLE_PAST_MS) } },
+        select: { id: true },
+    });
+    const ids = new Set(current.map((a) => a.id));
+    const back = detached.filter((l) => ids.has(l.activityId));
+    let count = 0;
+    // Held guests (D41) were recorded while the link was detached; an event the CRM had deleted comes back `cancelled`.
+    for (const state of ['pending', 'cancelled'] as const) {
+        const linkIds = back.filter((l) => reattachedState(l) === state).map((l) => l.id);
+        if (linkIds.length === 0) continue;
+        count += (
+            await tx.activityExternalLink.updateMany({
+                where: { id: { in: linkIds }, state: 'detached' },
+                data: { state, dirtyAt: now, attempts: 0, nextAttemptAt: null },
+            })
+        ).count;
+    }
+    return count;
 }
 
 const LIVE = { in: [...LIVE_CONNECTION_STATUSES] };
@@ -433,15 +481,21 @@ export async function reconcileAllQuietly(reason: string, options: Omit<Reconcil
 
 const DUE_CHECK_LIMIT = 200;
 
-/** Health checks of rows that wait for their first check, or whose error backoff is over (nightly; P2-3b sweeps). */
+/** Health checks of rows that wait for their first check, or whose error backoff is over (nightly; the calendar worker's poll tick enqueues them as `check` jobs, `dueCheckIds`). */
 export async function runDueChecks(now: Date = new Date()): Promise<{ checked: number; ok: number }> {
+    const due = await dueCheckIds(now);
+    let ok = 0;
+    for (const id of due) if ((await checkConnection(id, () => now)) === 'ok') ok += 1;
+    return { checked: due.length, ok };
+}
+
+/** Rows due a health check: pending ones, and rows in error whose backoff is over (oldest enrolment first). */
+export async function dueCheckIds(now: Date = new Date(), limit: number = DUE_CHECK_LIMIT): Promise<string[]> {
     const due = await prisma.calendarConnection.findMany({
         where: { OR: [{ status: 'pending' }, { status: 'error', nextCheckAt: { lte: now } }] },
         select: { id: true },
         orderBy: { enrolledAt: 'asc' },
-        take: DUE_CHECK_LIMIT,
+        take: limit,
     });
-    let ok = 0;
-    for (const row of due) if ((await checkConnection(row.id, () => now)) === 'ok') ok += 1;
-    return { checked: due.length, ok };
+    return due.map((row) => row.id);
 }
