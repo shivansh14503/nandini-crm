@@ -138,6 +138,13 @@ function setup(seed: { providers?: ProviderState[]; users?: UserState[]; configs
             state.providers.set(where.provider, row);
             return { ...row };
         },
+        updateMany: async ({ where, data }: { where: Partial<ProviderState> & { provider: string }; data: Partial<ProviderState> }) => {
+            const existing = state.providers.get(where.provider);
+            const matches = existing && Object.entries(where).every(([key, value]) => existing[key as keyof ProviderState] === value);
+            if (!matches) return { count: 0 };
+            state.providers.set(where.provider, { ...existing, ...data, updatedAt: now });
+            return { count: 1 };
+        },
     };
     const userModel = {
         findMany: async () => state.users.map((u) => ({ ...u })),
@@ -361,6 +368,22 @@ describe('integrationService providers', () => {
         assert.equal(result.testedAt, now.toISOString());
         assert.equal(state.providers.get('google')!.lastTestOk, true);
         assert.match(state.providers.get('google')!.lastTestMessage!, /accepted/);
+    });
+
+    it("doesn't store a result for credentials that were replaced while the probe ran", async () => {
+        const { state } = setup();
+        await integrationService.saveProvider('google', { clientId: 'id', clientSecret: 'old-secret-123' }, admin, now);
+        const fetchImpl: FetchLike = async () => {
+            // An admin saves a new secret while Google is still answering for the old one.
+            await integrationService.saveProvider('google', { clientSecret: 'new-secret-456' }, admin, now);
+            return { status: 400, text: async () => JSON.stringify({ error: 'invalid_grant', error_description: 'Malformed auth code.' }) };
+        };
+        const result = await integrationService.testProvider('google', fetchImpl, now);
+        assert.equal(result.ok, false);
+        assert.equal(result.code, 'credentials_changed');
+        const row = state.providers.get('google')!;
+        assert.equal(row.lastTestAt, null);
+        assert.equal(row.lastTestOk, null);
     });
 
     it('flags a client secret expiring within 30 days', () => {

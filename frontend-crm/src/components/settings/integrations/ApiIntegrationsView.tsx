@@ -180,7 +180,9 @@ export function ApiIntegrationsView() {
                         ))}
                     </Box>
                 </>
-            ) : query.isError || !data ? (
+            ) : !data ? (
+                // Full-page error only when nothing is cached: a failed background refetch keeps the cards (and their
+                // unsaved edits) mounted and shows the inline alert below instead.
                 <Alert
                     severity="error"
                     action={
@@ -193,6 +195,19 @@ export function ApiIntegrationsView() {
                 </Alert>
             ) : (
                 <>
+                    {query.isError && (
+                        <Alert
+                            severity="warning"
+                            action={
+                                <Button size="small" variant="outlined" sx={secondaryButtonSx} onClick={() => void query.refetch()} disabled={query.isFetching}>
+                                    Try again
+                                </Button>
+                            }
+                            sx={{ '& .MuiAlert-message': { minWidth: 0 }, flexWrap: 'wrap' }}
+                        >
+                            {errorMessage(query.error, 'Could not refresh API Integrations.')} The values below may be out of date; unsaved edits are kept.
+                        </Alert>
+                    )}
                     <ReadinessAlerts data={data} />
                     <ServerFacts data={data} />
 

@@ -1,7 +1,7 @@
 # Nandini CRM — API Plan
 
 > **Status:** living document. Lists every endpoint of `backend-crm` as of 2026-11-26 (through Calendar Phase 2 P2-1:
-> `/api/admin/integrations`, Admin › API Integrations) plus the planned ones.
+> `/api/admin/integrations`, Admin › API Integrations, with its review fixes) plus the planned ones.
 > When you add, change or remove a route, update this file in the same change (the route files'
 > header comments are the per-module source of truth; keep them in step too).
 > Related: [System design](system-design.md) · [Database design](database-design.md) · [Build plan](build-plan.md)
@@ -274,13 +274,13 @@ expiresOn, expiresSoon }`).
 | Method | Path | Description |
 | --- | --- | --- |
 | GET | `/` | `{ ready: { ok, reason: key_missing\|public_url_missing\|null }, keyStatus: ok\|missing\|unreadable, activeKeyId, publicApiUrl, publicApiUrlConfigured, webhooksActive, worker: { lastSeenAt }\|null, providers: ProviderAdminDto[], settings: CalendarSyncSettings, syncTypes: [{ value, label, calendarSync, locked, lockReason? }] }`; `Cache-Control: no-store`. `ProviderAdminDto`: `{ provider: google\|microsoft\|zoom, label, kind: calendar\|video, available, enabled, configured, clientId, secret, webhookSecret (zoom) \| null, settings, redirectUri, webhookUrls, lastTest: { at, ok, message }\|null, clientVersion, counts: { active, reauth, error }, updatedAt, updatedBy }` |
-| PUT | `/providers/:provider` | `{ enabled?, clientId?, clientSecret? (≥ 8 chars; omitted = keep), webhookSecret? (zoom), clientSecretExpiresOn? (YYYY-MM-DD \| null; microsoft, zoom), settings? (google `{ scopeProfile: narrow\|broad, pkce }`, microsoft `{ tenantId }` = GUID or tenant domain) }` → `ProviderAdminDto`. Enabling needs a client id + readable secret (+ Microsoft tenant): 409 `INTEGRATION_NOT_CONFIGURED`; Zoom can't be enabled before Phase 3: 409 `INTEGRATION_NOT_AVAILABLE`; a secret without a key: 503 `INTEGRATIONS_NOT_READY`. A changed client id or tenant bumps `clientVersion`; changed credentials clear `lastTest`; a new secret clears its expiry unless one is sent. Audited `IntegrationProvider` CREATE / UPDATE with `secretChanged: true` instead of the secret |
+| PUT | `/providers/:provider` | `{ enabled?, clientId?, clientSecret? (≥ 8 chars; omitted = keep), webhookSecret? (zoom), clientSecretExpiresOn? (YYYY-MM-DD \| null; microsoft, zoom), settings? (google `{ scopeProfile: narrow\|broad, pkce }`, microsoft `{ tenantId }` = GUID or tenant domain) }` → `ProviderAdminDto`. Enabling needs a client id + readable secret: 409 `INTEGRATION_NOT_CONFIGURED`; enabling Microsoft without a tenant: 400 `VALIDATION_ERROR` on `settings.tenantId`; Zoom can't be enabled before Phase 3: 409 `INTEGRATION_NOT_AVAILABLE`; a secret without a key: 503 `INTEGRATIONS_NOT_READY`. A changed client id or tenant bumps `clientVersion`; changed credentials clear `lastTest`; a new secret clears its expiry unless one is sent. Audited `IntegrationProvider` CREATE / UPDATE with `secretChanged: true` instead of the secret |
 | DELETE | `/providers/:provider/secret` | → `ProviderAdminDto`: secrets removed, provider switched off (audited `secretCleared`) |
-| POST | `/providers/:provider/test` | → `{ ok, code, message, testedAt }` with the **saved** credentials (no user involved): Google = a dummy code exchange (`invalid_grant` means the client is accepted), Microsoft = a client-credentials token request (AADSTS codes mapped). `code`: `credentials_ok`, `invalid_client`, `redirect_uri_mismatch`, `secret_expired`, `app_not_in_tenant`, `tenant_not_found`, `not_configured`, `not_available` (zoom), `network`, `provider_error`. Saved as `lastTest`. 6 / min per admin (§3) |
+| POST | `/providers/:provider/test` | → `{ ok, code, message, testedAt }` with the **saved** credentials (no user involved): Google = a dummy code exchange (`invalid_grant` means the client is accepted), Microsoft = a client-credentials token request (AADSTS codes mapped). `code`: `credentials_ok`, `invalid_client`, `redirect_uri_mismatch`, `secret_expired`, `app_not_in_tenant`, `tenant_not_found`, `not_configured`, `not_available` (zoom), `network`, `provider_error`, `credentials_changed` (the credentials were saved or removed while the probe ran: the result is not stored, test again). Saved as `lastTest` only while the tested client id / secret / `clientVersion` are still the saved ones. 6 / min per admin (§3) |
 | PUT | `/settings` | Partial `{ companyDomains (1–10), followUpReminder (activity reminder label \| null), backfillDays: 30\|60\|90, eventVisibility: private\|default, followUpActivities, allowMeetingImport, importFollowupType }` → the whole settings. Stored as the module setting `activities/calendarSync` through Form Customization (validated, audited `ModuleSetting UPDATE`, form-config cache dropped) |
 | PUT | `/sync-types` | `{ "<Followup Type>": boolean }` → `syncTypes`. Option meta `calendarSync` on `shared_followup_type` (missing = on); Task / Note refused (400). Audited as option updates |
 | GET | `/people` | `?search&issue=any\|missing\|duplicate\|not_company` → active, non-group users `[{ username, fullName, department, role, email, emailIssue: missing\|duplicate\|not_company\|null, connection: null (P2-2) }]` |
-| PUT | `/people/:username/email` | `{ email (blank clears), allowOtherDomain? }` → the person row. `modules/users/userEmail.service.ts` (reused by the later Admin › Users): trimmed and lower-cased; unique among active non-group users (409 `DUPLICATE_RECORD` on `email`, naming the holder); a company domain unless `allowOtherDomain` (400 on `email`); audited `User UPDATE`; drops `cache:lookups:users*` |
+| PUT | `/people/:username/email` | `{ email (required; `''` or `null` clears), allowOtherDomain? }` → the person row; a body without `email` is 400 `VALIDATION_ERROR`. `modules/users/userEmail.service.ts` (reused by the later Admin › Users): trimmed and lower-cased; unique among active non-group users (409 `DUPLICATE_RECORD` on `email`, naming the holder); a company domain unless `allowOtherDomain` (400 on `email`); audited `User UPDATE`; drops `cache:lookups:users*` |
 
 **Email validation** — `/email-validation` 🔐 (Settings › Email Validation)
 
@@ -361,7 +361,7 @@ scans the whole range: send a date range with it.
 | Failed logins | `LOGIN_RATE_LIMIT_MAX` (10) per `LOGIN_RATE_LIMIT_WINDOW_SECONDS` (900 s) | IP | 429 `RATE_LIMITED` + `Retry-After` |
 | Record PDF | 30 / 60 s | user | 429 |
 | Template preview | 20 / 60 s | user | 429 |
-| Integration connection test | 6 / 60 s | admin | 429 `RATE_LIMITED` + `Retry-After` (in-memory per process while Redis is down, so this one does not fail open) |
+| Integration connection test | 6 / 60 s | admin | 429 `RATE_LIMITED` + `Retry-After` (in-memory per process whenever Redis can't count it: down, or a command failing while it reports ready; this one never fails open) |
 
 Limited responses carry `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset`. All limits except the integration connection test fail open when Redis is down.
 
@@ -380,7 +380,7 @@ Limited responses carry `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Res
 | 409 | `VERSION_CONFLICT` | Stale PDF template version |
 | 409 | `CITY_IN_USE` | Deleting a city still used by records |
 | 409 | `DUPLICATE_HOLIDAY` | Holidays: that occasion is already a holiday on that date |
-| 409 | `INTEGRATION_NOT_CONFIGURED` | API Integrations: enabling a provider without a client id, a readable secret (or Microsoft's tenant) |
+| 409 | `INTEGRATION_NOT_CONFIGURED` | API Integrations: enabling a provider without a client id or a readable secret (Microsoft without a tenant is 400 `VALIDATION_ERROR` on `settings.tenantId`) |
 | 409 | `INTEGRATION_NOT_AVAILABLE` | API Integrations: Zoom before video meetings ship (Phase 3) |
 | 409 | `NOT_UNDOABLE`, `NOT_RESTORABLE`, `ALREADY_REVERSED` | Audit log: the entry can't be undone / restored, or was already |
 | 410 | `EXPORT_EXPIRED` | Audit log export older than 24 h |

@@ -299,7 +299,7 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         AES-256-GCM with a key ring from `INTEGRATIONS_ENCRYPTION_KEY`, rotation script
         `npm run integrations:reencrypt`), `PUBLIC_API_URL`, URL redaction in request / error logs, extra logger
         redact paths, audit `SENSITIVE_KEY` exact + suffix rule, `IntegrationProvider` table (migration
-        `20261126210000_integrations`), `/api/admin/integrations` (read, save provider with write-only secrets and
+        `20261126220000_integrations`), `/api/admin/integrations` (read, save provider with write-only secrets and
         `clientVersion`, remove secret, Google / Microsoft "Test connection" probes rate-limited 6 / min, company
         calendar settings as the module setting `activities/calendarSync`, Followup Types that go to calendars as
         option meta `calendarSync`, people and company emails through the reusable `users/userEmail.service.ts`),
@@ -308,7 +308,11 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         starts off; nothing changes for users until an admin turns one on (and P2-2 ships). Not run against a real
         SQL Server, Google or Microsoft in the build environment (migration checked with `prisma migrate diff`).
         Owner before deploy: generate and set the key on the API and the worker, keep a copy (system design §9.2);
-        after deploy: fix company emails on the People table.
+        after deploy: fix company emails on the People table. Review fixes (2026-11-26): request logs mask the parsed
+        `req.query` too, the connection-test limit falls back to memory whenever Redis can't count, a test result is
+        stored only if the credentials didn't change meanwhile (`credentials_changed`), the email body requires
+        `email`, docs give Microsoft-without-tenant as 400, a failed refetch keeps the cards and drafts mounted, and an
+        email change refreshes master data in every tab (`MASTER_DATA_SYNC_ENTITY`).
   - [ ] **P2-2: connect / disconnect** (Google, Microsoft; Connected calendars page, `CalendarConnection`, unique
         active emails)
   - [ ] **P2-3a: activity write-path refactor** (no behaviour change)

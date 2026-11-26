@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/hooks/queries/queryKeys';
-import { MASTER_DATA_QUERY_KEY } from '@/hooks/queries/useMasterData';
 import { integrationsAdminService } from '@/services/integrationsAdmin.service';
 import type { CalendarSyncSettings, IntegrationProviderKey, PersonEmailPayload, SaveProviderPayload } from '@/types/integration.types';
 
@@ -14,13 +13,12 @@ export function usePeople() {
     return useQuery({ queryKey: queryKeys.integrations.people(), queryFn: integrationsAdminService.people, staleTime: 30 * 1000 });
 }
 
-function useIntegrationsMutation<TArgs, TResult>(fn: (args: TArgs) => Promise<TResult>, alsoInvalidate: readonly (readonly unknown[])[] = []) {
+function useIntegrationsMutation<TArgs, TResult>(fn: (args: TArgs) => Promise<TResult>) {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: fn,
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: queryKeys.integrations.all });
-            for (const key of alsoInvalidate) void queryClient.invalidateQueries({ queryKey: key });
         },
     });
 }
@@ -31,8 +29,6 @@ export const useClearProviderSecret = () => useIntegrationsMutation((provider: I
 export const useTestProvider = () => useIntegrationsMutation((provider: IntegrationProviderKey) => integrationsAdminService.testProvider(provider));
 export const useSaveCalendarSettings = () => useIntegrationsMutation((patch: Partial<CalendarSyncSettings>) => integrationsAdminService.saveSettings(patch));
 export const useSaveSyncTypes = () => useIntegrationsMutation((changes: Record<string, boolean>) => integrationsAdminService.saveSyncTypes(changes));
-/** The user directory (master data) carries emails too, so it refreshes after a change. */
+/** The user directory (master data) carries emails too: the service broadcasts MASTER_DATA_SYNC_ENTITY, so every tab refreshes it. */
 export const useSetPersonEmail = () =>
-    useIntegrationsMutation(({ username, payload }: { username: string; payload: PersonEmailPayload }) => integrationsAdminService.setPersonEmail(username, payload), [
-        MASTER_DATA_QUERY_KEY,
-    ]);
+    useIntegrationsMutation(({ username, payload }: { username: string; payload: PersonEmailPayload }) => integrationsAdminService.setPersonEmail(username, payload));

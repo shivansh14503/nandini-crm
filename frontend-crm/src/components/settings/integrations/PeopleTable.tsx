@@ -127,7 +127,7 @@ export function PeopleTable({ companyDomains, onToast }: { companyDomains: strin
                         <Box key={f.key} component="button" type="button" aria-pressed={filter === f.key} onClick={() => setFilter(f.key)} sx={pillSx(filter === f.key)}>
                             {f.label}
                             <Box component="span" sx={{ fontSize: '0.7rem', color: 'var(--mui-palette-text-secondary)', fontWeight: 700 }}>
-                                {people.isSuccess ? counts[f.key] : ''}
+                                {people.data ? counts[f.key] : ''}
                             </Box>
                         </Box>
                     ))}
@@ -138,7 +138,8 @@ export function PeopleTable({ companyDomains, onToast }: { companyDomains: strin
                 <Box sx={{ p: 2 }}>
                     <TableSkeleton rows={6} columns={5} toolbar={false} />
                 </Box>
-            ) : people.isError ? (
+            ) : people.isError && !people.data ? (
+                // Only when nothing is cached: a failed background refetch keeps the last rows on screen.
                 <Alert severity="error" sx={{ m: 2 }}>
                     {errorMessage(people.error, 'Could not load people.')}
                 </Alert>

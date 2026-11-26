@@ -456,7 +456,10 @@ export const integrationService = {
         return toProviderDto(provider, after);
     },
 
-    /** "Test connection" with the saved credentials; the result is stored on the row (not audited: no setting changes). */
+    /**
+     * "Test connection" with the saved credentials; the result is stored on the row (not audited: no setting changes)
+     * unless the credentials changed while the probe ran, which answers `credentials_changed` instead.
+     */
     async testProvider(provider: IntegrationProviderKey, fetchImpl: FetchLike = fetch as unknown as FetchLike, now: Date = new Date()): Promise<TestConnectionDto> {
         const row = await prisma.integrationProvider.findUnique({ where: { provider } });
         if (row?.secretsEnc && !secretBox.ready()) throw notReady();
@@ -480,7 +483,15 @@ export const integrationService = {
             );
         }
         if (row && result.code !== 'not_available') {
-            await prisma.integrationProvider.update({ where: { provider }, data: { lastTestAt: now, lastTestOk: result.ok, lastTestMessage: result.message.slice(0, 300) } });
+            // Only stored while the tested credentials are still the saved ones: a save (or secret removal) during the
+            // probe clears lastTest*, and this result must not paint a pass / fail on credentials it never tried.
+            const { count } = await prisma.integrationProvider.updateMany({
+                where: { provider, clientId: row.clientId, secretsEnc: row.secretsEnc, clientVersion: row.clientVersion },
+                data: { lastTestAt: now, lastTestOk: result.ok, lastTestMessage: result.message.slice(0, 300) },
+            });
+            if (count === 0) {
+                result = { ok: false, code: 'credentials_changed', message: 'The credentials were changed while this test ran. Run the test again.' };
+            }
         }
         logger.info({ provider, ok: result.ok, code: result.code }, 'Integration test connection');
         return { ...result, testedAt: now.toISOString() };

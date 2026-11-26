@@ -1,6 +1,5 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
-import { isRedisReady } from '../../config/redis.js';
 import { authenticate, requireRole } from '../../middlewares/authMiddleware.js';
 import { createRateLimiter } from '../../middlewares/rateLimiter.js';
 import { validateRequest } from '../../middlewares/validateRequest.js';
@@ -25,13 +24,17 @@ import { peopleQuerySchema, personEmailBodySchema, providerParamSchema, settings
  *                                        webhookSecret? (zoom), clientSecretExpiresOn? (YYYY-MM-DD | null; microsoft, zoom),
  *                                        settings? (google { scopeProfile, pkce }, microsoft { tenantId }) } → ProviderAdminDto
  *                                        A changed client id / tenant bumps clientVersion. Turning a provider off pauses it.
+ *                                        Enabling without client id + readable secret → 409 INTEGRATION_NOT_CONFIGURED;
+ *                                        Microsoft without a tenant → 400 VALIDATION_ERROR on settings.tenantId.
  *   DELETE /providers/:provider/secret → ProviderAdminDto (secrets removed, provider switched off)
- *   POST   /providers/:provider/test   → { ok, code, message, testedAt } (saved credentials; 6 / min per admin)
+ *   POST   /providers/:provider/test   → { ok, code, message, testedAt } (saved credentials; 6 / min per admin, in memory
+ *                                        whenever Redis can't count). Stored as lastTest only if the credentials are
+ *                                        unchanged since the probe began, else code credentials_changed.
  *   PUT    /settings                   partial CalendarSyncSettings → CalendarSyncSettings (ModuleSetting activities/calendarSync)
  *   PUT    /sync-types                 { "<Followup Type>": boolean } → syncTypes (option meta calendarSync; Task / Note refused)
  *   GET    /people                     ?search&issue=any|missing|duplicate|not_company → active non-group users
  *                                        [{ username, fullName, department, role, email, emailIssue, connection }]
- *   PUT    /people/:username/email     { email (blank clears), allowOtherDomain? } → person row
+ *   PUT    /people/:username/email     { email (required; '' / null clears), allowOtherDomain? } → person row
  *                                        (users/userEmail.service.ts: lower-cased, unique among active non-group users,
  *                                        company domain unless allowOtherDomain; audited User UPDATE)
  */
@@ -41,15 +44,12 @@ router.use(authenticate, requireRole(...FORM_CONFIG_ADMIN_ROLES));
 const TEST_LIMIT = 6;
 const TEST_WINDOW_SECONDS = 60;
 const TEST_LIMIT_MESSAGE = 'Too many connection tests. Wait a minute and try again.';
-const testLimiterRedis = createRateLimiter({
-    keyPrefix: 'ratelimit:integration-test',
-    max: TEST_LIMIT,
-    windowSeconds: TEST_WINDOW_SECONDS,
-    keyGenerator: (req) => `user:${req.user?.id ?? 'unknown'}`,
-    message: TEST_LIMIT_MESSAGE,
-});
+const testLimitKey = (req: Request) => `user:${req.user?.id ?? 'unknown'}`;
 
-/** In-memory fallback while Redis is down, so the probes can't be used to hammer Google / Microsoft. Per process. */
+/**
+ * In-memory fallback whenever Redis can't count a test (down, or a command failing while it reports ready), so the
+ * probes can't be used to hammer Google / Microsoft. Per process.
+ */
 const localTestHits = new Map<string, { count: number; resetAt: number }>();
 export function localTestLimit(key: string, now: number = Date.now()): { allowed: boolean; retryAfterSeconds: number } {
     const entry = localTestHits.get(key);
@@ -62,16 +62,22 @@ export function localTestLimit(key: string, now: number = Date.now()): { allowed
     return { allowed: entry.count <= TEST_LIMIT, retryAfterSeconds: Math.max(1, Math.ceil((entry.resetAt - now) / 1000)) };
 }
 
-function testLimiter(req: Request, res: Response, next: NextFunction): void {
-    if (isRedisReady()) {
-        void testLimiterRedis(req, res, next);
-        return;
-    }
-    const { allowed, retryAfterSeconds } = localTestLimit(`user:${req.user?.id ?? 'unknown'}`);
+export function localTestLimiter(req: Request, res: Response, next: NextFunction): void {
+    const { allowed, retryAfterSeconds } = localTestLimit(testLimitKey(req));
     if (allowed) return next();
     res.setHeader('Retry-After', String(retryAfterSeconds));
     next(new HttpError(TEST_LIMIT_MESSAGE, StatusCodes.TOO_MANY_REQUESTS, { code: 'RATE_LIMITED' }));
 }
+
+/** 6 tests / min per admin: Redis when it can count, the in-memory limiter otherwise (never unlimited). */
+export const testLimiter = createRateLimiter({
+    keyPrefix: 'ratelimit:integration-test',
+    max: TEST_LIMIT,
+    windowSeconds: TEST_WINDOW_SECONDS,
+    keyGenerator: testLimitKey,
+    message: TEST_LIMIT_MESSAGE,
+    fallback: localTestLimiter,
+});
 
 const providerOf = (req: Request) => req.params.provider as IntegrationProviderKey;
 

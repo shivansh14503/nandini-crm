@@ -68,12 +68,15 @@ export function emailIssueFor(email: string | null | undefined, duplicates: Read
     return null;
 }
 
-/** Body of an email change: `{ email, allowOtherDomain? }` (blank email clears it). */
+/**
+ * Body of an email change: `{ email, allowOtherDomain? }`. `email` is required: '' or null clears the address, but a
+ * body without the key is refused (400) so a partial client can't wipe an address by accident.
+ */
 export const userEmailBodySchema = z.object({
     email: z.preprocess(
-        normalizeUserEmail,
+        (value) => (value === undefined ? value : normalizeUserEmail(value)),
         z
-            .email({ message: 'Enter a valid email address.' })
+            .email({ error: (issue) => (issue.input === undefined ? 'Email is required (send an empty value to clear it).' : 'Enter a valid email address.') })
             .max(USER_EMAIL_MAX_LENGTH, { message: `Email cannot exceed ${USER_EMAIL_MAX_LENGTH} characters.` })
             .nullable(),
     ),

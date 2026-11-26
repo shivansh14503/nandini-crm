@@ -18,7 +18,9 @@ export type TestCode =
     | 'not_configured'
     | 'not_available'
     | 'network'
-    | 'provider_error';
+    | 'provider_error'
+    /** The saved credentials changed while the test ran; the result was not stored. */
+    | 'credentials_changed';
 
 export interface TestResult {
     ok: boolean;

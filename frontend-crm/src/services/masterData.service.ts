@@ -6,6 +6,13 @@ import { apiClient } from './apiClient';
 import { setMasterData, type MasterData } from './masterData.store';
 
 /**
+ * Sync entity for writes that change the master data behind it (e.g. a user's company email on Admin › API
+ * Integrations): `notifyCrmUpdate(MASTER_DATA_SYNC_ENTITY)` makes QueryProvider refetch only the master data, in
+ * this tab and every other open tab.
+ */
+export const MASTER_DATA_SYNC_ENTITY = 'master-data';
+
+/**
  * Loads users, Nature of Call and partner masters from `/api/lookups/*` into the master-data store.
  * Components pick it up through `useMasterData()`. Deliberately no `notifyCrmUpdate`: QueryProvider would
  * invalidate every query (including this one) and loop.

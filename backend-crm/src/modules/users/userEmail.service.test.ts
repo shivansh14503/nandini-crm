@@ -35,7 +35,17 @@ describe('company email rule', () => {
     it('parses the body: blank clears, bad and too-long addresses refused', () => {
         assert.deepEqual(userEmailBodySchema.parse({ email: ' X@Y.com ' }), { email: 'x@y.com', allowOtherDomain: false });
         assert.deepEqual(userEmailBodySchema.parse({ email: '' }), { email: null, allowOtherDomain: false });
+        assert.deepEqual(userEmailBodySchema.parse({ email: null }), { email: null, allowOtherDomain: false });
         assert.equal(userEmailBodySchema.safeParse({ email: 'not-an-email' }).success, false);
         assert.equal(userEmailBodySchema.safeParse({ email: `${'a'.repeat(115)}@x.com` }).success, false);
+    });
+    it('refuses a body without the email key instead of clearing the address', () => {
+        for (const body of [{}, { allowOtherDomain: true }]) {
+            const parsed = userEmailBodySchema.safeParse(body);
+            assert.equal(parsed.success, false);
+            assert.deepEqual(parsed.error?.issues[0]?.path, ['email']);
+            assert.match(parsed.error?.issues[0]?.message ?? '', /required/);
+        }
+        assert.match(userEmailBodySchema.safeParse({ email: 'nope' }).error?.issues[0]?.message ?? '', /valid email/);
     });
 });

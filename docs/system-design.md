@@ -1,6 +1,6 @@
 # Nandini CRM — System Design
 
-> **Status:** living document. Describes the system as built (code as of 2026-11-26; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Referrals module; Documents module; Activities data model and API, Calendar Phase 1 PR1; Activities screens and Calendar, PR2; notifications, reminders and mail workers, navbar bell and the morning summary email, PR3, with its review fixes; guarded cache reads for lookups, form configs and search, with its review fixes; Calendar Phase 2 P2-1, Admin › API Integrations foundation: encrypted provider credentials, connection tests, calendar sync settings, company emails).
+> **Status:** living document. Describes the system as built (code as of 2026-11-26; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Referrals module; Documents module; Activities data model and API, Calendar Phase 1 PR1; Activities screens and Calendar, PR2; notifications, reminders and mail workers, navbar bell and the morning summary email, PR3, with its review fixes; guarded cache reads for lookups, form configs and search, with its review fixes; Calendar Phase 2 P2-1, Admin › API Integrations foundation: encrypted provider credentials, connection tests, calendar sync settings, company emails, with its review fixes).
 > Update it in the same change that alters architecture, infrastructure, Redis usage, queues or security.
 > Related: [Database design](database-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
@@ -201,9 +201,11 @@ Role names are compared case-insensitively and with any dash style.
 - Rate limits in Redis (fail-open): failed logins per IP, PDF renders per user, PDF previews per user.
 - Logger redacts passwords, auth headers and cookies, and (P2-1) every token / secret / verifier / `secretsEnc` /
   `syncCursor` field and the `x-goog-channel-token` header (`LOG_REDACT_PATHS` in `config/logger.ts`). Request URLs
-  are logged through `utils/redactUrl.ts` (pino-http `req` serializer, error-handler log lines, the 404 message): the
-  values of `code`, `state`, `id_token`, `session_state`, `validationToken`, `token`, `syncToken`, `pageToken`,
-  `$deltatoken` and `$skiptoken` become `[redacted]`, and a URL fragment carrying one of them is dropped. 5xx
+  are logged through `utils/redactUrl.ts` (pino-http `req` serializer `serializeRequestForLog`, error-handler log
+  lines, the 404 message): the values of `code`, `state`, `id_token`, `session_state`, `validationToken`, `token`,
+  `syncToken`, `pageToken`, `$deltatoken` and `$skiptoken` (names case-insensitive) become `[REDACTED]` both in the
+  logged URL and in the parsed `req.query` object the standard serializer adds, and a URL fragment carrying one of
+  them is dropped (redactUrl.test.ts sends a real request through pino-http). 5xx
   responses hide internals in production.
 - **Integration secrets (secret box, `services/secretBox.ts`, P2-1).** Client secrets and webhook secrets of
   Google / Microsoft / Zoom (`IntegrationProvider.secretsEnc`) are sealed with **AES-256-GCM**: format
@@ -222,8 +224,11 @@ Role names are compared case-insensitively and with any dash style.
   token, secret, clientSecret, refreshToken, accessToken, …) plus a case-sensitive camelCase suffix rule
   `(Secret|Secrets|Token|Password)(Enc)?$`, applied to **every** entity's before / after values.
 - **Connection tests** (`POST /api/admin/integrations/providers/:provider/test`) call Google / Microsoft with the
-  saved credentials only (no user): 6 per minute per admin in Redis, with an in-memory per-process limit while Redis
-  is down, so the probe can't be used to hammer the providers.
+  saved credentials only (no user): 6 per minute per admin in Redis, with an in-memory per-process limit whenever
+  Redis can't count a test (down, or a command failing while it reports ready: `createRateLimiter`'s `fallback`
+  option), so the probe can't be used to hammer the providers. A result is stored as `lastTest` only if the client
+  id, sealed secret and `clientVersion` are unchanged since the probe started (conditional `updateMany`); otherwise
+  the admin gets `credentials_changed` and tests again.
 - **Audit log** (`AuditLog`, an append-only SQL Server ledger table — see §5 "Audit write paths"): every change,
   sign-in, failed sign-in (wrong password or deactivated account) and refused request (403, at most one per user +
   route per minute) is recorded with who / where / how. Record history (`GET /api/audit-logs/...`) follows the
@@ -258,7 +263,7 @@ commands fail immediately instead of hanging, and reconnects in the background (
 | `ratelimit:login:{ip}` | counter | `LOGIN_RATE_LIMIT_WINDOW_SECONDS` (15 min) | failed logins only | Brute-force protection (default 10 failures / window); reset on success |
 | `ratelimit:pdf:{module}:user:{id}` | counter | 60 s | `GET /:id/pdf` | 30 PDF renders / min / user |
 | `ratelimit:pdf-preview:user:{id}` | counter | 60 s | `POST /api/pdf-templates/preview` | 20 previews / min / user |
-| `ratelimit:integration-test:user:{id}` | counter | 60 s | `POST /api/admin/integrations/providers/:provider/test` | 6 connection tests / min / admin (in-memory per process while Redis is down) |
+| `ratelimit:integration-test:user:{id}` | counter | 60 s | `POST /api/admin/integrations/providers/:provider/test` | 6 connection tests / min / admin (in-memory per process whenever Redis can't count) |
 | `cache:lookups:users:{all\|active}` | JSON, guarded ¹ | 5 min | lookups | User picker list; dropped by a company email change (`invalidateUserCaches`, Admin › API Integrations › People) |
 | `cache:lookups:organizations:{limit}` / `contacts:{limit}` / `products:{limit}` | JSON, guarded ¹ | 5 min | lookups (no search term only) | Lookup dialogs' default lists |
 | `cache:lookups:partner-companies` / `partner-contacts` | JSON, guarded ¹ | 1 h | lookups | Partner master lists; dropped by partner company writes |
@@ -598,7 +603,8 @@ frontend-crm/src/
   bell's unread count is the one polled query (every 60 s while the tab is visible, and on focus; §8.4).
 - **Cross-tab sync:** every write calls `notifyCrmUpdate(entity)`, which fires a window event and a
   `BroadcastChannel('crm_sync_channel')` message. `QueryProvider` listens and invalidates that entity's queries (and
-  audit logs) in this tab and every other open tab.
+  audit logs) in this tab and every other open tab. Three entities without query keys of their own are mapped
+  explicitly: `form-configs`, `drawer-layouts` and `master-data` (users, Nature of Call, partners).
 - **Bootstrap:** after sign-in, `CrmDataBootstrap` prefetches lightweight masters (users, Nature of Call, partners);
   on sign-out it clears the whole query cache.
 - **Theme:** MUI `cssVariables` with class-based colour schemes; see the root `CLAUDE.md` for the token rules.
@@ -673,7 +679,10 @@ to copy, "Test connection"), the company calendar settings card, "What goes to c
 People table with the company email editor (`integrations.people`). Each card keeps its own draft; the view joins
 their dirty flags into one `useLeaveGuard`. Writes call `notifyCrmUpdate('/api/admin/integrations')`; settings and
 sync-type saves also notify `FORM_CONFIG_SYNC_ENTITY`, so an open Form Builder reloads instead of saving stale module
-settings or option meta back.
+settings or option meta back; a company email change also notifies `MASTER_DATA_SYNC_ENTITY` (`'master-data'`), which
+`QueryProvider` maps to the master data (user directory) query only, so every open tab picks up the new address. A
+failed background refetch keeps the cards (and their unsaved drafts) on screen with an inline "Try again" warning;
+the full-page error shows only when nothing has loaded yet.
 
 ## 9. Deployment topology
 

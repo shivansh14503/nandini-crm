@@ -14,6 +14,7 @@ import type {
 import { apiClient } from './apiClient';
 import { notifyCrmUpdate } from './crmSync';
 import { FORM_CONFIG_SYNC_ENTITY } from './formConfig.service';
+import { MASTER_DATA_SYNC_ENTITY } from './masterData.service';
 
 /** Also the sync entity: `notifyCrmUpdate(BASE)` maps to the `integrations` query keys (never a sub-path). */
 export const INTEGRATIONS_ENDPOINT = '/api/admin/integrations';
@@ -57,9 +58,11 @@ export const integrationsAdminService = {
     async people(): Promise<Person[]> {
         return (await apiClient.get<ApiResponse<Person[]>>(`${BASE}/people`)).data;
     },
+    /** Users.email also feeds the user directory (master data): every open tab refetches it, not only this one. */
     async setPersonEmail(username: string, payload: PersonEmailPayload): Promise<Person> {
         const res = await apiClient.put<ApiResponse<Person>>(`${BASE}/people/${enc(username)}/email`, payload);
         notifyCrmUpdate(BASE);
+        notifyCrmUpdate(MASTER_DATA_SYNC_ENTITY);
         return res.data;
     },
 };

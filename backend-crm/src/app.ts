@@ -49,7 +49,7 @@ import { closeQueues } from './jobs/queues.js';
 import { startWorkers, stopWorkers } from './jobs/workers/index.js';
 import { errorHandler, notFoundHandler } from './middlewares/errorHandler.js';
 import integrationRouter from './modules/integrations/integration.routes.js';
-import { redactUrl } from './utils/redactUrl.js';
+import { serializeRequestForLog } from './utils/redactUrl.js';
 
 const LAN_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?$/;
 
@@ -82,9 +82,9 @@ app.use(
         // Health probes would otherwise flood the logs.
         autoLogging: { ignore: (req) => req.url === '/api/health' },
         customLogLevel: (_req, res, err) => (err || res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'info'),
-        // OAuth codes / state, webhook validation tokens and provider sync cursors never reach a log line (redactUrl.ts).
-        // pino-http runs this on its standard req serializer's output.
-        serializers: { req: (req: { url?: string }) => ({ ...req, url: redactUrl(req.url) }) },
+        // OAuth codes / state, webhook validation tokens and provider sync cursors never reach a log line: the URL and
+        // the parsed query / params the standard req serializer adds are all masked (redactUrl.ts).
+        serializers: { req: serializeRequestForLog },
     }),
 );
 app.use(cookieParser());

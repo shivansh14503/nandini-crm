@@ -1,7 +1,7 @@
 # Nandini CRM — Database Design
 
 > **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (80 migrations,
-> latest `20261126210000_integrations`, as of 2026-11-26). Update it in the same change as any schema migration.
+> latest `20261126220000_integrations`, as of 2026-11-26). Update it in the same change as any schema migration.
 > Related: [System design](system-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
 ---
@@ -586,7 +586,7 @@ shows such a day once.
 
 ### 4.28 `IntegrationProvider` (Admin › API Integrations)
 
-Migration `20261126210000_integrations` (new table only; Calendar Phase 2 P2-1). Module
+Migration `20261126220000_integrations` (new table only; Calendar Phase 2 P2-1). Module
 `backend-crm/src/modules/integrations`. One row per external provider an admin has saved; no row = not set up, and
 every provider starts switched off.
 
