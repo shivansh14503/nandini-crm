@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { Fragment, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -30,12 +30,13 @@ import PersonIcon from '@mui/icons-material/Person';
 import AddIcon from '@mui/icons-material/Add';
 import AdminPanelSettingsOutlinedIcon from '@mui/icons-material/AdminPanelSettingsOutlined';
 import MenuIcon from '@mui/icons-material/Menu';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { getModuleColor, moduleForPath } from '@/theme/moduleColors';
 import { useAuth } from '../../context/AuthContext';
 import { GlobalSearch } from './GlobalSearch';
 import { ThemeModeToggle } from './ThemeModeToggle';
 import { APP_CONFIG, ROUTES } from '@/config/constants';
-import { NAV_ITEMS, ModuleDot, type NavGroup } from './navItems';
+import { NAV_ITEMS, ModuleDot, type NavGroup, type NavLinkItem } from './navItems';
 import { MobileNavDrawer } from './MobileNavDrawer';
 import { NotificationBell } from './NotificationBell';
 import { useDropdown } from './useDropdown';
@@ -46,6 +47,151 @@ import { useDropdown } from './useDropdown';
  * the pills move into the menu drawer.
  */
 const FULL_NAVBAR_MIN_WIDTH = 1420;
+
+/* ─── Nested flyout inside a pill's menu (e.g. All Activities › Calls, Meetings …) ─── */
+const navMenuItemSx = {
+    textDecoration: 'none',
+    fontSize: '0.82rem',
+    color: 'var(--crm-gray-700)',
+    px: 2,
+    py: 0.9,
+    gap: 1.25,
+    '&:hover': { backgroundColor: 'var(--mui-palette-primary-soft)', color: 'var(--mui-palette-primary-main)' },
+} as const;
+
+/**
+ * A menu row with nested routes. Its label still links to its own page; the flyout to the right opens on mouse
+ * hover, on a tap / click on the chevron, or with ArrowRight from the keyboard (ArrowLeft or Escape goes
+ * back). The flyout is rendered inside the parent menu (no portal) so hover, click-away and focus stay in one tree.
+ */
+function NavSubmenu({ item, showDot, onNavigate }: { item: NavLinkItem; showDot: boolean; onNavigate: () => void }) {
+    const { open, close, show, menuId, setAnchorEl, anchorEl, hoverProps, triggerProps, handleClickAway } = useDropdown();
+    const rowRef = useRef<HTMLAnchorElement | null>(null);
+    const [focusFirst, setFocusFirst] = useState(false);
+    const children = item.children ?? [];
+    const childDots = children.some((c) => moduleForPath(c.href));
+
+    const openFromKeyboard = () => {
+        setFocusFirst(true);
+        show();
+    };
+    const backToRow = () => {
+        close();
+        rowRef.current?.focus();
+    };
+
+    return (
+        <Fragment>
+            <MenuItem
+                component={Link}
+                href={item.href}
+                onClick={onNavigate}
+                ref={(el: HTMLAnchorElement | null) => {
+                    rowRef.current = el;
+                    setAnchorEl(el);
+                }}
+                {...hoverProps}
+                onPointerEnter={(e: React.PointerEvent) => {
+                    if (e.pointerType === 'mouse') setFocusFirst(false);
+                    hoverProps.onPointerEnter(e);
+                }}
+                aria-haspopup="menu"
+                aria-expanded={open}
+                aria-controls={open ? menuId : undefined}
+                onKeyDown={(e: React.KeyboardEvent) => {
+                    if (e.key === 'ArrowRight') {
+                        e.preventDefault();
+                        openFromKeyboard();
+                    } else if (e.key === 'ArrowLeft' && open) {
+                        e.preventDefault();
+                        close();
+                    }
+                }}
+                sx={{
+                    ...navMenuItemSx,
+                    pr: 0.5,
+                    ...(open && { backgroundColor: 'var(--mui-palette-primary-soft)', color: 'var(--mui-palette-primary-main)' }),
+                }}
+            >
+                {showDot && <ModuleDot href={item.href} />}
+                <Box component="span" sx={{ flex: 1, minWidth: 0 }}>
+                    {item.label}
+                </Box>
+                {/* Tap / click target for touch screens: opens the flyout instead of following the link. */}
+                <Box
+                    component="span"
+                    aria-hidden
+                    onClick={(e: React.MouseEvent) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setFocusFirst(false);
+                        triggerProps.onClick();
+                    }}
+                    sx={{
+                        ml: 1,
+                        width: 32,
+                        height: 28,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderRadius: '6px',
+                        color: open ? 'var(--crm-text-blue-600)' : 'var(--mui-palette-text-muted)',
+                        transition: 'background-color 0.15s ease, color 0.15s ease',
+                        '&:hover': { backgroundColor: 'var(--mui-palette-background-paper)', color: 'var(--crm-text-blue-700)' },
+                    }}
+                >
+                    <ChevronRightIcon sx={{ fontSize: 18 }} />
+                </Box>
+            </MenuItem>
+
+            <Popper
+                open={open}
+                anchorEl={anchorEl}
+                placement="right-start"
+                disablePortal
+                transition
+                role="presentation"
+                style={{ zIndex: 1 }}
+                modifiers={[{ name: 'offset', options: { offset: [-4, 4] } }]}
+            >
+                {({ TransitionProps }) => (
+                    <Grow {...TransitionProps} timeout={120} style={{ transformOrigin: 'left top' }}>
+                        <Paper
+                            elevation={8}
+                            {...hoverProps}
+                            onKeyDown={(e: React.KeyboardEvent) => {
+                                // Keep keys inside the flyout away from the parent menu's own arrow-key handling.
+                                e.stopPropagation();
+                                if (e.key === 'ArrowLeft' || e.key === 'Escape') {
+                                    e.preventDefault();
+                                    backToRow();
+                                }
+                            }}
+                            sx={{
+                                minWidth: 170,
+                                borderRadius: '10px',
+                                overflow: 'hidden',
+                                border: '1px solid var(--crm-gray-200)',
+                                boxShadow: '0 8px 30px rgba(0,0,0,0.10)',
+                            }}
+                        >
+                            <ClickAwayListener onClickAway={handleClickAway}>
+                                <MenuList id={menuId} dense autoFocusItem={focusFirst} aria-label={item.label} sx={{ py: 0.5 }}>
+                                    {children.map((child) => (
+                                        <MenuItem key={child.href} component={Link} href={child.href} onClick={onNavigate} sx={navMenuItemSx}>
+                                            {childDots && <ModuleDot href={child.href} />}
+                                            {child.label}
+                                        </MenuItem>
+                                    ))}
+                                </MenuList>
+                            </ClickAwayListener>
+                        </Paper>
+                    </Grow>
+                )}
+            </Popper>
+        </Fragment>
+    );
+}
 
 /* ─── Hover/click-dropdown pill ─────────────────────────── */
 function NavPill({ item }: { item: NavGroup }) {
@@ -108,33 +254,24 @@ function NavPill({ item }: { item: NavGroup }) {
                             sx={{
                                 minWidth: 180,
                                 borderRadius: '10px',
-                                overflow: 'hidden',
+                                // visible, so a nested flyout (All Activities ›) isn't clipped
+                                overflow: 'visible',
                                 border: '1px solid var(--crm-gray-200)',
                                 boxShadow: '0 8px 30px rgba(0,0,0,0.10)',
                             }}
                         >
                             <ClickAwayListener onClickAway={handleClickAway}>
                                 <MenuList dense sx={{ py: 0.5 }}>
-                                    {item.items.map((sub, i) => (
-                                        <MenuItem
-                                            key={i}
-                                            component={Link}
-                                            href={sub.href}
-                                            onClick={close}
-                                            sx={{
-                                                textDecoration: 'none',
-                                                fontSize: '0.82rem',
-                                                color: 'var(--crm-gray-700)',
-                                                px: 2,
-                                                py: 0.9,
-                                                gap: 1.25,
-                                                '&:hover': { backgroundColor: 'var(--mui-palette-primary-soft)', color: 'var(--mui-palette-primary-main)' },
-                                            }}
-                                        >
-                                            {hasModuleItems && <ModuleDot href={sub.href} />}
-                                            {sub.label}
-                                        </MenuItem>
-                                    ))}
+                                    {item.items.map((sub, i) =>
+                                        sub.children?.length ? (
+                                            <NavSubmenu key={i} item={sub} showDot={hasModuleItems} onNavigate={close} />
+                                        ) : (
+                                            <MenuItem key={i} component={Link} href={sub.href} onClick={close} sx={navMenuItemSx}>
+                                                {hasModuleItems && <ModuleDot href={sub.href} />}
+                                                {sub.label}
+                                            </MenuItem>
+                                        ),
+                                    )}
                                 </MenuList>
                             </ClickAwayListener>
                         </Paper>
@@ -397,7 +534,8 @@ function CreateButton({ compact = false }: { compact?: boolean }) {
                             sx={{
                                 minWidth: 180,
                                 borderRadius: '10px',
-                                overflow: 'hidden',
+                                // visible, so a nested flyout (All Activities ›) isn't clipped
+                                overflow: 'visible',
                                 border: '1px solid var(--crm-gray-200)',
                                 boxShadow: '0 8px 30px rgba(0,0,0,0.10)',
                             }}

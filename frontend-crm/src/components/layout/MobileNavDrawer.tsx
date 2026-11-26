@@ -22,7 +22,7 @@ import AdminPanelSettingsOutlinedIcon from '@mui/icons-material/AdminPanelSettin
 import { glassSurfaceSx, GLASS_RADIUS, GLASS_SHADOW, FLOAT_INSET } from '@/theme/glass';
 import { moduleForPath } from '@/theme/moduleColors';
 import { APP_CONFIG, ROUTES } from '@/config/constants';
-import { ModuleDot, type NavGroup } from './navItems';
+import { ModuleDot, type NavGroup, type NavLinkItem } from './navItems';
 import { ThemeModeToggle } from './ThemeModeToggle';
 
 const isOnRoute = (path: string, href: string) => path === href || path.startsWith(`${href}/`);
@@ -32,6 +32,9 @@ function activeHrefKey(groups: readonly NavGroup[], path: string): string | null
     for (const group of groups) {
         for (const item of group.items) {
             if (isOnRoute(path, item.href)) return `${group.label}:${item.label}`;
+            for (const child of item.children ?? []) {
+                if (isOnRoute(path, child.href)) return `${group.label}:${item.label}:${child.label}`;
+            }
         }
     }
     return null;
@@ -49,6 +52,45 @@ const rowSx = {
     '&:hover': { backgroundColor: 'var(--mui-palette-primary-soft)', color: 'var(--crm-text-blue-700)' },
     '&.Mui-focusVisible': { boxShadow: '0 0 0 3px rgb(var(--crm-accent-rgb) / 0.22)' },
 } as const;
+
+/** One link row in the menu; the current page's row is highlighted. */
+function NavLinkRow({
+    item,
+    active,
+    showDot,
+    onClose,
+    nested = false,
+}: {
+    item: NavLinkItem;
+    active: boolean;
+    showDot: boolean;
+    onClose: () => void;
+    nested?: boolean;
+}) {
+    return (
+        <ListItemButton
+            component={Link}
+            href={item.href}
+            onClick={onClose}
+            selected={active}
+            aria-current={active ? 'page' : undefined}
+            sx={{
+                ...rowSx,
+                minHeight: nested ? 36 : 38,
+                ...(nested && { fontSize: '0.83rem' }),
+                ...(active && {
+                    color: 'var(--crm-text-blue-900)',
+                    fontWeight: 700,
+                    backgroundColor: 'var(--mui-palette-primary-soft) !important',
+                    boxShadow: 'inset 0 0 0 1px var(--mui-palette-primary-softBorder)',
+                }),
+            }}
+        >
+            {showDot && <ModuleDot href={item.href} />}
+            {item.label}
+        </ListItemButton>
+    );
+}
 
 export interface MobileNavDrawerProps {
     open: boolean;
@@ -75,6 +117,16 @@ export function MobileNavDrawer({ open, onClose, groups, currentPath, user, onLo
         setLastPath(currentPath);
         setExpanded(new Set([activeGroup]));
     }
+
+    // Items with nested routes (All Activities › Calls …) open inline under their row; collapsed by default.
+    const [expandedItems, setExpandedItems] = useState<Set<string>>(() => new Set());
+    const toggleItem = (key: string) =>
+        setExpandedItems((prev) => {
+            const next = new Set(prev);
+            if (next.has(key)) next.delete(key);
+            else next.add(key);
+            return next;
+        });
 
     const toggleGroup = (label: string) =>
         setExpanded((prev) => {
@@ -243,29 +295,82 @@ export function MobileNavDrawer({ open, onClose, groups, currentPath, user, onLo
                                 <Collapse in={isOpen} timeout={180} unmountOnExit>
                                     <List disablePadding sx={{ pl: 1, pb: 0.5 }}>
                                         {group.items.map((item) => {
-                                            const active = activeKey === `${group.label}:${item.label}`;
+                                            const key = `${group.label}:${item.label}`;
+                                            const link = (
+                                                <NavLinkRow
+                                                    item={item}
+                                                    active={activeKey === key}
+                                                    showDot={hasModuleItems}
+                                                    onClose={onClose}
+                                                />
+                                            );
+                                            if (!item.children?.length) {
+                                                return (
+                                                    <NavLinkRow
+                                                        key={item.label}
+                                                        item={item}
+                                                        active={activeKey === key}
+                                                        showDot={hasModuleItems}
+                                                        onClose={onClose}
+                                                    />
+                                                );
+                                            }
+
+                                            const itemOpen = expandedItems.has(key);
+                                            const childDots = item.children.some((c) => moduleForPath(c.href));
+                                            const submenuId = `nav-sub-${key.replace(/[^a-z0-9]+/gi, '-')}`;
                                             return (
-                                                <ListItemButton
-                                                    key={item.label}
-                                                    component={Link}
-                                                    href={item.href}
-                                                    onClick={onClose}
-                                                    selected={active}
-                                                    aria-current={active ? 'page' : undefined}
-                                                    sx={{
-                                                        ...rowSx,
-                                                        minHeight: 38,
-                                                        ...(active && {
-                                                            color: 'var(--crm-text-blue-900)',
-                                                            fontWeight: 700,
-                                                            backgroundColor: 'var(--mui-palette-primary-soft) !important',
-                                                            boxShadow: 'inset 0 0 0 1px var(--mui-palette-primary-softBorder)',
-                                                        }),
-                                                    }}
-                                                >
-                                                    {hasModuleItems && <ModuleDot href={item.href} />}
-                                                    {item.label}
-                                                </ListItemButton>
+                                                <Box key={item.label}>
+                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                        <Box sx={{ flex: 1, minWidth: 0 }}>{link}</Box>
+                                                        <IconButton
+                                                            onClick={() => toggleItem(key)}
+                                                            aria-expanded={itemOpen}
+                                                            aria-controls={submenuId}
+                                                            aria-label={`${itemOpen ? 'Hide' : 'Show'} ${item.label} types`}
+                                                            sx={{
+                                                                width: 38,
+                                                                height: 38,
+                                                                flexShrink: 0,
+                                                                borderRadius: '10px',
+                                                                color: itemOpen ? 'var(--crm-text-blue-600)' : 'var(--mui-palette-text-muted)',
+                                                                transition: 'all 0.15s ease',
+                                                                '&:hover': {
+                                                                    backgroundColor: 'var(--mui-palette-primary-soft)',
+                                                                    color: 'var(--crm-text-blue-700)',
+                                                                },
+                                                                '&.Mui-focusVisible': { boxShadow: '0 0 0 3px rgb(var(--crm-accent-rgb) / 0.22)' },
+                                                            }}
+                                                        >
+                                                            <ExpandMoreIcon
+                                                                sx={{
+                                                                    fontSize: 18,
+                                                                    transition: 'transform 0.2s',
+                                                                    transform: itemOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                                                                }}
+                                                            />
+                                                        </IconButton>
+                                                    </Box>
+                                                    <Collapse in={itemOpen} timeout={180} unmountOnExit>
+                                                        <List
+                                                            id={submenuId}
+                                                            disablePadding
+                                                            aria-label={item.label}
+                                                            sx={{ ml: 2, pl: 1, py: 0.25, borderLeft: '1px solid var(--mui-palette-border-main)' }}
+                                                        >
+                                                            {item.children.map((child) => (
+                                                                <NavLinkRow
+                                                                    key={child.href}
+                                                                    item={child}
+                                                                    active={activeKey === `${key}:${child.label}`}
+                                                                    showDot={childDots}
+                                                                    onClose={onClose}
+                                                                    nested
+                                                                />
+                                                            ))}
+                                                        </List>
+                                                    </Collapse>
+                                                </Box>
                                             );
                                         })}
                                     </List>

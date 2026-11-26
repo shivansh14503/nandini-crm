@@ -30,6 +30,11 @@ export function useDropdown() {
         setOpen(false);
     }, [clearCloseTimer]);
 
+    const show = useCallback(() => {
+        clearCloseTimer();
+        setOpen(true);
+    }, [clearCloseTimer]);
+
     // Close on Escape while open
     useEffect(() => {
         if (!open) return;
@@ -72,5 +77,5 @@ export function useDropdown() {
         close();
     };
 
-    return { open, close, menuId, setAnchorEl, anchorEl, hoverProps, triggerProps, handleClickAway };
+    return { open, close, show, menuId, setAnchorEl, anchorEl, hoverProps, triggerProps, handleClickAway };
 }
