@@ -439,7 +439,7 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
       reconnect, disconnect). The OAuth callback (`CALENDAR_CONNECTIONS_PAGE`, `…&calendar=connected|error&reason=&provider=`),
       its sign-in `?next=`, `calendar_reconnect` notification links (computed on read, so older rows follow) and the
       calendar's reconnect banner now open the tab; the card drops only its own callback params, so `?tab=` stays. The
-      user menu and mobile drawer item is now "Connected accounts" (was "Connected calendars"); the temporary
+      "Connected calendars" user menu and mobile drawer items are removed (the tab is reached from My Profile); the temporary
       `/connected-calendars` page is only a client redirect to the tab that keeps the query string (old bookmarks,
       callbacks in flight). Contract test: `ROUTES.PROFILE_CONNECTED_ACCOUNTS` equals the API constant and ProfileView
       has that tab. The company email editor and its unique index (`UX_Users_email`) already shipped with Calendar
