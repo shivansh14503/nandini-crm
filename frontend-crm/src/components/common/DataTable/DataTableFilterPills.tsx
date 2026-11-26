@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Box, Chip, Typography } from '@mui/material';
+import { fmtCount, useDisplayFormats } from '@/utils/formats';
 import type { DataTableFilterPillsProps } from './types';
 
 export function DataTableFilterPills<TFilter extends string = string>({
@@ -10,6 +11,8 @@ export function DataTableFilterPills<TFilter extends string = string>({
     onFilterChange,
     variant = 'chip',
 }: DataTableFilterPillsProps<TFilter>) {
+    // Device grouping until the company saves its formats (as before), then the company grouping.
+    const { customized } = useDisplayFormats();
     if (variant === 'pill') {
         const pillBaseSx = (isActive: boolean) => ({
             px: 1.8,
@@ -60,7 +63,7 @@ export function DataTableFilterPills<TFilter extends string = string>({
                                         color: isActive && tab.id === 'all' ? 'var(--crm-text-blue-700)' : 'var(--mui-palette-text-secondary)',
                                     }}
                                 >
-                                    {tab.count.toLocaleString()}
+                                    {customized ? fmtCount(tab.count) : tab.count.toLocaleString()}
                                 </Typography>
                             )}
                         </Box>

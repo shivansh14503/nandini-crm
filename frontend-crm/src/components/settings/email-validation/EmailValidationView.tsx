@@ -58,6 +58,7 @@ import {
     type EmailValidationRun,
     type StartRunPayload,
 } from '@/services/emailValidationAdmin.service';
+import { businessWallClock, fmtCount, fmtInstant, fmtTime, getDisplayFormats, useDisplayFormats } from '@/utils/formats';
 
 const SUMMARY_KEY = ['email-validation', 'summary'] as const;
 const ADDRESSES_KEY = ['email-validation', 'addresses'] as const;
@@ -114,8 +115,22 @@ const headCellSx = {
 
 const cellSx = { py: 0.9, fontSize: '0.82rem', color: 'var(--crm-slate-700)' } as const;
 
-const formatDateTime = (iso: string | null) =>
-    iso ? new Date(iso).toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+// Dates, times and counts on this page use the device's own style (today's look) until the company formats are
+// saved, then the company formats (business clock).
+const customized = () => getDisplayFormats().customized;
+
+const formatDateTime = (iso: string | null) => {
+    if (!iso) return '—';
+    if (customized()) return fmtInstant(iso) || '—';
+    return new Date(iso).toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+};
+
+const formatCount = (value: number) => (customized() ? fmtCount(value) : value.toLocaleString());
+
+const formatPolledAt = (iso: string) => {
+    const wall = customized() ? businessWallClock(iso) : null;
+    return wall ? fmtTime(wall) : new Date(iso).toLocaleTimeString();
+};
 
 function StatusPill({ status, reason }: { status: AddressStatus; reason: string | null }) {
     const style = STATUS_STYLE[status];
@@ -155,7 +170,7 @@ function usedOn(records: EmailAddressRow['records']): string {
 
 /** Headline and progress of a running check; list-mode checks go through phases at the provider. */
 function runProgressText(run: EmailValidationRun): { title: string; percent: number | null } {
-    const n = (value: number) => value.toLocaleString();
+    const n = formatCount;
     const sent = run.providerTotal ?? 0;
     switch (run.mode === 'list' ? run.phase : null) {
         case 'local_checks':
@@ -204,7 +219,7 @@ function RunProgress({ run, onCancel, cancelling }: { run: EmailValidationRun; o
             <Typography sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)' }}>
                 {run.mode === 'list' ? 'Large check, sent to the provider as one list. ' : ''}So far {run.validCount} valid · {run.riskyCount} risky · {run.invalidCount} invalid
                 {run.undecidedCount ? ` · ${run.undecidedCount} undecided` : ''}. Started by {run.startedBy}.
-                {atProvider && run.lastPolledAt ? ` Last status check ${new Date(run.lastPolledAt).toLocaleTimeString()}; checked every few minutes.` : ''} You can leave this
+                {atProvider && run.lastPolledAt ? ` Last status check ${formatPolledAt(run.lastPolledAt)}; checked every few minutes.` : ''} You can leave this
                 page; the check carries on.
             </Typography>
         </Box>
@@ -213,6 +228,7 @@ function RunProgress({ run, onCancel, cancelling }: { run: EmailValidationRun; o
 
 /** Admin › Email Validation: every saved address with its stored result, bulk re-checks, and what to do with bad ones. */
 export function EmailValidationView() {
+    useDisplayFormats(); // dates, times and counts follow an admin's format change
     const queryClient = useQueryClient();
     const [filter, setFilter] = useState<AddressFilter>({ status: 'all', sort: 'oldest' });
     const [searchInput, setSearchInput] = useState('');
@@ -479,7 +495,7 @@ export function EmailValidationView() {
                     >
                         Check
                     </Button>
-                    <Typography sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)' }}>of this list, in the order shown (max {maxRunSize.toLocaleString()} per check)</Typography>
+                    <Typography sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)' }}>of this list, in the order shown (max {formatCount(maxRunSize)} per check)</Typography>
                 </Box>
 
                 {/* Selection bar */}

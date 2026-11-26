@@ -4,9 +4,11 @@ import { Box, Button, Chip, Typography } from '@mui/material';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import { describeCondition, isConditionComplete } from './applyFilter';
 import type { TableFilterController } from './useTableFilter';
+import { fmtCount, useDisplayFormats } from '@/utils/formats';
 
 /** The applied filter as removable chips above the table; clicking a chip reopens the dialog. */
 export function ActiveFilterChips({ controller }: { controller: TableFilterController }) {
+    useDisplayFormats();
     const { criteria, fields } = controller;
     if (!criteria) return null;
     const entries = Object.entries(criteria.conditions).filter(([key, c]) => isConditionComplete(fields.byKey.get(key), c));
@@ -27,7 +29,7 @@ export function ActiveFilterChips({ controller }: { controller: TableFilterContr
         >
             <FilterListIcon sx={{ fontSize: 16, color: 'var(--crm-text-blue-600)' }} />
             <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--crm-text-blue-800)', mr: 0.5 }}>
-                {controller.matchCount === null ? 'Filtered by' : `${controller.matchCount.toLocaleString('en-IN')} match`}
+                {controller.matchCount === null ? 'Filtered by' : `${fmtCount(controller.matchCount)} match`}
             </Typography>
             {entries.map(([key, c]) => {
                 const field = fields.byKey.get(key)!;

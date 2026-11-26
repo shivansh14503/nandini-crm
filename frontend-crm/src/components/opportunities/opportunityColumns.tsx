@@ -14,13 +14,10 @@ import { useQuotations } from '@/hooks/queries';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import type { Quotation } from '@/types/quotation.types';
 import { formatDateTime } from '@/utils/date';
+import { fmtDayOrRaw, fmtMoney, fmtTimeOrRaw } from '@/utils/formats';
 
-const formatCurrency = (val: number) =>
-    new Intl.NumberFormat('en-IN', {
-        style: 'currency',
-        currency: 'INR',
-        maximumFractionDigits: 0,
-    }).format(val);
+/** ₹ without decimals, in the company number grouping. */
+const formatCurrency = (val: number) => fmtMoney(val, { maxDecimals: 0 });
 
 const plainCellSx = { fontSize: '0.78rem', color: 'var(--crm-slate-700)' } as const;
 
@@ -187,7 +184,7 @@ export function useOpportunityColumns(openRecord: (record: Opportunity) => void,
                                         color: isToday ? 'var(--crm-amber-700)' : 'var(--crm-slate-700)',
                                     }}
                                 >
-                                    {o.nextFollowupDate || '-'}
+                                    {fmtDayOrRaw(o.nextFollowupDate) || '-'}
                                     {isToday && (
                                         <Box
                                             component="span"
@@ -209,7 +206,7 @@ export function useOpportunityColumns(openRecord: (record: Opportunity) => void,
                                 </Typography>
                                 {o.followupType && (
                                     <Typography sx={{ fontSize: '0.7rem', color: 'var(--mui-palette-text-secondary)' }}>
-                                        {o.followupType} {o.nextFollowupTime ? `• ${o.nextFollowupTime}` : ''}
+                                        {o.followupType} {o.nextFollowupTime ? `• ${fmtTimeOrRaw(o.nextFollowupTime)}` : ''}
                                     </Typography>
                                 )}
                             </Box>

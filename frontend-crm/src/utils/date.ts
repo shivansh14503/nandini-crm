@@ -1,12 +1,12 @@
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const pad = (n: number) => String(n).padStart(2, '0');
+import { fmtInstant, fmtWallClock } from './formats';
+import { isWallClock } from './zonedTime';
 
-/** Formats an ISO timestamp as 'dd-MMM-yyyy, hh:mm a' (e.g. '24-Oct-2026, 01:07 PM'). Empty/invalid input → ''. */
+/**
+ * Formats an ISO timestamp on the business clock in the company formats (utils/formats). Not customized: today's
+ * 'dd-MMM-yyyy, hh:mm a' (e.g. '24-Oct-2026, 01:07 PM'). A zone-less `YYYY-MM-DDTHH:mm` business wall clock (e.g. a
+ * contract's renewal reminder) is already business time and prints as stored on every device. Empty/invalid input → ''.
+ */
 export function formatDateTime(iso?: string | null): string {
-    if (!iso) return '';
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return '';
-    const hours = d.getHours() % 12 || 12;
-    const meridiem = d.getHours() < 12 ? 'AM' : 'PM';
-    return `${pad(d.getDate())}-${MONTHS[d.getMonth()]}-${d.getFullYear()}, ${pad(hours)}:${pad(d.getMinutes())} ${meridiem}`;
+    if (isWallClock(iso)) return fmtWallClock(iso, { legacyTime: 'hh:mm A' });
+    return fmtInstant(iso, { legacyTime: 'hh:mm A' });
 }

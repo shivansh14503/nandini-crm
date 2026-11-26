@@ -10,13 +10,15 @@ import GridOnOutlinedIcon from '@mui/icons-material/GridOnOutlined';
 import { errorMessage, secondaryButtonSx } from '@/components/settings/form-customization/builderUi';
 import { auditAdminService, type AuditExport, type AuditExportFormat, type AuditListQuery } from '@/services/auditAdmin.service';
 import { AUDIT_LOG_KEY } from './auditLogUi';
+import { fmtCount } from '@/utils/formats';
 
 const FORMATS: { format: AuditExportFormat; label: string; hint: string; icon: React.ReactNode }[] = [
     { format: 'xlsx', label: 'Excel (.xlsx)', hint: 'Up to 500,000 entries', icon: <GridOnOutlinedIcon fontSize="small" /> },
     { format: 'csv', label: 'CSV (.csv)', hint: 'Up to 1,000,000 entries', icon: <DescriptionOutlinedIcon fontSize="small" /> },
 ];
 const POLL_MS = 1500;
-const count = (value: number) => value.toLocaleString('en-IN');
+/** A count in the company number grouping (Indian until it is changed). */
+const count = (value: number) => fmtCount(value);
 const isPending = (row: AuditExport) => row.status === 'queued' || row.status === 'running';
 
 /** Hands the finished file to the browser, which streams it to disk (the session cookie authenticates it). */

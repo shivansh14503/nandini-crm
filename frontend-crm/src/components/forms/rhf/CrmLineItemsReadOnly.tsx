@@ -4,8 +4,10 @@ import React from 'react';
 import { Box, Divider, Paper, Table, TableBody, TableCell, TableHead, TableRow, Typography } from '@mui/material';
 import { ReadOnlyField } from '../ReadOnlyField';
 import type { CrmLineItemsValues } from './CrmLineItemsSection';
+import { fmtMoney } from '@/utils/formats';
 
-const money = (n: number | undefined) => `₹${(n ?? 0).toLocaleString('en-IN')}`;
+/** ₹ with up to 3 decimals (as typed), in the company number grouping. */
+const money = (n: number | undefined) => fmtMoney(n ?? 0, { minDecimals: 0, maxDecimals: 3 });
 
 const headCellSx = {
     fontSize: '0.7rem',

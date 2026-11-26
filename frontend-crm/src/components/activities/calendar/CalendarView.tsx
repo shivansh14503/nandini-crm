@@ -54,6 +54,8 @@ import { ActivityQuickCreateDialog } from '../ActivityQuickCreateDialog';
 import { useActivityTypeIcon, useActivityTypeLabel } from '../ActivityBadges';
 import { RelatedRecordDrawer } from '../relatedRecord';
 import { timeZoneAbbr, useBusinessClock } from '../activityTime';
+import { useDisplayFormats } from '@/utils/formats';
+import { formatShortDay, shortDayOrder, type DisplayFormats } from '@/lib/display-formats/displayFormats';
 import { CalendarToolbar, type CalendarViewKey } from './CalendarToolbar';
 import {
     CalendarFilters,
@@ -93,6 +95,8 @@ const CUSTOM_VIEWS = { timeGrid3Day: { type: 'timeGrid', duration: { days: 3 } }
 const MONTH_HEADER_FORMAT: FormatterInput = { weekday: 'short' };
 const DAY_HEADER_FORMAT: FormatterInput = { weekday: 'short', day: 'numeric' };
 const EVENT_TIME_FORMAT: FormatterInput = { hour: 'numeric', minute: '2-digit', meridiem: 'short' };
+/** Event times and time-grid labels once the company formats are saved as 24-hour (`13:07`). */
+const TIME_24H_FORMAT: FormatterInput = { hour: '2-digit', minute: '2-digit', hour12: false };
 const LIST_DAY_FORMAT: FormatterInput = { weekday: 'long', day: 'numeric', month: 'short' };
 const noEventsContent = () => 'Nothing scheduled in this period.';
 /** Holidays first in a day, then FullCalendar's usual order. `rank` is an extended prop (holidays 0, the rest 1). */
@@ -104,14 +108,34 @@ const sameSet = (a: readonly string[], b: readonly string[]) => a.length === b.l
 /** `YYYY-MM-DD` formatted for the title ("25 Nov 2026"); `day` is a calendar day, so UTC noon avoids any shift. */
 const fmtDay = (day: string, options: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat('en-IN', { ...options, timeZone: 'UTC' }).format(new Date(`${day}T12:00:00Z`));
 
-/** The toolbar title of a view showing `[start, end)` (calendar days). */
-function viewTitle(view: CalendarViewKey, start: string, end: string): string {
+/**
+ * `25 Nov 2026`, or `Nov 25, 2026` once the company date format is saved as MM/DD/YYYY (the order of the company's
+ * short day labels, see `formatShortDay`).
+ */
+const shortDayWithYear = (day: string, formats: DisplayFormats) =>
+    shortDayOrder(formats) === 'MD' ? `${formatShortDay(day, formats)}, ${day.slice(0, 4)}` : `${formatShortDay(day, formats)} ${day.slice(0, 4)}`;
+
+/**
+ * The toolbar title of a view showing `[start, end)` (calendar days). Until the company saves its formats the title
+ * reads as it always has (`en-IN`); after that day and month follow the company's order (`Thursday, Nov 26, 2026`,
+ * `Nov 23 – 29, 2026` for MM/DD/YYYY; `Thursday, 26 Nov 2026`, `23 – 29 Nov 2026` otherwise).
+ */
+function viewTitle(view: CalendarViewKey, start: string, end: string, formats: DisplayFormats): string {
     if (view === 'month') return fmtDay(start, { month: 'long', year: 'numeric' });
-    if (view === 'day') return fmtDay(start, { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
     const last = addDays(end, -1);
-    if (start.slice(0, 4) !== last.slice(0, 4)) return `${fmtDay(start, { day: 'numeric', month: 'short', year: 'numeric' })} – ${fmtDay(last, { day: 'numeric', month: 'short', year: 'numeric' })}`;
-    if (start.slice(0, 7) !== last.slice(0, 7)) return `${fmtDay(start, { day: 'numeric', month: 'short' })} – ${fmtDay(last, { day: 'numeric', month: 'short', year: 'numeric' })}`;
-    return `${fmtDay(start, { day: 'numeric' })} – ${fmtDay(last, { day: 'numeric', month: 'short', year: 'numeric' })}`;
+    if (!formats.customized) {
+        if (view === 'day') return fmtDay(start, { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
+        if (start.slice(0, 4) !== last.slice(0, 4)) return `${fmtDay(start, { day: 'numeric', month: 'short', year: 'numeric' })} – ${fmtDay(last, { day: 'numeric', month: 'short', year: 'numeric' })}`;
+        if (start.slice(0, 7) !== last.slice(0, 7)) return `${fmtDay(start, { day: 'numeric', month: 'short' })} – ${fmtDay(last, { day: 'numeric', month: 'short', year: 'numeric' })}`;
+        return `${fmtDay(start, { day: 'numeric' })} – ${fmtDay(last, { day: 'numeric', month: 'short', year: 'numeric' })}`;
+    }
+    if (view === 'day') return `${fmtDay(start, { weekday: 'long' })}, ${shortDayWithYear(start, formats)}`;
+    if (start.slice(0, 4) !== last.slice(0, 4)) return `${shortDayWithYear(start, formats)} – ${shortDayWithYear(last, formats)}`;
+    if (start.slice(0, 7) !== last.slice(0, 7)) return `${formatShortDay(start, formats)} – ${shortDayWithYear(last, formats)}`;
+    // Same month: the month is named once (`23 – 29 Nov 2026` / `Nov 23 – 29, 2026`).
+    return shortDayOrder(formats) === 'MD'
+        ? `${formatShortDay(start, formats)} – ${Number(last.slice(8, 10))}, ${last.slice(0, 4)}`
+        : `${Number(start.slice(8, 10))} – ${shortDayWithYear(last, formats)}`;
 }
 
 /** Days on screen (`[start, end)`), the date the view is about and its type, as FullCalendar last reported them. */
@@ -215,6 +239,9 @@ export default function CalendarView() {
     const me = user?.username ?? '';
     const clock = useBusinessClock();
     const timeZone = clock.timeZone;
+    // A saved 24-hour company time format switches the calendar's own times; otherwise FullCalendar's 12-hour defaults.
+    const displayFormats = useDisplayFormats();
+    const use24h = displayFormats.customized && displayFormats.timeFormat === '24h';
     const today = zonedDayOf(clock.now(), timeZone);
 
     const calendarRef = useRef<CalendarRef>(null);
@@ -450,7 +477,7 @@ export default function CalendarView() {
     // ── Toolbar actions ─────────────────────────────────────────────────────
     const changeView = (view: CalendarViewKey) => api()?.changeView(FC_VIEWS[view]);
     const currentView = range?.view ?? initial.view;
-    const title = range ? viewTitle(range.view, range.currentStart, range.currentEnd) : '';
+    const title = range ? viewTitle(range.view, range.currentStart, range.currentEnd, displayFormats) : '';
 
     // A view the width no longer offers (a week on a phone after rotating) switches to that width's default.
     useEffect(() => {
@@ -598,7 +625,8 @@ export default function CalendarView() {
                         defaultTimedEventDuration="00:30:00"
                         eventMinHeight={20}
                         dayHeaderFormat={currentView === 'month' ? MONTH_HEADER_FORMAT : DAY_HEADER_FORMAT}
-                        eventTimeFormat={EVENT_TIME_FORMAT}
+                        eventTimeFormat={use24h ? TIME_24H_FORMAT : EVENT_TIME_FORMAT}
+                        slotHeaderFormat={use24h ? TIME_24H_FORMAT : undefined}
                         listDayFormat={LIST_DAY_FORMAT}
                         noEventsContent={noEventsContent}
                         events={events}

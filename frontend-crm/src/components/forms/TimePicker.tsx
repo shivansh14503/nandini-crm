@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Box, ClickAwayListener, InputAdornment, Paper, Popper, TextField } from '@mui/material';
 import AccessTimeOutlinedIcon from '@mui/icons-material/AccessTimeOutlined';
 import { localNow, parseTimeOfDay } from '@/utils/pastDates';
+import { fmtTime, useDisplayFormats } from '@/utils/formats';
 import { fieldSx } from './FormField';
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -24,12 +25,9 @@ export function formatTime12(mins: number): string {
 export const formatTime24 = (mins: number) => `${pad(Math.floor(mins / 60))}:${pad(mins % 60)}`;
 
 /** Minutes since midnight → the short 12-hour hint shown beside 24-hour times (`4:15 PM`). */
-const hint12 = (mins: number) => {
-    const h = Math.floor(mins / 60);
-    return `${h % 12 || 12}:${pad(mins % 60)} ${h < 12 ? 'AM' : 'PM'}`;
-};
+const hint12 = (mins: number) => fmtTime(mins, { legacy: 'h:mm A' });
 
-/** Hour → `4 PM`, the label under each 24-hour hour in the picker. */
+/** Hour → `4 PM`, the label beside each 24-hour hour in the picker. */
 const hourHint = (h: number) => `${h % 12 || 12} ${h < 12 ? 'AM' : 'PM'}`;
 
 /**
@@ -108,7 +106,10 @@ const VISIBLE_ROWS = 7;
 export interface TimePickerProps {
     value: string;
     onChange: (value: string) => void;
-    /** Stored format of `value` / `onChange`; the field always shows `HH:mm` (24-hour) with a 12-hour hint. Defaults to `12h`. */
+    /**
+     * Stored format of `value` / `onChange`; the field always shows `HH:mm` (24-hour) with a 12-hour hint (no hint once
+     * the company time format is saved as 24-hour). Defaults to `12h`. The company formats never change what is stored.
+     */
     valueFormat?: TimeValueFormat;
     /** The date the time belongs to (`YYYY-MM-DD`): on today, times that have passed are greyed out. */
     date?: string | null;
@@ -129,7 +130,8 @@ export interface TimePickerProps {
 /**
  * Time-of-day picker: a 24-hour `HH:mm` text field that opens two scrollable columns (hours 00–23, minutes).
  * Each hour carries its 12-hour reading (`16 · 4 PM`) and the field shows the picked time in 12-hour form too,
- * so nobody has to convert in their head. Clicking an item updates the value at once. Typing a time
+ * so nobody has to convert in their head (once the company time format is saved as 24-hour, the field already reads
+ * the company's way and the 12-hour hints are left out). Clicking an item updates the value at once. Typing a time
  * (`16:15`, `4:15 pm`) is accepted on blur / Enter.
  * Keyboard: ↓ (or Alt+↓) opens and focuses the columns, ↑/↓ move, ←/→ or Tab switch columns, Enter/Space picks,
  * Escape closes. A stored value that has already passed stays as it is, so older records keep it.
@@ -148,6 +150,9 @@ export function TimePicker({
     now: nowProp,
 }: TimePickerProps) {
     const current = useMemo(() => parseTimeOfDay(value), [value]);
+    // The 12-hour hints help readers of 12-hour times; a company on 24-hour reads the field as it is.
+    const displayFormats = useDisplayFormats();
+    const showHints = !(displayFormats.customized && displayFormats.timeFormat === '24h');
     const display = current === null ? value ?? '' : formatTime24(current);
 
     const [open, setOpen] = useState(false);
@@ -162,7 +167,7 @@ export function TimePicker({
 
     // 12-hour reading of whatever is in the field right now (typed text included).
     const typedMinutes = editing ? parseTimeOfDay(text) : current;
-    const fieldHint = typedMinutes === null ? null : hint12(typedMinutes);
+    const fieldHint = typedMinutes === null || !showHints ? null : hint12(typedMinutes);
 
     // Earliest allowed time today (null on other days). No date yet counts as today: that's where the time lands.
     const now = nowProp === undefined ? localNow() : nowProp;
@@ -461,7 +466,7 @@ export function TimePicker({
                                         const isSelected = c.selectedIndex === index;
                                         const isFocused = focus?.col === col && focus.index === index;
                                         const isDisabled = disabledAt(col, index) && !isSelected;
-                                        const hourHintText = col === 0 ? hourHint(HOURS[index]) : null;
+                                        const hourHintText = col === 0 && showHints ? hourHint(HOURS[index]) : null;
                                         return (
                                             <Box
                                                 key={index}

@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { prisma } from '../../config/prisma.js';
+import { companyFormatsService } from '../company-formats/companyFormats.service.js';
+import type { DisplayFormats } from '../company-formats/core/displayFormats.js';
 import { CATEGORY_MODULES } from '../form-configs/formConfig.defaults.js';
 import { closesLeadFromMeta, describeLimits, describeRatingRule, newLeadLimitsFrom, ratingRuleFromMeta } from '../leads/lead.rating.js';
 import type { FormConfigAuditMeta } from '../form-configs/formConfig.service.js';
@@ -345,8 +347,8 @@ function fieldRevisions(row: ParsedRow, ctx: AuditContext, base: Base): AuditRev
     }
 }
 
-function toRevisions(row: ParsedRow, ctx: AuditContext, author: string): AuditRevisionItem[] {
-    const base: Base = { author, time: displayTime(row.createdAt) };
+function toRevisions(row: ParsedRow, ctx: AuditContext, author: string, formats: DisplayFormats): AuditRevisionItem[] {
+    const base: Base = { author, time: displayTime(row.createdAt, formats) };
     if (row.entityType === 'DropdownCategory') return categoryRevisions(row, ctx, base);
     if (row.entityType === 'DropdownOption') return optionRevisions(row, ctx, base);
     if (row.entityType === 'ModuleSetting') return settingRevisions(row, ctx, base);
@@ -405,11 +407,14 @@ export const formConfigAuditService = {
     async forScope(params: unknown, limit: number) {
         const { entityId: scope } = scopeParamsSchema.parse(params);
 
-        const rows = await prisma.auditLog.findMany({
-            where: { entityType: { in: [...FORM_CONFIG_ENTITY_TYPES] } },
-            orderBy: { createdAt: 'desc' },
-            take: scope === 'all' ? limit : Math.min(limit * 10, MAX_SCANNED_ROWS),
-        });
+        const [rows, formats] = await Promise.all([
+            prisma.auditLog.findMany({
+                where: { entityType: { in: [...FORM_CONFIG_ENTITY_TYPES] } },
+                orderBy: { createdAt: 'desc' },
+                take: scope === 'all' ? limit : Math.min(limit * 10, MAX_SCANNED_ROWS),
+            }),
+            companyFormatsService.load(),
+        ]);
         const parsed: ParsedRow[] = rows.map((row) => {
             const rawChanges = parseChanges(row.changesJson);
             const changes = rawChanges && typeof rawChanges === 'object' && !Array.isArray(rawChanges) ? (rawChanges as Changes) : {};
@@ -443,7 +448,7 @@ export const formConfigAuditService = {
             entityType: 'form-configs',
             entityId: scope,
             entries,
-            revisions: scoped.flatMap((row) => toRevisions(row, contextOf(row), authorOf(row))),
+            revisions: scoped.flatMap((row) => toRevisions(row, contextOf(row), authorOf(row), formats)),
         };
     },
 };

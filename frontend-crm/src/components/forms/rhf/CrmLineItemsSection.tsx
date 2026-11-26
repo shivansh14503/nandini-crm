@@ -27,6 +27,7 @@ import type { Product } from '@/types/product.types';
 import { FIELD_MAX_LENGTH, FIELD_SIZE_WIDTH } from '../fieldSizing';
 import { useFormMode } from '@/context/FormModeContext';
 import { CrmLineItemsReadOnly } from './CrmLineItemsReadOnly';
+import { fmtMoney, fmtNumber, useDisplayFormats } from '@/utils/formats';
 import {
     OPPORTUNITY_CURRENCIES,
     OPPORTUNITY_TAX_RATES,
@@ -73,6 +74,9 @@ function productTaxRate(product: Product): string {
 
 const NO_PRODUCTS: Product[] = [];
 
+/** Line-item amounts keep up to 3 decimals (as typed), in the company number grouping. */
+const LINE_MONEY = { minDecimals: 0, maxDecimals: 3 } as const;
+
 export function parseTaxRate(taxRateStr: string): number {
     if (!taxRateStr || taxRateStr === '--None--' || taxRateStr === 'GST 0%') return 0;
     const match = taxRateStr.match(/(\d+)%/);
@@ -96,6 +100,8 @@ export const DEFAULT_LINE_ITEMS_VALUES: CrmLineItemsValues = {
 // ══════════════════════════════════════════════════════════════════════
 export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEditorProps) {
     const isView = useFormMode().mode === 'view';
+    // Amounts are formatted while rendering: re-render when the company formats change.
+    useDisplayFormats();
     const currency = value.currency || 'Indian Rupee: ₹';
     const groupName = value.groupName || '';
     const lineItems = Array.isArray(value.lineItems) ? value.lineItems : [];
@@ -465,7 +471,7 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
                                         {/* Sale Price (Readonly/calculated) */}
                                         <TextField
                                             size="small"
-                                            value={item.salePrice.toLocaleString('en-IN')}
+                                            value={fmtNumber(item.salePrice, { maxDecimals: 3 })}
                                             disabled
                                             sx={{
                                                 ...fieldSx,
@@ -481,7 +487,7 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
                                         <Box sx={{ display: 'flex', gap: 0.5 }}>
                                             <TextField
                                                 size="small"
-                                                value={item.taxAmount.toLocaleString('en-IN')}
+                                                value={fmtNumber(item.taxAmount, { maxDecimals: 3 })}
                                                 disabled
                                                 sx={{
                                                     flex: 1,
@@ -511,7 +517,7 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
                                         {/* Total */}
                                         <TextField
                                             size="small"
-                                            value={item.total.toLocaleString('en-IN')}
+                                            value={fmtNumber(item.total, { maxDecimals: 3 })}
                                             disabled
                                             sx={{
                                                 ...fieldSx,
@@ -647,13 +653,13 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                             <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)' }}>Total Gross:</Typography>
                             <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--mui-palette-text-primary)' }}>
-                                ₹{totalAmount.toLocaleString('en-IN')}
+                                {fmtMoney(totalAmount, LINE_MONEY)}
                             </Typography>
                         </Box>
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                             <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)' }}>Item Discounts:</Typography>
                             <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--mui-palette-error-main)' }}>
-                                - ₹{totalDiscount.toLocaleString('en-IN')}
+                                - {fmtMoney(totalDiscount, LINE_MONEY)}
                             </Typography>
                         </Box>
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -688,25 +694,25 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                             <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)' }}>Total:</Typography>
                             <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>
-                                ₹{totalAmount.toLocaleString('en-IN')}
+                                {fmtMoney(totalAmount, LINE_MONEY)}
                             </Typography>
                         </Box>
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                             <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)' }}>Discount:</Typography>
                             <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--mui-palette-error-main)' }}>
-                                - ₹{totalDiscount.toLocaleString('en-IN')}
+                                - {fmtMoney(totalDiscount, LINE_MONEY)}
                             </Typography>
                         </Box>
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                             <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)' }}>Subtotal:</Typography>
                             <Typography sx={{ fontSize: '0.85rem', fontWeight: 700 }}>
-                                ₹{subtotal.toLocaleString('en-IN')}
+                                {fmtMoney(subtotal, LINE_MONEY)}
                             </Typography>
                         </Box>
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                             <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)' }}>Tax:</Typography>
                             <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--crm-text-blue-600)' }}>
-                                + ₹{totalTax.toLocaleString('en-IN')}
+                                + {fmtMoney(totalTax, LINE_MONEY)}
                             </Typography>
                         </Box>
                         <Divider sx={{ my: 0.5 }} />
@@ -715,7 +721,7 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
                                 Grand Total:
                             </Typography>
                             <Typography sx={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--crm-green-700)' }}>
-                                ₹{grandTotal.toLocaleString('en-IN')}
+                                {fmtMoney(grandTotal, LINE_MONEY)}
                             </Typography>
                         </Box>
                     </Box>

@@ -5,6 +5,7 @@ import { describe, it } from 'node:test';
 import { pathToFileURL } from 'node:url';
 import { DOCUMENT_DEST, expectedFrontendFiles } from '../../scripts/syncPdfDocument.js';
 import { DRAWER_LAYOUT_DEST, expectedDrawerLayoutFiles } from '../../scripts/syncDrawerLayout.js';
+import { DISPLAY_FORMATS_DEST, expectedDisplayFormatsFiles } from '../../scripts/syncDisplayFormats.js';
 import { FIELD_MAX_LENGTH } from '../config/fieldLimits.js';
 import { TALLY_SERIAL_LENGTH, tallySerialIssue } from './tallySerial.js';
 import { leadSourceDetailIssues, PARTNER_LEAD_SOURCE, REFERRED_BY_LEAD_SOURCES } from '../modules/shared/leadSource.js';
@@ -239,6 +240,14 @@ describe('backend ↔ frontend contract', { skip }, () => {
         assert.deepEqual(readdirSync(DRAWER_LAYOUT_DEST).sort(), Object.keys(expected).sort());
         for (const [name, content] of Object.entries(expected)) {
             assert.equal(readFileSync(path.join(DRAWER_LAYOUT_DEST, name), 'utf8'), content, `${name} is out of date`);
+        }
+    });
+
+    it('frontend lib/display-formats is an exact copy of the company display formats core (run npm run sync:display-formats)', () => {
+        const expected = expectedDisplayFormatsFiles();
+        assert.deepEqual(readdirSync(DISPLAY_FORMATS_DEST).sort(), Object.keys(expected).sort());
+        for (const [name, content] of Object.entries(expected)) {
+            assert.equal(readFileSync(path.join(DISPLAY_FORMATS_DEST, name), 'utf8'), content, `${name} is out of date`);
         }
     });
 

@@ -7,6 +7,8 @@ import { NOTE_TYPE } from '@/types/activity.types';
 import type { ActivityFormValues } from '@/validations/activity.schema';
 import { fromApiSchedule, toApiSchedule } from '@/utils/activitySchedule';
 import { instantToZonedWallClock, isDay, isWallClock } from '@/utils/zonedTime';
+import { fmtDay, fmtShortDay, fmtTime, getDisplayFormats } from '@/utils/formats';
+import { shortDayOrder } from '@/lib/display-formats/displayFormats';
 
 /**
  * Time helpers of the activity screens. Activities are stored as true instants and entered, shown and grouped in the
@@ -18,7 +20,6 @@ import { instantToZonedWallClock, isDay, isWallClock } from '@/utils/zonedTime';
 export const DEFAULT_TIME_ZONE = 'Asia/Kolkata';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
 
 export interface BusinessClock {
     timeZone: string;
@@ -58,18 +59,19 @@ function dayParts(day: string) {
     return { y, m, d, weekday: new Date(Date.UTC(y, m - 1, d)).getUTCDay() };
 }
 
-/** `2026-11-25` → `Wed 25 Nov` (plus the year when `withYear`). */
+/**
+ * `2026-11-25` → `Wed 25 Nov` (`Wed Nov 25` for a saved MM/DD/YYYY). With the year: `Wed 25 Nov 2026` until the
+ * company formats are saved, then the company date format (`Wed 25/11/2026`). Company formats: utils/formats.
+ */
 export function formatDayLabel(day: string, { weekday = true, withYear = false }: { weekday?: boolean; withYear?: boolean } = {}): string {
     if (!isDay(day.slice(0, 10))) return day;
-    const { y, m, d, weekday: wd } = dayParts(day);
-    return `${weekday ? `${WEEKDAYS[wd]} ` : ''}${d} ${MONTHS[m - 1]}${withYear ? ` ${y}` : ''}`;
+    if (!withYear) return fmtShortDay(day, { weekday });
+    return fmtDay(day, { weekday, legacy: weekday ? 'ddd D MMM YYYY' : 'D MMM YYYY' });
 }
 
-/** `…T14:05` → `2:05 PM`. */
+/** `…T14:05` → `2:05 PM` (`14:05` for a saved 24-hour format). */
 export function formatWallTime(wall: string): string {
-    const h = Number(wall.slice(11, 13));
-    const min = wall.slice(14, 16);
-    return `${h % 12 || 12}:${min} ${h < 12 ? 'AM' : 'PM'}`;
+    return fmtTime(wall.slice(11, 16));
 }
 
 /** The schedule fields of an activity or calendar item. */
@@ -85,7 +87,8 @@ export interface ScheduleLike {
  * The time an activity takes place, in the business timezone:
  *  • timed: `Wed 25 Nov, 10:30 AM – 11:30 AM IST` (the end's day only when it differs);
  *  • all-day: `Wed 25 Nov` or `Wed 25 – Thu 26 Nov`.
- * The year shows when it isn't the current one. '' when there is no schedule (notes).
+ * The year shows when it isn't the current one. '' when there is no schedule (notes). Dates and times follow the
+ * company formats (utils/formats) once saved.
  */
 export function formatActivityWhen(item: ScheduleLike, timeZone: string, now: Date = new Date()): string {
     const thisYear = Number(instantToZonedWallClock(now, timeZone).slice(0, 4));
@@ -97,9 +100,12 @@ export function formatActivityWhen(item: ScheduleLike, timeZone: string, now: Da
         const b = dayParts(last);
         const withYear = a.y !== thisYear || b.y !== thisYear;
         if (first === last) return formatDayLabel(first, { withYear });
-        if (a.y === b.y && a.m === b.m) return `${WEEKDAYS[a.weekday]} ${a.d} – ${formatDayLabel(last, { withYear })}`;
-        if (a.y === b.y) return `${formatDayLabel(first)} – ${formatDayLabel(last, { withYear })}`;
-        return `${formatDayLabel(first, { withYear: true })} – ${formatDayLabel(last, { withYear: true })}`;
+        const formats = getDisplayFormats();
+        // Saved formats print a year in the company pattern (`Wed 25/11/2026`): both ends then carry it in full.
+        if (a.y !== b.y || (withYear && formats.customized)) return `${formatDayLabel(first, { withYear: true })} – ${formatDayLabel(last, { withYear: true })}`;
+        // `Wed 25 – Thu 26 Nov` reads well only with the day before the month.
+        if (a.m === b.m && shortDayOrder(formats) === 'DM') return `${WEEKDAYS[a.weekday]} ${a.d} – ${formatDayLabel(last, { withYear })}`;
+        return `${formatDayLabel(first)} – ${formatDayLabel(last, { withYear })}`;
     }
     if (!item.startAt) return '';
     const start = new Date(item.startAt);

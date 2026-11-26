@@ -27,6 +27,7 @@ import {
 import { CRM_MODULE_LABELS, type CrmModuleKey, type FormConfigsPayload } from '@/types/formConfig.types';
 import { panelHeaderSx, surfaceSx } from '../form-customization/builderUi';
 import { draftConfig, type DraftMode, type ScorecardDraft } from './scorecardDraft';
+import { fmtCount, useDisplayFormats } from '@/utils/formats';
 
 /** Each module's list screen. */
 const LIST_ROUTE: Record<CrmModuleKey, string> = {
@@ -100,6 +101,7 @@ export function ScorecardPreview({ module, configs, draft, mode, defaults }: Sco
     const { rows, loading, failed } = usePreviewRecords(module);
     const [activeId, setActiveId] = useState<string>(SCORECARD_ALL_ID);
     const noun = CRM_MODULE_LABELS[module].toLowerCase();
+    useDisplayFormats(); // the record count below follows the company number grouping
 
     const items = useMemo((): StatusSummaryItem<string>[] | null => {
         if (mode === 'off') return null;
@@ -185,7 +187,7 @@ export function ScorecardPreview({ module, configs, draft, mode, defaults }: Sco
                         ? `Couldn't load the ${noun}, so every card shows 0.`
                         : rows.length === 0
                           ? `No ${noun} yet, so every card shows 0.`
-                          : `${rows.length.toLocaleString('en-IN')} ${rows.length === 1 ? singular(noun) : noun}. On the list, the cards count the records in the view you have open.`}
+                          : `${fmtCount(rows.length)} ${rows.length === 1 ? singular(noun) : noun}. On the list, the cards count the records in the view you have open.`}
                 </Typography>
             )}
         </Box>

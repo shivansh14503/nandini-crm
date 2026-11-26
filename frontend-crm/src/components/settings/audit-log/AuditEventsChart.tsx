@@ -3,6 +3,7 @@
 import React from 'react';
 import { Box, ButtonBase, Tooltip, Typography } from '@mui/material';
 import type { AuditDayCount } from '@/services/auditAdmin.service';
+import { fmtCount, fmtDay, fmtShortDay, useDisplayFormats } from '@/utils/formats';
 
 /** Stacked bottom to top in this order; colours are theme tokens with their own dark-mode steps (color-scale.css). */
 const SERIES = [
@@ -12,15 +13,12 @@ const SERIES = [
 ] as const;
 
 const PLOT_HEIGHT = 112;
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-/** `2026-11-21` → `21 Nov` (with the year when asked). */
+/** `2026-11-21` → `21 Nov` (with the year when asked: `21 Nov 2026`); the company date style once saved. */
 export function shortDate(date: string, withYear = false): string {
-    const [y, m, d] = date.split('-').map(Number);
-    return `${d} ${MONTHS[m - 1]}${withYear ? ` ${y}` : ''}`;
+    return withYear ? fmtDay(date, { legacy: 'D MMM YYYY' }) : fmtShortDay(date);
 }
 
-const n = (value: number) => value.toLocaleString('en-IN');
+const n = (value: number) => fmtCount(value);
 
 function Swatch({ color }: { color: string }) {
     return <Box component="span" aria-hidden sx={{ width: 10, height: 10, borderRadius: '3px', backgroundColor: color, flexShrink: 0 }} />;
@@ -28,6 +26,7 @@ function Swatch({ color }: { color: string }) {
 
 /** Events per day, by category, as stacked bars; a click on a day filters the list to it. */
 export function AuditEventsChart({ days, onPickDay }: { days: AuditDayCount[]; onPickDay: (date: string) => void }) {
+    useDisplayFormats(); // tick dates and counts follow an admin's format change
     const max = Math.max(1, ...days.map((d) => d.total));
     const totals = SERIES.map((s) => days.reduce((sum, d) => sum + d[s.key], 0));
     const gap = days.length > 90 ? 0 : days.length > 45 ? 1 : 2;

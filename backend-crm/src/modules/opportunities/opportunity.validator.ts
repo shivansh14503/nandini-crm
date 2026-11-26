@@ -20,6 +20,7 @@ import {
     optionalUpperText,
     stringList,
 } from '../../validators/common.js';
+import { DEFAULT_DISPLAY_FORMATS, formatMoney, type DisplayFormats } from '../company-formats/core/displayFormats.js';
 import { lineItemListSchema } from '../shared/lineItems.js';
 
 /** Commission Amounts up to this default to Commission Type Self; larger ones to Other. */
@@ -46,12 +47,20 @@ export const PAYEE_BANK_FIELDS = [
 ] as const;
 export type PayeeBankKey = (typeof PAYEE_BANK_FIELDS)[number]['key'];
 
-/** Every payee bank detail left empty while the commission is above 1,000 (Commission Type Other). */
-export function payeeBankIssues(input: { commission?: string; commissionAmount?: number } & Partial<Record<PayeeBankKey, string>>): { path: string[]; message: string }[] {
+/**
+ * Every payee bank detail left empty while the commission is above 1,000 (Commission Type Other). The message is
+ * mirrored in frontend-crm/src/validations/opportunity.schema.ts `commissionIssues`; the limit is written in the
+ * company grouping (`₹1,000` in both Indian and international grouping, so the API keeps the default formats here).
+ */
+export function payeeBankIssues(
+    input: { commission?: string; commissionAmount?: number } & Partial<Record<PayeeBankKey, string>>,
+    formats: DisplayFormats = DEFAULT_DISPLAY_FORMATS,
+): { path: string[]; message: string }[] {
     if (!hasCommission(input) || defaultCommissionType(input.commissionAmount) !== 'Other') return [];
+    const limit = formatMoney(SMALL_COMMISSION_LIMIT, formats, { maxDecimals: 0 });
     return PAYEE_BANK_FIELDS.filter((f) => !input[f.key]?.trim()).map((f) => ({
         path: [f.key],
-        message: `${f.label} is required when Commission Amount is above ₹${SMALL_COMMISSION_LIMIT.toLocaleString('en-IN')}.`,
+        message: `${f.label} is required when Commission Amount is above ${limit}.`,
     }));
 }
 

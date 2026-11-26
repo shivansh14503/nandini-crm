@@ -15,8 +15,10 @@ import { secondaryButtonSx } from "@/components/settings/form-customization/buil
 import type { AuditUserActivity } from "@/services/auditAdmin.service";
 import { CATEGORY_TABS, type CategoryTab } from "./auditLogFilter";
 import { UserAvatar, UserBadges, relativeTime } from "./auditLogUi";
+import { fmtCount } from "@/utils/formats";
 
-const count = (value: number) => value.toLocaleString("en-IN");
+/** A count in the company number grouping (Indian until it is changed). */
+const count = (value: number) => fmtCount(value);
 
 function Fact({
   label,

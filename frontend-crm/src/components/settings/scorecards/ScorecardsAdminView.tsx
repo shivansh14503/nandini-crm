@@ -41,6 +41,7 @@ import { useLeaveGuard } from '../useLeaveGuard';
 import { ScorecardEditor } from './ScorecardEditor';
 import { ScorecardPreview } from './ScorecardPreview';
 import { draftMode, draftPayload, useScorecardDraft, type DraftMode } from './scorecardDraft';
+import { fmtInstant, useDisplayFormats } from '@/utils/formats';
 
 /**
  * Admin › List Scorecards: the summary cards above each module's list. Pick a module, switch its cards on or off,
@@ -65,10 +66,8 @@ function savedMode(module: CrmModuleKey, saved: ScorecardConfig | undefined): Dr
     return SCORECARD_MODULES[module].builtInCards ? 'builtin' : 'off';
 }
 
-const formatSavedAt = (iso: string) => {
-    const d = new Date(iso);
-    return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
-};
+/** `3 Dec 2026, 10:42 am` on the business clock (the company formats once saved); '' when invalid. */
+const formatSavedAt = (iso: string) => fmtInstant(iso, { legacyDate: 'D MMM YYYY', legacyTime: 'h:mm a' });
 
 const moduleTint = (module: CrmModuleKey) => getModuleColor(moduleKeyFrom(module) ?? 'leads');
 
@@ -102,6 +101,7 @@ const UnsavedDot = () => (
 );
 
 export function ScorecardsAdminView({ module }: { module: CrmModuleKey }) {
+    useDisplayFormats(); // "Last saved …" follows an admin's format change
     const router = useRouter();
     const queryClient = useQueryClient();
     const scorecardsQuery = useScorecards();

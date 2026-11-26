@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { AuthUser } from '../../types/user.types.js';
+import { DEFAULT_DISPLAY_FORMATS, type DisplayFormats } from '../company-formats/core/displayFormats.js';
 import {
     activityWhen,
     assignmentKey,
@@ -176,6 +177,35 @@ describe('notification texts', () => {
         // 10:00 IST as a true instant.
         assert.equal(row.dueAt?.toISOString(), '2026-11-25T04:30:00.000Z');
         assert.equal(row.entityModule, 'contracts');
+    });
+});
+
+describe('notification texts in saved company formats', () => {
+    const us: DisplayFormats = { ...DEFAULT_DISPLAY_FORMATS, customized: true, dateFormat: 'MM/DD/YYYY', timeFormat: '24h' };
+    const later = { ...activity, startAt: new Date(activity.startAt!.getTime() + 3 * DAY) };
+
+    it('writes times in 24-hour and day labels month first', () => {
+        assert.equal(reminderText(activity, now, us).body, 'Starts at 10:30 (in 15 min) · Related to LD-0012 Ramesh');
+        assert.equal(reminderText(later, now, us).body, 'Starts on Sat Nov 28 at 10:30 (in 3 days) · Related to LD-0012 Ramesh');
+        assert.equal(assignmentText(later, 'Palak', now, us).body, 'Meeting · Sat Nov 28, 10:30 · Related to LD-0012 Ramesh · by Palak');
+        assert.equal(invitationText(activity, 'Palak', now, us).body, 'Today, 10:30 · Related to LD-0012 Ramesh · from Palak');
+        const multi = { ...activity, allDay: true, startAt: new Date('2026-11-25T18:30:00.000Z'), endAt: new Date('2026-11-28T18:30:00.000Z') };
+        assert.equal(activityWhen(multi, now, us), 'All day, Thu Nov 26 – Sat Nov 28');
+    });
+
+    it('a saved day-first format keeps the day labels and switches only the clock', () => {
+        const dmy24: DisplayFormats = { ...DEFAULT_DISPLAY_FORMATS, customized: true, dateFormat: 'DD/MM/YYYY', timeFormat: '24h' };
+        assert.equal(reminderText(later, now, dmy24).body, 'Starts on Sat 28 Nov at 10:30 (in 3 days) · Related to LD-0012 Ramesh');
+        const pm = { ...activity, startAt: new Date('2026-11-25T13:00:00.000Z') }; // 18:30 IST
+        assert.equal(reminderText(pm, now, dmy24).body, 'Starts at 18:30 (in 8 h 15 min) · Related to LD-0012 Ramesh');
+        assert.equal(reminderText(pm, now).body, 'Starts at 6:30 PM (in 8 h 15 min) · Related to LD-0012 Ramesh');
+    });
+
+    it('describes a contract renewal in the saved formats', () => {
+        const contract = { id: 'c1', contractNumber: 'CON-0007', contractTitle: 'Tally TSS', organizationName: 'ACME LTD', renewalReminderDate: new Date('2026-11-25T15:00:00.000Z') };
+        assert.equal(contractRenewalText(contract, TZ, us).body, 'CON-0007 · ACME LTD · Reminder set for Wed Nov 25, 15:00');
+        assert.equal(contractRenewalNotification(contract, 'ravi', TZ, us).body, 'CON-0007 · ACME LTD · Reminder set for Wed Nov 25, 15:00');
+        assert.equal(contractRenewalText(contract, TZ).body, 'CON-0007 · ACME LTD · Reminder set for Wed 25 Nov, 3:00 PM');
     });
 });
 

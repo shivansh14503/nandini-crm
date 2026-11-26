@@ -30,7 +30,8 @@ import { auditLedgerService } from './auditLedger.service.js';
  *   GET /:id      → { entry, changes, fields: [{ key, label, before, after }], details: [{ key, label, value }],
  *                   related: AuditListItem[] (same request, first 100), relatedCount,
  *                   actions: { undo, restore: { available, reason? } | null }, reversedBy, reverses: AuditListItem | null }
- *                 — 404 when there's no such entry
+ *                 — 404 when there's no such entry. Values read as stored until company formats are saved; then days,
+ *                   date-times and amount fields follow them (auditAdmin.present.ts `cellValue`; exports never do)
  *   GET /:id/undo → { id, canUndo, fields: [{ key, label, from, to, current, status: ready|conflict|already|blocked }] }
  *                   (values as shown); 409 NOT_UNDOABLE (not an UPDATE / STATUS_CHANGE of a CRM record) or
  *                   ALREADY_REVERSED; 404 when the record is deleted or gone

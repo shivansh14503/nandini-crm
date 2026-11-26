@@ -11,6 +11,8 @@ import { FORM_CONFIG_SYNC_ENTITY } from '@/services/formConfig.service';
 import { DRAWER_LAYOUT_SYNC_ENTITY } from '@/services/drawerLayout.service';
 import { DRAWER_LAYOUTS_QUERY_KEY } from '@/hooks/queries/useDrawerLayouts';
 import { MASTER_DATA_SYNC_ENTITY } from '@/services/masterData.service';
+import { COMPANY_FORMATS_SYNC_ENTITY } from '@/services/companyFormats.service';
+import { COMPANY_FORMATS_QUERY_KEY } from '@/hooks/queries/useCompanyFormats';
 
 export function QueryProvider({ children }: { children: React.ReactNode }) {
     const [queryClient] = useState(
@@ -40,6 +42,11 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
                 }
                 if (entity === DRAWER_LAYOUT_SYNC_ENTITY) {
                     queryClient.invalidateQueries({ queryKey: DRAWER_LAYOUTS_QUERY_KEY });
+                    return;
+                }
+                // Admin › Company formats: refetch even where nothing observes the query, so the display store updates.
+                if (entity === COMPANY_FORMATS_SYNC_ENTITY) {
+                    queryClient.invalidateQueries({ queryKey: COMPANY_FORMATS_QUERY_KEY, refetchType: 'all' });
                     return;
                 }
                 // Writes that change the user directory / masters behind the lookups (e.g. a user's company email).

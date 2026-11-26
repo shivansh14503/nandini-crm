@@ -5,7 +5,8 @@
 > (`origin`, `lockedFields`, `409 FOLLOW_UP_ACTIVITY_LOCKED`, the follow-up side effects of lead / opportunity saves); P2-1: `/api/admin/integrations`, Admin › API
 > Integrations; Profile Phase 1: `/api/me` (My Profile), `/api/user-photos` and `POST /api/auth/change-password`; and
 > Profile Phase 2: `/api/admin/users` (Admin › Users) with the must-change-password claim; Profile Phase 3:
-> `/api/me/preferences` (My Profile › Notifications)) plus the planned ones.
+> `/api/me/preferences` (My Profile › Notifications); Profile Phase 5: `/api/company-formats` (Admin › Company formats), with PR5b's audit field values in the company formats)
+> plus the planned ones.
 > When you add, change or remove a route, update this file in the same change (the route files'
 > header comments are the per-module source of truth; keep them in step too).
 > Related: [System design](system-design.md) · [Database design](database-design.md) · [Build plan](build-plan.md)
@@ -383,6 +384,38 @@ ageing and scorecards keep reading the record's own fields; the activity never c
 | GET | `/` 🔐 | Settings, every module's rule, current FY, each module's next number |
 | PUT | `/` 🔐 | `{ companyPrefix, separator, fyStartMonth, fyFormat, series: [...] }` |
 
+**Company formats** — `/company-formats` (Admin › Company formats, Profile Phase 5;
+`backend-crm/src/modules/company-formats/companyFormats.routes.ts`, route header comment = source of truth). How dates,
+times and numbers are **shown** across the CRM, its quotation PDFs, the morning email, new bell notification texts and
+the admin audit log (times, and once saved the dates and amounts in its Before / After values). Display only: stored values and every API field (ISO dates, plain numbers) never change format, nor do
+exports. All three routes sit behind the must-change-password gate (403 `PASSWORD_CHANGE_REQUIRED`; the frontend
+bootstrap skips the read while the claim is set).
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/` | Any signed-in user: `CompanyFormatsDto` (below). No saved setting → the defaults with `customized: false` |
+| PUT | `/` 🔐 | `{ dateFormat, timeFormat, numberGrouping }` (all three required, unknown keys refused) → `{ success, data: CompanyFormatsDto, message: 'Company formats saved' }`. Saving the stored values writes and audits nothing. Otherwise upserts the single row and audits `CompanyFormats UPDATE` (the first save records `customized: false → true`) |
+| DELETE | `/` 🔐 | Reset to the CRM defaults: deletes the row (screens go back to their pre-Phase-5 styles) → `{ success, data: CompanyFormatsDto, message: 'Company formats reset to the CRM defaults' }`; audited `CompanyFormats UPDATE` (`customized: true → false`). Nothing saved → no write, no audit |
+
+```ts
+interface CompanyFormatsDto {
+  dateFormat: 'DD-MMM-YYYY' | 'DD MMM YYYY' | 'DD/MM/YYYY' | 'DD-MM-YYYY' | 'MM/DD/YYYY' | 'YYYY-MM-DD';
+  timeFormat: '12h' | '24h';
+  numberGrouping: 'indian' | 'international';
+  customized: boolean;          // false = never saved / reset: every screen keeps its pre-Phase-5 style
+  currency: { code: 'INR'; symbol: '₹'; name: 'Indian Rupee'; decimals: 2 }; // informational, not a setting
+  timeZone: string;             // BUSINESS_TIMEZONE
+  updatedAt: string | null;     // ISO; null while not customized
+  updatedBy: string | null;     // username; null while not customized
+}
+```
+
+Errors: 400 `VALIDATION_ERROR` (`errors[].path` `['dateFormat']` "Pick a date format from the list.", `['timeFormat']`
+"Pick 12-hour or 24-hour time.", `['numberGrouping']` "Pick Indian or International number grouping.", or an unknown
+key); 401; 403 `FORBIDDEN` (PUT / DELETE by a non-admin role); 403 `PASSWORD_CHANGE_REQUIRED`. The value lists and
+formatters are `backend-crm/src/modules/company-formats/core/displayFormats.ts`, copied to
+`frontend-crm/src/lib/display-formats` by `npm run sync:display-formats` (checked by `contractSync.test.ts`).
+
 **Holidays** — `/holidays` (Admin › Holidays; `backend-crm/src/modules/holidays`, route header comment = source of truth)
 
 | Method | Path | Description |
@@ -515,7 +548,7 @@ Planned: `POST /sync` (P2-5), `PATCH /:id { importMeetings }` (P2-8).
 | GET | `/facets?from&to` | Filter options with counts for the range (default the last 30 days, max 366): `{ from, to, total, users, modules, actions, categories, severities, sources }`, each `[{ value, label, count }]`, most used first (`users[].label` = full name) |
 | GET | `/users?from&to` | Users tab: `{ from, to, users: [{ username, name, role, department, email, status, onLeave, isGroupUser, photoUrl, lastLoginAt, lastLogin, lastActivityAt, lastActivity, lastActivityLabel, total, data, config, security, signIns, failedSignIns }] }`. Every user in the user list (inactive ones too; group accounts only once they have entries), `system` (background jobs) once it has entries, and any other username with entries in the range (`status`: `active` / `inactive` / `system` / `unknown`). `total` / `data` / `config` / `security` / `signIns` / `failedSignIns` count the range (default the last 30 days, max 366); `lastActivity*` is the user's newest entry any time (`lastActivityLabel` e.g. `Updated · Leads`), `lastLogin*` the user's last successful sign-in; `lastLogin` / `lastActivity` in the business timezone; `photoUrl` is `/api/user-photos/<id>` or null (always null for `system` / `unknown`). Most active first. A user's own entries are `GET /?user=<username>`; their report is `POST /exports` with that filter |
 | GET | `/stats?from&to` | Summary strip: `{ from, to, today, failedSignIns24h, accessDenied24h, deletes7d, total, mostActiveUsers: [{ username, label, count }] (top 5, jobs left out), eventsPerDay: [{ date, total, data, config, security }] }`. `today` / `24h` / `7d` are fixed windows; the rest follow the range (default the last 30 days, max 366); every day of the range is listed, empty ones as 0 |
-| GET | `/:id` | `{ entry, changes, fields, details, related, relatedCount }`: `entry` = list item plus `sessionId`, `httpMethod`, `route`, `userAgent`; `changes` = the stored JSON; `fields` = `[{ key, label, before, after }]` labelled from the form configuration (custom fields included; `before` null for a create, `after` null for a delete); `details` = `[{ key, label, value }]` for everything else the entry recorded (sign-in IP, refused path, import counts, reason, follow-up); `related` = the first 100 other entries of the same request (`relatedCount` = all of them; filter `requestId` for the rest); `actions` = `{ undo, restore }`, each `{ available, reason? }` or null when the entry doesn't offer it; `reversedBy` / `reverses` = the REVERT / RESTORE entry that undid this one, or the entry this one undid (list items, or null). 404 when there's no such entry |
+| GET | `/:id` | `{ entry, changes, fields, details, related, relatedCount }`: `entry` = list item plus `sessionId`, `httpMethod`, `route`, `userAgent`; `changes` = the stored JSON; `fields` = `[{ key, label, before, after }]` labelled from the form configuration (custom fields included; `before` null for a create, `after` null for a delete; values read as stored until company formats are saved, then `YYYY-MM-DD` days, date-times and amount-type fields follow the company formats; `details` and the undo preview likewise, exports never); `details` = `[{ key, label, value }]` for everything else the entry recorded (sign-in IP, refused path, import counts, reason, follow-up); `related` = the first 100 other entries of the same request (`relatedCount` = all of them; filter `requestId` for the rest); `actions` = `{ undo, restore }`, each `{ available, reason? }` or null when the entry doesn't offer it; `reversedBy` / `reverses` = the REVERT / RESTORE entry that undid this one, or the entry this one undid (list items, or null). 404 when there's no such entry |
 | GET | `/:id/undo` | Undo preview of an UPDATE / STATUS_CHANGE of a CRM record (the 11 record modules: leads, contacts, organizations, opportunities, quotations, products, tickets, contracts, activities, partner companies, referrals): `{ id, canUndo, fields: [{ key, label, from, to, current, status, reason? }] }` (values as shown on screen). `status`: `ready` (still holds the entry's `to`, can be put back), `conflict` (changed again since), `already` (already holds the earlier value), `blocked` (not editable through the record's update, e.g. a system field). `reason` explains a block (as of 2026-11-26, P2-4): an activity's `lockedFields` (a follow-up activity's type, times, status, owner, related record, with `startDay` / `endDay` / `relatedCode`) are blocked ("A follow-up activity follows its lead / opportunity: change it on the record"), and every field of a Lead / Opportunity entry written by calendar sync (route `job:calendar-sync…`, P2-5) is blocked; other fields of the entry stay undoable. 409 `NOT_UNDOABLE` (any other entry, incl. CONVERT, IMPORT and Form Customization) or `ALREADY_REVERSED`; 404 when the record is deleted or gone |
 | POST | `/:id/undo` | `{ fields?: string[] }` (default: every `ready` field) → `{ id, revertId, undone, conflicts, notReverted }` (same field shape). Puts the `from` values back through the module's own update (validation, field locking, name write-through); the module's UPDATE entry is written as `REVERT` with `revertsId` = this entry. An entry can be undone once (409 `ALREADY_REVERSED`); 409 `CONFLICT` with one `errors[]` item per field when none can be put back; the module's own `400 VALIDATION_ERROR` / `DUPLICATE_RECORD` pass through |
 | POST | `/:id/restore` | Brings back the soft-deleted record of a DELETE entry → `{ id, restoreId, entityType, entityId, module }`; writes `RESTORE` with `revertsId`. Name / tax-id uniqueness is checked again (409 `DUPLICATE_RECORD`); 409 `NOT_RESTORABLE` (not a record delete), `ALREADY_REVERSED`, or `CONFLICT` (the record isn't deleted any more) |

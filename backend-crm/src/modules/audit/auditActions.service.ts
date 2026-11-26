@@ -3,6 +3,7 @@ import { runAsRevertOf } from '../../services/auditContext.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
 import { activityService } from '../activities/activity.service.js';
+import { companyFormatsService } from '../company-formats/companyFormats.service.js';
 import { contactService } from '../contacts/contact.service.js';
 import { contractService } from '../contracts/contract.service.js';
 import { referralService } from '../referrals/referral.service.js';
@@ -81,7 +82,7 @@ async function undoContext(params: unknown, user: AuthUser) {
 
 /** One field of the undo preview, values as the screen shows them. */
 async function presentPlans(module: string, plans: UndoFieldPlan[]) {
-    const labeler = await buildLabeler();
+    const labeler = await buildLabeler(await companyFormatsService.load());
     const show = (key: string, value: unknown) => labeler.value(module, key, value);
     return plans.map((plan) => ({
         key: plan.key,

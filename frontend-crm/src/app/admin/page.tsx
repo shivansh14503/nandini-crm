@@ -10,6 +10,7 @@ import DashboardCustomizeOutlinedIcon from '@mui/icons-material/DashboardCustomi
 import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
 import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined';
 import FormatListNumberedOutlinedIcon from '@mui/icons-material/FormatListNumberedOutlined';
+import TranslateOutlinedIcon from '@mui/icons-material/TranslateOutlined';
 import MarkEmailReadOutlinedIcon from '@mui/icons-material/MarkEmailReadOutlined';
 import EventBusyOutlinedIcon from '@mui/icons-material/EventBusyOutlined';
 import HubOutlinedIcon from '@mui/icons-material/HubOutlined';
@@ -80,6 +81,15 @@ const ADMIN_MODULES: AdminModule[] = [
         href: ROUTES.DOCUMENT_SERIES,
         badge: BADGES.available,
         highlights: ['Company prefix', 'Financial year', 'Suffix', 'Numbering'],
+    },
+    {
+        key: 'company-formats',
+        title: 'Company Formats',
+        description: 'Pick how dates, times and numbers appear across the CRM, PDFs and emails, with a live preview. One setting for everyone.',
+        icon: <TranslateOutlinedIcon />,
+        href: ROUTES.COMPANY_FORMATS,
+        badge: BADGES.available,
+        highlights: ['Date', 'Time', 'Number grouping', 'Preview'],
     },
     {
         key: 'email-validation',

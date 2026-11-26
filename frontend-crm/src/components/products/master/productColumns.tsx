@@ -8,6 +8,7 @@ import { documentNumberColumn, type DataTableColumn } from '../../common/DataTab
 import { ROUTES } from '@/config/constants';
 import type { Product } from '@/types/product.types';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
+import { fmtMoney } from '@/utils/formats';
 
 const TAX_RATE_COLORS: Record<string, { bg: string; color: string; border: string }> = {
     '0%': { bg: 'var(--crm-green-50)', color: 'var(--crm-green-700)', border: 'var(--crm-green-200)' },
@@ -107,7 +108,7 @@ export function useProductColumns(openRecord: (record: Product) => void, product
                 minWidth: 100,
                 render: (p) => (
                     <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--mui-palette-text-primary)' }}>
-                        {p.mrp ? `₹${Number(p.mrp).toLocaleString('en-IN')}` : '-'}
+                        {p.mrp ? fmtMoney(Number(p.mrp), { minDecimals: 0, maxDecimals: 3 }) || '-' : '-'}
                     </Typography>
                 ),
             },

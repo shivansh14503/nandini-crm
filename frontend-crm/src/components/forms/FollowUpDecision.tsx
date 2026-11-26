@@ -7,6 +7,7 @@ import EventRepeatOutlinedIcon from '@mui/icons-material/EventRepeatOutlined';
 import EventAvailableOutlinedIcon from '@mui/icons-material/EventAvailableOutlined';
 import { useFormContext, useFormState, useWatch } from 'react-hook-form';
 import { localNow, parseTimeOfDay } from '@/utils/pastDates';
+import { fmtDay, fmtTime, useDisplayFormats } from '@/utils/formats';
 import { focusFormField } from '@/utils/formFocus';
 import type { ConfigValidationIssue } from '@/utils/formConfig';
 
@@ -268,15 +269,12 @@ export function isFollowUpExpired(slot: FollowUpSlot, now = localNow()): boolean
     return !at || at <= now;
 }
 
-/** `04 Dec 2026 · 2:58 pm`. */
+/** `04 Dec 2026 · 2:58 pm` (the company formats once saved). */
 export function formatFollowUpSlot({ date, time }: FollowUpSlot): string {
-    const parsed = /^\d{4}-\d{2}-\d{2}$/.test(date) ? new Date(`${date}T00:00:00`) : null;
-    const dateText = parsed ? parsed.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : date;
+    const dateText = /^\d{4}-\d{2}-\d{2}$/.test(date) ? fmtDay(date, { legacy: 'DD MMM YYYY' }) : date;
     const minutes = parseTimeOfDay(time);
     if (minutes === null) return dateText;
-    const hours = Math.floor(minutes / 60);
-    const timeText = `${hours % 12 || 12}:${pad(minutes % 60)} ${hours < 12 ? 'am' : 'pm'}`;
-    return `${dateText} · ${timeText}`;
+    return `${dateText} · ${fmtTime(minutes, { legacy: 'h:mm a' })}`;
 }
 
 const pulse = keyframes`
@@ -367,6 +365,7 @@ const optionSx: SxProps<Theme> = {
  * Escape; only a decision closes it.
  */
 export function FollowUpDecisionPopper({ open, anchorEl, existing, onDecide, attention = 0 }: FollowUpDecisionPopperProps) {
+    useDisplayFormats(); // the slot text follows an admin's format change
     const firstOptionRef = React.useRef<HTMLButtonElement>(null);
     const [arrowEl, setArrowEl] = React.useState<HTMLSpanElement | null>(null);
 

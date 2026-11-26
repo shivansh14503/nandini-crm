@@ -62,6 +62,7 @@ import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import { glassSurfaceSx, GLASS_SHADOW, GLASS_RADIUS, FLOAT_INSET, NAVBAR_HEIGHT } from '@/theme/glass';
 import { moduleKeyFrom, moduleTableTintVars } from '@/theme/moduleColors';
 import { isShownField } from '@/utils/recordNumbers';
+import { fmtMoney } from '@/utils/formats';
 
 export interface RelatedRecordsTableViewProps {
     open: boolean;
@@ -113,11 +114,7 @@ function relatedRecordHref(moduleKey: string, row: RelatedRow): string | undefin
 const formatCurrency = (val: unknown): string => {
     const num = Number(val);
     if (!Number.isFinite(num)) return String(val ?? '-');
-    return new Intl.NumberFormat('en-IN', {
-        style: 'currency',
-        currency: 'INR',
-        maximumFractionDigits: 0,
-    }).format(num);
+    return fmtMoney(num, { maxDecimals: 0 });
 };
 
 /** Product rows here are line items whose own id isn't the product's: link to the catalogue product instead. */

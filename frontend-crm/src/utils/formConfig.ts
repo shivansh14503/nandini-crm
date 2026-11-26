@@ -6,6 +6,7 @@ import type {
     FormFieldDefinitionDto,
 } from '@/types/formConfig.types';
 import { isActivityOnlyFollowupType } from '@/utils/followupTypes';
+import { fmtDay, fmtMoney } from '@/utils/formats';
 
 /**
  * Pure helpers over the admin form configuration, shared by hooks, the FormConfig context, form resolvers and
@@ -250,17 +251,17 @@ export function parseDefaultValue(field: FormFieldDefinitionDto, category?: Drop
     return raw;
 }
 
-/** Display text for a custom field value in drawers / read-only views. */
+/** Display text for a custom field value in drawers / read-only views (dates and amounts in the company formats). */
 export function formatCustomValue(field: FormFieldDefinitionDto, value: unknown, labels?: Record<string, string>): string {
     if (isEmptyValue(value)) return '';
     const label = (v: string) => labels?.[v] ?? v;
     if (Array.isArray(value)) return value.map((v) => label(String(v))).join(', ');
     if (field.fieldType === 'checkbox') return value === true || value === 'true' ? 'Yes' : 'No';
     if (field.fieldType === 'date' && typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
-        return new Date(`${value}T00:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+        return fmtDay(value, { legacy: 'DD MMM YYYY' });
     }
-    if (field.fieldType === 'amount' && value !== '' && !Number.isNaN(Number(value))) {
-        return `₹${Number(value).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+    if (field.fieldType === 'amount' && value !== '' && Number.isFinite(Number(value))) {
+        return fmtMoney(Number(value), { minDecimals: 0, maxDecimals: 2 });
     }
     if (field.fieldType === 'percentage') return `${String(value)}%`;
     return label(String(value));

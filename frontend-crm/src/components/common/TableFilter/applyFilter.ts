@@ -1,4 +1,6 @@
 import { DATE_OPERATORS, DAYS_OPERATORS, type FilterCondition, type FilterCriteria, type FilterFieldDef } from './types';
+import { fmtDay } from '@/utils/formats';
+import { isDay } from '@/utils/zonedTime';
 
 // ── Dates ────────────────────────────────────────────────────────────────────
 
@@ -153,10 +155,11 @@ export function applyCriteria<T>(rows: T[], criteria: FilterCriteria | null, byK
 
 // ── Summaries (chips, recent list) ───────────────────────────────────────────
 
+/** A condition's day as dd/mm/yyyy until the company formats are saved, then in the company date format (display only). */
 const fmtDate = (v?: string) => {
     if (!v) return '…';
     const [y, m, d] = v.split('-');
-    return `${d}/${m}/${y}`;
+    return isDay(v) ? fmtDay(v, { legacy: 'DD/MM/YYYY' }) : `${d}/${m}/${y}`;
 };
 
 /** "Status: New, In Process" / "Date Created: Last 7 Days" / "Age (Days): at least 30". */

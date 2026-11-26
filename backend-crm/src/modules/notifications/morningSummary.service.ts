@@ -21,6 +21,8 @@ import {
     renewalRange,
 } from '../activities/activity.calendar.js';
 import { NOTE_TYPE, PLANNED_STATUS } from '../activities/activity.schedule.js';
+import { companyFormatsService } from '../company-formats/companyFormats.service.js';
+import type { DisplayFormats } from '../company-formats/core/displayFormats.js';
 import { FOLLOWUP_TYPE_CATEGORY_KEY } from '../form-configs/formConfig.defaults.js';
 import { loadRatingConfig } from '../leads/lead.followUp.js';
 import { isOutOfOfficeToday } from '../preferences/preferences.dto.js';
@@ -70,6 +72,8 @@ export interface SummaryContext {
     closingStatuses: ReadonlySet<string>;
     typeIcons: Readonly<Record<string, string>>;
     appUrl: string;
+    /** Company display formats (Admin › Company formats), read once per run. */
+    formats: DisplayFormats;
 }
 
 /** Followup Type value → its option's `meta.icon` (survives an admin renaming the option). */
@@ -93,7 +97,7 @@ async function loadTypeIcons(): Promise<Record<string, string>> {
 export async function summaryContext(now = new Date()): Promise<SummaryContext> {
     const timeZone = ENV.BUSINESS_TIMEZONE;
     const day = zonedDayOf(now, timeZone);
-    const [{ closingStatuses }, typeIcons] = await Promise.all([loadRatingConfig(prisma), loadTypeIcons()]);
+    const [{ closingStatuses }, typeIcons, formats] = await Promise.all([loadRatingConfig(prisma), loadTypeIcons(), companyFormatsService.load()]);
     return {
         now,
         timeZone,
@@ -103,6 +107,7 @@ export async function summaryContext(now = new Date()): Promise<SummaryContext> 
         closingStatuses,
         typeIcons,
         appUrl: ENV.MAIL.APP_PUBLIC_URL,
+        formats,
     };
 }
 
@@ -259,6 +264,7 @@ export async function loadMorningSummaryInput(recipient: SummaryRecipient, ctx: 
         appUrl: ctx.appUrl,
         recipient: { username: recipient.username, fullName: recipient.fullName },
         typeIcons: ctx.typeIcons,
+        formats: ctx.formats,
         today: { total: todayTotal, rows: todayRows },
         overdue: { total: overdueTotal, rows: overdueRows },
         followupsToday: { leads: leadTodayTotal, opportunities: oppTodayTotal, rows: [...leadRows.map(leadItem), ...opportunityRows.map(opportunityItem)] },
