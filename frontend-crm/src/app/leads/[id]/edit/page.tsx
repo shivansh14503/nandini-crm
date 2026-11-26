@@ -1,26 +1,21 @@
 'use client';
 
-import { Suspense, useEffect } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { Suspense } from 'react';
+import { useParams } from 'next/navigation';
 import { Box } from '@mui/material';
 import { FollowUpHistoryLayout } from '@/components/common/FollowUpHistory/FollowUpHistoryLayout';
 import { useAuth } from '@/context/AuthContext';
-import { ROUTES } from '@/config/constants';
+import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { Navbar } from '@/components/layout/Navbar';
 import { LoadingScreen } from '@/components/common/LoadingScreen';
 import LeadForm from '@/components/leads/LeadForm';
 
 function LeadEditContent() {
-    const router = useRouter();
     const params = useParams();
     const id = (params?.id as string) || '';
-    const { user, loading, isAuthenticated } = useAuth();
+    const { user, loading } = useAuth();
 
-    useEffect(() => {
-        if (!loading && !isAuthenticated) {
-            router.push(ROUTES.LOGIN);
-        }
-    }, [isAuthenticated, loading, router]);
+    useRequireAuth();
 
     if (loading) return <LoadingScreen message="Loading lead editor..." />;
     if (!user) return null;

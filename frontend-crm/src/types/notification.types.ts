@@ -12,6 +12,7 @@ export const NOTIFICATION_KINDS = [
     'calendar_sync_error',
     'calendar_invites_held',
     'integration_secret_expiring',
+    'booking_created',
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 

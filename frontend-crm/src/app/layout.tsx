@@ -6,6 +6,7 @@ import { QueryProvider } from "@/context/QueryProvider";
 import { AuthProvider } from "@/context/AuthContext";
 import { CrmDataBootstrap } from "@/components/common/CrmDataBootstrap";
 import { PasswordChangeGate } from "@/components/auth/PasswordChangeGate";
+import { SessionExpiredDialog } from "@/components/auth/SessionExpiredDialog";
 import { EnterTogglesCheckboxes } from "@/components/common/EnterTogglesCheckboxes";
 import { DateInputGuard } from "@/components/common/DateInputGuard";
 import { APP_CONFIG } from "@/config/constants";
@@ -47,6 +48,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <CrmDataBootstrap />
               <EnterTogglesCheckboxes />
               <DateInputGuard />
+              {/* A session that ends while unsaved edits are on screen: sign in again without leaving the page. */}
+              <SessionExpiredDialog />
               {/* A user who must change their password is kept on My Profile › Security. */}
               <PasswordChangeGate>{children}</PasswordChangeGate>
             </AuthProvider>

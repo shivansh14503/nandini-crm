@@ -9,6 +9,7 @@ import { errorMessage, secondaryButtonSx, surfaceSx } from '@/components/setting
 import { useLeaveGuard } from '@/components/settings/useLeaveGuard';
 import { useIntegrationsAdmin } from '@/hooks/queries/useIntegrationsAdmin';
 import type { IntegrationsAdmin } from '@/types/integration.types';
+import { BookingLinksSettingsCard } from './BookingLinksSettingsCard';
 import { CalendarSyncSettingsCard } from './CalendarSyncSettingsCard';
 import { PeopleTable, isPeopleFilter, type PeopleFilter } from './PeopleTable';
 import { ProviderCard } from './ProviderCard';
@@ -203,6 +204,7 @@ export function ApiIntegrationsView() {
     const onProviderDirty = useCallback((provider: string, dirty: boolean) => markDirty(`provider:${provider}`, dirty), [markDirty]);
     const onSettingsDirty = useCallback((dirty: boolean) => markDirty('settings', dirty), [markDirty]);
     const onSyncTypesDirty = useCallback((dirty: boolean) => markDirty('syncTypes', dirty), [markDirty]);
+    const onBookingDirty = useCallback((dirty: boolean) => markDirty('bookingLinks', dirty), [markDirty]);
     const showToast = useCallback((message: string, severity: 'success' | 'error' = 'success') => setToast({ open: true, message, severity }), []);
 
     useLeaveGuard(Object.values(dirtyParts).some(Boolean), LEAVE_MESSAGE);
@@ -335,6 +337,8 @@ export function ApiIntegrationsView() {
                         <CalendarSyncSettingsCard settings={data.settings} onDirtyChange={onSettingsDirty} onToast={showToast} />
                         <SyncTypesCard types={data.syncTypes} onDirtyChange={onSyncTypesDirty} onToast={showToast} />
                     </Box>
+
+                    <BookingLinksSettingsCard onDirtyChange={onBookingDirty} onToast={showToast} />
 
                     <PeopleTable
                         key={people.version}

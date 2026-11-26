@@ -58,8 +58,8 @@ export interface ActivityLock {
     deleteRefusedReason: string | null;
 }
 
-/** Activity origins (Calendar Phase 2): made in the CRM, a lead / opportunity follow-up (P2-4), imported (P2-8). */
-export const ACTIVITY_ORIGINS = ['crm', 'followup', 'calendar'] as const;
+/** Activity origins: made in the CRM, a lead / opportunity follow-up (P2-4), imported (P2-8), booked on a public booking page (Phase 4). */
+export const ACTIVITY_ORIGINS = ['crm', 'followup', 'calendar', 'booking'] as const;
 export type ActivityOrigin = (typeof ACTIVITY_ORIGINS)[number];
 export const FOLLOW_UP_ORIGIN: ActivityOrigin = 'followup';
 

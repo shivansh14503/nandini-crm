@@ -16,6 +16,7 @@ import EventBusyOutlinedIcon from '@mui/icons-material/EventBusyOutlined';
 import SyncProblemOutlinedIcon from '@mui/icons-material/SyncProblemOutlined';
 import ForwardToInboxOutlinedIcon from '@mui/icons-material/ForwardToInboxOutlined';
 import KeyOutlinedIcon from '@mui/icons-material/KeyOutlined';
+import EventAvailableOutlinedIcon from '@mui/icons-material/EventAvailableOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import { ROUTES } from '@/config/constants';
 import { useAuth } from '@/context/AuthContext';
@@ -45,6 +46,7 @@ const KIND_ICONS: Record<string, SvgIconComponent> = {
     calendar_sync_error: SyncProblemOutlinedIcon,
     calendar_invites_held: ForwardToInboxOutlinedIcon,
     integration_secret_expiring: KeyOutlinedIcon,
+    booking_created: EventAvailableOutlinedIcon,
 };
 
 /** The icon tile takes the tint of the record's module (activities olive, contracts rose); others stay neutral. */

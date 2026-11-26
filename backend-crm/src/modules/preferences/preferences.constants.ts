@@ -6,7 +6,7 @@
 
 /**
  * Bell (in-app) kinds a user can turn off, in the order My Profile lists them. A kind added later (e.g.
- * `calendar_sync_issue`, `calendar_sync_error`, `calendar_invites_held`, `integration_secret_expiring`) is not
+ * `calendar_sync_issue`, `calendar_sync_error`, `calendar_invites_held`, `integration_secret_expiring`, `booking_created`) is not
  * configurable unless it is added here with a UserPreference column: it always delivers.
  */
 export const IN_APP_NOTIFICATION_KINDS = ['activity_reminder', 'activity_assigned', 'activity_invited', 'contract_renewal'] as const;

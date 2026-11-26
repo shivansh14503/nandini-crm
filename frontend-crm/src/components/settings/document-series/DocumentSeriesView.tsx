@@ -45,6 +45,7 @@ import {
     type Separator,
 } from '@/types/documentSeries.types';
 import { fmtInstant, useDisplayFormats } from '@/utils/formats';
+import { holdUnsavedWork } from '@/utils/unsavedWork';
 import {
     MAX_COMPANY_PREFIX,
     MAX_MODULE_PREFIX,
@@ -214,12 +215,16 @@ export function DocumentSeriesView() {
     const hasErrors = Object.keys(errors).length > 0;
     const fy = useMemo(() => (draft && query.data ? financialYearOf(draft.settings, query.data.timeZone) : null), [draft, query.data]);
 
-    // Warn before leaving with unsaved changes.
+    // Warn before leaving with unsaved changes, and keep the page mounted if the session ends mid-edit.
     useEffect(() => {
         if (!dirty) return;
+        const releaseUnsavedWork = holdUnsavedWork();
         const handler = (e: BeforeUnloadEvent) => e.preventDefault();
         window.addEventListener('beforeunload', handler);
-        return () => window.removeEventListener('beforeunload', handler);
+        return () => {
+            window.removeEventListener('beforeunload', handler);
+            releaseUnsavedWork();
+        };
     }, [dirty]);
 
     if (query.isLoading || (!draft && !query.isError)) {
@@ -227,9 +232,18 @@ export function DocumentSeriesView() {
             <TableSkeleton rows={6} columns={5} toolbar={false} />
         );
     }
-    if (query.isError || !draft || !query.data || !fy) {
+    // A failed background refetch keeps the loaded data: the editor (and the draft) stay, with a warning below.
+    if (!draft || !query.data || !fy) {
         return (
-            <Alert severity="error" sx={{ borderRadius: '10px' }}>
+            <Alert
+                severity="error"
+                sx={{ borderRadius: '10px', alignItems: 'center' }}
+                action={
+                    <Button size="small" variant="outlined" sx={secondaryButtonSx} onClick={() => void query.refetch()} disabled={query.isFetching}>
+                        Try again
+                    </Button>
+                }
+            >
                 {errorMessage(query.error, 'Could not load document series.')}
             </Alert>
         );
@@ -336,6 +350,20 @@ export function DocumentSeriesView() {
                     </Tooltip>
                 </Box>
             </Box>
+
+            {query.isError && (
+                <Alert
+                    severity="warning"
+                    sx={{ borderRadius: '10px', fontSize: '0.8rem', alignItems: 'center' }}
+                    action={
+                        <Button size="small" variant="outlined" sx={secondaryButtonSx} onClick={() => void query.refetch()} disabled={query.isFetching}>
+                            Try again
+                        </Button>
+                    }
+                >
+                    Could not refresh document series. Showing the last loaded settings.
+                </Alert>
+            )}
 
             <Alert severity="info" icon={<InfoOutlinedIcon fontSize="small" />} sx={{ borderRadius: '10px', fontSize: '0.8rem' }}>
                 Every series restarts from its starting number at the beginning of each financial year ({MONTHS[draft.settings.fyStartMonth - 1]} 1).

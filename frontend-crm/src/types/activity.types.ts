@@ -187,7 +187,8 @@ export interface Activity extends ActivityFormData {
     updatedBy?: string;
     /**
      * Who made it: 'crm' (the CRM, any user), 'followup' (a lead / opportunity follow-up activity, which moves with
-     * its record), 'calendar' (brought in from a calendar). Read only.
+     * its record), 'calendar' (brought in from a calendar), 'booking' (booked by a visitor on a
+     * public booking page, /book/<slug>). Read only.
      */
     origin?: ActivityOrigin;
     /** Sent with every activity the API returns (outside the audited record). */
@@ -202,7 +203,7 @@ export interface Activity extends ActivityFormData {
 }
 
 /** `Activity.origin` values. */
-export type ActivityOrigin = 'crm' | 'followup' | 'calendar' | (string & {});
+export type ActivityOrigin = 'crm' | 'followup' | 'calendar' | 'booking' | (string & {});
 /** Origin of a lead / opportunity follow-up activity (Calendar Phase 2 P2-4). */
 export const FOLLOW_UP_ORIGIN = 'followup';
 /** Error code of a write to a locked field of a follow-up activity (409). */

@@ -20,6 +20,7 @@ import { useMasterData } from '@/hooks/queries/useMasterData';
 import { ROUTES } from '@/config/constants';
 import { findCrmUser } from '@/services/masterData.store';
 import { recordFileService } from '@/services/recordFile.service';
+import { fetchWithSession } from '@/services/apiClient';
 import type { Document } from '@/types/document.types';
 import { activeOptionValues, findCategory, optionLabelMap } from '@/utils/formConfig';
 import { fmtExportDateTime, fmtExportDay } from '@/utils/formats';
@@ -250,7 +251,7 @@ export function DocumentsMasterView() {
         let failed = 0;
         for (const file of files) {
             try {
-                const res = await fetch(recordFileService.fileUrl(file), { credentials: 'include' });
+                const res = await fetchWithSession(recordFileService.fileUrl(file));
                 if (!res.ok) throw new Error(String(res.status));
                 downloadBlob(await res.blob(), file.fileName);
             } catch {

@@ -31,6 +31,11 @@ import { withoutMutedRecipients } from './notification.preferences.js';
  *   - `integration_secret_expiring` → admins: a provider's client secret expires within 30 days (entityModule
  *     `admin-integrations`, entityId the provider; once a week).
  */
+/**
+ * `booking_created` (Calendar Phase 4, booking links): a visitor booked a time on the owner's public booking page. Sent to
+ * the link's owner (entityModule `activities`, entityId the booked activity, so it opens in the calendar). A system kind:
+ * no preference switch, always delivered.
+ */
 export const NOTIFICATION_KINDS = [
     'activity_reminder',
     'activity_assigned',
@@ -40,6 +45,7 @@ export const NOTIFICATION_KINDS = [
     'calendar_sync_error',
     'calendar_invites_held',
     'integration_secret_expiring',
+    'booking_created',
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
