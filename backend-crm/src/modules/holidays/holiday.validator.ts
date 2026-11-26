@@ -1,11 +1,6 @@
 import { z } from 'zod';
 import { enumWithDefault, isCalendarDate, optionalText, requiredDate, requiredText } from '../../validators/common.js';
 
-/** Holiday Type options (fixed). Public = everyone is off; Optional = employees may choose it; Company = the company's own. */
-export const HOLIDAY_TYPES = ['Public', 'Optional', 'Company'] as const;
-export type HolidayType = (typeof HOLIDAY_TYPES)[number];
-export const DEFAULT_HOLIDAY_TYPE: HolidayType = 'Public';
-
 /** Status options: the same Active / Inactive pair (and labels) Referrals use. Only Active holidays reach the calendar. */
 export const HOLIDAY_STATUSES = ['Active', 'Inactive'] as const;
 export type HolidayStatus = (typeof HOLIDAY_STATUSES)[number];
@@ -38,12 +33,11 @@ const holidayDate = requiredDate('Holiday Date').refine(inYearRange, {
 export const holidayInputSchema = z.object({
     occasion: requiredText('Occasion', OCCASION_MAX_LENGTH).transform((value) => value.replace(/\s+/g, ' ')),
     holidayDate,
-    holidayType: z.preprocess(caseInsensitive(HOLIDAY_TYPES), enumWithDefault('Holiday Type', HOLIDAY_TYPES, DEFAULT_HOLIDAY_TYPE)),
     status: z.preprocess(caseInsensitive(HOLIDAY_STATUSES), enumWithDefault('Status', HOLIDAY_STATUSES, ACTIVE_HOLIDAY_STATUS)),
 });
 export type HolidayInput = z.infer<typeof holidayInputSchema>;
 
-export const HOLIDAY_SORT_FIELDS = ['holidayDate', 'occasion', 'holidayType', 'status', 'updatedAt'] as const;
+export const HOLIDAY_SORT_FIELDS = ['holidayDate', 'occasion', 'status', 'updatedAt'] as const;
 export type HolidaySortField = (typeof HOLIDAY_SORT_FIELDS)[number];
 
 export const holidayListQuerySchema = z.object({
@@ -52,7 +46,6 @@ export const holidayListQuerySchema = z.object({
     search: optionalText('Search', 100),
     year: z.coerce.number().int().min(MIN_HOLIDAY_YEAR).max(MAX_HOLIDAY_YEAR).optional(),
     status: z.enum(HOLIDAY_STATUSES).optional(),
-    holidayType: z.enum(HOLIDAY_TYPES).optional(),
     sortBy: z.enum(HOLIDAY_SORT_FIELDS).default('holidayDate'),
     sortOrder: z.enum(['asc', 'desc']).default('desc'),
 });
@@ -84,7 +77,6 @@ export const holidayImportSchema = z.object({
                 values: z.object({
                     occasion: importCell.optional(),
                     holidayDate: importCell.optional(),
-                    holidayType: importCell.optional(),
                     status: importCell.optional(),
                 }),
             }),

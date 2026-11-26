@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Box } from '@mui/material';
-import type { HolidayStatus, HolidayType } from '@/types/holiday.types';
+import type { HolidayStatus } from '@/types/holiday.types';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -33,21 +33,6 @@ const pillSx = (color: string, backgroundColor: string, borderColor: string) => 
     backgroundColor,
     border: `1px solid ${borderColor}`,
 });
-
-const TYPE_STYLE: Record<HolidayType, [string, string, string]> = {
-    Public: ['var(--crm-text-blue-700)', 'var(--mui-palette-primary-soft)', 'var(--mui-palette-primary-softBorder)'],
-    Optional: ['var(--crm-amber-700)', 'var(--mui-palette-warning-soft)', 'var(--mui-palette-warning-softBorder)'],
-    Company: ['var(--mui-palette-info-main)', 'var(--mui-palette-info-soft)', 'var(--mui-palette-info-softBorder)'],
-};
-
-export function HolidayTypePill({ type }: { type: HolidayType }) {
-    const [color, bg, border] = TYPE_STYLE[type] ?? TYPE_STYLE.Public;
-    return (
-        <Box component="span" sx={pillSx(color, bg, border)}>
-            {type}
-        </Box>
-    );
-}
 
 export function HolidayStatusPill({ status }: { status: HolidayStatus }) {
     const active = status === 'Active';

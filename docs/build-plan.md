@@ -310,8 +310,8 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
 ### Phase 16 — Holidays (P2, 2026-11-26)
 
 - [x] **Admin › Holidays** (2026-11-26) — the company holiday list (modelled on the old CRM's Holidays list):
-      Occasion, Holiday Date, Day, Holiday Type (Public / Optional / Company) and Status (Active / Inactive, as on
-      Referrals). Add and edit in a dialog; search, year / type / status filters, sorting, pagination; bulk Mark Active,
+      Occasion, Holiday Date, Day and Status (Active / Inactive, as on Referrals; a Holiday Type column was dropped the
+      same day). Add and edit in a dialog; search, year / status filters, sorting, pagination; bulk Mark Active,
       Mark Inactive and Delete. Import from .csv / .xlsx / .xls with a downloadable template, column mapping and a server
       check before saving that marks each row new, duplicate (already in the list or repeated in the file, skipped) or
       error. Same date + occasion can't be saved twice (unique index, 409 `DUPLICATE_HOLIDAY`). Audited (entity
