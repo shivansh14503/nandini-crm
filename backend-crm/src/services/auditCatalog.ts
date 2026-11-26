@@ -44,6 +44,11 @@ export type AuditEntityType =
     | 'CalendarSyncUser'
     /** A public booking page of one employee (Calendar Phase 4, booking-links); CREATE / UPDATE (turned off = UPDATE). */
     | 'BookingLink'
+    /**
+     * One employee's email logging (Calendar Phase 4, Admin › API Integrations › People): the admin's switch (CREATE /
+     * UPDATE `{ username, mode: { from, to } }`) and purges of their logged emails (PURGE `{ username, copies, emails }`).
+     */
+    | 'LoggedEmailMailbox'
     /** An export of the audit log itself (Admin › Audit Log). */
     | 'AuditExport'
     /** The audit log's SQL Server ledger (integrity checks). */
@@ -108,7 +113,9 @@ export type AuditAction =
      * An admin's "Test connection" acted as one person on their company calendar (P2-2b): `{ asUsername, ok, code,
      * userStep }`, never a token. SECURITY: the CRM signed in as someone else.
      */
-    | 'TEST_AS_USER';
+    | 'TEST_AS_USER'
+    /** An admin deleted a person's logged emails (Calendar Phase 4 email logging): counts only. */
+    | 'PURGE';
 
 /** DATA = a CRM record changed; CONFIG = an admin setting changed; SECURITY = sign-ins and refused access. */
 export type AuditCategory = 'DATA' | 'CONFIG' | 'SECURITY';
@@ -148,6 +155,7 @@ const MODULE_BY_ENTITY: Record<AuditEntityType, string> = {
     CalendarConnection: 'calendar',
     CalendarSyncUser: 'admin-integrations',
     BookingLink: 'booking-links',
+    LoggedEmailMailbox: 'admin-integrations',
     AuditExport: 'audit-log',
     AuditLedger: 'audit-log',
 };
@@ -169,6 +177,7 @@ const CONFIG_ENTITIES: ReadonlySet<AuditEntityType> = new Set([
     'City',
     'IntegrationProvider',
     'CalendarSyncUser',
+    'LoggedEmailMailbox',
 ]);
 
 const SECURITY_ACTIONS: ReadonlySet<AuditAction> = new Set([
@@ -218,7 +227,7 @@ export function categoryFor(entityType: AuditEntityType, action: AuditAction): A
  */
 export function severityFor(action: AuditAction, category: AuditCategory): AuditSeverity {
     if (action === 'LOGIN_FAILED' || action === 'ACCESS_DENIED') return 'WARNING';
-    if (['DELETE', 'RESTORE', 'REVERT', 'CONVERT', 'IMPORT', 'EXPORT', 'PASSWORD_CHANGE', 'PASSWORD_RESET', 'SESSION_REVOKE', 'ENROL', 'STOP', 'CONNECT', 'DISCONNECT', 'TEST_AS_USER'].includes(action) || category === 'CONFIG') {
+    if (['DELETE', 'RESTORE', 'REVERT', 'CONVERT', 'IMPORT', 'EXPORT', 'PASSWORD_CHANGE', 'PASSWORD_RESET', 'SESSION_REVOKE', 'ENROL', 'STOP', 'CONNECT', 'DISCONNECT', 'TEST_AS_USER', 'PURGE'].includes(action) || category === 'CONFIG') {
         return 'NOTICE';
     }
     return 'INFO';
@@ -354,6 +363,7 @@ export function labelFromChanges(entityType: AuditEntityType, entityId: string, 
         case 'CalendarConnection':
             return pick('accountEmail');
         case 'CalendarSyncUser':
+        case 'LoggedEmailMailbox':
             return pick('username') ?? entityId;
         case 'BookingLink':
             return pick('title');

@@ -2094,3 +2094,131 @@ model BookingLinkBooking {
   @@index([bookingLinkId, startAt])
   @@index([bookingLinkId, createdAt])
 }
+
+// ── Email logging (Calendar Phase 4) ───────────────────────────────────────────
+
+/// One email exchanged between an employee and a CRM contact / lead, logged from the employee's company mailbox (Gmail
+/// / Outlook, admin-managed: email-log/emailLog.ingest.ts). Stored once per RFC Message-ID however many employees'
+/// mailboxes hold it (LoggedEmailCopy). Headers and a short plain-text snippet only: never a body, HTML, an attachment or
+/// Bcc. System data (not audited); deleted by the nightly retention (ModuleSetting activities/emailLogging
+/// retentionMonths) or an admin purge.
+///
+/// Hand-written filtered unique index (migration 20261216100000_email_logging; Prisma can't model filtered indexes):
+///   UX_LoggedEmail_messageIdHash (messageIdHash) WHERE messageIdHash IS NOT NULL
+model LoggedEmail {
+  id             String   @id @default(uuid()) @db.NVarChar(50)
+  /// sha256 (hex) of the Message-ID header as sent; null when the message had none (then not deduped across mailboxes).
+  messageIdHash  String?  @db.NVarChar(64)
+  /// The first copy's provider thread id (Gmail threadId / Graph conversationId); provider-scoped, display only.
+  threadId       String?  @db.NVarChar(200)
+  subject        String   @db.NVarChar(300)
+  /// Lower-cased sender address.
+  fromEmail      String   @db.NVarChar(254)
+  fromName       String?  @db.NVarChar(200)
+  /// JSON [{ email, name? }] of the To recipients (at most 25; lower-cased addresses).
+  toJson         String   @db.NVarChar(4000)
+  /// JSON [{ email, name? }] of the Cc recipients (at most 25).
+  ccJson         String   @db.NVarChar(4000)
+  /// To / Cc recipients beyond the 25 + 25 kept.
+  moreRecipients Int      @default(0)
+  sentAt         DateTime
+  /// out = sent from a company domain; in = received from outside.
+  direction      String   @db.NVarChar(3)
+  /// Plain text (≤ 500), HTML entities decoded; null when the company setting storeSnippets is off.
+  snippet        String?  @db.NVarChar(500)
+  hasAttachments Boolean  @default(false)
+  /// google | microsoft | fake: the provider of the first copy.
+  provider       String   @db.NVarChar(30)
+  /// Employee whose mailbox logged it first.
+  ownerUsername  String   @db.NVarChar(50)
+  createdAt      DateTime @default(now())
+
+  copies LoggedEmailCopy[]
+  links  LoggedEmailLink[]
+
+  /// Nightly retention (sentAt older than retentionMonths).
+  @@index([sentAt])
+  @@index([ownerUsername])
+}
+
+/// One employee mailbox that holds a logged email (participants; "Open in Gmail / Outlook" for that employee only).
+/// Unique per mailbox message, so re-reading a mailbox never logs twice. Purging a person deletes their copies (and every
+/// email left without one).
+model LoggedEmailCopy {
+  id                String   @id @default(uuid()) @db.NVarChar(50)
+  emailId           String   @db.NVarChar(50)
+  username          String   @db.NVarChar(50)
+  provider          String   @db.NVarChar(30)
+  /// Gmail message id / Graph immutable message id.
+  providerMessageId String   @db.NVarChar(300)
+  providerThreadId  String?  @db.NVarChar(200)
+  /// Graph webLink (Outlook on the web); Gmail links are built from the id.
+  webLink           String?  @db.NVarChar(1000)
+  /// For this employee: out = they sent it (Sent folder / sender), in = they received it.
+  direction         String   @db.NVarChar(3)
+  createdAt         DateTime @default(now())
+
+  email LoggedEmail @relation(fields: [emailId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([username, providerMessageId])
+  @@index([emailId])
+}
+
+/// A logged email shown on a CRM record (contacts | leads | opportunities). sentAt is copied from the email for the
+/// record's newest-first list.
+model LoggedEmailLink {
+  id           String   @id @default(uuid()) @db.NVarChar(50)
+  emailId      String   @db.NVarChar(50)
+  /// contacts | leads | opportunities (CRM module key).
+  module       String   @db.NVarChar(20)
+  recordId     String   @db.NVarChar(50)
+  /// The address that matched (the opportunity's contact's address for opportunities).
+  matchedEmail String?  @db.NVarChar(120)
+  sentAt       DateTime
+  createdAt    DateTime @default(now())
+
+  email LoggedEmail @relation(fields: [emailId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([emailId, module, recordId])
+  @@index([module, recordId, sentAt])
+}
+
+/// One employee's email logging: the admin's switch (mode, audited) and the ingestion state (cursor, health, lease). A
+/// row is created on the first admin change or the first run. Employees can't change it (they see their status on My
+/// Profile). Usernames are strings, as everywhere (no FK to Users).
+model LoggedEmailMailbox {
+  username            String    @id @db.NVarChar(50)
+  /// on | off; null = the company default (ModuleSetting activities/emailLogging defaultForPeople).
+  mode                String?   @db.NVarChar(10)
+  modeUpdatedBy       String?   @db.NVarChar(50)
+  modeUpdatedAt       DateTime?
+  /// Mailbox the cursor belongs to (a provider or email change starts a new cursor).
+  provider            String?   @db.NVarChar(30)
+  accountEmail        String?   @db.NVarChar(254)
+  /// Gmail { historyId } / Graph { inbox, sent } delta links. Not a credential, but never logged.
+  cursorJson          String?   @db.NVarChar(Max)
+  /// idle (never run) | ok | error
+  status              String    @default("idle") @db.NVarChar(20)
+  /// user | app (app = the whole provider, e.g. the mail scope isn't granted)
+  errorLevel          String?   @db.NVarChar(10)
+  lastErrorCode       String?   @db.NVarChar(50)
+  /// Admin text (≤ 300; never shown to the employee, never logged at info).
+  lastErrorMessage    String?   @db.NVarChar(300)
+  lastErrorAt         DateTime?
+  consecutiveFailures Int       @default(0)
+  lastRunAt           DateTime?
+  lastSuccessAt       DateTime?
+  /// Earliest next run (poll interval, or the error backoff 15 min → 1 h → 6 h → 24 h).
+  nextRunAt           DateTime?
+  /// Emails this mailbox added (new logged emails or copies) since the row was created or last purged.
+  loggedCount         Int       @default(0)
+  /// Per-mailbox mutex of the ingestion runs.
+  leaseId             String?   @db.NVarChar(50)
+  leaseUntil          DateTime?
+  purgedAt            DateTime?
+  purgedBy            String?   @db.NVarChar(50)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @default(now()) @updatedAt
+
+  @@index([status, nextRunAt])
+}

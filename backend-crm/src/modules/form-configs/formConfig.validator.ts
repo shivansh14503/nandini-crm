@@ -6,6 +6,7 @@ import { NO_FOLLOW_UP_META_KEY, OPPORTUNITY_STAGES_META_KEY, opportunityStagesSc
 import { CALENDAR_SYNC_META_KEY, CALENDAR_SYNC_SETTING_KEY, calendarSyncSettingsSchema } from '../integrations/calendarSyncSettings.js';
 import { VIDEO_MEETING_META_KEY } from '../calendar-sync/conference.rules.js';
 import { BOOKING_SETTING_KEY, bookingSettingsSchema } from '../booking-links/bookingLink.settings.js';
+import { EMAIL_LOGGING_SETTING_KEY, emailLoggingSettingsSchema } from '../email-log/emailLog.settings.js';
 
 /**
  * Request schemas for /api/form-configs. Rules that depend on the stored row (system options can't be renamed or
@@ -109,6 +110,8 @@ export const MODULE_SETTING_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
     [`activities:${CALENDAR_SYNC_SETTING_KEY}`]: calendarSyncSettingsSchema,
     /** Company booking-link settings: switch and who may create links (booking-links/bookingLink.settings.ts). */
     [`activities:${BOOKING_SETTING_KEY}`]: bookingSettingsSchema,
+    /** Company email-logging settings: switch, default for people, visibility, retention (email-log/emailLog.settings.ts). */
+    [`activities:${EMAIL_LOGGING_SETTING_KEY}`]: emailLoggingSettingsSchema,
 };
 
 export const moduleSchema = z.enum(CRM_MODULES, { error: `module must be one of: ${CRM_MODULES.join(', ')}.` });

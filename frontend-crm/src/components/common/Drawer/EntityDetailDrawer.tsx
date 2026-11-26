@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { useResetTab } from '@/hooks/useResetTab';
 import { useRecordActivities } from '@/hooks/queries/useActivities';
+import { useEmailLoggingOn } from '@/utils/emailLogging';
 import {
     Drawer,
     useMediaQuery,
@@ -27,6 +28,7 @@ import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import EventNoteOutlinedIcon from '@mui/icons-material/EventNoteOutlined';
+import MailOutlineRoundedIcon from '@mui/icons-material/MailOutlineRounded';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 
@@ -42,11 +44,17 @@ import { useRegisterRightPanel } from '@/components/layout/rightPanelStore';
 
 const CHANGES_TAB_ID = 'changes-tab';
 const ACTIVITIES_TAB_ID = 'activities-tab';
+const EMAILS_TAB_ID = 'emails-tab';
 
 // Loaded on demand: it brings the activity drawer and quick-create dialog (which themselves use this drawer).
 const RecordActivitiesPanel = dynamic(() => import('./RecordActivitiesPanel').then((m) => m.RecordActivitiesPanel), {
     ssr: false,
     loading: () => <FormFieldsSkeleton fields={4} columns={1} />,
+});
+// Email logging (Calendar Phase 4): loaded when the Emails tab opens.
+const RecordEmailsPanel = dynamic(() => import('@/components/email-log/RecordEmailsPanel').then((m) => m.RecordEmailsPanel), {
+    ssr: false,
+    loading: () => <FormFieldsSkeleton fields={3} columns={1} />,
 });
 
 interface FooterButtonProps {
@@ -96,6 +104,7 @@ export function EntityDetailDrawer({
     recordAudit,
     includeChangesTab = true,
     activities,
+    emails,
     changesTabLabel = 'Changes',
     defaultTabIndex = 0,
     primaryAction,
@@ -117,6 +126,8 @@ export function EntityDetailDrawer({
     const stack = useDrawerStack();
     // The Activities tab's count (the panel reads the same cached list).
     const recordActivities = useRecordActivities(activities?.module ?? 'leads', activities?.id, { enabled: Boolean(activities) && open });
+    // The Emails tab shows only while an admin has email logging on (the company switch reaches everyone in the form configs).
+    const emailLoggingOn = useEmailLoggingOn();
 
     // Precedence: explicit props > shared stack context > internal standalone state
     const isCollapsed = isCollapsedProp ?? stack?.isCollapsed ?? internalCollapsed;
@@ -239,6 +250,14 @@ export function EntityDetailDrawer({
             icon: <EventNoteOutlinedIcon sx={{ fontSize: 16 }} />,
             badge: recordActivities.data?.length || undefined,
             content: <RecordActivitiesPanel {...activities} />,
+        });
+    }
+    if (emails && emailLoggingOn) {
+        allTabs.push({
+            id: EMAILS_TAB_ID,
+            label: 'Emails',
+            icon: <MailOutlineRoundedIcon sx={{ fontSize: 16 }} />,
+            content: <RecordEmailsPanel module={emails.module} id={emails.id} />,
         });
     }
     if (includeChangesTab && auditEntity) {
