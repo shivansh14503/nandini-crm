@@ -271,7 +271,6 @@ model Organization {
   tickets            Ticket[]
   contracts          Contract[]
   activities         Activity[]
-  referrals          Referral[]
   convertedLeads     Lead[]         @relation("LeadConvertedOrganization")
   billingCityRef     City?          @relation("OrganizationBillingCity", fields: [billingCityId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   shippingCityRef    City?          @relation("OrganizationShippingCity", fields: [shippingCityId], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -385,9 +384,9 @@ model Referral {
   id String @id @default(uuid()) @db.NVarChar(50)
 
   name             String  @db.NVarChar(100)
-  /// Denormalized display name; organizationId is the link.
-  organizationName String  @db.NVarChar(200)
-  organizationId   String? @db.NVarChar(50)
+  /// Free text (not linked to an Organization). Migration 20261127110000_referral_company_name carried the former
+  /// organizationName over and dropped organizationName / organizationId.
+  companyName      String? @db.NVarChar(200)
   mobile           String  @db.NVarChar(20)
   officePhone      String? @db.NVarChar(20)
   assignedTo       String  @db.NVarChar(50)
@@ -406,12 +405,10 @@ model Referral {
   isDeleted Boolean   @default(false)
   deletedAt DateTime?
 
-  organization  Organization? @relation(fields: [organizationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   emailAddress  EntityEmail[]
   leads         Lead[]
   opportunities Opportunity[]
 
-  @@index([organizationId])
   @@index([mobile])
   @@index([name])
   @@index([assignedTo])

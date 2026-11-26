@@ -26,7 +26,7 @@
 | Leads, Opportunities, Quotations, Organizations, Contacts | ✅ CRUD, list filters, row-level access, audit, import (not quotations), lead conversion |
 | Tickets, Products, Partner Companies | ✅ CRUD, import |
 | Contracts | ✅ CRUD, list filters, status cards, row-level access, audit (no import) |
-| Referrals | ✅ CRUD, Active / Inactive status, audit, drawer layout, Form Builder (no import); Referred By on leads, opportunities and Convert Lead is picked from the active referrals (2026-11-25) |
+| Referrals | ✅ CRUD, Active / Inactive status, audit, drawer layout, Form Builder (no import); Referred By on leads, opportunities and Convert Lead is picked from the active referrals (2026-11-25); free-text Company Name instead of the Organization picker, one form section, and Create Referral Contact inside the Referral Search picker, whose filters are Name, Any Number and Any Email (2026-11-26) |
 | Activities & calendar | ✅ data model, API, Form Builder fields; Activities list, form, quick create, drawer, record Activities tabs and the Calendar page (FullCalendar v7, business timezone, drag to reschedule); reminders, assignment / invitation and contract renewal notifications in the navbar bell; 9 AM morning summary email (off until SMTP is set up). Google / Microsoft 365 sync is Phase 2 |
 | Documents | ✅ read-only list (filters, export / file download), drawer and detail page of the opportunities' documents |
 | Quotation PDF | ✅ templates, builder, preview, cached render |
@@ -439,7 +439,7 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
       reconnect, disconnect). The OAuth callback (`CALENDAR_CONNECTIONS_PAGE`, `…&calendar=connected|error&reason=&provider=`),
       its sign-in `?next=`, `calendar_reconnect` notification links (computed on read, so older rows follow) and the
       calendar's reconnect banner now open the tab; the card drops only its own callback params, so `?tab=` stays. The
-      user menu and mobile drawer item is now "Connected accounts" (was "Connected calendars"); the temporary
+      "Connected calendars" user menu and mobile drawer items are removed (the tab is reached from My Profile); the temporary
       `/connected-calendars` page is only a client redirect to the tab that keeps the query string (old bookmarks,
       callbacks in flight). Contract test: `ROUTES.PROFILE_CONNECTED_ACCOUNTS` equals the API constant and ProfileView
       has that tab. The company email editor and its unique index (`UX_Users_email`) already shipped with Calendar

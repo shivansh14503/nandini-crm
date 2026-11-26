@@ -1,17 +1,17 @@
 import { z } from 'zod';
 import { FIELD_MAX_LENGTH as L } from '../config/fieldLimits';
-import { requiredString, optionalString, requiredText, zodPhone, zodPhoneOptional, customFieldsSchema } from './common';
+import { requiredString, optionalString, optionalText, requiredText, zodPhone, zodPhoneOptional, customFieldsSchema } from './common';
 import { corporateEmailSchema } from './contact.schema';
 import { REFERRAL_STATUSES } from '../types/referral.types';
 
 /**
  * Mirrors backend-crm/src/modules/referrals/referral.validator.ts: the Contact form's rules (contact.schema.ts) for
- * the fields a referral shares with a contact, plus its Status (Active / Inactive).
+ * the fields a referral shares with a contact, plus a free-text Company Name and its Status (Active / Inactive).
  */
 export const referralFormSchema = z.object({
     name: requiredText('Name', L.personName),
-    organizationName: requiredText('Organization Name', L.organizationName),
-    organizationId: optionalString,
+    /** Free text (not an organization picker), stored uppercase. */
+    companyName: optionalText('Company Name', L.organizationName),
     mobile: zodPhone,
     officePhone: zodPhoneOptional,
     emailAddress: z.array(corporateEmailSchema).superRefine((emails, ctx) => {

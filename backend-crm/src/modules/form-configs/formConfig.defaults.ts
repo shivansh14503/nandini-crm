@@ -1119,17 +1119,16 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
     ]),
 
     // ── Referrals ── The Contact form's fields (same keys, labels and lists) without Left Job, Phone 3–5, Is Primary
-    // Contact, Communication Type, DND and the Notes section, plus Status.
-    ...section('referrals', 'overview', 'Referral Details & Association', [
+    // Contact, Communication Type, DND and the Notes section, plus a free-text Company Name (not an organization
+    // picker) and Status. One section holds them all.
+    ...section('referrals', 'overview', 'Referral Details', [
         t('name', 'Name', { req: true }),
         t('mobile', 'Mobile', { type: 'phone', req: true }),
         t('officePhone', 'Office Phone', { type: 'phone' }),
-        t('organizationName', 'Organization Name', { type: 'lookup', req: true }),
+        t('companyName', 'Company Name'),
         // Only Active referrals are offered as Referred By (fixed list: Active / Inactive).
         sel('status', 'Status', 'referral_status', { req: true }),
-    ]),
-    ...section('referrals', 'overview', 'Communication Channels', [t('emailAddress', 'Email Address', { type: 'email', soft: true })]),
-    ...section('referrals', 'overview', 'Internal Assignment & Department Role', [
+        t('emailAddress', 'Email Address', { type: 'email', soft: true }),
         sel('designation', 'Designation', 'contact_designation'),
         sel('department', 'Department', 'contact_department'),
         t('assignedTo', 'Assigned to', { type: 'lookup', req: true }),

@@ -277,7 +277,7 @@ const SAMPLE_REFERRAL: Record<string, unknown> = {
     mobile: '+919811022334',
     officePhone: '+911141002200',
     emailAddress: [email('rajesh@khannaassociates.in')],
-    organizationName: 'KHANNA & ASSOCIATES',
+    companyName: 'KHANNA & ASSOCIATES',
     designation: 'Director / Partner',
     department: 'Finance & Accounts',
     assignedTo: 'Priya Mehta',

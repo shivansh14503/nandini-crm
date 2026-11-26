@@ -1,6 +1,6 @@
 # Nandini CRM — API Plan
 
-> **Status:** living document. Lists every endpoint of `backend-crm` as of 2026-11-26 (through Calendar Phase 2 P2-2:
+> **Status:** living document. Lists every endpoint of `backend-crm` as of 2026-11-26 (Referrals: Company Name replaces Organization Name; through Calendar Phase 2 P2-2:
 > `/api/calendar-connections` and the admin connection routes; P2-1: `/api/admin/integrations`, Admin › API
 > Integrations; Profile Phase 1: `/api/me` (My Profile), `/api/user-photos` and `POST /api/auth/change-password`; and
 > Profile Phase 2: `/api/admin/users` (Admin › Users) with the must-change-password claim; Profile Phase 3:
@@ -137,7 +137,7 @@ for anyone who can view the activity. Admin › Audit Log can undo updates and r
 | `/documents` | Read-only (`GET /`, `GET /:id`) | Activities › Documents: the document each opportunity records in its Documentation section, written only through `/opportunities` (`addDocument`, `documentNo`, `documentDate`, `documentFile`). Row: `{ id, documentNo, documentDate, documentFile: { id, fileName, mimeType, sizeBytes, url } \| null, opportunityId, opportunityCode, opportunity (label), salesStage, organizationName, organizationId?, contact, contactId?, assignedTo (the opportunity's), createdBy, updatedBy, createdAt, updatedAt }`. Only documents of live opportunities, scoped by the opportunity's access (`GET /:id` → 404 / 403 as for the opportunity). Search: an `OPP-` number by prefix, else Document No, file name, opportunity code / name, organization, contact. Sort: `createdAt`, `updatedAt`, `documentNo`, `documentDate` | `opportunityId`, `organizationId`, `contactId`, `assignedTo`, `mine`, `createdWithinDays` |
 | `/products` | CRUD | Not row-scoped | `category`, `type`, `isActive` |
 | `/partner-companies` | CRUD | Company name globally unique | `natureOfPartner`, `assignedTo` |
-| `/referrals` | CRUD | Referred By master. Required: `name`, `mobile` (unique among live referrals, `409`), `organizationName` (by `organizationId`, else by name), `assignedTo`; `status` `Active` / `Inactive` (default `Active`); `emailAddress` like contacts. No record number. Lists are **not row-scoped** (every user picks Referred By from them); changes need the assignee, the creator or a global role. A rename is written through to the leads' and opportunities' `referredBy` | `status`, `organizationId`, `assignedTo`, `mine`, `createdWithinDays` |
+| `/referrals` | CRUD | Referred By master. Required: `name`, `mobile` (unique among live referrals, `409`), `assignedTo`; optional `companyName` (free text, stored uppercase, ≤ 200; replaced `organizationName` / `organizationId` in migration `20261127110000_referral_company_name`); `status` `Active` / `Inactive` (default `Active`); `emailAddress` like contacts. No record number. Lists are **not row-scoped** (every user picks Referred By from them); changes need the assignee, the creator or a global role. A rename is written through to the leads' and opportunities' `referredBy` | `status`, `assignedTo`, `mine`, `createdWithinDays`; `search` matches name, company name, numbers, designation and emails |
 
 ### 2.4 Search, lookups and audit
 

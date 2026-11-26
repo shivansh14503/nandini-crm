@@ -66,6 +66,7 @@ import {
 } from './CalendarFilters';
 import { EventContent, HolidayEventContent } from './EventContent';
 import { CalendarReconnectAlert } from '@/components/integrations/CalendarReconnectAlert';
+import { useScrollChainToPage } from '@/hooks/useScrollChainToPage';
 
 /** FullCalendar view per calendar view. */
 const FC_VIEWS: Record<CalendarViewKey, string> = {
@@ -222,6 +223,9 @@ export default function CalendarView() {
     const today = zonedDayOf(clock.now(), timeZone);
 
     const calendarRef = useRef<CalendarRef>(null);
+    // Scrolling the time grid, agenda or filter rail past its top or bottom carries on scrolling the page.
+    const pageRef = useRef<HTMLDivElement>(null);
+    useScrollChainToPage(pageRef);
     const views = isPhone ? PHONE_VIEWS : isDesktop ? DESKTOP_VIEWS : TABLET_VIEWS;
     const defaultView: CalendarViewKey = isPhone ? 'agenda' : isSmallTablet ? '3day' : 'week';
 
@@ -485,6 +489,7 @@ export default function CalendarView() {
 
     return (
         <Box
+            ref={pageRef}
             sx={{
                 flex: 1,
                 display: 'flex',

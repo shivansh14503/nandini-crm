@@ -1,7 +1,7 @@
 # Nandini CRM — Database Design
 
-> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (85 migrations,
-> latest `20261127110000_company_formats`, as of 2026-11-26). Update it in the same change as any schema migration.
+> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (86 migrations,
+> latest `20261127120000_company_formats`, as of 2026-11-26). Update it in the same change as any schema migration.
 > Related: [System design](system-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
 ---
@@ -85,7 +85,6 @@ erDiagram
     Organization ||--o{ Ticket : has
     Organization ||--o{ Contract : has
     Organization ||--o{ Activity : "concerned by"
-    Organization ||--o{ Referral : has
     Contact ||--o{ EntityEmail : emailAddress
     Contact ||--o{ Opportunity : "contact for"
     Contact ||--o{ Quotation : "contact for"
@@ -507,8 +506,8 @@ Indexes: `status`, `assignedTo`, `organizationId`, `contactId`, `opportunityId`,
 ### 4.23 `Referral` (Referred By master)
 
 People and firms who refer business (All › Referrals, migration `20261125230000_referrals`). Uses the Contact form's
-fields without Left Job, Phone 3–5, Is Primary Contact, Communication Type, DND and notes: `name`, `organizationName`
-(uppercase) + `organizationId` → `Organization` (NO ACTION; organization renames are written through), `mobile`
+fields without Left Job, Phone 3–5, Is Primary Contact, Communication Type, DND and notes: `name`, `companyName`
+(optional free text, stored uppercase, ≤ 200; not linked to an organization), `mobile`
 (unique among live referrals, checked by the API), `officePhone`, `designation`, `department`, `assignedTo`, `status`
 (`Active` / `Inactive`, default `Active`; fixed dropdown `referral_status`), `customDataJson`, audit/soft delete.
 Emails live in `EntityEmail.referralId` (cascade). No record number (no document series).
@@ -518,7 +517,13 @@ written through on a rename (`propagateReferralName`). New values must be an **A
 later goes Inactive or is deleted stays on the records that already have it. Rows created before the migration keep
 their free-text `referredBy` with `referredById` NULL (`modules/shared/referredBy.ts`).
 
-Indexes: `organizationId`, `mobile`, `name`, `assignedTo`, `status`, `(isDeleted, createdAt)`.
+Indexes: `mobile`, `name`, `assignedTo`, `status`, `(isDeleted, createdAt)`.
+
+Migration `20261127110000_referral_company_name` replaced `organizationName` + `organizationId` (an organization picker)
+with `companyName`: each referral's organization name was copied into it, then the two columns, their index and
+foreign key were dropped. The built-in Form Builder row became `companyName` (Company Name, text, optional), every
+field of the referral form moved into one "Referral Details" section, and saved referral drawer layouts and table
+filters naming `organizationName` were rewritten to `companyName`.
 
 ### 4.24 `Document` (Activities › Documents)
 
@@ -716,7 +721,7 @@ most 500 per query), or the full list with the user directory. Saves take the pe
 
 ### 4.31 `CompanyFormatSettings` (Admin › Company formats)
 
-Migration `20261127110000_company_formats` (Profile Phase 5, as of 2026-11-26; new table only). Module
+Migration `20261127120000_company_formats` (Profile Phase 5, as of 2026-11-26; new table only). Module
 `backend-crm/src/modules/company-formats`. How dates, times and numbers are shown across the CRM, its PDFs, the
 morning email and new notification texts: one company-wide setting (no per-user locale). **Single row, `id = 1`**,
 written by the first save and deleted by "Reset to CRM defaults". **No row = not customized**: every screen keeps the

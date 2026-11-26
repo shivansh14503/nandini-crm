@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import dynamic from 'next/dynamic';
 import { getNatureOfCalls } from '@/services/masterData.store';
 import { getPartnerContacts } from '@/services/masterData.store';
 import { useMasterData } from '@/hooks/queries/useMasterData';
@@ -26,6 +27,11 @@ import {
     REFERRAL_LOOKUP_PRESET,
     type LookupPreset,
 } from './lookupConfigs';
+
+// Loaded on demand: the referral form only when "Create Referral Contact" is used (and no import cycle with the forms).
+const ReferralQuickCreateDialog = dynamic(() => import('@/components/referrals/ReferralQuickCreateDialog').then((m) => m.ReferralQuickCreateDialog), {
+    ssr: false,
+});
 
 /**
  * Builds an entity lookup modal from a preset and a data source. `getLabel` is the value the field
@@ -196,21 +202,34 @@ export function useActiveReferrals(enabled = true): { referrals: Referral[]; isL
     return { referrals, isLoading };
 }
 
-/** Referred By picker: the Active referrals only. */
+/**
+ * Referred By picker: the Active referrals only. "Create Referral Contact" opens the referral form in a dialog on top;
+ * a new Active referral is picked straight away (an Inactive one can't be Referred By, so the picker stays open).
+ */
 export function ReferralLookupModal({ open, onClose, onSelect, selectedValue, initialFilterValues }: EntityLookupModalProps<Referral>) {
     const { referrals, isLoading } = useActiveReferrals(open);
+    const [creating, setCreating] = React.useState(false);
     const selected = selectedValue?.trim().toLowerCase();
     const selectedId = selected ? referrals.find((r) => r.name.trim().toLowerCase() === selected)?.id : undefined;
+    const handleCreated = (referral: Referral) => {
+        if (referral.status !== ACTIVE_REFERRAL_STATUS) return;
+        onSelect(referral);
+        onClose();
+    };
     return (
-        <GenericLookupModal<Referral>
-            open={open}
-            onClose={onClose}
-            onSelect={onSelect}
-            data={open ? referrals : NO_REFERRALS}
-            loading={open && isLoading}
-            selectedId={selectedId}
-            {...REFERRAL_LOOKUP_PRESET}
-            initialFilterValues={initialFilterValues}
-        />
+        <>
+            <GenericLookupModal<Referral>
+                open={open}
+                onClose={onClose}
+                onSelect={onSelect}
+                data={open ? referrals : NO_REFERRALS}
+                loading={open && isLoading}
+                selectedId={selectedId}
+                {...REFERRAL_LOOKUP_PRESET}
+                initialFilterValues={initialFilterValues}
+                createAction={{ label: 'Create Referral Contact', onClick: () => setCreating(true) }}
+            />
+            {creating && <ReferralQuickCreateDialog open={open && creating} onClose={() => setCreating(false)} onSaved={handleCreated} />}
+        </>
     );
 }
