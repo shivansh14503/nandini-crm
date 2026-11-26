@@ -46,6 +46,7 @@ import { useDropdownOptionsGetter } from '@/hooks/queries/useFormConfigs';
 import { OrganizationNameAutocomplete } from '@/components/organizations/OrganizationNameAutocomplete';
 import { useOrganizationNameCheck } from '@/components/organizations/useOrganizationNameCheck';
 import { useFormMode } from '@/context/FormModeContext';
+import { useIsCodedDefaultsHarvest } from '@/context/CodedFieldDefaultsContext';
 import { upperCase, useUndoSafeSanitizer } from '@/components/forms/undoSafeInput';
 import { CUSTOMER_RESPONSES, FieldGlow, useFollowUpDecision, type FollowUpDecision } from '@/components/forms/FollowUpDecision';
 import { useLeadRatingConfig } from '@/utils/leadRating';
@@ -177,6 +178,8 @@ export function LeadOverviewSection({ leadId, notify, onDecisionPendingChange, o
     // GSTIN only applies to 'Registered' / SEZ leads: clear it whenever another type (or none) is chosen.
     const registrationType = useWatch({ control, name: 'registrationType' }) ?? '';
     const isRegistered = isGstRegistrationType(registrationType);
+    // The form builder's hidden copy shows GST Number anyway, so its coded hint reaches the builder.
+    const harvest = useIsCodedDefaultsHarvest();
     React.useEffect(() => {
         if (!isRegistered && getValues('gstNumber')) {
             setValue('gstNumber', '', { shouldValidate: true });
@@ -243,7 +246,7 @@ export function LeadOverviewSection({ leadId, notify, onDecisionPendingChange, o
                     <LockedField name="mailingName" label="Mailing Name" hint="Follows Organization Name" value={organizationName} placeholder="Same as organization name" />
                     <RhfSelect<LeadFormData> name="registrationType" label="Registration Type" options={LEAD_REGISTRATION_TYPES} placeholder="Select Type" />
                     {/* GSTIN only exists for registered businesses, so the field only appears for 'Registered' / SEZ. */}
-                    {isRegistered && (
+                    {(isRegistered || harvest) && (
                         <RhfUppercaseField<LeadFormData>
                             name="gstNumber"
                             label="GST Number"

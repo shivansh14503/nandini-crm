@@ -22,6 +22,7 @@ import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 
 import { useFormContext, useWatch, FormProvider, useForm } from 'react-hook-form';
 import { useFormMode } from '@/context/FormModeContext';
+import { useIsCodedDefaultsHarvest } from '@/context/CodedFieldDefaultsContext';
 import { upperCase, useUndoSafeSanitizer } from '@/components/forms/undoSafeInput';
 import { useAuth } from '@/context/AuthContext';
 import { formatDateTime } from '@/utils/date';
@@ -122,6 +123,8 @@ function OverviewTabInner({
     // Nature of Partner belongs to partner organizations: it shows (required) beside Customer Type when that is
     // Partner, and is cleared when Customer Type changes from Partner to something else.
     const isPartner = isPartnerCustomerType(watchedCustomerType ?? form?.customerType);
+    // The form builder's hidden copy shows Nature of Partner anyway, so its coded texts reach the builder.
+    const harvest = useIsCodedDefaultsHarvest();
     const watchedNatureOfPartner = useWatch({ control, name: 'natureOfPartner' });
     React.useEffect(() => {
         if (set && watchedNatureOfPartner !== undefined && watchedNatureOfPartner !== form?.natureOfPartner) {
@@ -452,7 +455,7 @@ function OverviewTabInner({
                     required
                 />
 
-                {isPartner && (
+                {(isPartner || harvest) && (
                     <RhfSelect<OrganizationFormData>
                         name="natureOfPartner"
                         label="Nature of Partner"

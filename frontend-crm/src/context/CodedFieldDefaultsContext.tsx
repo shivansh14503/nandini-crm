@@ -34,6 +34,15 @@ export function useCodedDefaultsRecorder(): CodedDefaultsRecorder | null {
     return useContext(RecorderContext);
 }
 
+/**
+ * True inside the form builder's hidden harvest copy of a form. Fields a form shows only for some values (Partner
+ * Company for Lead Source Partner, GST Number for a registered business, the commission and document fields…) are
+ * then rendered anyway, so their coded hint / placeholder reaches the form builder like every other field's.
+ */
+export function useIsCodedDefaultsHarvest(): boolean {
+    return useContext(RecorderContext) !== null;
+}
+
 const DefaultsContext = createContext<CodedFieldDefaultsMap>({});
 
 /** Provides the coded defaults of the module open in the form builder. */
