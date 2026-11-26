@@ -39,11 +39,20 @@ import * as zonedTime from '../utils/zonedTime.js';
 import { FOLLOW_UP_ACTIVITY_LOCKED, FOLLOW_UP_ORIGIN } from '../modules/activities/activity.access.js';
 import { ACTIVITY_ONLY_TYPE_MESSAGE, activityOnlyTypeIssues, isActivityOnlyFollowupType } from '../modules/shared/followupTypes.js';
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, PASSWORD_RULES, passwordPolicyIssue } from '../modules/auth/passwordPolicy.js';
-import { GOOGLE_SCOPE_PROFILES, INTEGRATION_PROVIDERS, SECRET_EXPIRY_WARNING_DAYS } from '../modules/integrations/integration.constants.js';
+import { INTEGRATION_PROVIDERS, SECRET_EXPIRY_WARNING_DAYS } from '../modules/integrations/integration.constants.js';
+import { PEOPLE_ISSUE_FILTERS, PERSON_CALENDAR_NOTE_MAX } from '../modules/integrations/integration.validator.js';
+import { SERVICE_ACCOUNT_KEY_MAX_BYTES } from '../modules/calendar-sync/providers/googleServiceAccount.js';
 import { BACKFILL_DAY_CHOICES, EVENT_VISIBILITIES, MAX_COMPANY_DOMAINS } from '../modules/integrations/calendarSyncSettings.js';
 import { USER_EMAIL_ISSUES, USER_EMAIL_MAX_LENGTH } from '../modules/users/userEmail.service.js';
-import { CALENDAR_CONNECTIONS_PAGE, CALENDAR_PROVIDERS, CALLBACK_REASONS, CONNECTION_STATUS_REASONS, CONNECTION_STATUSES } from '../modules/calendar-sync/connection.constants.js';
-import { loginLocation } from '../modules/calendar-sync/oauth.js';
+import {
+    ADMIN_INTEGRATIONS_PAGE,
+    CALENDAR_CONNECTIONS_PAGE,
+    CALENDAR_PROVIDERS,
+    CONNECTION_STATUSES,
+    ENROLMENT_SOURCES,
+    NOT_SYNCED_REASONS,
+    OWN_CALENDAR_STATUSES,
+} from '../modules/calendar-sync/connection.constants.js';
 import { NOTIFICATION_KINDS } from '../modules/notifications/notification.producer.js';
 import { normalizeUsername, RESERVED_USERNAMES, USERNAME_MAX_LENGTH, USERNAME_MIN_LENGTH, USERNAME_PATTERN, usernameIssue } from '../modules/user-admin/username.js';
 import {
@@ -168,8 +177,12 @@ interface FrontendIntegrationTypes {
     INTEGRATION_PROVIDERS: readonly string[];
     BACKFILL_DAY_CHOICES: readonly number[];
     EVENT_VISIBILITIES: readonly string[];
-    GOOGLE_SCOPE_PROFILES: readonly string[];
     USER_EMAIL_ISSUES: readonly string[];
+    PEOPLE_ISSUE_FILTERS: readonly string[];
+    CONNECTION_STATUSES: readonly string[];
+    ENROLMENT_SOURCES: readonly string[];
+    SERVICE_ACCOUNT_KEY_MAX_BYTES: number;
+    PERSON_CALENDAR_NOTE_MAX: number;
     SECRET_EXPIRY_WARNING_DAYS: number;
     MAX_COMPANY_DOMAINS: number;
     USER_EMAIL_MAX_LENGTH: number;
@@ -177,10 +190,9 @@ interface FrontendIntegrationTypes {
 
 interface FrontendCalendarConnectionTypes {
     CALENDAR_PROVIDERS: readonly string[];
-    CONNECTION_STATUSES: readonly string[];
-    CONNECTION_STATUS_REASONS: readonly string[];
-    CALLBACK_REASONS: readonly string[];
-    CALLBACK_REASON_MESSAGES: Record<string, string>;
+    OWN_CALENDAR_STATUSES: readonly string[];
+    NOT_SYNCED_REASONS: readonly string[];
+    NOT_SYNCED_REASON_MESSAGES: Record<string, string>;
 }
 
 interface FrontendSafeNextPath {
@@ -487,8 +499,12 @@ describe('backend ↔ frontend contract', { skip }, () => {
         assert.deepEqual([...frontend.INTEGRATION_PROVIDERS], [...INTEGRATION_PROVIDERS]);
         assert.deepEqual([...frontend.BACKFILL_DAY_CHOICES], [...BACKFILL_DAY_CHOICES]);
         assert.deepEqual([...frontend.EVENT_VISIBILITIES], [...EVENT_VISIBILITIES]);
-        assert.deepEqual([...frontend.GOOGLE_SCOPE_PROFILES], [...GOOGLE_SCOPE_PROFILES]);
         assert.deepEqual([...frontend.USER_EMAIL_ISSUES], [...USER_EMAIL_ISSUES]);
+        assert.deepEqual([...frontend.PEOPLE_ISSUE_FILTERS], [...PEOPLE_ISSUE_FILTERS]);
+        assert.deepEqual([...frontend.CONNECTION_STATUSES], [...CONNECTION_STATUSES]);
+        assert.deepEqual([...frontend.ENROLMENT_SOURCES], [...ENROLMENT_SOURCES]);
+        assert.equal(frontend.SERVICE_ACCOUNT_KEY_MAX_BYTES, SERVICE_ACCOUNT_KEY_MAX_BYTES);
+        assert.equal(frontend.PERSON_CALENDAR_NOTE_MAX, PERSON_CALENDAR_NOTE_MAX);
         assert.equal(frontend.SECRET_EXPIRY_WARNING_DAYS, SECRET_EXPIRY_WARNING_DAYS);
         assert.equal(frontend.MAX_COMPANY_DOMAINS, MAX_COMPANY_DOMAINS);
         assert.equal(frontend.USER_EMAIL_MAX_LENGTH, USER_EMAIL_MAX_LENGTH);
@@ -497,32 +513,32 @@ describe('backend ↔ frontend contract', { skip }, () => {
     it('frontend components/integrations/calendarConnections.types.ts matches the calendar connection constants', async () => {
         const frontend = await loadFrontend<FrontendCalendarConnectionTypes>('components/integrations/calendarConnections.types.ts');
         assert.deepEqual([...frontend.CALENDAR_PROVIDERS], [...CALENDAR_PROVIDERS]);
-        assert.deepEqual([...frontend.CONNECTION_STATUSES], [...CONNECTION_STATUSES]);
-        assert.deepEqual([...frontend.CONNECTION_STATUS_REASONS], [...CONNECTION_STATUS_REASONS]);
-        assert.deepEqual([...frontend.CALLBACK_REASONS], [...CALLBACK_REASONS]);
-        assert.deepEqual(Object.keys(frontend.CALLBACK_REASON_MESSAGES).sort(), [...CALLBACK_REASONS].sort(), 'every callback reason has a sentence');
+        assert.deepEqual([...frontend.OWN_CALENDAR_STATUSES], [...OWN_CALENDAR_STATUSES]);
+        assert.deepEqual([...frontend.NOT_SYNCED_REASONS], [...NOT_SYNCED_REASONS]);
+        assert.deepEqual(Object.keys(frontend.NOT_SYNCED_REASON_MESSAGES).sort(), [...NOT_SYNCED_REASONS].sort(), 'every reason has a sentence');
     });
 
-    it('frontend notification kinds and the Connected accounts route match', async () => {
+    it('frontend notification kinds, the Connected accounts route and the admin page match', async () => {
         const frontend = await loadFrontend<{ NOTIFICATION_KINDS: readonly string[] }>('types/notification.types.ts');
         assert.deepEqual([...frontend.NOTIFICATION_KINDS], [...NOTIFICATION_KINDS]);
         const constants = readFileSync(path.join(FRONTEND_SRC, 'config/constants.ts'), 'utf8');
         assert.ok(constants.includes(`PROFILE_CONNECTED_ACCOUNTS: '${CALENDAR_CONNECTIONS_PAGE}'`), 'ROUTES.PROFILE_CONNECTED_ACCOUNTS');
         const target = new URL(CALENDAR_CONNECTIONS_PAGE, 'http://crm.invalid');
-        assert.ok(existsSync(path.join(FRONTEND_SRC, `app${target.pathname}/page.tsx`)), 'the page the callback redirects to exists');
+        assert.ok(existsSync(path.join(FRONTEND_SRC, `app${target.pathname}/page.tsx`)), 'the Connected accounts page exists');
         const tab = target.searchParams.get('tab');
-        assert.ok(tab, 'the callback opens a My Profile tab');
+        assert.ok(tab, 'Connected accounts is a My Profile tab');
         const profileView = readFileSync(path.join(FRONTEND_SRC, 'components/profile/ProfileView.tsx'), 'utf8');
         assert.ok(profileView.includes(`key: '${tab}'`), `My Profile has a '${tab}' tab`);
-        // Old bookmarks and in-flight callbacks still land somewhere.
+        // Old bookmarks still land somewhere.
         assert.ok(existsSync(path.join(FRONTEND_SRC, 'app/connected-calendars/page.tsx')), 'the old /connected-calendars redirect exists');
+        // calendar_sync_issue opens Admin › API Integrations (notificationHref).
+        assert.ok(constants.includes(`API_INTEGRATIONS: '${ADMIN_INTEGRATIONS_PAGE}'`), 'ROUTES.API_INTEGRATIONS');
+        assert.ok(existsSync(path.join(FRONTEND_SRC, `app${ADMIN_INTEGRATIONS_PAGE}/page.tsx`)), 'the admin integrations page exists');
     });
 
-    it('the login page follows the callback\'s ?next= back to Connected accounts, and only to CRM paths', async () => {
+    it('the login page follows ?next= back to CRM paths only', async () => {
         const { safeNextPath } = await loadFrontend<FrontendSafeNextPath>('utils/safeNextPath.ts');
-        const next = new URL(loginLocation()).searchParams.get('next');
-        assert.equal(safeNextPath(next, '/dashboard'), CALENDAR_CONNECTIONS_PAGE);
-        assert.equal(safeNextPath('/profile?tab=connected-accounts&calendar=connected', '/d'), '/profile?tab=connected-accounts&calendar=connected');
+        assert.equal(safeNextPath(CALENDAR_CONNECTIONS_PAGE, '/dashboard'), CALENDAR_CONNECTIONS_PAGE);
         for (const bad of ['//evil.example', '/\\evil.example', 'https://evil.example', 'javascript:alert(1)', '/login', '', null, '/a\nb']) {
             assert.equal(safeNextPath(bad, '/d'), '/d', String(bad));
         }

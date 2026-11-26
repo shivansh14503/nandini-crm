@@ -16,7 +16,7 @@ describe('preferencesPatchSchema', () => {
 
     it('refuses unknown keys, top-level and nested', () => {
         assert.equal(issues({ theme: 'dark' }).length, 1);
-        assert.deepEqual(issues({ inApp: { calendar_reconnect: false } }).map((issue) => issue.path), ['inApp']);
+        assert.deepEqual(issues({ inApp: { calendar_sync_issue: false } }).map((issue) => issue.path), ['inApp']);
         assert.deepEqual(issues({ outOfOffice: { from: '2026-12-01', to: '2026-12-02', reason: 'x' } }).map((issue) => issue.path), ['outOfOffice']);
     });
 

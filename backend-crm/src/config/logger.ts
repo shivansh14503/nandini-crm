@@ -28,6 +28,12 @@ export const LOG_REDACT_PATHS: readonly string[] = [
     '*.code_verifier',
     '*.secrets',
     '*.secretsEnc',
+    'assertion',
+    '*.assertion',
+    '*.private_key',
+    '*.privateKey',
+    'serviceAccountKey',
+    '*.serviceAccountKey',
     '*.syncCursor',
 ];
 

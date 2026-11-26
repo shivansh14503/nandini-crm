@@ -1,112 +1,224 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
-import {
-    Accordion,
-    AccordionDetails,
-    AccordionSummary,
-    Alert,
-    Box,
-    Button,
-    CircularProgress,
-    FormControlLabel,
-    MenuItem,
-    Switch,
-    TextField,
-    Tooltip,
-    Typography,
-} from '@mui/material';
-import ExpandMoreRoundedIcon from '@mui/icons-material/ExpandMoreRounded';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Autocomplete, Box, Button, CircularProgress, TextField, Tooltip, Typography, Switch } from '@mui/material';
 import CheckCircleOutlineRoundedIcon from '@mui/icons-material/CheckCircleOutlineRounded';
 import ErrorOutlineRoundedIcon from '@mui/icons-material/ErrorOutlineRounded';
-import {
-    ConfirmDeleteDialog,
-    errorMessage,
-    inputSx,
-    panelHeaderSx,
-    primaryButtonSx,
-    secondaryButtonSx,
-    surfaceSx,
-} from '@/components/settings/form-customization/builderUi';
-import { useClearProviderSecret, useSaveProvider, useTestProvider } from '@/hooks/queries/useIntegrationsAdmin';
-import type { GoogleScopeProfile, ProviderAdmin, SaveProviderPayload } from '@/types/integration.types';
+import UploadFileRoundedIcon from '@mui/icons-material/UploadFileRounded';
+import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
+import { ConfirmDeleteDialog, errorMessage, inputSx, panelHeaderSx, primaryButtonSx, secondaryButtonSx, surfaceSx } from '@/components/settings/form-customization/builderUi';
+import { useClearProviderSecret, usePeople, useSaveProvider, useTestProvider } from '@/hooks/queries/useIntegrationsAdmin';
+import { SERVICE_ACCOUNT_KEY_MAX_BYTES, type ProviderAdmin, type SaveProviderPayload, type TestConnectionResult } from '@/types/integration.types';
 import { CopyField, ProviderMark, StatusChip, fieldErrorsOf, fieldLabelSx, formatDateTime, formatDay, hintSx, type ChipTone } from './integrationUi';
 
-/** What the card's form edits. Secrets start empty: they are write-only and never come back from the server. */
+/**
+ * One provider on Admin › API Integrations (Calendar Phase 2, P2-2b: admin-managed calendar sync).
+ *   - Google Workspace: upload or paste the service account key (.json); the client email, numeric client ID and the
+ *     exact scopes string are shown read-only to copy into the Admin console's domain-wide delegation.
+ *   - Microsoft 365: one Entra app with the application permission Calendars.ReadWrite: client ID, client secret,
+ *     tenant ID.
+ *   - Both: which company email domains they serve, a two-step "Test connection" (the app, then optionally one
+ *     person's calendar), health found while syncing, and people counts.
+ *   - Zoom: credentials only (video meetings arrive in Phase 3).
+ * Secrets are write-only: the form starts empty and the server never sends one back.
+ */
+
+/** What the card's form edits. */
 interface ProviderForm {
     clientId: string;
     clientSecret: string;
     webhookSecret: string;
     expiresOn: string;
     tenantId: string;
-    scopeProfile: GoogleScopeProfile;
-    pkce: boolean;
+    /** Google: the key file's text (write-only). */
+    serviceAccountKey: string;
+    domains: string[];
 }
 
 function formFrom(p: ProviderAdmin): ProviderForm {
     return {
-        clientId: p.clientId ?? '',
+        clientId: p.provider === 'google' ? '' : (p.clientId ?? ''),
         clientSecret: '',
         webhookSecret: '',
         expiresOn: p.secret.expiresOn ?? '',
         tenantId: p.settings.tenantId ?? '',
-        scopeProfile: p.settings.scopeProfile ?? 'narrow',
-        pkce: p.settings.pkce ?? true,
+        serviceAccountKey: '',
+        domains: [...p.domains].sort(),
     };
 }
 
-const sameForm = (a: ProviderForm, b: ProviderForm) => (Object.keys(a) as (keyof ProviderForm)[]).every((k) => a[k] === b[k]);
+const sameForm = (a: ProviderForm, b: ProviderForm) => (Object.keys(a) as (keyof ProviderForm)[]).every((k) => JSON.stringify(a[k]) === JSON.stringify(b[k]));
 
-/** Only what changed goes to the server; an empty secret field keeps the stored secret. */
+/** Only what changed goes to the server; empty secret fields keep the stored ones. */
 function payloadFor(p: ProviderAdmin, base: ProviderForm, form: ProviderForm): SaveProviderPayload {
     const payload: SaveProviderPayload = {};
-    if (form.clientId.trim() !== base.clientId.trim()) payload.clientId = form.clientId.trim() || null;
-    if (form.clientSecret.trim()) payload.clientSecret = form.clientSecret.trim();
-    if (p.provider === 'zoom' && form.webhookSecret.trim()) payload.webhookSecret = form.webhookSecret.trim();
-    if ((p.provider === 'microsoft' || p.provider === 'zoom') && form.expiresOn !== base.expiresOn) payload.clientSecretExpiresOn = form.expiresOn || null;
-    if (p.provider === 'microsoft' && form.tenantId.trim() !== base.tenantId.trim()) payload.settings = { tenantId: form.tenantId.trim() || null };
-    if (p.provider === 'google' && (form.scopeProfile !== base.scopeProfile || form.pkce !== base.pkce)) {
-        payload.settings = { scopeProfile: form.scopeProfile, pkce: form.pkce };
+    const settings: NonNullable<SaveProviderPayload['settings']> = {};
+    if (p.provider === 'google') {
+        if (form.serviceAccountKey.trim()) payload.serviceAccountKey = form.serviceAccountKey.trim();
+    } else {
+        if (form.clientId.trim() !== base.clientId.trim()) payload.clientId = form.clientId.trim() || null;
+        if (form.clientSecret.trim()) payload.clientSecret = form.clientSecret.trim();
+        if (form.expiresOn !== base.expiresOn) payload.clientSecretExpiresOn = form.expiresOn || null;
     }
+    if (p.provider === 'zoom' && form.webhookSecret.trim()) payload.webhookSecret = form.webhookSecret.trim();
+    if (p.provider === 'microsoft' && form.tenantId.trim() !== base.tenantId.trim()) settings.tenantId = form.tenantId.trim() || null;
+    if (p.kind === 'calendar' && JSON.stringify(form.domains) !== JSON.stringify(base.domains)) settings.domains = form.domains;
+    if (Object.keys(settings).length) payload.settings = settings;
     return payload;
 }
 
+/** A first look at a key file in the browser (the server checks it properly); never echoes the key. */
+function keyFilePreview(text: string): { clientEmail: string } | { error: string } | null {
+    if (!text.trim()) return null;
+    try {
+        const json = JSON.parse(text) as Record<string, unknown>;
+        if (json.type !== 'service_account') return { error: 'This is not a service account key (type must be "service_account").' };
+        if (typeof json.client_email !== 'string' || typeof json.private_key !== 'string') return { error: 'The key file has no client_email or private key.' };
+        return { clientEmail: json.client_email };
+    } catch {
+        return { error: 'This is not a JSON key file.' };
+    }
+}
+
+const credentialsUnreadable = (p: ProviderAdmin) => (p.secret.set && !p.secret.readable) || Boolean(p.serviceAccount?.set && !p.serviceAccount.readable);
+
 /** Not set up / Off / On / Needs attention. */
 export function providerStatus(p: ProviderAdmin): { tone: ChipTone; label: string; title?: string } {
-    if (p.secret.set && !p.secret.readable) return { tone: 'error', label: 'Needs attention', title: "The stored secret can't be opened with the server's current key." };
+    if (credentialsUnreadable(p)) return { tone: 'error', label: 'Needs attention', title: "The stored credentials can't be opened with the server's current key." };
     if (!p.configured) return { tone: 'neutral', label: 'Not set up' };
-    if (p.enabled && p.lastTest && !p.lastTest.ok) return { tone: 'warning', label: 'Needs attention', title: 'The last connection test failed.' };
+    if (p.enabled && p.health.status === 'error') return { tone: 'error', label: 'Not working', title: p.health.message ?? undefined };
     if (p.enabled && p.secret.expiresSoon) return { tone: 'warning', label: 'Needs attention', title: 'The client secret expires soon.' };
     return p.enabled ? { tone: 'success', label: 'On' } : { tone: 'neutral', label: 'Off' };
 }
 
 const PROVIDER_BLURB: Record<ProviderAdmin['provider'], string> = {
-    google: 'Employees connect their Google Calendar. CRM meetings and follow-ups go to it, and changes made there come back.',
-    microsoft: 'Employees connect their Outlook calendar (Microsoft 365). CRM meetings and follow-ups go to it, and changes made there come back.',
+    google:
+        'A service account with domain-wide delegation puts CRM meetings on everyone’s Google Calendar. Nobody signs in: people on the domains below are synced automatically.',
+    microsoft:
+        'One Entra app with the application permission Calendars.ReadWrite (admin consent) puts CRM meetings on everyone’s Outlook calendar. Nobody signs in. To limit the app to some mailboxes, scope it with RBAC for Applications in Exchange Online.',
     zoom: 'Video meeting links on CRM meetings. You can store the app credentials now; the switch turns on when video meetings ship.',
 };
 
-/** One provider's credentials and switch on Admin › API Integrations. */
-export function ProviderCard({
-    provider,
-    keyReady,
-    onDirtyChange,
-    onToast,
+const monoSx = { fontSize: '0.8rem', color: 'var(--crm-slate-900)', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace' } as const;
+
+const domainChipSx = (on: boolean, taken: boolean) =>
+    ({
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 0.5,
+        minHeight: 36,
+        px: 1.25,
+        borderRadius: '999px',
+        fontSize: '0.78rem',
+        fontWeight: 600,
+        fontFamily: 'inherit',
+        cursor: taken ? 'not-allowed' : 'pointer',
+        border: on ? '1px solid var(--mui-palette-primary-softBorder)' : '1px solid var(--mui-palette-border-main)',
+        backgroundColor: on ? 'var(--mui-palette-primary-soft)' : 'var(--mui-palette-background-paper)',
+        color: taken ? 'var(--mui-palette-text-muted)' : on ? 'var(--crm-text-blue-900)' : 'var(--crm-slate-700)',
+        transition: 'all 0.15s ease',
+        '&:hover': taken ? {} : { borderColor: 'var(--crm-blue-300)', backgroundColor: 'var(--mui-palette-primary-soft)', color: 'var(--crm-text-blue-700)' },
+        '&:focus-visible': { outline: 'none', boxShadow: '0 0 0 3px rgb(var(--crm-accent-rgb) / 0.22)' },
+    }) as const;
+
+/** Which company email domains a calendar provider serves: one toggle per company domain (a domain has one provider). */
+function DomainsField({
+    value,
+    companyDomains,
+    takenBy,
+    disabled,
+    error,
+    onChange,
 }: {
+    value: string[];
+    companyDomains: string[];
+    takenBy: Record<string, string>;
+    disabled: boolean;
+    error?: string;
+    onChange: (domains: string[]) => void;
+}) {
+    // A stored domain that is no longer a company domain still shows, so it can be removed.
+    const all = [...new Set([...companyDomains, ...value])].sort();
+    const toggle = (domain: string) => onChange(value.includes(domain) ? value.filter((d) => d !== domain) : [...value, domain].sort());
+    return (
+        <Box sx={{ minWidth: 0 }}>
+            <Typography sx={fieldLabelSx}>Email domains it serves</Typography>
+            <Box role="group" aria-label="Email domains" sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
+                {all.map((domain) => {
+                    const on = value.includes(domain);
+                    const taken = !on && Boolean(takenBy[domain]);
+                    return (
+                        <Tooltip key={domain} title={taken ? `Served by ${takenBy[domain]}` : ''} arrow disableHoverListener={!taken} disableFocusListener={!taken}>
+                            <Box
+                                component="button"
+                                type="button"
+                                aria-pressed={on}
+                                disabled={disabled || taken}
+                                onClick={() => toggle(domain)}
+                                sx={domainChipSx(on, taken)}
+                            >
+                                {on && <CheckRoundedIcon sx={{ fontSize: 15 }} />}
+                                {domain}
+                            </Box>
+                        </Tooltip>
+                    );
+                })}
+            </Box>
+            <Typography sx={{ ...hintSx, mt: 0.5, color: error ? 'var(--mui-palette-error-main)' : hintSx.color }}>
+                {error || 'Company domains come from the calendar settings below. Each domain belongs to one provider; people on it are synced automatically.'}
+            </Typography>
+        </Box>
+    );
+}
+
+/** The two steps of the last test run in this session. */
+function TestSteps({ result }: { result: TestConnectionResult }) {
+    return (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+            {result.steps.map((s) => (
+                <Box key={s.step} sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.75, color: s.ok ? 'var(--crm-emerald-700)' : 'var(--crm-red-700)' }}>
+                    {s.ok ? <CheckCircleOutlineRoundedIcon sx={{ fontSize: 17, mt: '1px' }} /> : <ErrorOutlineRoundedIcon sx={{ fontSize: 17, mt: '1px' }} />}
+                    <Typography sx={{ fontSize: '0.76rem', lineHeight: 1.5, minWidth: 0, overflowWrap: 'anywhere' }}>
+                        <Box component="span" sx={{ fontWeight: 700 }}>
+                            {s.step === 'app' ? 'App: ' : 'As the person: '}
+                        </Box>
+                        {s.message}
+                    </Typography>
+                </Box>
+            ))}
+        </Box>
+    );
+}
+
+export interface ProviderCardProps {
     provider: ProviderAdmin;
     /** False while the server has no readable encryption key: nothing can be saved. */
     keyReady: boolean;
+    companyDomains: string[];
+    /** Domains other providers serve → their label. */
+    takenBy: Record<string, string>;
     onDirtyChange: (provider: ProviderAdmin['provider'], dirty: boolean) => void;
     onToast: (message: string, severity?: 'success' | 'error') => void;
-}) {
+    /** Opens the People list filtered to calendar problems. */
+    onShowProblems?: () => void;
+}
+
+/** One provider's credentials, domains, test and switch on Admin › API Integrations. */
+export function ProviderCard({ provider, keyReady, companyDomains, takenBy, onDirtyChange, onToast, onShowProblems }: ProviderCardProps) {
     const p = provider;
+    const isGoogle = p.provider === 'google';
     const serverForm = useMemo(() => formFrom(p), [p]);
     const [base, setBase] = useState<ProviderForm>(serverForm);
     const [form, setForm] = useState<ProviderForm>(serverForm);
     const [replacingSecret, setReplacingSecret] = useState(false);
     const [replacingWebhook, setReplacingWebhook] = useState(false);
+    const [replacingKey, setReplacingKey] = useState(false);
+    const [keyFileName, setKeyFileName] = useState('');
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [confirmRemove, setConfirmRemove] = useState(false);
+    const [asUsername, setAsUsername] = useState<string | null>(null);
+    const [testResult, setTestResult] = useState<TestConnectionResult | null>(null);
+    const fileInput = useRef<HTMLInputElement>(null);
 
     const dirty = !sameForm(form, base);
 
@@ -128,6 +240,7 @@ export function ProviderCard({
     const save = useSaveProvider();
     const test = useTestProvider();
     const clear = useClearProviderSecret();
+    const people = usePeople();
     const busy = save.isPending || clear.isPending;
 
     const set = <K extends keyof ProviderForm>(key: K, value: ProviderForm[K]) => {
@@ -135,7 +248,7 @@ export function ProviderCard({
         setErrors((e) => {
             if (!Object.keys(e).length) return e;
             const next = { ...e };
-            delete next[key === 'tenantId' ? 'settings.tenantId' : key === 'expiresOn' ? 'clientSecretExpiresOn' : key];
+            delete next[key === 'tenantId' ? 'settings.tenantId' : key === 'domains' ? 'settings.domains' : key === 'expiresOn' ? 'clientSecretExpiresOn' : key];
             delete next[''];
             return next;
         });
@@ -145,7 +258,23 @@ export function ProviderCard({
         setForm(base);
         setReplacingSecret(false);
         setReplacingWebhook(false);
+        setReplacingKey(false);
+        setKeyFileName('');
         setErrors({});
+    };
+
+    const pickKeyFile = async (file: File | undefined) => {
+        if (!file) return;
+        if (file.size > SERVICE_ACCOUNT_KEY_MAX_BYTES) {
+            setErrors((e) => ({ ...e, serviceAccountKey: 'That file is too large to be a service account key.' }));
+            return;
+        }
+        try {
+            set('serviceAccountKey', await file.text());
+            setKeyFileName(file.name);
+        } catch {
+            setErrors((e) => ({ ...e, serviceAccountKey: "The file couldn't be read." }));
+        }
     };
 
     const submit = async () => {
@@ -160,8 +289,11 @@ export function ProviderCard({
             setForm(saved);
             setReplacingSecret(false);
             setReplacingWebhook(false);
+            setReplacingKey(false);
+            setKeyFileName('');
             setErrors({});
-            onToast(`${p.label} saved.`);
+            setTestResult(null);
+            onToast(payload.serviceAccountKey || payload.clientSecret || payload.clientId !== undefined ? `${p.label} saved. Run Test connection next.` : `${p.label} saved.`);
         } catch (err) {
             setErrors(fieldErrorsOf(err));
             onToast(errorMessage(err, `Could not save ${p.label}.`), 'error');
@@ -171,7 +303,11 @@ export function ProviderCard({
     const toggleEnabled = async (enabled: boolean) => {
         try {
             await save.mutateAsync({ provider: p.provider, payload: { enabled } });
-            onToast(enabled ? `${p.label} is on. Employees can connect from My Profile › Connected accounts.` : `${p.label} is off. Connected calendars stop syncing until it is turned back on.`);
+            onToast(
+                enabled
+                    ? `${p.label} is on. People on its domains are being enrolled.`
+                    : `${p.label} is off. Calendar sync stops for its people; events already in their calendars stay.`,
+            );
         } catch (err) {
             onToast(errorMessage(err, `Could not turn ${p.label} ${enabled ? 'on' : 'off'}.`), 'error');
         }
@@ -179,8 +315,9 @@ export function ProviderCard({
 
     const runTest = async () => {
         try {
-            const result = await test.mutateAsync(p.provider);
-            onToast(result.message, result.ok ? 'success' : 'error');
+            const result = await test.mutateAsync({ provider: p.provider, payload: asUsername ? { asUsername } : {} });
+            setTestResult(result);
+            onToast(result.ok ? 'Test passed.' : result.message, result.ok ? 'success' : 'error');
         } catch (err) {
             onToast(errorMessage(err, 'Could not run the connection test.'), 'error');
         }
@@ -191,9 +328,10 @@ export function ProviderCard({
         try {
             await clear.mutateAsync(p.provider);
             cancel();
-            onToast(`${p.label} secret removed and the integration switched off.`);
+            setTestResult(null);
+            onToast(isGoogle ? 'Google key removed and Google Workspace switched off.' : `${p.label} secret removed and the integration switched off.`);
         } catch (err) {
-            onToast(errorMessage(err, 'Could not remove the secret.'), 'error');
+            onToast(errorMessage(err, isGoogle ? 'Could not remove the key.' : 'Could not remove the secret.'), 'error');
         }
     };
 
@@ -204,16 +342,36 @@ export function ProviderCard({
           ? 'Set the encryption key on the server first.'
           : dirty
             ? 'Save or cancel your changes first.'
-            : !p.configured && !p.enabled
-              ? p.provider === 'microsoft'
-                  ? 'Save a client ID, client secret and tenant ID first.'
-                  : 'Save a client ID and client secret first.'
-              : '';
-    const showSecretField = !p.secret.set || !p.secret.readable || replacingSecret;
+            : p.enabled
+              ? ''
+              : !p.configured
+                ? isGoogle
+                    ? 'Upload the service account key first.'
+                    : 'Save a client ID, client secret and tenant ID first.'
+                : !p.appTested
+                  ? 'Run Test connection with these credentials first.'
+                  : '';
+    const showSecretField = !isGoogle && (!p.secret.set || !p.secret.readable || replacingSecret);
     const showWebhookField = p.webhookSecret !== null && (!p.webhookSecret.set || !p.webhookSecret.readable || replacingWebhook);
+    const showKeyField = isGoogle && (!p.serviceAccount?.set || !p.serviceAccount.readable || replacingKey);
+    const keyPreview = isGoogle ? keyFilePreview(form.serviceAccountKey) : null;
     const hasExpiry = p.provider === 'microsoft' || p.provider === 'zoom';
     const changedBy = (s: { updatedAt: string | null; updatedBy: string | null }) =>
         [s.updatedAt ? `changed ${formatDay(s.updatedAt)}` : '', s.updatedBy ? `by ${s.updatedBy}` : ''].filter(Boolean).join(' ');
+    const hasStoredSecret = p.secret.set || Boolean(p.webhookSecret?.set) || Boolean(p.serviceAccount?.set);
+    // Only people this provider would sync: the server refuses anyone else (409 CALENDAR_TEST_NOT_ALLOWED).
+    const testPeople = useMemo(
+        () =>
+            (people.data ?? []).filter((person) => {
+                const { choice, target, reason } = person.calendar;
+                if (!person.email || choice?.excluded || reason === 'not_company') return false;
+                if (choice?.provider && choice.provider !== p.provider) return false;
+                return !target || target.provider === p.provider;
+            }),
+        [people.data, p.provider],
+    );
+    const selectedPerson = testPeople.find((person) => person.username === asUsername) ?? null;
+    const counts = p.counts;
 
     return (
         <Box component="section" aria-label={p.label} sx={{ ...surfaceSx, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
@@ -240,7 +398,7 @@ export function ProviderCard({
                         {p.label}
                     </Typography>
                     <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)' }}>
-                        {p.kind === 'calendar' ? 'Calendar sync' : 'Video meetings · Phase 3'}
+                        {p.kind === 'calendar' ? 'Company calendar sync' : 'Video meetings · Phase 3'}
                     </Typography>
                 </Box>
                 <StatusChip tone={status.tone} title={status.title}>
@@ -250,7 +408,7 @@ export function ProviderCard({
                     <span>
                         <Switch
                             checked={p.enabled}
-                            disabled={Boolean(enableBlocked && !(p.enabled && !dirty && p.available)) || busy}
+                            disabled={Boolean(enableBlocked) || busy}
                             onChange={(e) => void toggleEnabled(e.target.checked)}
                             slotProps={{ input: { 'aria-label': `${p.label} on or off` } }}
                         />
@@ -261,10 +419,19 @@ export function ProviderCard({
             <Box sx={{ p: { xs: 1.75, sm: 2 }, display: 'flex', flexDirection: 'column', gap: 1.75, flex: 1, minWidth: 0 }}>
                 <Typography sx={hintSx}>{PROVIDER_BLURB[p.provider]}</Typography>
 
-                {p.secret.set && !p.secret.readable && (
+                {p.enabled && p.health.status === 'error' && (
+                    <Alert severity="error" sx={{ fontSize: '0.78rem', py: 0.25, '& .MuiAlert-message': { minWidth: 0 } }}>
+                        <Box component="span" sx={{ fontWeight: 700 }}>
+                            Calendar sync has stopped.{' '}
+                        </Box>
+                        {p.health.message}
+                        {p.health.at ? ` (found ${formatDateTime(p.health.at)})` : ''} Fix it, then run Test connection.
+                    </Alert>
+                )}
+                {credentialsUnreadable(p) && (
                     <Alert severity="error" sx={{ fontSize: '0.78rem', py: 0.25 }}>
-                        The stored client secret can&apos;t be opened with the server&apos;s current encryption key (the key was changed or lost). Enter the secret again and
-                        save. Until then nobody can connect.
+                        The stored {isGoogle ? 'key' : 'client secret'} can&apos;t be opened with the server&apos;s current encryption key (the key was changed or lost).{' '}
+                        {isGoogle ? 'Upload the key again' : 'Enter the secret again'} and save. Until then calendar sync is paused.
                     </Alert>
                 )}
                 {p.secret.expiresSoon && p.secret.expiresOn && (
@@ -273,70 +440,153 @@ export function ProviderCard({
                     </Alert>
                 )}
 
-                {/* Read-only values the admin pastes into the provider's console */}
-                {p.redirectUri && <CopyField label="Redirect URI" value={p.redirectUri} />}
-                {p.webhookUrls?.map((url, i) => (
-                    <CopyField key={url} label={p.webhookUrls && p.webhookUrls.length > 1 ? `Webhook URL ${i + 1}` : 'Webhook URL'} value={url} />
-                ))}
-
-                <TextField
-                    label="Client ID"
-                    size="small"
-                    fullWidth
-                    value={form.clientId}
-                    onChange={(e) => set('clientId', e.target.value)}
-                    disabled={busy}
-                    error={Boolean(errors.clientId)}
-                    helperText={errors.clientId || (p.provider === 'microsoft' ? 'Application (client) ID from the app registration.' : undefined)}
-                    autoComplete="off"
-                    sx={inputSx}
-                    slotProps={{ htmlInput: { maxLength: 200, spellCheck: false } }}
-                />
-
-                {/* Client secret (write-only) */}
-                <Box sx={{ minWidth: 0 }}>
-                    {showSecretField ? (
-                        <TextField
-                            label={p.secret.set ? 'New client secret' : 'Client secret'}
-                            type="password"
-                            size="small"
-                            fullWidth
-                            value={form.clientSecret}
-                            onChange={(e) => set('clientSecret', e.target.value)}
-                            disabled={busy}
-                            error={Boolean(errors.clientSecret)}
-                            helperText={errors.clientSecret || 'Stored encrypted. It is never shown again after you save.'}
-                            autoComplete="new-password"
-                            sx={inputSx}
-                            slotProps={{ htmlInput: { maxLength: 2000, spellCheck: false } }}
-                        />
-                    ) : (
-                        <>
-                            <Typography sx={fieldLabelSx}>Client secret</Typography>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                                <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-900)', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace' }}>
-                                    •••• {p.secret.last4 ?? ''}
-                                </Typography>
-                                {changedBy(p.secret) && <Typography sx={{ ...hintSx, flex: 1, minWidth: 0 }}>· {changedBy(p.secret)}</Typography>}
-                                <Button size="small" variant="outlined" sx={{ ...secondaryButtonSx, minHeight: 32 }} onClick={() => setReplacingSecret(true)} disabled={busy}>
-                                    Replace
-                                </Button>
+                {/* Google: the service account key */}
+                {isGoogle && (
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25, minWidth: 0 }}>
+                        {showKeyField ? (
+                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+                                <Typography sx={fieldLabelSx}>{p.serviceAccount?.set ? 'New service account key' : 'Service account key'}</Typography>
+                                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+                                    <Button
+                                        variant="outlined"
+                                        sx={{ ...secondaryButtonSx, minHeight: 40 }}
+                                        startIcon={<UploadFileRoundedIcon />}
+                                        onClick={() => fileInput.current?.click()}
+                                        disabled={busy || !keyReady}
+                                    >
+                                        Upload key (.json)
+                                    </Button>
+                                    {keyFileName && <Typography sx={{ ...hintSx, overflowWrap: 'anywhere', minWidth: 0 }}>{keyFileName}</Typography>}
+                                    <input
+                                        ref={fileInput}
+                                        type="file"
+                                        accept="application/json,.json"
+                                        hidden
+                                        onChange={(e) => {
+                                            void pickKeyFile(e.target.files?.[0]);
+                                            e.target.value = '';
+                                        }}
+                                    />
+                                </Box>
+                                <TextField
+                                    label="…or paste the key file’s contents"
+                                    size="small"
+                                    fullWidth
+                                    multiline
+                                    minRows={2}
+                                    maxRows={6}
+                                    value={keyFileName ? '' : form.serviceAccountKey}
+                                    placeholder={keyFileName ? `${keyFileName} loaded` : '{ "type": "service_account", … }'}
+                                    onChange={(e) => {
+                                        setKeyFileName('');
+                                        set('serviceAccountKey', e.target.value);
+                                    }}
+                                    disabled={busy || !keyReady}
+                                    error={Boolean(errors.serviceAccountKey) || Boolean(keyPreview && 'error' in keyPreview)}
+                                    helperText={
+                                        errors.serviceAccountKey ||
+                                        (keyPreview && 'error' in keyPreview ? keyPreview.error : keyPreview ? `Key for ${keyPreview.clientEmail}. Save to store it encrypted.` : 'Stored encrypted. It is never shown again after you save.')
+                                    }
+                                    autoComplete="off"
+                                    sx={{ ...inputSx, '& textarea': monoSx }}
+                                    slotProps={{ htmlInput: { spellCheck: false, maxLength: SERVICE_ACCOUNT_KEY_MAX_BYTES } }}
+                                />
+                                {replacingKey && (
+                                    <Button
+                                        size="small"
+                                        sx={{ ...secondaryButtonSx, minHeight: 32, px: 1, alignSelf: 'flex-start' }}
+                                        onClick={() => {
+                                            setReplacingKey(false);
+                                            setKeyFileName('');
+                                            set('serviceAccountKey', '');
+                                        }}
+                                    >
+                                        Keep the current key
+                                    </Button>
+                                )}
                             </Box>
-                        </>
-                    )}
-                    {replacingSecret && (
-                        <Button
-                            size="small"
-                            sx={{ ...secondaryButtonSx, mt: 0.5, minHeight: 32, px: 1 }}
-                            onClick={() => {
-                                setReplacingSecret(false);
-                                set('clientSecret', '');
-                            }}
-                        >
-                            Keep the current secret
-                        </Button>
-                    )}
-                </Box>
+                        ) : (
+                            p.serviceAccount && (
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                                    <Typography sx={fieldLabelSx}>Service account key</Typography>
+                                    <Typography sx={{ ...monoSx, fontSize: '0.74rem', minWidth: 0, overflowWrap: 'anywhere' }}>{p.serviceAccount.privateKeyId?.slice(0, 12)}…</Typography>
+                                    {changedBy(p.serviceAccount) && <Typography sx={{ ...hintSx, flex: 1, minWidth: 0 }}>· {changedBy(p.serviceAccount)}</Typography>}
+                                    <Button size="small" variant="outlined" sx={{ ...secondaryButtonSx, minHeight: 36 }} onClick={() => setReplacingKey(true)} disabled={busy}>
+                                        Replace key
+                                    </Button>
+                                </Box>
+                            )
+                        )}
+                        {p.serviceAccount?.clientEmail && <CopyField label="Service account" value={p.serviceAccount.clientEmail} />}
+                        {p.serviceAccount?.clientId && <CopyField label="Client ID (for domain-wide delegation)" value={p.serviceAccount.clientId} />}
+                        {p.scopesAdminConsole && <CopyField label="OAuth scopes (paste exactly)" value={p.scopesAdminConsole} />}
+                        <Typography sx={hintSx}>
+                            In the Google Admin console open Security › Access and data control › API controls › Manage domain-wide delegation, add the client ID above with
+                            these scopes. It can take a few minutes (rarely up to 24 h) before Google accepts it.
+                        </Typography>
+                    </Box>
+                )}
+
+                {/* Microsoft / Zoom: client credentials */}
+                {!isGoogle && (
+                    <TextField
+                        label="Client ID"
+                        size="small"
+                        fullWidth
+                        value={form.clientId}
+                        onChange={(e) => set('clientId', e.target.value)}
+                        disabled={busy}
+                        error={Boolean(errors.clientId)}
+                        helperText={errors.clientId || (p.provider === 'microsoft' ? 'Application (client) ID from the app registration.' : undefined)}
+                        autoComplete="off"
+                        sx={inputSx}
+                        slotProps={{ htmlInput: { maxLength: 200, spellCheck: false } }}
+                    />
+                )}
+
+                {!isGoogle && (
+                    <Box sx={{ minWidth: 0 }}>
+                        {showSecretField ? (
+                            <TextField
+                                label={p.secret.set ? 'New client secret' : 'Client secret'}
+                                type="password"
+                                size="small"
+                                fullWidth
+                                value={form.clientSecret}
+                                onChange={(e) => set('clientSecret', e.target.value)}
+                                disabled={busy}
+                                error={Boolean(errors.clientSecret)}
+                                helperText={errors.clientSecret || 'The secret’s Value (not its ID). Stored encrypted; never shown again after you save.'}
+                                autoComplete="new-password"
+                                sx={inputSx}
+                                slotProps={{ htmlInput: { maxLength: 2000, spellCheck: false } }}
+                            />
+                        ) : (
+                            <>
+                                <Typography sx={fieldLabelSx}>Client secret</Typography>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                                    <Typography sx={monoSx}>•••• {p.secret.last4 ?? ''}</Typography>
+                                    {changedBy(p.secret) && <Typography sx={{ ...hintSx, flex: 1, minWidth: 0 }}>· {changedBy(p.secret)}</Typography>}
+                                    <Button size="small" variant="outlined" sx={{ ...secondaryButtonSx, minHeight: 36 }} onClick={() => setReplacingSecret(true)} disabled={busy}>
+                                        Replace
+                                    </Button>
+                                </Box>
+                            </>
+                        )}
+                        {replacingSecret && (
+                            <Button
+                                size="small"
+                                sx={{ ...secondaryButtonSx, mt: 0.5, minHeight: 32, px: 1 }}
+                                onClick={() => {
+                                    setReplacingSecret(false);
+                                    set('clientSecret', '');
+                                }}
+                            >
+                                Keep the current secret
+                            </Button>
+                        )}
+                    </Box>
+                )}
 
                 {hasExpiry && (
                     <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, flexWrap: 'wrap' }}>
@@ -369,7 +619,7 @@ export function ProviderCard({
                         onChange={(e) => set('tenantId', e.target.value)}
                         disabled={busy}
                         error={Boolean(errors['settings.tenantId'])}
-                        helperText={errors['settings.tenantId'] || 'Directory (tenant) ID, or the tenant domain (company.onmicrosoft.com). Only this company’s accounts can connect.'}
+                        helperText={errors['settings.tenantId'] || 'Directory (tenant) ID, or the tenant domain (company.onmicrosoft.com).'}
                         autoComplete="off"
                         sx={inputSx}
                         slotProps={{ htmlInput: { maxLength: 100, spellCheck: false } }}
@@ -396,10 +646,8 @@ export function ProviderCard({
                             <>
                                 <Typography sx={fieldLabelSx}>Webhook secret token</Typography>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                                    <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-900)', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace' }}>
-                                        •••• {p.webhookSecret.last4 ?? ''}
-                                    </Typography>
-                                    <Button size="small" variant="outlined" sx={{ ...secondaryButtonSx, minHeight: 32 }} onClick={() => setReplacingWebhook(true)} disabled={busy}>
+                                    <Typography sx={monoSx}>•••• {p.webhookSecret.last4 ?? ''}</Typography>
+                                    <Button size="small" variant="outlined" sx={{ ...secondaryButtonSx, minHeight: 36 }} onClick={() => setReplacingWebhook(true)} disabled={busy}>
                                         Replace
                                     </Button>
                                 </Box>
@@ -408,70 +656,94 @@ export function ProviderCard({
                     </Box>
                 )}
 
-                {p.provider === 'google' && (
-                    <Accordion
-                        disableGutters
-                        elevation={0}
-                        sx={{
-                            border: '1px solid var(--mui-palette-border-main)',
-                            borderRadius: '8px !important',
-                            backgroundColor: 'var(--mui-palette-background-paper)',
-                            '&::before': { display: 'none' },
-                        }}
-                    >
-                        <AccordionSummary
-                            expandIcon={<ExpandMoreRoundedIcon />}
-                            sx={{ minHeight: 40, fontSize: '0.8rem', fontWeight: 600, color: 'var(--crm-slate-700)', '&:hover': { color: 'var(--crm-text-blue-700)' } }}
-                        >
-                            Advanced
-                        </AccordionSummary>
-                        <AccordionDetails sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, pt: 0 }}>
-                            <TextField
-                                select
-                                label="Permission profile"
-                                size="small"
-                                value={form.scopeProfile}
-                                onChange={(e) => set('scopeProfile', e.target.value as GoogleScopeProfile)}
-                                disabled={busy}
-                                helperText={
-                                    form.scopeProfile === 'narrow'
-                                        ? 'Narrow: the CRM only sees events it created plus free / busy times. Recommended.'
-                                        : 'Broad: the CRM can read every event on the connected calendar (needed for bringing in customer meetings later).'
-                                }
-                                sx={inputSx}
-                            >
-                                <MenuItem value="narrow" sx={{ fontSize: '0.85rem' }}>
-                                    Narrow (recommended)
-                                </MenuItem>
-                                <MenuItem value="broad" sx={{ fontSize: '0.85rem' }}>
-                                    Broad
-                                </MenuItem>
-                            </TextField>
-                            <FormControlLabel
-                                control={<Switch size="small" checked={form.pkce} onChange={(e) => set('pkce', e.target.checked)} disabled={busy} />}
-                                label={<Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-700)' }}>Use PKCE when employees connect (recommended)</Typography>}
-                                sx={{ ml: 0, gap: 1 }}
-                            />
-                        </AccordionDetails>
-                    </Accordion>
+                {p.webhookUrls?.map((url, i) => (
+                    <CopyField key={url} label={p.webhookUrls && p.webhookUrls.length > 1 ? `Webhook URL ${i + 1}` : 'Webhook URL'} value={url} />
+                ))}
+
+                {p.kind === 'calendar' && (
+                    <DomainsField
+                        value={form.domains}
+                        companyDomains={companyDomains}
+                        takenBy={takenBy}
+                        disabled={busy}
+                        error={errors['settings.domains']}
+                        onChange={(domains) => set('domains', domains)}
+                    />
                 )}
 
                 {errors[''] && <Alert severity="error">{errors['']}</Alert>}
 
-                {/* Last test */}
-                {p.lastTest && (
-                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.75, color: p.lastTest.ok ? 'var(--crm-emerald-700)' : 'var(--crm-red-700)' }}>
-                        {p.lastTest.ok ? <CheckCircleOutlineRoundedIcon sx={{ fontSize: 17, mt: '1px' }} /> : <ErrorOutlineRoundedIcon sx={{ fontSize: 17, mt: '1px' }} />}
-                        <Typography sx={{ fontSize: '0.76rem', lineHeight: 1.5, minWidth: 0, overflowWrap: 'anywhere' }}>
-                            {p.lastTest.message ?? (p.lastTest.ok ? 'Credentials accepted.' : 'The test failed.')}{' '}
-                            <Box component="span" sx={{ color: 'var(--mui-palette-text-secondary)' }}>
-                                · tested {formatDateTime(p.lastTest.at)}
-                            </Box>
-                        </Typography>
+                {/* People counts */}
+                {p.kind === 'calendar' && (p.enabled || counts.ok + counts.pending + counts.error + counts.excluded > 0) && (
+                    <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', alignItems: 'center' }}>
+                        <StatusChip tone="success">{counts.ok} synced</StatusChip>
+                        {counts.pending > 0 && <StatusChip tone="info">{counts.pending} setting up</StatusChip>}
+                        {counts.error > 0 &&
+                            (onShowProblems ? (
+                                <Box
+                                    component="button"
+                                    type="button"
+                                    onClick={onShowProblems}
+                                    // A 32 px tap target around the small chip (responsive-ui rule 4).
+                                    sx={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        minHeight: 32,
+                                        px: 0.25,
+                                        py: 0,
+                                        border: 0,
+                                        background: 'none',
+                                        cursor: 'pointer',
+                                        borderRadius: '999px',
+                                        '&:focus-visible': { outline: 'none', boxShadow: '0 0 0 3px rgb(var(--crm-accent-rgb) / 0.22)' },
+                                    }}
+                                    aria-label={`Show the ${counts.error} people with calendar problems`}
+                                >
+                                    <StatusChip tone="error">{counts.error} with problems</StatusChip>
+                                </Box>
+                            ) : (
+                                <StatusChip tone="error">{counts.error} with problems</StatusChip>
+                            ))}
+                        {counts.excluded > 0 && <StatusChip tone="neutral">{counts.excluded} excluded</StatusChip>}
                     </Box>
                 )}
-                {p.kind === 'calendar' && (
-                    <Typography sx={hintSx}>The test checks the app credentials only. The final check is connecting your own calendar once the switch is on.</Typography>
+
+                {/* Last test */}
+                {testResult ? (
+                    <TestSteps result={testResult} />
+                ) : (
+                    p.lastTest && (
+                        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.75, color: p.lastTest.ok ? 'var(--crm-emerald-700)' : 'var(--crm-red-700)' }}>
+                            {p.lastTest.ok ? <CheckCircleOutlineRoundedIcon sx={{ fontSize: 17, mt: '1px' }} /> : <ErrorOutlineRoundedIcon sx={{ fontSize: 17, mt: '1px' }} />}
+                            <Typography sx={{ fontSize: '0.76rem', lineHeight: 1.5, minWidth: 0, overflowWrap: 'anywhere' }}>
+                                {p.lastTest.message ?? (p.lastTest.ok ? 'Credentials accepted.' : 'The test failed.')}{' '}
+                                <Box component="span" sx={{ color: 'var(--mui-palette-text-secondary)' }}>
+                                    · tested {formatDateTime(p.lastTest.at)}
+                                </Box>
+                            </Typography>
+                        </Box>
+                    )
+                )}
+
+                {p.kind === 'calendar' && p.available && (
+                    <Autocomplete
+                        size="small"
+                        options={testPeople}
+                        value={selectedPerson}
+                        onChange={(_e, value) => setAsUsername(value?.username ?? null)}
+                        getOptionLabel={(o) => `${o.fullName || o.username} (${o.email})`}
+                        isOptionEqualToValue={(a, b) => a.username === b.username}
+                        loading={people.isLoading}
+                        disabled={dirty || !p.configured || test.isPending}
+                        renderInput={(params) => (
+                            <TextField
+                                {...params}
+                                label="Also test as (optional)"
+                                helperText={isGoogle ? 'Reads one event from this person’s calendar as them: proves domain-wide delegation.' : 'Reads one event from this person’s mailbox: proves the app may reach it.'}
+                                sx={inputSx}
+                            />
+                        )}
+                    />
                 )}
 
                 {/* Actions */}
@@ -491,7 +763,7 @@ export function ProviderCard({
                             </span>
                         </Tooltip>
                     )}
-                    {(p.secret.set || p.webhookSecret?.set) && (
+                    {hasStoredSecret && (
                         <Button
                             size="small"
                             sx={{
@@ -499,12 +771,12 @@ export function ProviderCard({
                                 minHeight: 36,
                                 px: 1.25,
                                 color: 'var(--mui-palette-text-secondary)',
-                                '&:hover': { color: 'var(--mui-palette-error-main)', backgroundColor: 'var(--mui-palette-error-soft)' },
+                                '&:hover': { color: 'var(--mui-palette-error-main)', backgroundColor: 'var(--mui-palette-error-soft)', borderColor: 'var(--mui-palette-error-softBorder)' },
                             }}
                             disabled={busy || dirty}
                             onClick={() => setConfirmRemove(true)}
                         >
-                            Remove secret
+                            {isGoogle ? 'Remove key' : 'Remove secret'}
                         </Button>
                     )}
                     <Box sx={{ flex: 1 }} />
@@ -525,10 +797,16 @@ export function ProviderCard({
                 )}
             </Box>
 
-            <ConfirmDeleteDialog open={confirmRemove} title={`Remove the ${p.label} secret?`} confirmLabel="Remove secret" onConfirm={() => void removeSecret()} onClose={() => setConfirmRemove(false)}>
+            <ConfirmDeleteDialog
+                open={confirmRemove}
+                title={isGoogle ? 'Remove the Google key?' : `Remove the ${p.label} secret?`}
+                confirmLabel={isGoogle ? 'Remove key' : 'Remove secret'}
+                onConfirm={() => void removeSecret()}
+                onClose={() => setConfirmRemove(false)}
+            >
                 <span>
-                    The stored secret{p.webhookSecret?.set ? 's are' : ' is'} deleted and {p.label} is switched off. Connected calendars stop syncing until a new secret is saved
-                    and the switch is turned back on.
+                    The stored {isGoogle ? 'key is' : p.webhookSecret?.set ? 'secrets are' : 'secret is'} deleted and {p.label} is switched off. Calendar sync stops for its people
+                    until new credentials are saved, tested and the switch is turned back on. Events already in their calendars stay.
                 </span>
             </ConfirmDeleteDialog>
         </Box>

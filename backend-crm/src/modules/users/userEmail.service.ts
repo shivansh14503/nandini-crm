@@ -5,13 +5,13 @@ import { auditService } from '../../services/audit.service.js';
 import { CACHE_KEYS, cacheService } from '../../services/cache.service.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
-import { calendarConnectionUserLockKey, LIVE_CONNECTION_STATUSES } from '../calendar-sync/connection.constants.js';
+import { calendarConnectionUserLockKey } from '../calendar-sync/connection.constants.js';
 import { acquireLocks, runInTransaction } from '../shared/transactions.js';
 
 /**
  * Company email of a CRM user: the one backend rule for `Users.email`, shared by Admin › API Integrations › People
- * (PUT /api/admin/integrations/people/:username/email), Admin › Users (user-admin/userAdmin.service.ts, through
- * `assertCompanyEmailAllowed` + `assertUserEmailFree` inside its own transaction) and the calendar connect auto-fill (`claimEmptyEmail`).
+ * (PUT /api/admin/integrations/people/:username/email) and Admin › Users (user-admin/userAdmin.service.ts, through
+ * `assertCompanyEmailAllowed` + `assertUserEmailFree` inside its own transaction).
  *
  * Rule (database-design §4.1): stored trimmed and lower-cased, blank = none (NULL); unique among **active, non-group**
  * users (`isActive = 1 AND isGroupUser = 0`). Group (shared) logins aren't calendar identities, so they may share an
@@ -20,8 +20,10 @@ import { acquireLocks, runInTransaction } from '../shared/transactions.js';
  * The hand-written filtered unique index `UX_Users_email` (migration 20261127090000_calendar_connections) enforces the
  * same rule in the database; writes for one address also serialize on an application lock (`user-email:<address>`),
  * so a clash is answered with a clear 409 instead of a unique-index error.
- * A user with a live calendar connection keeps the connected account's address: any other value (or clearing it)
- * answers 409 `EMAIL_CONNECTED` until the calendar is disconnected (spec §4.6).
+ * The company email is also the person's calendar identity (admin-managed calendar sync, P2-2b): after an address
+ * changes, `reconcileUser` moves their sync to the new mailbox (the old row stops; events already in the old calendar
+ * stay). Every writer of `Users.email` takes `calendarConnectionUserLockKey(username)` too, so the change and the
+ * reconcile serialize.
  */
 
 export const USER_EMAIL_MAX_LENGTH = 120;
@@ -135,21 +137,18 @@ export const userEmailService = {
      * Sets (or clears) a user's email under the rule above, audited as `User UPDATE` by the actor. 404 for an unknown
      * username; 400 (`VALIDATION_ERROR`, field `email`) outside the company domains without `allowOtherDomain`;
      * 409 (`DUPLICATE_RECORD`, field `email`) when another active, non-group user holds it. An unchanged address is a
-     * no-op (no audit entry). 409 `EMAIL_CONNECTED` while the user has a live calendar connection whose account
-     * address differs from the new value ("Disconnect their calendar first").
+     * no-op (no audit entry). After the commit the person's calendar sync follows the new address (reconcileUser).
      */
     async setEmail(username: string, body: unknown, options: SetUserEmailOptions): Promise<UserEmailRow> {
         const { email, allowOtherDomain } = userEmailBodySchema.parse(body);
         assertCompanyEmailAllowed(email, allowOtherDomain, options.companyDomains);
         const { row, changed } = await runInTransaction(async (tx) => {
             // Two admins saving the same address at once: the second waits, then sees the first as a duplicate. The user's
-            // calendar-connection lock (also when clearing) makes a calendar connect for this user wait, or wait for it,
-            // so the EMAIL_CONNECTED check below and the connect's email check never both pass on stale data.
+            // calendar lock (also when clearing) serializes this change with the calendar enrolment reconcile.
             await acquireLocks(tx, [email ? userEmailLockKey(email) : null, calendarConnectionUserLockKey(username)]);
             const user = await tx.user.findUnique({ where: { username }, select: USER_EMAIL_SELECT });
             if (!user) throw HttpError.notFound(`User '${username}' not found.`);
             if (user.email === email) return { row: user, changed: false };
-            await assertEmailKeepsConnection(tx, user.username, email);
             if (email && holdsAddress(user)) await assertUserEmailFree(tx, email, user.id);
             const updated = await tx.user.update({ where: { id: user.id }, data: { email }, select: USER_EMAIL_SELECT });
             await auditService.record(tx, {
@@ -161,36 +160,13 @@ export const userEmailService = {
             });
             return { row: updated, changed: true };
         });
-        if (changed) await invalidateUserCaches();
+        if (changed) {
+            await invalidateUserCaches();
+            // Loaded on use: enrolment → integrations → integration.validator imports this module (an import cycle).
+            const { reconcileUserQuietly } = await import('../calendar-sync/enrolment.js');
+            await reconcileUserQuietly(row.username, 'email_changed', { actor: options.actor.username });
+        }
         return row;
-    },
-
-    /**
-     * Calendar connect auto-fill (spec §3.3 step 6): gives a user **without** an email the verified address of the
-     * calendar account they just connected, inside the connect transaction (audited `User UPDATE`, changedBy the user
-     * themself). Only a company address that no other active, non-group user holds; otherwise nothing is written and
-     * the outcome says why. The caller has checked the length (`USER_EMAIL_MAX_LENGTH`).
-     */
-    async claimEmptyEmail(
-        tx: TransactionClient,
-        input: { userId: number; email: string; companyDomains: readonly string[]; actorUsername: string },
-    ): Promise<'set' | 'not_company' | 'taken' | 'not_empty'> {
-        const email = normalizeUserEmail(input.email);
-        if (!email || !isCompanyEmail(email, input.companyDomains)) return 'not_company';
-        await acquireLocks(tx, [userEmailLockKey(email)]);
-        const user = await tx.user.findUnique({ where: { id: input.userId }, select: USER_EMAIL_SELECT });
-        if (!user || normalizeUserEmail(user.email)) return 'not_empty';
-        const holder = await tx.user.findFirst({ where: { email, isActive: true, isGroupUser: false, id: { not: user.id } }, select: { username: true } });
-        if (holder) return 'taken';
-        await tx.user.update({ where: { id: user.id }, data: { email }, select: { id: true } });
-        await auditService.record(tx, {
-            entityType: 'User',
-            entityId: String(user.id),
-            action: 'UPDATE',
-            changedBy: input.actorUsername,
-            changes: { email: { from: user.email, to: email } },
-        });
-        return 'set';
     },
 
     /** Every user (active or not) with the fields the email rule needs; callers filter. */
@@ -198,22 +174,6 @@ export const userEmailService = {
         return client.user.findMany({ select: USER_EMAIL_SELECT, orderBy: [{ fullName: 'asc' }, { username: 'asc' }] });
     },
 };
-
-/**
- * 409 `EMAIL_CONNECTED` when the user has a live calendar connection (Calendar Phase 2 P2-2) on another address: the
- * CRM email and the connected account must stay the same person (attendee / organizer matching relies on it). Every
- * writer of `Users.email` calls it before changing an address, holding `calendarConnectionUserLockKey(username)`
- * (taken in the same `acquireLocks` call as `userEmailLockKey`, or before it), the lock the calendar connect takes.
- */
-export async function assertEmailKeepsConnection(tx: TransactionClient, username: string, email: string | null): Promise<void> {
-    const live = await tx.calendarConnection.findFirst({
-        where: { username, kind: 'calendar', status: { in: [...LIVE_CONNECTION_STATUSES] } },
-        select: { accountEmail: true },
-    });
-    if (!live || (email !== null && live.accountEmail.toLowerCase() === email)) return;
-    const message = `This person's calendar is connected as ${live.accountEmail}. Disconnect their calendar first.`;
-    throw new HttpError(message, StatusCodes.CONFLICT, { code: 'EMAIL_CONNECTED', errors: [{ message, path: ['email'] }] });
-}
 
 /**
  * 409 (`DUPLICATE_RECORD`, field `email`) when an active, non-group user other than `exceptUserId` holds the address.

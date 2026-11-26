@@ -1,7 +1,7 @@
 # Nandini CRM — Database Design
 
-> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (88 migrations,
-> latest `20261127130000_followup_activities`, as of 2026-11-26). Update it in the same change as any schema migration.
+> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (89 migrations,
+> latest `20261128090000_calendar_admin_connect`, Calendar Phase 2 P2-2b, as of 2026-11-26). Update it in the same change as any schema migration.
 > Related: [System design](system-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
 ---
@@ -36,7 +36,7 @@
 | Audit & UI state | `AuditLog`, `AuditExport`, `AuditDigest`, `TableFilter`, `ModuleScorecard` |
 | Notifications & outgoing mail | `Notification` (navbar bell), `EmailLog` (every email the CRM sends) |
 | Email checks | `EmailValidationRun` |
-| Integrations | `IntegrationProvider` (Admin › API Integrations), `CalendarConnection` (an employee's connected calendar, P2-2) |
+| Integrations | `IntegrationProvider` (Admin › API Integrations), `CalendarConnection` (an employee's company calendar sync state, P2-2b), `CalendarSyncUser` (admin's per-person calendar choice, P2-2b) |
 
 ## 2. Design conventions
 
@@ -411,7 +411,7 @@ with `@ignore` so schema diffs stay empty.
 
 | Group | Columns |
 | --- | --- |
-| What | `category` (`DATA` / `CONFIG` / `SECURITY`), `action` (`CREATE`, `UPDATE`, `DELETE`, `RESTORE`, `REVERT`, `STATUS_CHANGE`, `CONVERT`, `FOLLOW_UP`, `EMAIL_CHECK` (an email check changed an address's result on a record: `{ verificationStatus: { from, to }, email, reason, runId? }`), `IMPORT`, `LOGIN`, `LOGIN_FAILED`, `LOGOUT`, `ACCESS_DENIED`, `SET_DEFAULT`, `DUPLICATE`, `PDF_GENERATED`, `EXPORT` (an audit log export: `{ format, rowCount, truncated, fileName, filters }`), `LEDGER_VERIFY` (a "Verify integrity" run: `{ result, message, digests, unreadableFiles, upToBlock, durationMs }`), `PASSWORD_CHANGE` (a user changed their own password: `{ passwordChangedAt: { from, to } }` plus `passwordChangeRequired: { from: true, to: false }` when it replaced a temporary one, never a password), `PASSWORD_RESET` (an admin reset a user's password in Admin › Users: `{ passwordChangeRequired: true, generated }`, never a password; keys ending in `Password` are redacted, hence `passwordChangeRequired`), `SESSION_REVOKE` (My Profile sign-out of other sessions: `{ scope: 'one', sessionId }` or `{ scope: 'others', signedOutSessions }`)), `severity` (`INFO` / `NOTICE` / `WARNING` / `CRITICAL`), `module` (CRM module key or admin area: `form-customization`, `pdf-templates`, `document-series`, `cities`, `users`) |
+| What | `category` (`DATA` / `CONFIG` / `SECURITY`), `action` (`CREATE`, `UPDATE`, `DELETE`, `RESTORE`, `REVERT`, `STATUS_CHANGE`, `CONVERT`, `FOLLOW_UP`, `EMAIL_CHECK` (an email check changed an address's result on a record: `{ verificationStatus: { from, to }, email, reason, runId? }`), `IMPORT`, `LOGIN`, `LOGIN_FAILED`, `LOGOUT`, `ACCESS_DENIED`, `SET_DEFAULT`, `DUPLICATE`, `PDF_GENERATED`, `EXPORT` (an audit log export: `{ format, rowCount, truncated, fileName, filters }`), `LEDGER_VERIFY` (a "Verify integrity" run: `{ result, message, digests, unreadableFiles, upToBlock, durationMs }`), `PASSWORD_CHANGE` (a user changed their own password: `{ passwordChangedAt: { from, to } }` plus `passwordChangeRequired: { from: true, to: false }` when it replaced a temporary one, never a password), `PASSWORD_RESET` (an admin reset a user's password in Admin › Users: `{ passwordChangeRequired: true, generated }`, never a password; keys ending in `Password` are redacted, hence `passwordChangeRequired`), `SESSION_REVOKE` (My Profile sign-out of other sessions: `{ scope: 'one', sessionId }` or `{ scope: 'others', signedOutSessions }`), `ENROL` / `STOP` (calendar sync of one person started / stopped, P2-2b), `TEST_AS_USER` (an admin's "Test connection" acted as one person on their company calendar: entity `IntegrationProvider`, `{ asUsername, ok, code, userStep }`, never a token; SECURITY, NOTICE; as of 2026-11-26, P2-2b review fixes)), `severity` (`INFO` / `NOTICE` / `WARNING` / `CRITICAL`), `module` (CRM module key or admin area: `form-customization`, `pdf-templates`, `document-series`, `cities`, `users`) |
 | Which record | `entityType`, `entityId`, `entityCode` (record number at the time; shown only once the module has a document series), `entityLabel` (record name at the time, so renamed / deleted records stay readable) |
 | Change | `changedFields` (`\|status\|assignedTo\|` for diffs), `changesJson` (`{ field: { from, to } }` for updates, a snapshot or summary otherwise; sensitive keys stored as `[redacted]`) |
 | Who | `changedBy` (username, `system` for jobs), `actorId` (`Users.Id`), `actorRole` (role at the time) |
@@ -649,66 +649,86 @@ shows such a day once.
 
 ### 4.28 `IntegrationProvider` (Admin › API Integrations)
 
-Migration `20261126220000_integrations` (new table only; Calendar Phase 2 P2-1). Module
+Migration `20261126220000_integrations` (new table only; Calendar Phase 2 P2-1); columns reshaped for admin-managed
+calendar connections by `20261128090000_calendar_admin_connect` (P2-2b, as of 2026-11-26). Module
 `backend-crm/src/modules/integrations`. One row per external provider an admin has saved; no row = not set up, and
-every provider starts switched off.
+every provider starts switched off. The Google key and the Microsoft / Zoom secrets are stored **only** here, sealed.
 
 | Column | Type | Notes |
 | --- | --- | --- |
 | `provider` | NVARCHAR(30) PK | `google` \| `microsoft` \| `zoom` |
-| `enabled` | BIT, default 0 | Employees can connect only while on; Zoom stays off until Phase 3 |
-| `clientId` | NVARCHAR(200) NULL | OAuth client (application) id; not secret |
-| `secretsEnc` | NVARCHAR(MAX) NULL | Sealed JSON `{ clientSecret, webhookSecret? }`: `enc:v1:<keyId>:<iv>:<tag>:<ct>`, AES-256-GCM, AAD `IntegrationProvider:<provider>:secrets` ([system design §3.6](system-design.md#36-security-model)). Never returned, logged or audited |
+| `enabled` | BIT, default 0 | People on this provider's domains are enrolled only while on; switching on needs a passing app-level test; Zoom stays off until Phase 3 |
+| `clientId` | NVARCHAR(200) NULL | Google: the service account's numeric `client_id`, taken from the uploaded key; Microsoft / Zoom: the app's client id. Not secret |
+| `secretsEnc` | NVARCHAR(MAX) NULL | Sealed JSON: Google `{ serviceAccountKey }` (the whole key file as text), Microsoft `{ clientSecret }`, Zoom `{ clientSecret, webhookSecret? }`: `enc:v1:<keyId>:<iv>:<tag>:<ct>`, AES-256-GCM, AAD `IntegrationProvider:<provider>:secrets` ([system design §3.6](system-design.md#36-security-model)). Never returned, logged or audited |
 | `keyId` | NVARCHAR(8) NULL | Key that sealed `secretsEnc` (`npm run integrations:reencrypt` moves rows to the active key) |
-| `secretHintsJson` | NVARCHAR(MAX) NULL | Non-secret hints: `{ clientSecret: { last4, updatedAt, updatedBy, expiresOn? }, webhookSecret?: {…} }` |
-| `settingsJson` | NVARCHAR(MAX) NULL | Google `{ scopeProfile, pkce }`, Microsoft `{ tenantId }`, Zoom `{}` |
-| `clientVersion` | INT, default 1 | Bumped when the client id or the Microsoft tenant changes (connections made with the old app must reconnect, P2-2) |
+| `secretHintsJson` | NVARCHAR(MAX) NULL | Non-secret hints: Google `{ serviceAccountKey: { clientEmail, clientId, projectId, privateKeyId, updatedAt, updatedBy } }`; Microsoft / Zoom `{ clientSecret: { last4, updatedAt, updatedBy, expiresOn? }, webhookSecret?: {…} }`; also the marker of the last passing app-level test (`appTest`, with the `clientVersion` it passed for) |
+| `settingsJson` | NVARCHAR(MAX) NULL | Google `{ domains }`, Microsoft `{ tenantId, domains }`, Zoom `{}`. `domains`: company email domains the provider serves (a domain belongs to at most one provider, checked under the app lock `integration-provider:domains`) |
+| `clientVersion` | INT, default 1 | Bumped by any credentials change (key, client id, secret, tenant): part of the in-memory token cache key, so grants made with old credentials are never reused |
 | `lastTestAt`, `lastTestOk`, `lastTestMessage` (≤ 300) | | Last "Test connection" result; cleared when credentials change |
+| `healthStatus` | NVARCHAR(10), default `unknown` | App-level health found while syncing: `unknown` \| `ok` \| `error` (P2-2b) |
+| `healthCode`, `healthAt` | NVARCHAR(50) NULL, DATETIME2 NULL | The app-level error code (`delegation_missing`, `key_invalid`, `invalid_client`, …) and when |
 | `updatedBy`, `createdAt`, `updatedAt` | | |
 
 Saves lock the row (`acquireLocks`) and are audited as entity `IntegrationProvider` (module `admin-integrations`,
-category CONFIG) with `secretChanged` / `webhookSecretChanged` / `secretCleared` flags instead of values. Company
+category CONFIG) with `secretChanged` / `serviceAccountKeyChanged` / `webhookSecretChanged` / `secretCleared` flags instead of values. Company
 calendar settings are not here: they are the module setting `ModuleSetting (activities, calendarSync)`; which
 Followup Types sync is option meta `calendarSync` on `shared_followup_type` options (missing = on; Task / Note never).
 
-### 4.29 `CalendarConnection` (an employee's connected calendar)
+### 4.29 `CalendarConnection` (an employee's company calendar sync state) and `CalendarSyncUser`
 
-Migration `20261127090000_calendar_connections` (Calendar Phase 2 P2-2, as of 2026-11-26). Module
-`backend-crm/src/modules/calendar-sync`. One row per connect; a disconnect keeps the row (tokens nulled, status
-`disconnected`) for the history and the audit trail, and reconnecting the same account re-activates its newest row.
-No FK to `Users` (usernames, like every owner column).
+Migration `20261127090000_calendar_connections` (Calendar Phase 2 P2-2) created it for per-user OAuth; migration
+`20261128090000_calendar_admin_connect` (P2-2b, as of 2026-11-26) turned it into **per-user sync state with no tokens**.
+Module `backend-crm/src/modules/calendar-sync`. Rows are created and stopped only by the enrolment reconcile
+(`enrolment.ts`), never by the employee. One row per (user, provider, mailbox) identity: an email or provider change
+stops the old row and starts a new one; stopped rows are kept for link history. No FK to `Users`.
 
 | Column | Type | Notes |
 | --- | --- | --- |
-| `id` | NVARCHAR(50) PK | `randomUUID()` made in code before the insert, so the token AAD can name the row |
+| `id` | NVARCHAR(50) PK | `uuid()` |
 | `username` | NVARCHAR(50) | The CRM user |
-| `provider` | NVARCHAR(30) | `google` \| `microsoft` \| `fake` (dev-only, `CALENDAR_FAKE_PROVIDER`) \| `zoom` (Phase 3) |
-| `kind` | NVARCHAR(20), default `calendar` | `calendar` \| `video` |
-| `accountEmail` | NVARCHAR(254) | Lower-cased verified account address |
-| `accountId` | NVARCHAR(200) | Google `sub`, Entra `oid` |
-| `tenantId` | NVARCHAR(100) NULL | Google `hd` / Entra `tid` |
-| `status` | NVARCHAR(20), default `active` | `active` \| `reauth_required` \| `error` \| `disconnected` |
-| `statusReason` | NVARCHAR(50) NULL | Fixed code: `invalid_grant`, `client_changed`, `grant_expired`, `key_error`, `user_inactive`, `by_user`, `by_admin`, `switched_account` |
-| `grantedScopes` | NVARCHAR(1000) | As the token response listed them |
-| `clientVersion` | INT | `IntegrationProvider.clientVersion` at connect; a mismatch → `reauth_required` (`client_changed`) |
-| `accessTokenEnc`, `refreshTokenEnc` | NVARCHAR(MAX) NULL | Sealed (AES-256-GCM, AAD `CalendarConnection:<id>:accessToken\|refreshToken`); never returned, logged or audited |
-| `accessTokenExpiresAt`, `refreshTokenExpiresAt` | DATETIME2 NULL | `refreshTokenExpiresAt`: Google time-limited grants (`refresh_token_expires_in`), null = no known end |
-| `keyId` | NVARCHAR(8) NULL | Key of the sealed tokens (`npm run integrations:reencrypt` re-seals them too) |
-| `tokenVersion` | INT, default 0 | Compare-and-set guard of token refresh (API and worker processes) |
-| `calendarId` | NVARCHAR(200), default `primary` | |
-| `importMeetings` | BIT, default 0 | P2-8 |
+| `provider` | NVARCHAR(30) | `google` \| `microsoft` \| `fake` (dev-only test calendar, `CALENDAR_FAKE_PROVIDER`) |
+| `accountEmail` | NVARCHAR(254) | The user's company email at enrolment, lower-cased (Google JWT `sub`, Graph `/users/{mailbox}`) |
+| `status` | NVARCHAR(20), default `pending` | `pending` (enrolled, not checked yet) \| `ok` \| `error` (a user-level problem) \| `stopped` |
+| `statusReason` | NVARCHAR(50) NULL | `error`: `user_not_found`, `user_unavailable`, `calendar_unavailable`, `mailbox_out_of_scope`, `no_mailbox`; `stopped`: `excluded`, `user_inactive`, `email_changed`, `provider_changed`, `provider_removed`, `no_email`, `oauth_retired` (P2-2's OAuth rows; never reactivated) |
+| `source` | NVARCHAR(10), default `domain` | How the provider was chosen: `domain` \| `override` |
+| `calendarId` | NVARCHAR(200), default `primary` | `primary` (Google) / `''` = default calendar (Graph) |
 | `syncCursor`, `syncWindowStart`, `syncWindowEnd`, `fullSyncAt` | | P2-5 (Google sync token / Graph delta link: never logged) |
 | `backfilledAt`, `backfillCount` | | P2-3c |
-| `lastPulledAt`, `lastPushedAt`, `lastSuccessAt`, `lastErrorAt`, `lastErrorCode`, `consecutiveFailures` | | Sync health (P2-3 on; `lastErrorCode` is also set by a reauth) |
+| `lastPulledAt`, `lastPushedAt`, `lastSuccessAt`, `lastCheckedAt` | | Sync health |
+| `nextCheckAt` | DATETIME2 NULL | Earliest next health check after a user-level error (backoff 15 min → 1 h → 6 h → 24 h) |
+| `lastErrorAt`, `lastErrorCode`, `lastErrorMessage` (≤ 300), `consecutiveFailures` | | `lastErrorMessage`: provider text for admins only (never shown to the employee, never logged at info) |
 | `leaseId`, `leaseUntil` | | Per-connection job mutex (P2-3) |
-| `connectedAt`, `disconnectedAt`, `disconnectedBy`, `createdAt`, `updatedAt` | | `disconnectedBy`: the user, an admin or `system` |
+| `enrolledAt` (was `connectedAt`), `stoppedAt` (was `disconnectedAt`), `stoppedBy` (was `disconnectedBy`) | | Renamed with `sp_rename`, data kept. `stoppedBy`: the admin whose change stopped it, or `system` |
+| `createdAt`, `updatedAt` | | |
 
-Indexes: `(username, status)`, `(provider, status)`, `(keyId)`, and two hand-written **filtered unique** indexes on the
-live statuses (`WHERE status IN ('active','reauth_required','error')`): `UX_CalendarConnection_user_kind
-(username, kind)` (one calendar per person) and `UX_CalendarConnection_account (provider, accountId)` (one CRM user per
-provider account). Connect / disconnect take application locks on the user, the provider account and the email, and
-are audited as entity `CalendarConnection` (audit module `calendar`, `auditCatalog.moduleFor`; the notification `entityModule` is `calendar-connections`) with actions `CONNECT` / `DISCONNECT`
-(`{ provider, accountEmail, by, reason?, note?, reconnected?, emailFilled?, replaced? }`, never a token).
+Dropped by P2-2b: `kind`, `accountId`, `tenantId`, `grantedScopes`, `clientVersion`, `accessTokenEnc`,
+`refreshTokenEnc`, `accessTokenExpiresAt`, `refreshTokenExpiresAt`, `keyId`, `tokenVersion`, `importMeetings` (moved to
+`CalendarSyncUser`), and the indexes on them. Before dropping, the migration stops live P2-2 rows (`oauth_retired`) and
+nulls their tokens, clears Google's stored OAuth client (switched off, `clientVersion` + 1), switches Microsoft off
+with `domains: []` (client id, secret and tenant kept) and deletes `calendar_reconnect` notifications.
+
+Indexes: `(username, status)`, `(provider, status)`, `(status, nextCheckAt)`, and two hand-written **filtered unique**
+indexes on the live statuses (`WHERE status IN ('pending','ok','error')`): `UX_CalendarConnection_user (username)` (one
+live calendar per person) and `UX_CalendarConnection_mailbox (provider, accountEmail)` (one person per mailbox). The
+reconcile takes the app lock `calendar-connection:user:<username>`; a unique-index clash is never caught inside the
+transaction (D45): another live row on the same mailbox is found before the insert, its owner is reconciled first
+(outside the transaction), then this person once more. Audited as entity `CalendarConnection` (audit module
+`calendar`) with actions `ENROL` (`{ username, provider, accountEmail, source, trigger, reactivated? }`) / `STOP`
+(`{ username, provider, accountEmail, reason, by }`); P2-2's `CONNECT` / `DISCONNECT` stay in history.
+
+**`CalendarSyncUser`** (new in P2-2b): the admin's choices for one employee (Admin › API Integrations › People). A row
+exists only while something differs from the default (provider by email domain, included, no import).
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `username` | NVARCHAR(50) PK | |
+| `provider` | NVARCHAR(30) NULL | null = by email domain; `google` \| `microsoft` \| `fake` (only while `CALENDAR_FAKE_PROVIDER` is on) |
+| `excluded` | BIT, default 0 | 1 = never synced (live row stopped `excluded`; events already in the calendar stay) |
+| `note` | NVARCHAR(200) NULL | Why; shown on the People table |
+| `importMeetings` | BIT, default 0 | P2-8 (also needs the company switch `allowMeetingImport`) |
+| `updatedBy`, `createdAt`, `updatedAt` | | |
+
+Audited as entity `CalendarSyncUser` (module `admin-integrations`) CREATE / UPDATE / DELETE.
 
 ### 4.30 `UserPreference` (My Profile › Notifications)
 
@@ -720,7 +740,7 @@ default reminder, not out of office), which is the behaviour before this table, 
 | Column | Type | Notes |
 | --- | --- | --- |
 | `userId` | INT PK, FK → `Users.Id` (CASCADE / NO ACTION) | Deleting a user deletes the row (the app only deactivates users) |
-| `inAppActivityReminder`, `inAppActivityAssigned`, `inAppActivityInvited`, `inAppContractRenewal` | BIT NOT NULL, default 1 | Bell kinds `activity_reminder` / `activity_assigned` / `activity_invited` / `contract_renewal`; 0 = no `Notification` row of that kind is written for the user (`notifications/notification.preferences.ts`). Other kinds (`calendar_reconnect`) have no column and always deliver |
+| `inAppActivityReminder`, `inAppActivityAssigned`, `inAppActivityInvited`, `inAppContractRenewal` | BIT NOT NULL, default 1 | Bell kinds `activity_reminder` / `activity_assigned` / `activity_invited` / `contract_renewal`; 0 = no `Notification` row of that kind is written for the user (`notifications/notification.preferences.ts`). Other kinds (`calendar_sync_issue`) have no column and always deliver |
 | `emailMorningSummary` | BIT NOT NULL, default 1 | The 9 AM morning summary email |
 | `defaultReminder` | NVARCHAR(30) NULL | Pre-fills Reminder on activities the user creates (client side): an `ACTIVITY_REMINDERS` label, `none` (No reminder), NULL = company default |
 | `outOfOfficeFrom`, `outOfOfficeTo` | DATE NULL | Inclusive business-timezone days, stored at UTC midnight like `Holiday` / `Contract` dates; both set or both NULL. At most 365 days; a new or changed range can't end in the past or start more than 365 days ahead (`preferences.rules.ts`). While today is in range: no morning summary, and "Out of office until …" next to the user in pickers and Admin › Users. Bell notifications keep arriving. An ended range stays stored but reads as none |
@@ -799,8 +819,9 @@ and `customized`; saving the stored values again writes nothing.
 | Notification preferences (My Profile › Notifications) | App lock on the user → upsert the `UserPreference` row → `AuditLog` User UPDATE; user lookup caches dropped after commit when the out-of-office changed |
 | User added / edited (Admin › Users) | App locks (username, email address, reports-to chain, admin roster as needed; the per-user lock on edits) → checks → INSERT / UPDATE `Users` → `AuditLog` CREATE / UPDATE; user lookup caches dropped after commit |
 | User deactivated / reset (Admin › Users) | App lock on the user → `isActive = 0, deactivatedAt = now` (or new hash + `mustChangePassword = 1`) → `AuditLog` STATUS_CHANGE / PASSWORD_RESET; after commit every Redis session of the user is deleted |
-| Nightly retention (00:20) | Hard delete of old `Notification` and `EmailLog` rows (see §4.26); then live `CalendarConnection` rows of inactive / group users are disconnected (`user_inactive`, revoked) and `calendar_reconnect` "access ends soon" notifications written (as of 2026-11-26) |
-| Calendar connect / disconnect | Locks → INSERT or re-activate the `CalendarConnection` row (+ fill an empty `Users.email`) → `AuditLog` CONNECT; disconnect nulls the tokens, sets `disconnected`, `AuditLog` DISCONNECT, then revokes at Google after commit |
+| Nightly retention (00:20) | Hard delete of old `Notification` and `EmailLog` rows (see §4.26); then the calendar steps (P2-2b, as of 2026-11-26): reconcile everyone's `CalendarConnection` enrolment, run due health checks, and write the admins' `calendar_sync_issue` digest when someone's calendar went to `error` that day |
+| Calendar enrolment reconcile (P2-2b) | App lock `calendar-connection:user:<username>` → read user, choice, providers → INSERT `pending` / UPDATE to `stopped` → `AuditLog` ENROL / STOP; a new row's first health check runs after commit |
+| People calendar choice | Upsert / delete `CalendarSyncUser` → `AuditLog` → reconcile the person after commit |
 
 ## 7. Migrations and seeding
 
@@ -808,8 +829,10 @@ and `customized`; saving the stored values again writes nothing.
 - Several migrations are **data migrations** written by hand (e.g. uppercasing organization names, aligning dropdown
   labels with stored values, linking addresses to city ids). Read them before squashing.
 - Prisma can't express filtered unique indexes; they live only in migration SQL (live organization names, `20261031000000_organization_name_unique_live`, the three
-  `UX_ActivityAttendee_*` indexes of `20261126090000_activities`, and `UX_CalendarConnection_user_kind`,
-  `UX_CalendarConnection_account` and `UX_Users_email` of `20261127090000_calendar_connections`). That last migration
+  `UX_ActivityAttendee_*` indexes of `20261126090000_activities`, `UX_Users_email` of
+  `20261127090000_calendar_connections`, and `UX_CalendarConnection_user` / `UX_CalendarConnection_mailbox` of
+  `20261128090000_calendar_admin_connect`, which replaced P2-2's `UX_CalendarConnection_user_kind` /
+  `UX_CalendarConnection_account`). `20261127090000_calendar_connections`
   also lower-cases `Users.email` and stops (THROW 50001, rolled back) when two active non-group users share an
   address: run `npm run calendar:check-emails` before deploying; after a stop, fix the users, run
   `npx prisma migrate resolve --rolled-back 20261127090000_calendar_connections` and deploy again.

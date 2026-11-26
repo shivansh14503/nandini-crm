@@ -176,11 +176,11 @@ describe('notify', () => {
         assert.deepEqual(singles, [rows[0].dedupeKey, rows[2].dedupeKey]);
     });
 
-    it('skips muted recipients without reading their dedupe keys, and always delivers calendar_reconnect', async () => {
+    it('skips muted recipients without reading their dedupe keys, and always delivers calendar_sync_issue', async () => {
         const dropped = watchInvalidations();
         const rows = [
             row(1, { username: 'palak', kind: 'contract_renewal', dedupeKey: 'renewal:palak' }),
-            row(2, { username: 'palak', kind: 'calendar_reconnect', dedupeKey: 'reconnect:palak' }),
+            row(2, { username: 'palak', kind: 'calendar_sync_issue', dedupeKey: 'reconnect:palak' }),
         ];
         const { db, reads } = fakeDb([], [], [], [{ username: 'palak', inAppContractRenewal: false }]);
         assert.deepEqual(await notify(rows, db, now), { created: 1 });
@@ -190,7 +190,7 @@ describe('notify', () => {
 
     it('makes no preference query when no row is of a configurable kind', async () => {
         const { db, preferenceReads } = fakeDb();
-        assert.deepEqual(await notify([row(1, { kind: 'calendar_reconnect' })], db, now), { created: 1 });
+        assert.deepEqual(await notify([row(1, { kind: 'calendar_sync_issue' })], db, now), { created: 1 });
         assert.deepEqual(preferenceReads, []);
     });
 

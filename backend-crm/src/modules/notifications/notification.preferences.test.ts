@@ -62,13 +62,13 @@ describe('withoutMutedRecipients', () => {
         assert.deepEqual(await withoutMutedRecipients(fakeDb().db, rows), rows);
     });
 
-    it('never filters a kind without a switch (calendar_reconnect) and makes no query when no row is configurable', async () => {
+    it('never filters a kind without a switch (calendar_sync_issue) and makes no query when no row is configurable', async () => {
         const { db, queries } = fakeDb({ palak: { inAppActivityReminder: false, inAppActivityAssigned: false, inAppActivityInvited: false, inAppContractRenewal: false } });
-        const rows = [row('palak', 'calendar_reconnect')];
+        const rows = [row('palak', 'calendar_sync_issue')];
         assert.deepEqual(await withoutMutedRecipients(db, rows), rows);
         assert.deepEqual(queries, []);
 
-        const mixed = [row('palak', 'calendar_reconnect'), row('palak', 'activity_reminder')];
+        const mixed = [row('palak', 'calendar_sync_issue'), row('palak', 'activity_reminder')];
         assert.deepEqual(await withoutMutedRecipients(db, mixed), [mixed[0]]);
         assert.deepEqual(queries, [['palak']], 'only the configurable rows’ recipients are read');
     });

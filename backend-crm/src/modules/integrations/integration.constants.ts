@@ -1,5 +1,6 @@
 /**
- * The external providers of Admin › API Integrations and their fixed OAuth facts (Calendar Phase 2 spec §3.3, D7).
+ * The external providers of Admin › API Integrations and their fixed facts (Calendar Phase 2 spec §3.3; admin-managed
+ * calendar connections: addendum phase2-admin-connect AC1–AC4).
  * Provider endpoints are constants on purpose: no admin-entered URL is ever fetched (SSRF). Pure.
  * Mirrored by frontend-crm/src/types/integration.types.ts (INTEGRATION_PROVIDERS).
  */
@@ -29,6 +30,12 @@ export const PROVIDER_KINDS: Readonly<Record<IntegrationProviderKey, 'calendar' 
  */
 export const ENABLEABLE_PROVIDERS: ReadonlySet<IntegrationProviderKey> = new Set(['google', 'microsoft']);
 
+/** Providers authenticated by a client id + client secret. Google uses a service account key instead (addendum AC1). */
+export const PROVIDERS_WITH_CLIENT_SECRET: ReadonlySet<IntegrationProviderKey> = new Set(['microsoft', 'zoom']);
+
+/** Calendar providers that serve company email domains (`settings.domains`; a domain belongs to at most one). */
+export const DOMAIN_PROVIDERS: ReadonlySet<IntegrationProviderKey> = new Set(['google', 'microsoft']);
+
 /** Providers with a webhook secret of their own (Zoom's event-subscription Secret Token). */
 export const PROVIDERS_WITH_WEBHOOK_SECRET: ReadonlySet<IntegrationProviderKey> = new Set(['zoom']);
 
@@ -38,87 +45,40 @@ export const PROVIDERS_WITH_SECRET_EXPIRY: ReadonlySet<IntegrationProviderKey> =
 /** Days before a client secret's expiry date when the card warns (and, from P2-3, admins get a notification). */
 export const SECRET_EXPIRY_WARNING_DAYS = 30;
 
-// ── OAuth endpoints (constants: never built from admin input except the validated Microsoft tenant) ─────────────
+// ── Token and API endpoints (constants: never built from admin input except the validated Microsoft tenant) ──
+// The `token_uri` inside an uploaded Google key file is ignored on purpose: a key file can't point the server elsewhere.
 
-export const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 export const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
-export const GOOGLE_REVOKE_URL = 'https://oauth2.googleapis.com/revoke';
+export const GOOGLE_CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
 export const microsoftAuthorityUrl = (tenantId: string) => `https://login.microsoftonline.com/${encodeURIComponent(tenantId)}/oauth2/v2.0`;
+export const GRAPH_API = 'https://graph.microsoft.com/v1.0';
+/** Client-credentials scope: every application permission (or RBAC for Applications role) the app holds. */
+export const GRAPH_DEFAULT_SCOPE = 'https://graph.microsoft.com/.default';
 export const ZOOM_TOKEN_URL = 'https://zoom.us/oauth/token';
 
 /** A Microsoft tenant: a directory GUID or a verified domain (e.g. nandiniinfosys.onmicrosoft.com). */
 export const MICROSOFT_TENANT_PATTERN = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|(?=.{3,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+)$/i;
 
-// ── Scopes (D7) ───────────────────────────────────────────────────────────────────────────────────────────────
-
-export const GOOGLE_SCOPE_PROFILES = ['narrow', 'broad'] as const;
-export type GoogleScopeProfile = (typeof GOOGLE_SCOPE_PROFILES)[number];
+// ── Scopes (addendum AC3 / AC4) ───────────────────────────────────────────────────────────────────────────────
 
 const GOOGLE_API = 'https://www.googleapis.com/auth/';
 
 /**
- * Scopes requested on Connect. `narrow` = events the user owns + free/busy of calendars they can see; `broad` (one
- * switch on the Google card, if the first real run needs it) = all events + the same free/busy scope. Never
- * `calendar.freebusy`, which only covers the user's own calendars.
+ * The two scopes the Google service account is authorised for in the Admin console (Security › Access and data control
+ * › API controls › Domain-wide delegation) and requests for each employee: events on the user's own calendars
+ * (insert, delete, list with sync tokens, watch) and free/busy. Fixed: changing them means changing the Admin console
+ * entry, so it can't be a CRM-only switch.
  */
-export const GOOGLE_REQUESTED_SCOPES: Readonly<Record<GoogleScopeProfile, readonly string[]>> = {
-    narrow: ['openid', 'email', `${GOOGLE_API}calendar.events.owned`, `${GOOGLE_API}calendar.events.freebusy`],
-    broad: ['openid', 'email', `${GOOGLE_API}calendar.events`, `${GOOGLE_API}calendar.events.freebusy`],
-};
+export const GOOGLE_DWD_SCOPES: readonly string[] = [`${GOOGLE_API}calendar.events.owned`, `${GOOGLE_API}calendar.events.freebusy`];
+/** Exactly what the admin pastes into the Admin console's "OAuth scopes (comma-delimited)" box. */
+export const GOOGLE_DWD_SCOPES_ADMIN_CONSOLE = GOOGLE_DWD_SCOPES.join(',');
+/** The app-level step of "Test connection" mints a token without `sub` for this one scope (proves the key only). */
+export const GOOGLE_KEY_CHECK_SCOPE = `${GOOGLE_API}calendar.events.owned`;
 
-export const MICROSOFT_REQUESTED_SCOPES: readonly string[] = ['openid', 'email', 'profile', 'offline_access', 'User.Read', 'Calendars.ReadWrite'];
+/** The Graph application permission (or Exchange RBAC for Applications role) calendar sync needs. */
+export const MICROSOFT_APP_PERMISSION = 'Calendars.ReadWrite';
 
-/** What a token response must have granted (compared after `normalizeGrantedScopes`). OIDC scopes are never required. */
-export const REQUIRED_GRANTED_SCOPES = {
-    google: {
-        narrow: [`${GOOGLE_API}calendar.events.owned`, `${GOOGLE_API}calendar.events.freebusy`],
-        broad: [`${GOOGLE_API}calendar.events`, `${GOOGLE_API}calendar.events.freebusy`],
-    },
-    microsoft: ['calendars.readwrite', 'user.read'],
-} as const;
-
-const MICROSOFT_GRAPH_PREFIX = 'https://graph.microsoft.com/';
-
-/**
- * The token response's `scope` field as a set to compare with REQUIRED_GRANTED_SCOPES (spec §3.3 step 5):
- * - Google: space-separated, case-sensitive full scope URLs; kept as they are.
- * - Microsoft: optional and sometimes percent-encoded; decoded, split, the `https://graph.microsoft.com/` prefix
- *   stripped and lower-cased. A missing field means the requested scopes were granted ("if omitted, the token is for
- *   the scopes requested"), so the requested Graph scopes are returned.
- */
-export function normalizeGrantedScopes(provider: 'google' | 'microsoft', scope: string | null | undefined): Set<string> {
-    if (provider === 'google') return new Set((scope ?? '').split(/\s+/).filter(Boolean));
-    let text = scope ?? '';
-    if (!text.trim()) return new Set(MICROSOFT_REQUESTED_SCOPES.map((s) => s.toLowerCase()));
-    if (/%[0-9a-f]{2}/i.test(text)) {
-        try {
-            text = decodeURIComponent(text.replace(/\+/g, ' '));
-        } catch {
-            // Not valid percent-encoding: compare it as it is.
-        }
-    }
-    return new Set(
-        text
-            .split(/\s+/)
-            .filter(Boolean)
-            .map((s) => (s.toLowerCase().startsWith(MICROSOFT_GRAPH_PREFIX) ? s.slice(MICROSOFT_GRAPH_PREFIX.length) : s).toLowerCase()),
-    );
-}
-
-/** Required scopes missing from a grant (empty = all granted). */
-export function missingGrantedScopes(provider: 'google' | 'microsoft', scope: string | null | undefined, profile: GoogleScopeProfile = 'narrow'): string[] {
-    const granted = normalizeGrantedScopes(provider, scope);
-    const required = provider === 'google' ? REQUIRED_GRANTED_SCOPES.google[profile] : REQUIRED_GRANTED_SCOPES.microsoft;
-    return required.filter((s) => !granted.has(s));
-}
-
-// ── Redirect and webhook URLs (built from PUBLIC_API_URL) ─────────────────────────────────────────────────────
-
-/** OAuth redirect URI to register with the provider (one path per provider: blocks mix-up attacks). */
-export function redirectUriFor(provider: IntegrationProviderKey, publicApiUrl: string | null): string | null {
-    if (!publicApiUrl) return null;
-    return `${publicApiUrl.replace(/\/+$/, '')}/api/calendar-connections/oauth/${provider}/callback`;
-}
+// ── Webhook URLs (built from PUBLIC_API_URL; P2-7) ────────────────────────────────────────────────────────────
 
 const WEBHOOK_PATHS: Readonly<Record<IntegrationProviderKey, readonly string[]>> = {
     google: ['/api/webhooks/google/calendar'],

@@ -1,8 +1,8 @@
 import { ENV } from './env.js';
 
 /**
- * Which browser origins are the CRM itself. Used by CORS (app.ts) and by the calendar OAuth start, which seals the
- * origin that started a connect into its cookie so the callback returns there (calendar-sync/oauth.ts).
+ * Which browser origins are the CRM itself. Used by CORS (app.ts). (P2-2's calendar OAuth start also used it; that
+ * flow was retired in P2-2b.)
  *
  * LAN_ORIGIN: plain-http localhost / 127.0.0.1 / private 192.168.x.x and 10.x.x.x addresses (the office server and
  * developer machines). Pure, apart from reading CLIENT_ORIGIN.

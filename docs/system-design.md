@@ -1,6 +1,6 @@
 # Nandini CRM — System Design
 
-> **Status:** living document. Describes the system as built (code as of 2026-11-26; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Referrals module; Documents module; Activities data model and API, Calendar Phase 1 PR1; Activities screens and Calendar, PR2; notifications, reminders and mail workers, navbar bell and the morning summary email, PR3, with its review fixes; guarded cache reads for lookups, form configs and search, with its review fixes; Calendar Phase 2 P2-1, Admin › API Integrations foundation: encrypted provider credentials, connection tests, calendar sync settings, company emails, with its review fixes; My Profile (Profile Phase 1): profile, photo, change password, signed-in sessions; Admin › Users (Profile Phase 2, 2026-11-26): user management, the must-change-password claim, sessions revoked on deactivation / reset / role change; Calendar Phase 2 P2-2, employees connect / disconnect Google or Microsoft 365 calendars: OAuth with PKCE, sealed tokens, refresh, reconnect notifications; My Profile › Notifications (Profile Phase 3): bell kinds a user can turn off, the morning summary opt-out, a personal default reminder and out-of-office dates; Calendar Phase 2 P2-3a: one activity write path (system writes, write hook, lock seam, shared post-commit step), no behaviour change; Admin › Company formats (Profile Phase 5, PR5a): one company-wide date / time / number display setting, a shared formatter core, legacy styles kept until an admin saves; PR5b: the remaining ad-hoc format sites and the audit log's Before / After values follow it too; Calendar Phase 2 P2-4: lead / opportunity follow-ups create activities, locked follow-up fields, the nightly follow-up backfill).
+> **Status:** living document. Describes the system as built (code as of 2026-11-26; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Referrals module; Documents module; Activities data model and API, Calendar Phase 1 PR1; Activities screens and Calendar, PR2; notifications, reminders and mail workers, navbar bell and the morning summary email, PR3, with its review fixes; guarded cache reads for lookups, form configs and search, with its review fixes; Calendar Phase 2 P2-1, Admin › API Integrations foundation: encrypted provider credentials, connection tests, calendar sync settings, company emails, with its review fixes; My Profile (Profile Phase 1): profile, photo, change password, signed-in sessions; Admin › Users (Profile Phase 2, 2026-11-26): user management, the must-change-password claim, sessions revoked on deactivation / reset / role change; Calendar Phase 2 P2-2, employees connect / disconnect Google or Microsoft 365 calendars (replaced by P2-2b); Calendar Phase 2 P2-2b, admin-managed calendar connections: a Google service account with domain-wide delegation and a Microsoft Entra app with application permissions, automatic enrolment of everyone with a company email, in-memory tokens only, admin problem notifications; My Profile › Notifications (Profile Phase 3): bell kinds a user can turn off, the morning summary opt-out, a personal default reminder and out-of-office dates; Calendar Phase 2 P2-3a: one activity write path (system writes, write hook, lock seam, shared post-commit step), no behaviour change; Admin › Company formats (Profile Phase 5, PR5a): one company-wide date / time / number display setting, a shared formatter core, legacy styles kept until an admin saves; PR5b: the remaining ad-hoc format sites and the audit log's Before / After values follow it too; Calendar Phase 2 P2-4: lead / opportunity follow-ups create activities, locked follow-up fields, the nightly follow-up backfill).
 > Update it in the same change that alters architecture, infrastructure, Redis usage, queues or security.
 > Related: [Database design](database-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
@@ -280,40 +280,76 @@ which see every record (`modules/user-admin/roles.ts`, mirrored and contract-tes
   shows the setup steps; saving a secret answers 503 `INTEGRATIONS_NOT_READY`. A stored secret the ring can't open
   (key replaced without keeping the old one) shows as "Needs attention" and is kept until a new one is entered.
   Rotation: put the new key first (`k2:…,k1:…`) on the API and the worker, restart, run
-  `npm run integrations:reencrypt` (compare-and-set per row; `--dry-run` reports; it also re-seals calendar
-  connection tokens, compare-and-set on `tokenVersion`, never on a disconnected row), then drop the old key. HKDF
+  `npm run integrations:reencrypt` (compare-and-set per row; `--dry-run` reports; since P2-2b it covers only
+  `IntegrationProvider.secretsEnc`, which also holds the Google service account key: no token is stored anywhere), then
+  drop the old key. HKDF
   subkeys (`subkey(purpose)`) are reserved for webhook channel tokens (P2-7).
-- **Calendar connections (OAuth, P2-2, as of 2026-11-26; `modules/calendar-sync`).** Authorization code flow with
-  PKCE (S256), `state` and `nonce`. `POST /api/calendar-connections/:provider/start` puts `{ state, verifier, nonce,
-  userId, provider, return origin, expiry }` into the httpOnly cookie `crm_oauth`, sealed with the secret box (AAD
-  `oauth:<provider>:<userId>`, 10 min, `SameSite=Lax` so it rides the provider's top-level redirect back, path
-  `/api/calendar-connections/oauth` so no other request carries it). The callback
-  (`/api/calendar-connections/oauth/:provider/callback`, outside `authenticate`) checks the CRM session itself (signed
-  JWT + tracked-session check), opens the cookie (same user and provider, not expired), compares `state` in constant
-  time, exchanges the code with the verifier, decodes the id_token (no signature check: it came straight from the
-  provider's token endpoint over TLS) and checks `iss`, `aud`, `exp` / `iat` (±120 s), `nonce`; Google needs
-  `email_verified` and an `hd` claim in the company domains; Microsoft needs the configured tenant (`tid`, when the
-  tenant is a GUID) and reads the address from Graph `/me` (`mail`, else UPN). Granted scopes are compared with the
-  requested ones (`scope_denied`). The address must equal the user's company email, or fills an empty one when it is
-  a company address held by nobody else. It always answers with a **302** to
-  `/profile?tab=connected-accounts&calendar=…` (My Profile › Connected accounts) on the
-  CRM origin that started the flow (`isAppOrigin`, `config/origins.ts`, also used by CORS), never to another site,
-  with a fixed reason code (no provider text is reflected). A refused grant is revoked at Google unless it is live
-  for another user. Tokens are sealed per row and column (AAD `CalendarConnection:<id>:accessToken|refreshToken`);
-  no DTO, log line or audit entry carries one. Refresh (`connectionTokens.ts` `withAccessToken`): 5 minutes before
-  expiry, compare-and-set on `tokenVersion` (no Redis needed; a lost race uses the winner's token), a provider 401
-  refreshes once and retries; `invalid_grant` (and the AADSTS expiry codes) → `reauth_required` + a
-  `calendar_reconnect` notification; `invalid_client` is a provider problem and leaves the connection alone. Every
-  use re-checks the user is active, the provider still on and the company app unchanged (`clientVersion`).
-  Provider calls go through `providerFetch` (timeouts, Retry-After, full-jitter backoff, a per-process pause after a
-  long 429, typed errors whose message is only `"<provider> <operation> failed: <status> <code>"`, never a URL or
-  body). Connect start is limited to 10 / min per user. The `fake` provider (`CALENDAR_FAKE_PROVIDER=true`, ignored in
-  production) runs the same flow without Google or Microsoft for local testing.
+- **Calendar connections (admin-managed, P2-2b, as of 2026-11-26; `modules/calendar-sync`; replaces P2-2's
+  per-user OAuth).** Admins connect the company once on Admin › API Integrations; employees connect nothing.
+  - **Google Workspace**: one service account with **domain-wide delegation**. The admin uploads (or pastes) the key
+    JSON; it is checked (`type` service_account, `client_email`, numeric `client_id`, an RSA `private_key`, ≤ 10 KB),
+    sealed with the secret box (AAD `IntegrationProvider:google:secrets`) and never returned, logged or audited (the
+    audit says `serviceAccountKeyChanged: true` plus the client email / client id / key id). The CRM signs a JWT
+    itself (`providers/googleServiceAccount.ts`, `node:crypto` RS256, no SDK): header `{ alg: RS256, typ: JWT, kid }`,
+    claims `iss` = client email, `sub` = the employee's company email (left out for the app-level test), `scope`,
+    `aud` = `https://oauth2.googleapis.com/token` (a constant: the key file's own `token_uri` is ignored), `iat` =
+    now − 30 s, `exp` = `iat` + 3,000 s; exchanged with the `jwt-bearer` grant. Scopes, exactly what the Admin
+    console entry must list: `calendar.events.owned` and `calendar.events.freebusy`.
+  - **Microsoft 365**: one single-tenant Entra app with **application** permission `Calendars.ReadWrite` (scoped with
+    Exchange RBAC for Applications, or tenant-wide admin consent). Client credentials (`providers/microsoftAppToken.ts`,
+    scope `https://graph.microsoft.com/.default`), calls to `/users/{mailbox}/…`. The client secret is sealed the same way.
+  - **Tokens are never stored** (`tokenSource.ts`): an in-memory LRU per process (5,000 entries) keyed by
+    `provider:clientVersion:subject:scopeHash` (Microsoft: one tenant token), reused until 5 minutes before expiry,
+    one in-flight call per key; failures are remembered for 10 minutes per user (user-level) and 5 minutes per
+    provider (app-level). Any credentials change bumps `clientVersion`, so every process drops old grants within the
+    60 s credentials cache.
+  - **Errors** (`syncErrors.ts`): every token / API answer maps to a fixed code at one of three levels: **user**
+    (`user_not_found`, `user_unavailable`, `calendar_unavailable`, `mailbox_out_of_scope`, `no_mailbox`: that person's
+    row turns `error`, rechecked with backoff 15 min → 1 h → 6 h → 24 h; a Microsoft `mailbox_out_of_scope` counts as
+    the app's `no_application_permission` only when no other live Microsoft row is `ok` and the provider's last 3–10
+    other checked live rows all failed the same way, so people left outside an RBAC scope never read as the whole
+    app), **app** (`delegation_missing`,
+    `delegation_wrong_id`, `scopes_not_authorised`, `admin_policy`, `key_invalid`, `clock_skew`, `invalid_client`,
+    `secret_expired`, `app_not_in_tenant`, `tenant_not_found`, `no_application_permission`, `provider_error`: the
+    provider's health turns `error`, rows are left alone and employees see "paused") or **transient** (`rate_limited`,
+    `provider_unavailable`, `network`: retried). Each code has one admin sentence; provider text is kept to 300
+    characters for admins only and never shown to the employee.
+  - **Use** (`calendarAccess.ts` `withCalendarAccess(connectionId, fn)`): re-checks the row is live, the provider on
+    and the health not blocked, mints, runs `fn`, and on a provider 401 drops the cached grant and retries once.
+  - **Enrolment** (`enrolment.ts`): pure `resolveTarget` / `planEnrolment` decide per person (active, non-group, a
+    company email, a provider serving the domain or the admin's override in `CalendarSyncUser`, not excluded) and
+    `reconcileUser` applies it under the per-user lock `calendar-connection:user:<username>` (create `pending`, keep,
+    or stop with `excluded`, `user_inactive`, `email_changed`, `provider_changed`, `provider_removed`, `no_email`; a
+    `oauth_retired` row is never reactivated). Triggers: provider save / removal and settings save (everyone,
+    `reconcileAll`), People email and calendar changes, Admin › Users create / update / activate / deactivate, and the
+    nightly job. A new row gets an immediate health check (in-process until the P2-3b worker). Unique-index races
+    surface outside the transaction (D45).
+  - **Problems go to admins**, never to employees: `calendar_sync_issue` notifications (§5.1), the provider card's
+    health and the People table. The employee's My Profile card and the Calendar page notice show a calm status only.
+  - Provider calls go through `providerFetch` (timeouts, Retry-After, full-jitter backoff, a per-process pause after a
+    long 429, typed errors whose message is only `"<provider> <operation> failed: <status> <code>"`, never a URL,
+    body, token or assertion). The `fake` provider (`CALENDAR_FAKE_PROVIDER=true`, ignored in production) is an
+    admin-mode test calendar: it serves every company domain no real provider claims (and anyone put on it by
+    override), needs no key and talks to nothing, so enrolment and checks run end to end on a laptop.
+  - **Security** (tell the owner): a leaked Google key or Microsoft secret can read and change every calendar it
+    covers without anyone's password, so it is the master password of the company calendar. Damage is limited by the
+    two narrow Google scopes, `Calendars.ReadWrite` (with RBAC: people's mailboxes only), sealed storage, write-only
+    API, no logging and tokens in memory for under an hour. Rotate yearly and when someone with access leaves; on a
+    suspected leak delete the Google key (and the delegation entry) or the Microsoft secret / role assignment, then
+    rotate `INTEGRATIONS_ENCRYPTION_KEY`. Invitations still go out only on the meeting owner's own action (D41); an
+    admin can exclude anyone on the People table.
 - **Audit redaction** (`services/auditCatalog.ts` `isSensitiveKey`): an exact, case-insensitive list (password,
   token, secret, clientSecret, refreshToken, accessToken, …) plus a case-sensitive camelCase suffix rule
   `(Secret|Secrets|Token|Password)(Enc)?$`, applied to **every** entity's before / after values.
-- **Connection tests** (`POST /api/admin/integrations/providers/:provider/test`) call Google / Microsoft with the
-  saved credentials only (no user): 6 per minute per admin in Redis, with an in-memory per-process limit whenever
+- **Connection tests** (`POST /api/admin/integrations/providers/:provider/test`, P2-2b: two steps) call Google /
+  Microsoft with the saved credentials: step `app` (Google: a token for the service account itself; Microsoft: a
+  client-credentials token and its `roles`), then, when the admin names a person, step `user` (a token as that person
+  and a read of their primary calendar, which proves delegation / the app's mailbox scope). The person must be someone
+  the provider would sync (active, non-group, not excluded, a company email not on the other provider; else 409
+  `CALENDAR_TEST_NOT_ALLOWED`), and each such run is audited `IntegrationProvider TEST_AS_USER` with the acting admin
+  (as of 2026-11-26, P2-2b review fixes). A test clears the provider's health `error` only when it proves that problem
+  fixed (a passing user step; the app step alone only for key / client codes). A provider can be switched
+  on only after a passing app step since its credentials last changed. Tests and People "Check now" share the limit: 6 per minute per admin in Redis, with an in-memory per-process limit whenever
   Redis can't count a test (down, or a command failing while it reports ready: `createRateLimiter`'s `fallback`
   option), so the probe can't be used to hammer the providers. A result is stored as `lastTest` only if the client
   id, sealed secret and `clientVersion` are unchanged since the probe started (conditional `updateMany`); otherwise
@@ -500,7 +536,7 @@ one per event and recipient, made unique by `dedupeKey`, never audited.
 | `activity_assigned` | a committed create / update gives the activity to someone other than the person saving | the new owner | `activity_assigned:<activityId>:<updatedAtMs>:<username>` |
 | `activity_invited` | a committed create / update adds a colleague (not the person saving or the owner) to a **Planned** activity that isn't a Note | that colleague | `activity_invited:<activityId>:<updatedAtMs>:<username>` |
 | `contract_renewal` | the sweep finds `renewalReminderDate` (wall clock) in the last 7 days, contract not Expired | the Contract Manager (`assignedTo`), if active | `contract_renewal:<contractId>:<renewalWallClock>:<username>` |
-| `calendar_reconnect` (P2-2) | a calendar refresh is refused, the company app changed or a time-limited grant ended (the connection turns `reauth_required`); or, from the nightly job, a time-limited Google grant ends within 3 days | the connection's user | `calendar_reconnect:<connectionId>:<connectedAt ms>:<ISO week>` / `calendar_reconnect:<connectionId>:<connectedAt ms>:expiring` (per grant: a reconnect sets `connectedAt` again, so it re-arms) |
+| `calendar_sync_issue` (P2-2b; replaces P2-2's `calendar_reconnect`) | a provider fails app-level while syncing (delegation, key, secret, tenant …); or, from the nightly job, at least one person's calendar went to `error` that day (one digest) | active admin-role users | `calendar_sync_issue:<provider>:<code>:<business date>:<admin>` / `calendar_sync_issue:users:<business date>:<admin>` |
 
 - **After an activity save** (create, update, delete, bulk delete, restore, RSVP, and system writes, P2-3a),
   `runActivityPostCommit(rows, actor, { notify })` (`activity.service.ts`) runs once the transaction has committed: per
@@ -518,7 +554,7 @@ one per event and recipient, made unique by `dedupeKey`, never audited.
   `withoutMutedRecipients` (`notification.preferences.ts`): one batched read of the recipients' `UserPreference`
   switches (500 usernames per query, compared lower-cased) drops the rows of kinds a recipient turned off in My Profile
   › Notifications. Only `activity_reminder`, `activity_assigned`, `activity_invited` and `contract_renewal` are
-  configurable (`preferences.constants.ts`); any other kind (`calendar_reconnect`) always delivers and costs no query.
+  configurable (`preferences.constants.ts`); any other kind (`calendar_sync_issue`) always delivers and costs no query.
   Inside the reminder claim the read uses the transaction, and a reminder whose recipients all muted it is still
   claimed (`delivered`, nothing inserted), so it is not retried. Out of office never stops bell rows.
 - **Delayed job per reminder** (`scheduleActivityReminder`): when `remindAt` is set and `reminderSentAt` is null,
@@ -807,10 +843,18 @@ frontend-crm/src/
 `/admin/integrations` (`components/settings/integrations/ApiIntegrationsView.tsx` in `AdminPageShell`; the navbar
 "Integrations" item is shown to admin roles only, `navGroupsFor(role)`). One read
 (`GET /api/admin/integrations`, query key `integrations.admin`) feeds: readiness alerts (no key, unreadable secret,
-no public address, not HTTPS), the server facts row, one `ProviderCard` per provider (switch, client ID, write-only
-secret with "Replace", expiry date, Microsoft tenant, Google permission profile / PKCE, redirect URI and webhook URLs
-to copy, "Test connection"), the company calendar settings card, "What goes to calendars" (Followup Types) and the
-People table with the company email editor (`integrations.people`). Each card keeps its own draft; the view joins
+not HTTPS, the dev test calendar on), the server facts row, one `ProviderCard` per provider (P2-2b, as of 2026-11-26:
+Google key upload or paste with a summary that never echoes the key, the service account email, numeric Client ID and
+the exact scopes text to copy into the Admin console; Microsoft client ID, write-only secret with "Replace", expiry
+and tenant; the domains the provider serves as chips (a domain the other provider serves is disabled); health and
+People counts, with "Show problems" opening People filtered to calendar problems; a two-step "Test connection" with
+an optional "Also test as" person; the switch stays disabled until a passing test), the company calendar settings
+card, "What goes to calendars" (Followup Types) and the People table (`integrations.people`) with the company email
+editor and, per person, the calendar column (provider, status, last error, override / left-out chip) and a
+"Calendar…" dialog (`CalendarChoiceDialog`: provider by email domain or an override, leave out of sync with a note,
+"Check now"). `?tab=people&issue=<filter>` (the admin notification links) scrolls to People with that filter, on first load and
+whenever the bell pushes the link while the page is open (`useSearchParams` in a small Suspense-wrapped listener).
+"Also test as" lists only people the provider would sync. Each card keeps its own draft; the view joins
 their dirty flags into one `useLeaveGuard`. Writes call `notifyCrmUpdate('/api/admin/integrations')`; settings and
 sync-type saves also notify `FORM_CONFIG_SYNC_ENTITY`, so an open Form Builder reloads instead of saving stale module
 settings or option meta back; a company email change also notifies `MASTER_DATA_SYNC_ENTITY` (`'master-data'`), which
@@ -818,26 +862,17 @@ settings or option meta back; a company email change also notifies `MASTER_DATA_
 failed background refetch keeps the cards (and their unsaved drafts) on screen with an inline "Try again" warning;
 the full-page error shows only when nothing has loaded yet.
 
-### 8.6 Calendar connections (My Profile › Connected accounts, P2-2)
+### 8.6 Company calendar status (My Profile › Connected accounts, P2-2b)
 
-As of 2026-11-26. The self-contained `components/integrations/CalendarConnectionsCard` (own service, hooks with query
-key `calendarConnections`, and types contract-tested against the API) lives in My Profile's **Connected accounts** tab
-(`/profile?tab=connected-accounts`, `ROUTES.PROFILE_CONNECTED_ACCOUNTS` = the API's `CALENDAR_CONNECTIONS_PAGE`, §8.7;
-Profile Phase 4). Reached from My Profile (no separate menu item: the navbar user menu and mobile drawer link only
-My Profile), from
-`calendar_reconnect` notifications, the calendar's reconnect banner, and the OAuth callback redirect. The old
-temporary page `/connected-calendars` (`app/connected-calendars/page.tsx`) is now only a client redirect to the tab
-that keeps the query string (old bookmarks, callbacks already in flight). The card lists the live
-connection (provider, account, status, connected / access-ends dates) with Reconnect and Disconnect (a confirm dialog;
-Microsoft also points to myapps.microsoft.com because it has no per-app revoke), or one Connect button per provider an
-admin switched on ("Connect" leaves for the provider's consent screen via `window.location.assign`). It reads the
-callback's `?calendar=connected|error&reason=` itself (or takes it as a prop), shows a toast or a fixed sentence per
-reason, then drops only those params with `router.replace` (`?tab=` stays). Until P2-3 it says the calendar is
-connected and sync arrives in the next update. The CRM calendar shows `CalendarReconnectAlert` when the connection needs a reconnect; Admin › API
-Integrations › People shows each person's connection with an admin Disconnect (optional note, audited). Login honours
-`?next=` for CRM paths only (`utils/safeNextPath.ts`), so a callback without a session returns here after sign-in;
-`/profile` sends a signed-out visitor to `/login?next=<its path and query>` the same way (so does `/connected-calendars`,
-through its redirect), keeping the tab and any `?calendar=` result.
+As of 2026-11-26. The self-contained `components/integrations/CalendarConnectionsCard` (own service, hook
+`useOwnCalendarSync` with query key `calendarConnections`, and types contract-tested against the API) lives in My
+Profile's **Connected accounts** tab (`/profile?tab=connected-accounts`, `ROUTES.PROFILE_CONNECTED_ACCOUNTS` = the API's
+`CALENDAR_CONNECTIONS_PAGE`, §8.7; Profile Phase 4). Since P2-2b it is **status only**: the provider and mailbox, a
+status chip (Setting up / Synced / Needs attention / Paused), since and last-synced dates and one calm sentence, or why
+the person isn't synced (no company email, excluded by an admin, …). There is nothing to connect or disconnect, and it
+never shows an error code or provider text (admins fix problems). Its old props (`callback`, `onCallbackHandled`) are
+kept for compatibility and ignored. The CRM calendar shows `CalendarSyncStatusAlert` (an info notice with a "Details"
+link) while the status is error or paused. The old page `/connected-calendars` only redirects to the tab.
 
 ### 8.7 My Profile (`/profile`)
 
@@ -860,9 +895,8 @@ through its redirect), keeping the tab and any `?calendar=` result.
   Users show "Out of office until <date>" / "On leave" next to them (labelled, not hidden); bell notifications keep
   arriving. The user list carries the dates and the client compares them with the business day.
 - **Connected accounts tab** (Profile Phase 4, as of 2026-11-26; hidden while the user must change their password):
-  `CalendarConnectionsCard` unchanged (§8.6), connect / reconnect / disconnect Google or Microsoft 365. The OAuth
-  callback lands on `?tab=connected-accounts&calendar=connected|error&reason=&provider=`; the card reads and then drops
-  the `calendar` / `reason` / `provider` params itself. Also in the navbar user menu and the mobile drawer.
+  `CalendarConnectionsCard` (§8.6), status only since P2-2b (the company calendar is connected by admins; nothing to
+  connect or disconnect). Also in the navbar user menu and the mobile drawer.
 - **Security tab:** "Change password" (current / new / confirm, live checklist from `utils/passwordPolicy.ts`, the same
   rules as the API) and "Where you're signed in" (`GET /api/me/sessions`: device, IP, signed-in time, "This device"
   for the current one, Sign out per other row, "Sign out of all other sessions").
@@ -977,12 +1011,12 @@ one-minute database check (§4.3); off-hours contract renewals wait for the 07:0
 1. Generate a key **per environment** (laptop, server):
    `node -e "console.log('k1:'+require('crypto').randomBytes(32).toString('base64'))"`.
 2. Set it as `INTEGRATIONS_ENCRYPTION_KEY` in `backend-crm/.env` for **both** the API and the worker, and restart both.
-3. Keep a copy in the company password manager. Losing it means re-entering the client secrets and everyone
-   reconnecting their calendar (connection tokens become `error` / `key_error`).
-4. Set `PUBLIC_API_URL` to the https address the browser, Google and Microsoft reach the API at (e.g.
-   `https://crm.nandiniinfosys.com`). Redirect URIs and webhook URLs are built from it; outside production it defaults
-   to `http://localhost:<PORT>`. Production without it: API Integrations shows an error and nobody can connect. Not
-   https: calendar webhooks stay off (changes from calendars arrive by polling); the API logs a warning at start-up.
+3. Keep a copy in the company password manager. Losing it means uploading the Google key and entering the Microsoft
+   secret again (no tokens are stored since P2-2b, so nobody has to reconnect anything).
+4. Set `PUBLIC_API_URL` to the https address Google and Microsoft reach the API at (e.g.
+   `https://crm.nandiniinfosys.com`). Since P2-2b only calendar webhook URLs (P2-7) are built from it; outside
+   production it defaults to `http://localhost:<PORT>`, and it no longer blocks API Integrations. Not https: calendar
+   webhooks stay off (changes from calendars arrive by polling); the API logs a warning at start-up.
 5. Rotation: §3.6.
 6. Before deploying P2-2 (as of 2026-11-26): run `npm run calendar:check-emails`. Exit 0 ("No duplicates") is safe;
    otherwise fix the listed users on Admin › API Integrations › People first. The `calendar_connections` migration
@@ -993,11 +1027,63 @@ one-minute database check (§4.3); off-hours contract renewals wait for the 07:0
    the nightly step at 00:20 do it). Admin › API Integrations › Calendar sync settings › "Follow-ups create
    activities" turns the feature off company-wide (existing follow-up activities stay; turning it back on, the next
    backfill brings every record in line).
-8. Register the OAuth apps (Google Cloud: an Internal consent screen, the Calendar API, redirect URI
-   `<PUBLIC_API_URL>/api/calendar-connections/oauth/google/callback`; Entra: a single-tenant app with redirect URI
-   `<PUBLIC_API_URL>/api/calendar-connections/oauth/microsoft/callback`), save them on Admin › API Integrations and
-   switch a provider on. Nobody can connect before that. `CALENDAR_FAKE_PROVIDER=true` (development only) adds a test
-   provider that needs no app.
+8. Deploying P2-2b (migration `20261128090000_calendar_admin_connect`, as of 2026-11-26): P2-2's live OAuth
+   connections are stopped (`oauth_retired`) and their tokens dropped, the Google provider's OAuth client is cleared
+   and switched off, Microsoft keeps its client id / secret / tenant but is switched off with no domains, and old
+   `calendar_reconnect` notifications are deleted. Then connect the company calendars (§9.2.1). The old Google OAuth
+   client from P2-2 testing can be deleted in Cloud console (that revokes the test grants).
+9. `CALENDAR_FAKE_PROVIDER=true` (development only, ignored in production) adds the test calendar, which needs no
+   Google or Microsoft.
+
+#### 9.2.1 Connecting the company calendars (owner setup, P2-2b)
+
+**Google Workspace (do first; needs a Workspace super admin who can create a Cloud project in the organisation):**
+
+1. console.cloud.google.com › the nandiniinfosys.com organisation › **New project** "Nandini CRM calendar".
+2. **APIs & Services › Library › Google Calendar API › Enable.**
+3. **IAM & Admin › Service accounts › Create service account** `crm-calendar-sync` (no project roles needed).
+4. The service account › **Keys › Add key › Create new key › JSON** (a file downloads). If Google says "Service
+   account key creation is disabled", someone with Organization Policy Administrator turns off "Disable service
+   account key creation" (IAM & Admin › Organization policies › Manage policy › Override parent's policy ›
+   enforcement off), creates the key, then turns enforcement back on (an existing key keeps working). Alternative:
+   exempt only this service account with a tag and a conditional policy.
+5. Copy the service account's numeric **Unique ID** (the CRM also shows it after the upload).
+6. **admin.google.com › Security › Access and data control › API controls › Manage Domain Wide Delegation › Add new**:
+   Client ID = the numeric ID (not the service account email), OAuth scopes exactly
+   `https://www.googleapis.com/auth/calendar.events.owned,https://www.googleapis.com/auth/calendar.events.freebusy`
+   (the CRM shows this text with a copy button), **Authorize**. It can take minutes, up to 24 hours, to apply.
+7. Make sure the Calendar service is on for every organisational unit that should sync.
+8. CRM, **Admin › API Integrations › Google**: upload the JSON, pick the domains (`nandiniinfosys.com`), Save,
+   **Test connection** with "Also test as" yourself (both steps green), switch on, and watch People go from "Setting
+   up" to "Synced".
+9. **Delete the downloaded JSON** from the laptop (and Downloads); never email it or paste it in chat.
+
+**Microsoft 365 (only if a Microsoft 365 tenant really exists; needs a Global Administrator, or Application
+Administrator + Exchange Administrator):**
+
+1. entra.microsoft.com › **App registrations › New registration** "Nandini CRM calendar sync", this organizational
+   directory only, no redirect URI.
+2. Copy the **Application (client) ID** and **Directory (tenant) ID**.
+3. **Certificates & secrets › New client secret**: copy the **Value** (not the Secret ID) and note the expiry.
+4. Grant calendar access, one of:
+   - **Recommended, scoped (RBAC for Applications)**: add **no** Graph application permission in Entra (a tenant-wide
+     grant would cancel the scope). In Exchange Online PowerShell: `New-ServicePrincipal -AppId <client id> -ObjectId
+     <enterprise app object id>`, `New-ManagementScope -Name "CRM calendar users" -RecipientRestrictionFilter
+     "RecipientTypeDetails -eq 'UserMailbox'"`, `New-ManagementRoleAssignment -App <client id> -Role "Application
+     Calendars.ReadWrite" -CustomResourceScope "CRM calendar users"`, then `Test-ServicePrincipalAuthorization`
+     (30 min to 2 h to apply).
+   - **Simple, unscoped**: API permissions › Microsoft Graph › Application permissions › `Calendars.ReadWrite` ›
+     Grant admin consent (every mailbox in the tenant).
+5. CRM, **Admin › API Integrations › Microsoft**: client ID, secret, expiry, tenant ID, domains, Save, Test as a person
+   with a Microsoft mailbox, switch on.
+
+**Security note for the owner:** the Google key or Microsoft secret can read and change every calendar it covers
+without anyone's password: treat it as the master password of the company calendar. The CRM stores it encrypted
+(secret box), write-only, never logged or audited, and keeps access tokens in memory only (under an hour). Rotate it
+yearly and when someone with access leaves (upload / paste the new one, test, delete the old one; the CRM picks it up
+within 60 s). On a suspected leak: Google, delete the key and the delegation entry; Microsoft, delete the secret or the
+role assignment / consent; then rotate `INTEGRATIONS_ENCRYPTION_KEY` (`npm run integrations:reencrypt`). An admin can
+leave anyone (e.g. directors) out of sync on the People table.
 
 ### 9.3 Outgoing email (Google Workspace SMTP relay)
 
@@ -1055,7 +1141,7 @@ Retention: `NOTIFICATION_RETENTION_DAYS` (90), `EMAIL_LOG_RETENTION_DAYS` (180).
 | Follow-up activities not yet run against SQL Server (P2-4) | As of 2026-11-26 the `20261127130000_followup_activities` migration (the `origin` column and the hand-written filtered index `UX_Activity_openFollowUp`) was checked with `prisma migrate diff`, and the write path, planner, locks, feed and backfill with unit tests and the in-memory double, but no real SQL Server run was made. Run `npm run db:deploy` on the dev database, then `npm run followups:backfill -- --dry-run` and the real run (or wait for the nightly step) before relying on it. The morning email deliberately leaves follow-up activities out (`origin <> 'followup'` in its activity sections: it lists follow-ups from the records); a parked hook comment (`morningSummary.sections.ts`) marks where they would join. |
 | Morning email not yet proven against the relay | The mail layer, EmailLog claims and the summary are unit-tested (STARTTLS enforcement against a fake SMTP server), and the job schedulers and the guarded unread-count cache were checked against a local Redis, but no real SMTP send or SQL Server run has been done yet; the first real send should be an admin's "Send me a test". `MORNING_SUMMARY_CRON` is read with a small cron subset for the catch-up check (numbers, names, ranges, lists, steps). |
 | "Add to Google Calendar" is a one-time copy | Moving the meeting in the CRM doesn't update the copy; real Google / Microsoft 365 sync is Calendar Phase 2 (needs HTTPS on a nandiniinfosys.com hostname). |
-| Calendar sync stores grants only (P2-1, P2-2) | As of 2026-11-26 employees can connect and disconnect a calendar, but nothing syncs yet: pushing activities (P2-3) and webhooks (P2-7) are later PRs, and `syncActive` / `webhooksActive` are false. The nightly calendar steps run from the reminders worker's nightly job until the calendar worker exists (P2-3b). The adapters and probes were written against the providers' documented answers; no real Google / Microsoft / SQL Server call was made when P2-1 and P2-2 were built. Each process pauses a provider by itself after a long 429 (not shared through Redis). |
+| Calendar sync enrols people but pushes nothing yet (P2-1, P2-2b) | As of 2026-11-26 admins connect the company calendars and everyone with a company email is enrolled and health-checked, but nothing syncs yet: pushing activities (P2-3) and webhooks (P2-7) are later PRs, and `webhooksActive` is false. The nightly calendar steps (reconcile, due checks, admin digest) run from the reminders worker's nightly job, and a new enrolment's first check runs in-process, until the calendar worker exists (P2-3b). The JWT signing, token exchanges, probes and error mapping were written against the providers' documented answers and tested with a local RSA key; no real Google / Microsoft / SQL Server call was made when P2-1, P2-2 and P2-2b were built. Each process pauses a provider by itself after a long 429 (not shared through Redis). |
 | Integrations key is a single point of loss | Losing `INTEGRATIONS_ENCRYPTION_KEY` makes stored secrets unreadable (re-enter them); keep it in the password manager (§9.2). |
 | Workers inside the API by default | Long imports share the event loop with requests unless `RUN_WORKERS=false` + separate worker. |
 | Rate limits fail open | Intentional for availability; brute-force protection disappears while Redis is down. |

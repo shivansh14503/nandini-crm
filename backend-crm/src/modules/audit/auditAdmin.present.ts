@@ -157,8 +157,11 @@ const ACTION_LABELS: Record<string, string> = {
     PASSWORD_CHANGE: 'Password changed',
     PASSWORD_RESET: 'Password reset',
     SESSION_REVOKE: 'Session signed out',
+    ENROL: 'Calendar sync started',
+    STOP: 'Calendar sync stopped',
     CONNECT: 'Connected',
     DISCONNECT: 'Disconnected',
+    TEST_AS_USER: 'Calendar test as a person',
 };
 export const actionLabel = (action: string) => ACTION_LABELS[action] ?? humanize(action.toLowerCase());
 

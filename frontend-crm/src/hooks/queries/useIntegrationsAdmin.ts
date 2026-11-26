@@ -1,14 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/hooks/queries/queryKeys';
 import { integrationsAdminService } from '@/services/integrationsAdmin.service';
-import type { AdminDisconnectPayload, CalendarSyncSettings, IntegrationProviderKey, PersonEmailPayload, SaveProviderPayload } from '@/types/integration.types';
+import type { CalendarSyncSettings, IntegrationProviderKey, PersonCalendarPayload, PersonEmailPayload, SaveProviderPayload, TestConnectionPayload } from '@/types/integration.types';
 
 /** Admin › API Integrations: providers, readiness, calendar settings and Followup Types in one read. */
 export function useIntegrationsAdmin() {
     return useQuery({ queryKey: queryKeys.integrations.admin(), queryFn: integrationsAdminService.get, staleTime: 30 * 1000 });
 }
 
-/** Active, non-group users with their company email issue (and, later, their calendar connection). */
+/** Active, non-group users with their company email issue and their calendar sync. */
 export function usePeople() {
     return useQuery({ queryKey: queryKeys.integrations.people(), queryFn: integrationsAdminService.people, staleTime: 30 * 1000 });
 }
@@ -26,12 +26,14 @@ function useIntegrationsMutation<TArgs, TResult>(fn: (args: TArgs) => Promise<TR
 export const useSaveProvider = () =>
     useIntegrationsMutation(({ provider, payload }: { provider: IntegrationProviderKey; payload: SaveProviderPayload }) => integrationsAdminService.saveProvider(provider, payload));
 export const useClearProviderSecret = () => useIntegrationsMutation((provider: IntegrationProviderKey) => integrationsAdminService.clearSecret(provider));
-export const useTestProvider = () => useIntegrationsMutation((provider: IntegrationProviderKey) => integrationsAdminService.testProvider(provider));
+export const useTestProvider = () =>
+    useIntegrationsMutation(({ provider, payload }: { provider: IntegrationProviderKey; payload?: TestConnectionPayload }) => integrationsAdminService.testProvider(provider, payload));
 export const useSaveCalendarSettings = () => useIntegrationsMutation((patch: Partial<CalendarSyncSettings>) => integrationsAdminService.saveSettings(patch));
 export const useSaveSyncTypes = () => useIntegrationsMutation((changes: Record<string, boolean>) => integrationsAdminService.saveSyncTypes(changes));
 /** The user directory (master data) carries emails too: the service broadcasts MASTER_DATA_SYNC_ENTITY, so every tab refreshes it. */
 export const useSetPersonEmail = () =>
     useIntegrationsMutation(({ username, payload }: { username: string; payload: PersonEmailPayload }) => integrationsAdminService.setPersonEmail(username, payload));
-/** Admin disconnect of a person's calendar (QueryProvider also refreshes that person's own calendar connections list). */
-export const useAdminDisconnectConnection = () =>
-    useIntegrationsMutation(({ id, payload }: { id: string; payload?: AdminDisconnectPayload }) => integrationsAdminService.disconnectConnection(id, payload));
+/** A person's calendar choice (QueryProvider also refreshes the person's own status card). */
+export const useSetPersonCalendar = () =>
+    useIntegrationsMutation(({ username, payload }: { username: string; payload: PersonCalendarPayload }) => integrationsAdminService.setPersonCalendar(username, payload));
+export const useCheckPersonCalendar = () => useIntegrationsMutation((username: string) => integrationsAdminService.checkPersonCalendar(username));

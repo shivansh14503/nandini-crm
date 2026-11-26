@@ -3,11 +3,12 @@
  * (backend-crm/src/modules/notifications, docs/api-plan.md). Empty values are `''`, never `null`.
  */
 
-export const NOTIFICATION_KINDS = ['activity_reminder', 'activity_assigned', 'activity_invited', 'contract_renewal', 'calendar_reconnect'] as const;
+export const NOTIFICATION_KINDS = ['activity_reminder', 'activity_assigned', 'activity_invited', 'contract_renewal', 'calendar_sync_issue'] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
 /** Module of the record a notification is about. */
-export type NotificationEntityModule = 'activities' | 'contracts' | 'calendar-connections' | '';
+/** `admin-integrations`: calendar_sync_issue (admins only), opens Admin › API Integrations. */
+export type NotificationEntityModule = 'activities' | 'contracts' | 'admin-integrations' | '';
 
 /** One notification of the bell (named so it doesn't shadow the browser's own `Notification` type). */
 export interface CrmNotification {
@@ -27,7 +28,8 @@ export interface CrmNotification {
     readAt: string;
     /** ISO instant. */
     createdAt: string;
-    /** App route to open: `/calendar?activity=<id>`, `/contracts/<id>`, `/profile?tab=connected-accounts`, or '' when nowhere. */
+    /** App route to open: `/calendar?activity=<id>`, `/contracts/<id>`, `/admin/integrations` (`?tab=people&issue=calendar_problem`), or ''
+     * when nowhere. */
     href: string;
 }
 

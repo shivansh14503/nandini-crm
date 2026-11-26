@@ -47,8 +47,8 @@ export const CALENDAR_SYNC_DEFAULTS: Readonly<CalendarSyncSettings> = Object.fre
 
 const DOMAIN_PATTERN = /^(?=.{3,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
 
-/** One domain: trimmed, lower-cased, a leading `@` dropped. */
-const domainSchema = z.preprocess(
+/** One domain: trimmed, lower-cased, a leading `@` dropped (also the provider domain lists, integration.validator.ts). */
+export const domainSchema = z.preprocess(
     (value) => (typeof value === 'string' ? value.trim().toLowerCase().replace(/^@/, '') : value),
     z.string().regex(DOMAIN_PATTERN, { message: 'Enter a domain such as nandiniinfosys.com.' }),
 );

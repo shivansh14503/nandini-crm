@@ -1,4 +1,3 @@
-import jwt from 'jsonwebtoken';
 import type { FetchImpl } from '../providers/types.js';
 
 /**
@@ -43,8 +42,3 @@ export const route = (prefix: string, answer: Route['answer'], method?: string):
     match: (url, m) => url.startsWith(prefix) && (!method || m === method),
     answer,
 });
-
-/** An unsigned-in-spirit id_token (signed with a throwaway key: the connect flow only decodes it, see idToken.ts). */
-export function idToken(claims: Record<string, unknown>): string {
-    return jwt.sign(claims, 'test-only-key', { algorithm: 'HS256', noTimestamp: true });
-}

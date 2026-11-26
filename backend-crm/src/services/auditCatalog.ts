@@ -38,8 +38,10 @@ export type AuditEntityType =
     | 'City'
     /** A provider's company set-up on Admin › API Integrations (Google, Microsoft 365, Zoom); id = provider key. */
     | 'IntegrationProvider'
-    /** An employee's calendar connection (Calendar Phase 2 P2-2): CONNECT / DISCONNECT. */
+    /** An employee's company calendar sync row (Calendar Phase 2 P2-2b): ENROL / STOP (P2-2's CONNECT / DISCONNECT remain in history). */
     | 'CalendarConnection'
+    /** An admin's calendar choice for one person (Admin › API Integrations › People): provider override, exclusion. */
+    | 'CalendarSyncUser'
     /** An export of the audit log itself (Admin › Audit Log). */
     | 'AuditExport'
     /** The audit log's SQL Server ledger (integrity checks). */
@@ -86,10 +88,19 @@ export type AuditAction =
     | 'PASSWORD_RESET'
     /** A user signed out one of their other sessions (`scope: 'one'`, `sessionId`) or all of them (`scope: 'others'`). */
     | 'SESSION_REVOKE'
-    /** A calendar (or, from Phase 3, video) account was connected to a CRM user (Calendar Phase 2 P2-2). */
+    /** A person's company calendar started syncing (enrolled or re-enrolled by the admin-managed set-up, P2-2b). */
+    | 'ENROL'
+    /** A person's calendar sync stopped (excluded, left, email or provider changed, provider removed); events stay. */
+    | 'STOP'
+    /** P2-2 (retired): an employee connected their own calendar. Kept so older audit entries still type-check. */
     | 'CONNECT'
-    /** A calendar connection was ended by its user, an admin or the nightly check for inactive users. */
-    | 'DISCONNECT';
+    /** P2-2 (retired): an employee's own calendar connection was ended. */
+    | 'DISCONNECT'
+    /**
+     * An admin's "Test connection" acted as one person on their company calendar (P2-2b): `{ asUsername, ok, code,
+     * userStep }`, never a token. SECURITY: the CRM signed in as someone else.
+     */
+    | 'TEST_AS_USER';
 
 /** DATA = a CRM record changed; CONFIG = an admin setting changed; SECURITY = sign-ins and refused access. */
 export type AuditCategory = 'DATA' | 'CONFIG' | 'SECURITY';
@@ -127,6 +138,7 @@ const MODULE_BY_ENTITY: Record<AuditEntityType, string> = {
     City: 'cities',
     IntegrationProvider: 'admin-integrations',
     CalendarConnection: 'calendar',
+    CalendarSyncUser: 'admin-integrations',
     AuditExport: 'audit-log',
     AuditLedger: 'audit-log',
 };
@@ -147,6 +159,7 @@ const CONFIG_ENTITIES: ReadonlySet<AuditEntityType> = new Set([
     'Holiday',
     'City',
     'IntegrationProvider',
+    'CalendarSyncUser',
 ]);
 
 const SECURITY_ACTIONS: ReadonlySet<AuditAction> = new Set([
@@ -159,8 +172,11 @@ const SECURITY_ACTIONS: ReadonlySet<AuditAction> = new Set([
     'PASSWORD_CHANGE',
     'PASSWORD_RESET',
     'SESSION_REVOKE',
+    'ENROL',
+    'STOP',
     'CONNECT',
     'DISCONNECT',
+    'TEST_AS_USER',
 ]);
 
 /** Actions whose `changes` are a `{ field: { from, to } }` diff. */
@@ -193,7 +209,7 @@ export function categoryFor(entityType: AuditEntityType, action: AuditAction): A
  */
 export function severityFor(action: AuditAction, category: AuditCategory): AuditSeverity {
     if (action === 'LOGIN_FAILED' || action === 'ACCESS_DENIED') return 'WARNING';
-    if (['DELETE', 'RESTORE', 'REVERT', 'CONVERT', 'IMPORT', 'EXPORT', 'PASSWORD_CHANGE', 'PASSWORD_RESET', 'SESSION_REVOKE', 'CONNECT', 'DISCONNECT'].includes(action) || category === 'CONFIG') {
+    if (['DELETE', 'RESTORE', 'REVERT', 'CONVERT', 'IMPORT', 'EXPORT', 'PASSWORD_CHANGE', 'PASSWORD_RESET', 'SESSION_REVOKE', 'ENROL', 'STOP', 'CONNECT', 'DISCONNECT', 'TEST_AS_USER'].includes(action) || category === 'CONFIG') {
         return 'NOTICE';
     }
     return 'INFO';
@@ -232,7 +248,7 @@ export function changedFieldsOf(action: AuditAction, changes: unknown): string |
  * "otp" inside) and without listing `code` (which would hide record codes such as LD-0012 in every diff).
  */
 const SENSITIVE_KEY_EXACT =
-    /^(password|passwordHash|newPassword|currentPassword|token|accessToken|refreshToken|idToken|secret|secrets|secretsEnc|clientSecret|webhookSecret|apiKey|otp|codeVerifier|syncCursor|access_token|refresh_token|id_token|client_secret|code_verifier)$/i;
+    /^(password|passwordHash|newPassword|currentPassword|token|accessToken|refreshToken|idToken|secret|secrets|secretsEnc|clientSecret|webhookSecret|apiKey|otp|codeVerifier|syncCursor|access_token|refresh_token|id_token|client_secret|code_verifier|serviceAccountKey|privateKey|private_key|assertion)$/i;
 const SENSITIVE_KEY_SUFFIX = /(Secret|Secrets|Token|Password)(Enc)?$/;
 export const isSensitiveKey = (key: string): boolean => SENSITIVE_KEY_EXACT.test(key) || SENSITIVE_KEY_SUFFIX.test(key);
 export const REDACTED = '[redacted]';
@@ -328,6 +344,8 @@ export function labelFromChanges(entityType: AuditEntityType, entityId: string, 
             return INTEGRATION_PROVIDER_LABELS[entityId] ?? entityId;
         case 'CalendarConnection':
             return pick('accountEmail');
+        case 'CalendarSyncUser':
+            return pick('username') ?? entityId;
         case 'Import':
         case 'RecordFile':
         case 'PdfAsset':

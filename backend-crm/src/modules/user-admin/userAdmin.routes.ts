@@ -36,7 +36,7 @@ import {
  *   PATCH  /:id                 { firstName?, lastName?, email?, allowOtherDomain?, role?, department?, jobTitle?, reportsToId?,
  *                                 mobile?, officePhone?, isGroupUser?, onLeave? } → AdminUserDto (+ signedOutSessions when the
  *                                 role changed: the user is signed out so the new role applies)
- *                                400 INVALID_MANAGER · 400 SELF_LOCKOUT · 400 LAST_ADMIN · 409 DUPLICATE_RECORD (email) · 409 EMAIL_CONNECTED · 404
+ *                                400 INVALID_MANAGER · 400 SELF_LOCKOUT · 400 LAST_ADMIN · 409 DUPLICATE_RECORD (email) · 404
  *   POST   /:id/deactivate      → AdminUserDto + { signedOutSessions }   400 SELF_LOCKOUT · 400 LAST_ADMIN · 404
  *   POST   /:id/activate        → AdminUserDto + { signedOutSessions: null }   409 DUPLICATE_RECORD (email) · 404
  *   POST   /:id/reset-password  { password? } → { temporaryPassword: string | null, signedOutSessions }

@@ -1,7 +1,7 @@
 # Nandini CRM — Build Plan
 
 > **Status:** living document. Part 1 records what has been built (reconstructed from git history, 115 commits
-> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-26, Calendar Phase 2 P2-1, P2-2, P2-3a and P2-4, Profile Phase 1: My Profile, Profile Phase 2: Admin › Users, Profile Phase 3: notifications & preferences, Profile Phase 4: connected accounts and Profile Phase 5 PR5a + PR5b: company formats, which completes Phase 17). Part 2
+> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-26, Calendar Phase 2 P2-1, P2-2, P2-2b (admin-managed calendar connections), P2-3a and P2-4, Profile Phase 1: My Profile, Profile Phase 2: Admin › Users, Profile Phase 3: notifications & preferences, Profile Phase 4: connected accounts and Profile Phase 5 PR5a + PR5b: company formats, which completes Phase 17). Part 2
 > is the roadmap. Tick
 > items off and add new ones as work lands.
 > Related: [System design](system-design.md) · [Database design](database-design.md) · [API plan](api-plan.md)
@@ -294,11 +294,14 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
       design §4–§5, §8.4, §9 (worker and SMTP relay setup). Unit tests for recipients, stale policy, keys, texts,
       producer chunking, delivery claims, EmailLog claims, cron catch-up, summary sections, Google links and escaping,
       STARTTLS enforcement (fake SMTP server), the guarded cache and the overdue / today split.
-- [ ] **Phase 2: calendar sync** (Google / Microsoft 365) — needs the app on HTTPS under a nandiniinfosys.com hostname
-      (`PUBLIC_API_URL`), unique company emails on users, `CalendarConnection` and `ActivityExternalLink` tables, Admin ›
+- [ ] **Phase 2: calendar sync** (Google / Microsoft 365) — **admin-managed** since the owner's plan change of
+      2026-11-26 (P2-2b): admins connect the company once (Google service account with domain-wide delegation,
+      Microsoft Entra app with application permissions) and everyone with a company email is synced automatically;
+      employees have no connect / disconnect. Zoom stays per-user OAuth in Phase 3. Needs (for webhooks, P2-7) the app
+      on HTTPS under a nandiniinfosys.com hostname (`PUBLIC_API_URL`), unique company emails on users, `CalendarConnection` and `ActivityExternalLink` tables, Admin ›
       API Integrations with encrypted credentials, `Activity.iCalUid` + organizer fields for inbound events, recurring
       series materialized as occurrence rows, and inbound events clamped to the 31-day limit. The morning email's
-      "Add to Google Calendar" links (one-time copies) are then hidden for users who connected their calendar.
+      "Add to Google Calendar" links (one-time copies) are then hidden for users whose calendar is synced.
       Delivered in these PRs:
   - [x] **P2-1: Admin › API Integrations (foundation)** (2026-11-26) — secret box (`services/secretBox.ts`,
         AES-256-GCM with a key ring from `INTEGRATIONS_ENCRYPTION_KEY`, rotation script
@@ -318,7 +321,7 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         stored only if the credentials didn't change meanwhile (`credentials_changed`), the email body requires
         `email`, docs give Microsoft-without-tenant as 400, a failed refetch keeps the cards and drafts mounted, and an
         email change refreshes master data in every tab (`MASTER_DATA_SYNC_ENTITY`).
-  - [x] **P2-2: connect / disconnect** (2026-11-26) — `CalendarConnection` table and the filtered unique indexes
+  - [x] **P2-2: connect / disconnect** (2026-11-26; per-user OAuth, **replaced by P2-2b** the same day) — `CalendarConnection` table and the filtered unique indexes
         `UX_CalendarConnection_user_kind`, `UX_CalendarConnection_account` and `UX_Users_email` (migration
         `20261127090000_calendar_connections`, which lower-cases stored emails and stops on duplicates; pre-check
         `npm run calendar:check-emails`), `modules/calendar-sync` (provider adapters for Google, Microsoft and a
@@ -339,6 +342,38 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         `prisma migrate diff --from-empty`; the whole connect → callback → refresh → disconnect flow runs against the
         fake provider and replayed Google / Microsoft answers in tests). The morning email only has a parked hook
         comment (`hasActiveCalendarConnection`).
+  - [x] **P2-2b: admins connect the company calendars** (2026-11-26; replaces P2-2's per-user OAuth) — migration
+        `20261128090000_calendar_admin_connect` (`CalendarConnection` becomes token-free per-user sync state: statuses
+        pending / ok / error / stopped, `source`, check columns, renamed `enrolledAt` / `stoppedAt` / `stoppedBy`, new
+        filtered unique indexes `UX_CalendarConnection_user` / `UX_CalendarConnection_mailbox`; new `CalendarSyncUser`
+        for the admin's override / exclusion / note; `IntegrationProvider` health columns, Google key and domains in
+        the sealed / settings JSON; live P2-2 rows stopped `oauth_retired`, Google's OAuth client cleared, Microsoft
+        switched off, `calendar_reconnect` rows deleted). Backend: `tokenSource.ts` (Google JWT bearer signed with
+        `node:crypto` RS256, Microsoft client credentials, in-memory LRU cache with single flight, 5-minute leeway and
+        negative caching; nothing persisted), `syncErrors.ts` (user / app / transient codes with admin sentences),
+        `calendarAccess.ts` (`withCalendarAccess`, retry once on 401, provider health), `enrolment.ts` (pure
+        `resolveTarget` / `planEnrolment`, `reconcileUser` / `reconcileAll` under the per-user lock, due checks with
+        backoff), `calendar_sync_issue` notifications to admins (app-level per provider and day, nightly people
+        digest), triggers from provider / settings saves, People email and calendar changes, Admin › Users create /
+        update / activate / deactivate and the nightly job. API: provider save takes the Google key (write-only, ≤ 10
+        KB) and domains (`DOMAIN_IN_USE`), switching on needs a passing test (`INTEGRATION_NOT_TESTED`), two-step test
+        with `asUsername`, People `calendar` column, `PUT /people/:username/calendar`, `POST
+        /people/:username/calendar/check`, read-only `GET /api/calendar-connections`; removed the OAuth start /
+        callback / disconnect routes, the admin `/connections` routes, `EMAIL_CONNECTED`, `CALENDAR_ALREADY_CONNECTED`,
+        `PROVIDER_DISABLED` and `PUBLIC_API_URL` as a readiness gate; `integrations:reencrypt` covers provider secrets
+        only. The dev-only `fake` provider works in admin mode (serves unclaimed company domains, no key). Frontend:
+        provider cards (key upload / paste, client ID, scopes text and service account email to copy, domains, health,
+        counts, two-step test with "Also test as", switch gated on a test), People calendar column and
+        `CalendarChoiceDialog` (override, leave out with a note, Check now), `?tab=people&issue=` links, status-only
+        `CalendarConnectionsCard` (props kept, ignored), `CalendarSyncStatusAlert` on the calendar instead of the
+        reconnect banner, the bell icon for `calendar_sync_issue`. Tests: JWT header / claims / signature against a local
+        RSA key, token cache, error classification, enrolment rules and reconcile, People API, test connection, no dead
+        routes. Not run against a real SQL Server, Google or Microsoft. Owner setup: system design §9.2.1. Review
+        fixes (2026-11-26): "Test connection" as a person is audited `TEST_AS_USER` and limited to people the provider
+        would sync (409 `CALENDAR_TEST_NOT_ALLOWED`); a test clears provider health only for problems it proves fixed;
+        the Microsoft 403 escalation needs no `ok` row on the provider (RBAC-scoped tenants); card `excluded` counts
+        come from `CalendarSyncUser`; the People link follows bell navigation on the open page; a 32 px tap target on
+        "N with problems".
   - [x] **P2-3a: activity write-path refactor** (2026-11-26, no behaviour change) — `activity.system.ts`
         (`insertSystemActivity` / `applySystemPatch`: owner verbatim, no past-start / admin-required / related-access /
         lock checks; audit, revision, `remindAt`, attendee sync kept; `loadFollowUpContext()`), the write hook
@@ -456,8 +491,8 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
       editing someone's out-of-office (they see it), and hiding away users from pickers (they are labelled).
 - [x] **Profile Phase 4: Connected accounts** (2026-11-26) — a **Connected accounts** tab on My Profile
       (`/profile?tab=connected-accounts`, between Notifications and Security; hidden while the user must change their
-      password) hosting the Calendar thread's `CalendarConnectionsCard` unchanged (Google / Microsoft 365: connect,
-      reconnect, disconnect). The OAuth callback (`CALENDAR_CONNECTIONS_PAGE`, `…&calendar=connected|error&reason=&provider=`),
+      password) hosting the Calendar thread's `CalendarConnectionsCard` unchanged (at the time: Google / Microsoft 365
+      connect, reconnect, disconnect; status only since Calendar P2-2b, same export and props). The OAuth callback (`CALENDAR_CONNECTIONS_PAGE`, `…&calendar=connected|error&reason=&provider=`),
       its sign-in `?next=`, `calendar_reconnect` notification links (computed on read, so older rows follow) and the
       calendar's reconnect banner now open the tab; the card drops only its own callback params, so `?tab=` stays. The
       "Connected calendars" user menu and mobile drawer items are removed (the tab is reached from My Profile); the temporary

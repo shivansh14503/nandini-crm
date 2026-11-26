@@ -5,7 +5,7 @@ import { Box, IconButton, Tooltip, Typography } from '@mui/material';
 import ContentCopyRoundedIcon from '@mui/icons-material/ContentCopyRounded';
 import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
 import { ApiClientError } from '@/services/apiClient';
-import type { IntegrationProviderKey } from '@/types/integration.types';
+import type { IntegrationProviderKey, NotSyncedReason } from '@/types/integration.types';
 import { fmtDay, fmtInstant, fmtInstantDay } from '@/utils/formats';
 
 /** Shared pieces of Admin › API Integrations: status chips, copyable read-only values, provider marks. */
@@ -174,3 +174,16 @@ export function fieldErrorsOf(err: unknown): Record<string, string> {
     }
     return out;
 }
+
+/** Calendar providers as the People table names them. */
+export const CALENDAR_PROVIDER_LABELS: Record<string, string> = { google: 'Google Workspace', microsoft: 'Microsoft 365', fake: 'Test calendar' };
+
+/** Why a person isn't synced, as the People table says it. */
+export const NOT_SYNCED_LABELS: Record<NotSyncedReason, string> = {
+    no_email: 'No company email',
+    not_company: 'Not a company email',
+    no_provider: 'No provider for this domain',
+    excluded: 'Excluded',
+    inactive: 'Inactive',
+    group: 'Shared login',
+};

@@ -8,12 +8,11 @@ import { HttpError } from '../../utils/httpError.js';
 import { requireUser } from '../../utils/requestContext.js';
 import { FORM_CONFIG_ADMIN_ROLES } from '../form-configs/formConfig.routes.js';
 import type { IntegrationProviderKey } from './integration.constants.js';
-import { connectionService } from '../calendar-sync/connection.service.js';
 import { integrationService } from './integration.service.js';
 import { saveCalendarSettings } from './integration.settings.js';
 import {
-    connectionIdParamSchema,
     peopleQuerySchema,
+    personCalendarBodySchema,
     personEmailBodySchema,
     providerParamSchema,
     settingsBodySchema,
@@ -23,38 +22,44 @@ import {
 
 /**
  * /api/admin/integrations (Admin › API Integrations; admin roles only). Secrets are write-only: no response carries
- * one. Errors: 409 INTEGRATION_NOT_CONFIGURED, 409 INTEGRATION_NOT_AVAILABLE (Zoom before Phase 3),
- * 503 INTEGRATIONS_NOT_READY (INTEGRATIONS_ENCRYPTION_KEY unset), 409 DUPLICATE_RECORD (email), 429 RATE_LIMITED.
+ * one. Errors: 409 INTEGRATION_NOT_CONFIGURED, 409 INTEGRATION_NOT_TESTED, 409 INTEGRATION_NOT_AVAILABLE (Zoom before
+ * Phase 3), 409 DOMAIN_IN_USE, 409 CALENDAR_NOT_SYNCED, 503 INTEGRATIONS_NOT_READY (INTEGRATIONS_ENCRYPTION_KEY unset),
+ * 409 DUPLICATE_RECORD (email), 429 RATE_LIMITED.
  *
  *   GET    /                           → { ready: { ok, reason }, keyStatus: ok|missing|unreadable, activeKeyId, publicApiUrl,
- *                                          publicApiUrlConfigured, webhooksActive, worker, providers: ProviderAdminDto[],
+ *                                          publicApiUrlConfigured, webhooksActive, fakeProvider, worker, providers: ProviderAdminDto[],
  *                                          settings: CalendarSyncSettings, syncTypes: [{ value, label, calendarSync, locked, lockReason? }] }
- *   PUT    /providers/:provider        { enabled?, clientId?, clientSecret? (write-only, ≥ 8 chars; omitted = keep),
+ *   PUT    /providers/:provider        { enabled?, serviceAccountKey? (google: the key file's text, write-only),
+ *                                        clientId? (microsoft, zoom), clientSecret? (microsoft, zoom; write-only, ≥ 8 chars),
  *                                        webhookSecret? (zoom), clientSecretExpiresOn? (YYYY-MM-DD | null; microsoft, zoom),
- *                                        settings? (google { scopeProfile, pkce }, microsoft { tenantId }) } → ProviderAdminDto
- *                                        A changed client id / tenant bumps clientVersion. Turning a provider off pauses it.
- *                                        Enabling without client id + readable secret → 409 INTEGRATION_NOT_CONFIGURED;
- *                                        Microsoft without a tenant → 400 VALIDATION_ERROR on settings.tenantId.
- *   DELETE /providers/:provider/secret → ProviderAdminDto (secrets removed, provider switched off)
- *   POST   /providers/:provider/test   → { ok, code, message, testedAt } (saved credentials; 6 / min per admin, in memory
- *                                        whenever Redis can't count). Stored as lastTest only if the credentials are
- *                                        unchanged since the probe began, else code credentials_changed.
- *   PUT    /settings                   partial CalendarSyncSettings → CalendarSyncSettings (ModuleSetting activities/calendarSync)
+ *                                        settings? (google { domains }, microsoft { tenantId, domains }) } → ProviderAdminDto
+ *                                        Any credentials change bumps clientVersion and clears the last test and health.
+ *                                        Switching on needs complete credentials (409 INTEGRATION_NOT_CONFIGURED) and a
+ *                                        passing app-level test since the last credentials change (409 INTEGRATION_NOT_TESTED).
+ *                                        Domains: company domains only (400), one provider each (409 DOMAIN_IN_USE).
+ *                                        People are enrolled / stopped to match after the save.
+ *   DELETE /providers/:provider/secret → ProviderAdminDto (secrets / key removed, provider switched off, live rows stopped)
+ *   POST   /providers/:provider/test   { asUsername? } → { ok, code, message, steps: [{ step: app|user, ok, code, message }],
+ *                                        testedAt } (saved credentials; 6 / min per admin, in memory whenever Redis can't
+ *                                        count). Stored as lastTest only if the credentials are unchanged since the probe
+ *                                        began, else code credentials_changed. asUsername: only someone this provider
+ *                                        would sync (else 409 CALENDAR_TEST_NOT_ALLOWED); audited TEST_AS_USER.
+ *   PUT    /settings                   partial CalendarSyncSettings → CalendarSyncSettings (ModuleSetting activities/calendarSync).
+ *                                        409 DOMAIN_IN_USE when a removed company domain is still a provider's.
  *   PUT    /sync-types                 { "<Followup Type>": boolean } → syncTypes (option meta calendarSync; Task / Note refused)
- *   GET    /people                     ?search&issue=any|missing|duplicate|not_company → active non-group users
- *                                        [{ username, fullName, department, role, email, emailIssue, connection }]
+ *   GET    /people                     ?search&issue=any|missing|duplicate|not_company|calendar_problem → active non-group users
+ *                                        [{ username, fullName, department, role, email, emailIssue,
+ *                                           calendar: { target, reason, connection, choice } }]
  *   PUT    /people/:username/email     { email (required; '' / null clears), allowOtherDomain? } → person row
  *                                        (users/userEmail.service.ts: lower-cased, unique among active non-group users,
- *                                        company domain unless allowOtherDomain; audited User UPDATE). 409 EMAIL_CONNECTED
- *                                        while the person's live calendar connection has another address.
- *   GET    /connections                ?provider=google|microsoft|fake&status=live|all|active|reauth_required|error|disconnected
- *                                        &search → [{ id, username, fullName, provider, kind, accountEmail, status,
- *                                        statusReason, connectedAt, disconnectedAt, disconnectedBy, lastPulledAt, lastPushedAt,
- *                                        lastErrorCode, consecutiveFailures, pendingPushes, failedPushes, accessEndsAt, webhook }]
- *                                        (default live only; no token ever; pending / failed / webhook arrive with sync)
- *   POST   /connections/:id/disconnect { reason? (≤ 200) } → 204. Same path as the employee's own disconnect (revoke at
- *                                        Google, tokens deleted, events stay); audited CalendarConnection DISCONNECT with
- *                                        the admin as actor and the reason as a note.
+ *                                        company domain unless allowOtherDomain; audited User UPDATE). The person's
+ *                                        calendar sync moves to the new mailbox.
+ *   PUT    /people/:username/calendar  { provider? (google|microsoft|fake|null = by email domain), excluded?, note? } → person row
+ *                                        (CalendarSyncUser, audited; the person is reconciled at once)
+ *   POST   /people/:username/calendar/check → person row + { check: ok|user_error|provider_unhealthy|transient|skipped }
+ *                                        ("Check now"; 409 CALENDAR_NOT_SYNCED without a live row; same rate limit as tests)
+ *
+ * Removed in P2-2b: GET /connections and POST /connections/:id/disconnect (the People tab covers both).
  */
 const router = Router();
 router.use(authenticate, requireRole(...FORM_CONFIG_ADMIN_ROLES));
@@ -113,7 +118,7 @@ router.delete('/providers/:provider/secret', validateRequest({ params: providerP
 });
 
 router.post('/providers/:provider/test', validateRequest({ params: providerParamSchema }), testLimiter, async (req: Request, res: Response) => {
-    sendSuccess(res, await integrationService.testProvider(providerOf(req)));
+    sendSuccess(res, await integrationService.testProvider(providerOf(req), req.body ?? {}, requireUser(req)));
 });
 
 router.put('/settings', validateRequest({ body: settingsBodySchema }), async (req: Request, res: Response) => {
@@ -128,18 +133,16 @@ router.get('/people', validateRequest({ query: peopleQuerySchema }), async (req:
     sendSuccess(res, await integrationService.listPeople(req.query));
 });
 
-router.get('/connections', async (req: Request, res: Response) => {
-    res.setHeader('Cache-Control', 'no-store');
-    sendSuccess(res, await connectionService.adminList(req.query));
-});
-
-router.post('/connections/:id/disconnect', validateRequest({ params: connectionIdParamSchema }), async (req: Request, res: Response) => {
-    await connectionService.adminDisconnect(String(req.params.id), req.body, requireUser(req));
-    res.status(StatusCodes.NO_CONTENT).end();
-});
-
 router.put('/people/:username/email', validateRequest({ params: usernameParamSchema, body: personEmailBodySchema }), async (req: Request, res: Response) => {
     sendSuccess(res, await integrationService.setPersonEmail(String(req.params.username), req.body, requireUser(req)), 'Email saved');
+});
+
+router.put('/people/:username/calendar', validateRequest({ params: usernameParamSchema, body: personCalendarBodySchema }), async (req: Request, res: Response) => {
+    sendSuccess(res, await integrationService.setPersonCalendar(String(req.params.username), req.body, requireUser(req)), 'Calendar choice saved');
+});
+
+router.post('/people/:username/calendar/check', validateRequest({ params: usernameParamSchema }), testLimiter, async (req: Request, res: Response) => {
+    sendSuccess(res, await integrationService.checkPersonCalendar(String(req.params.username)));
 });
 
 export default router;

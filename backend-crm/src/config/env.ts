@@ -138,13 +138,14 @@ const envSchema = z
             }
         }),
         /**
-         * Public base URL of this API as browsers and Google / Microsoft reach it (no trailing slash): OAuth redirect
-         * URIs and webhook URLs are built from it. Default http://localhost:<PORT> outside production; unset in
-         * production → integrations "not ready". Production: https://crm.nandiniinfosys.com.
+         * Public base URL of this API as Google / Microsoft reach it (no trailing slash): calendar webhook URLs (P2-7)
+         * are built from it. Default http://localhost:<PORT> outside production. Admin-managed calendar sync (P2-2b)
+         * doesn't need it. Production: https://crm.nandiniinfosys.com.
          */
         PUBLIC_API_URL: z.preprocess(blankToUndefined, z.url().optional()),
         /**
-         * Dev-only in-memory calendar provider `fake` (My Profile › Connected accounts works end to end without Google). Ignored,
+         * Dev-only in-memory calendar provider `fake` in admin mode: it serves every company domain no enabled real provider
+         * claims, so enrolment → check runs end to end without Google or Microsoft. Ignored,
          * with a start-up warning, when NODE_ENV=production. Never set it on the shared server.
          */
         CALENDAR_FAKE_PROVIDER: z
@@ -176,9 +177,12 @@ const integrationsKeyRing = parseKeyRing(env.INTEGRATIONS_ENCRYPTION_KEY);
 configureSecretBox(integrationsKeyRing);
 const publicApiUrl = (env.PUBLIC_API_URL ?? (env.NODE_ENV === 'production' ? undefined : `http://localhost:${env.PORT}`))?.replace(/\/+$/, '');
 
-/** Why integrations can't be used yet (Admin › API Integrations shows it), or null when they can. */
-export type IntegrationsNotReadyReason = 'key_missing' | 'public_url_missing';
-const integrationsReadyReason: IntegrationsNotReadyReason | null = !integrationsKeyRing ? 'key_missing' : !publicApiUrl ? 'public_url_missing' : null;
+/**
+ * Why integrations can't be used yet (Admin › API Integrations shows it), or null when they can. Admin-managed calendar
+ * sync (P2-2b) needs no redirect URI, so PUBLIC_API_URL no longer gates readiness (webhooks, P2-7, still need it).
+ */
+export type IntegrationsNotReadyReason = 'key_missing';
+const integrationsReadyReason: IntegrationsNotReadyReason | null = !integrationsKeyRing ? 'key_missing' : null;
 
 export const ENV = {
     NODE_ENV: env.NODE_ENV,

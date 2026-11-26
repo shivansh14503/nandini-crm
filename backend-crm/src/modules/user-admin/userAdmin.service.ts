@@ -12,9 +12,9 @@ import { loadCalendarSettings } from '../integrations/integration.settings.js';
 import { joinFullName, photoUrlOf, resolveNameParts } from '../profile/profile.dto.js';
 import { acquireLocks, runInTransaction } from '../shared/transactions.js';
 import { calendarConnectionUserLockKey } from '../calendar-sync/connection.constants.js';
+import { reconcileUserQuietly } from '../calendar-sync/enrolment.js';
 import {
     assertCompanyEmailAllowed,
-    assertEmailKeepsConnection,
     assertUserEmailFree,
     duplicateEmailsAmong,
     holdsAddress,
@@ -295,6 +295,8 @@ export const userAdminService = {
             return created;
         });
         await invalidateUserCaches();
+        // A new person with a company email on a served domain starts syncing their calendar (P2-2b).
+        await reconcileUserQuietly(row.username, 'user_created', { actor: actor.username });
         return { user: toAdminUserDto(row, await emailRuleContext(), businessToday()), temporaryPassword: generated ? password : null };
     },
 
@@ -333,10 +335,9 @@ export const userAdminService = {
             // The address must be free when it changes, or when the user starts holding one (no longer a group login).
             const startsHolding = holdsAddress({ isActive: before.isActive, isGroupUser }) && (email !== before.email || before.isGroupUser);
             const emailChanges = email !== before.email;
-            // A changed address also takes the user's calendar-connection lock (before the address lock, as the calendar
-            // connect does) and keeps a live calendar connection's address (409 EMAIL_CONNECTED, Calendar P2-2).
+            // A changed address also takes the user's calendar lock (with the address lock, as the People screen does), so
+            // the change and the calendar enrolment reconcile after it serialize (P2-2b: the sync follows the address).
             await acquireLocks(tx, [emailChanges ? calendarConnectionUserLockKey(before.username) : null, email && startsHolding ? userEmailLockKey(email) : null]);
-            if (emailChanges) await assertEmailKeepsConnection(tx, before.username, email);
             if (email && startsHolding) await assertUserEmailFree(tx, email, id);
 
             const role = input.role !== undefined ? canonicalRoleName(input.role, await knownRoles(tx)) : before.role;
@@ -372,7 +373,11 @@ export const userAdminService = {
             return { row: after, changed: true, roleChanged: 'role' in changes };
         });
 
-        if (outcome.changed) await invalidateUserCaches();
+        if (outcome.changed) {
+            await invalidateUserCaches();
+            // Email or group-login changes move / start / stop the person's calendar sync (P2-2b).
+            await reconcileUserQuietly(outcome.row.username, 'user_updated', { actor: actor.username });
+        }
         const dto = toAdminUserDto(outcome.row, await emailRuleContext(), businessToday());
         if (!outcome.roleChanged || id === actor.id) return dto;
         return { ...dto, signedOutSessions: await sessionService.revokeAll(id) };
@@ -401,7 +406,10 @@ export const userAdminService = {
         // After the commit: tracked sessions end at once (authenticate checks Redis); untracked ones at token expiry.
         const signedOutSessions = await sessionService.revokeAll(id);
         if (changed) await invalidateUserCaches();
-        return { ...(await loadDto(id)), signedOutSessions };
+        const dto = await loadDto(id);
+        // Calendar sync stops for a deactivated person (events already in their calendar stay).
+        if (changed) await reconcileUserQuietly(dto.username, 'user_deactivated', { actor: actor.username });
+        return { ...dto, signedOutSessions };
     },
 
     /**
@@ -424,7 +432,9 @@ export const userAdminService = {
             return true;
         });
         if (changed) await invalidateUserCaches();
-        return { ...(await loadDto(id)), signedOutSessions: null };
+        const dto = await loadDto(id);
+        if (changed) await reconcileUserQuietly(dto.username, 'user_activated', { actor: actor.username });
+        return { ...dto, signedOutSessions: null };
     },
 
     /**

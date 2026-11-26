@@ -10,10 +10,10 @@ import { keyIdOf, open, seal, SecretBoxError, type KeyRing } from '../src/servic
  *                                                    npm run integrations:reencrypt
  *   3. When it reports 0 rows left on the old key, drop it from the env value and restart again.
  *
- * Covers IntegrationProvider.secretsEnc and CalendarConnection.accessTokenEnc / refreshTokenEnc (in batches of 100;
- * each connection row is rewritten only while its tokenVersion is unchanged, so a concurrent token refresh, which
- * seals with the active key anyway, wins). Exit code 1 when a value can't be opened with any key in the ring (it is
- * left as it is and named by id only; the employee reconnects).
+ * Covers IntegrationProvider.secretsEnc only (Google's service account key, Microsoft's / Zoom's client and webhook
+ * secrets). Since admin-managed calendar sync (P2-2b) no token is stored anywhere: access tokens live only in process
+ * memory, so there is nothing else to re-seal. Exit code 1 when a value can't be opened with any key in the ring (it
+ * is left as it is and named by id only; an admin enters that provider's credentials again).
  */
 
 export interface SealedRow {
@@ -58,45 +58,6 @@ export function planReencrypt(rows: readonly SealedRow[], ring: KeyRing): Reencr
     return plan;
 }
 
-export interface ConnectionTokenRow {
-    id: string;
-    tokenVersion: number;
-    accessTokenEnc: string | null;
-    refreshTokenEnc: string | null;
-}
-
-export const connectionTokenAad = (id: string, field: 'accessToken' | 'refreshToken') => `CalendarConnection:${id}:${field}`;
-
-export interface ConnectionReencryptPlan {
-    /** Rows to rewrite: only the fields that change are set. */
-    updates: { id: string; tokenVersion: number; accessTokenEnc?: string; refreshTokenEnc?: string }[];
-    alreadyCurrent: number;
-    unreadable: { id: string; reason: string }[];
-    byKid: Record<string, number>;
-}
-
-/** Pure: the CalendarConnection token values a run would re-seal (both columns of a row in one update). */
-export function planConnectionReencrypt(rows: readonly ConnectionTokenRow[], ring: KeyRing): ConnectionReencryptPlan {
-    const values: SealedRow[] = [];
-    for (const row of rows) {
-        if (row.accessTokenEnc) values.push({ id: `${row.id}|accessToken`, aad: connectionTokenAad(row.id, 'accessToken'), sealed: row.accessTokenEnc });
-        if (row.refreshTokenEnc) values.push({ id: `${row.id}|refreshToken`, aad: connectionTokenAad(row.id, 'refreshToken'), sealed: row.refreshTokenEnc });
-    }
-    const plan = planReencrypt(values, ring);
-    const byRow = new Map<string, ConnectionReencryptPlan['updates'][number]>();
-    const versions = new Map(rows.map((row) => [row.id, row.tokenVersion]));
-    for (const update of plan.updates) {
-        const [id, field] = update.id.split('|') as [string, 'accessToken' | 'refreshToken'];
-        const entry = byRow.get(id) ?? { id, tokenVersion: versions.get(id) ?? 0 };
-        if (field === 'accessToken') entry.accessTokenEnc = update.sealed;
-        else entry.refreshTokenEnc = update.sealed;
-        byRow.set(id, entry);
-    }
-    return { updates: [...byRow.values()], alreadyCurrent: plan.alreadyCurrent, unreadable: plan.unreadable, byKid: plan.byKid };
-}
-
-const CONNECTION_BATCH = 100;
-
 async function main(): Promise<void> {
     const dryRun = process.argv.includes('--dry-run');
     const [{ ENV }, { parseKeyRing }, { prisma }] = await Promise.all([
@@ -131,45 +92,7 @@ async function main(): Promise<void> {
         } else {
             console.log('Dry run: nothing written.');
         }
-
-        // CalendarConnection tokens, 100 rows at a time.
-        let cursor: string | undefined;
-        const totals: ConnectionReencryptPlan = { updates: [], alreadyCurrent: 0, unreadable: [], byKid: {} };
-        let rewritten = 0;
-        let skipped = 0;
-        for (;;) {
-            const rows: ConnectionTokenRow[] = await prisma.calendarConnection.findMany({
-                where: { OR: [{ accessTokenEnc: { not: null } }, { refreshTokenEnc: { not: null } }] },
-                select: { id: true, tokenVersion: true, accessTokenEnc: true, refreshTokenEnc: true },
-                orderBy: { id: 'asc' },
-                take: CONNECTION_BATCH,
-                ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-            });
-            if (rows.length === 0) break;
-            cursor = rows[rows.length - 1].id;
-            const batch = planConnectionReencrypt(rows, ring);
-            totals.alreadyCurrent += batch.alreadyCurrent;
-            totals.unreadable.push(...batch.unreadable);
-            for (const [kid, count] of Object.entries(batch.byKid)) totals.byKid[kid] = (totals.byKid[kid] ?? 0) + count;
-            totals.updates.push(...batch.updates);
-            if (dryRun) continue;
-            for (const update of batch.updates) {
-                const { id, tokenVersion, ...sealed } = update;
-                const result = await prisma.calendarConnection.updateMany({
-                    // Not on a row disconnected meanwhile (its tokens were nulled without a tokenVersion change).
-                    where: { id, tokenVersion, status: { not: 'disconnected' } },
-                    data: { ...sealed, keyId: ring.activeKid },
-                });
-                if (result.count === 1) rewritten += 1;
-                else skipped += 1;
-            }
-        }
-        console.log(`CalendarConnection: sealed token values by key ${JSON.stringify(totals.byKid)}.`);
-        console.log(`  ${totals.updates.length} row(s) to re-seal, ${totals.alreadyCurrent} value(s) already on ${ring.activeKid}, ${totals.unreadable.length} unreadable.`);
-        for (const row of totals.unreadable) console.log(`  unreadable: ${row.id} (${row.reason})`);
-        if (!dryRun) console.log(`  ${rewritten} re-sealed, ${skipped} refreshed meanwhile (already on the active key), skipped.`);
-
-        process.exitCode = plan.unreadable.length > 0 || totals.unreadable.length > 0 ? 1 : 0;
+        process.exitCode = plan.unreadable.length > 0 ? 1 : 0;
     } finally {
         await prisma.$disconnect();
     }

@@ -14,8 +14,8 @@ import { throttledLogger } from './throttledLogger.js';
  *   remind   delayed job per activity reminder, fires at `remindAt` (added after every committed activity save)
  *   sweep    scheduler 'reminder-sweep', every 15 minutes 07:00–21:45: missed reminders + contract renewals
  *   nightly  scheduler 'reminder-nightly', 00:20: notification / email log retention + re-arm pending reminders, then the
- *            calendar-connection steps (disconnect inactive users' calendars, "access ends soon" notifications) and the
- *            follow-up activity backfill (P2-4: missing / out-of-line follow-up activities, audited under
+ *            calendar steps (reconcile everyone's enrolment, due health checks, the admins' calendar problem digest;
+ *            P2-2b) and the follow-up activity backfill (P2-4: missing / out-of-line follow-up activities, audited under
  *            job:followup-backfill) until the calendar sync worker (Calendar Phase 2 P2-3b) takes them over
  * All in the business timezone. Every Redis `ready` (start-up and each reconnect) upserts the schedulers, re-arms
  * pending reminders and runs one sweep. While Redis is down a one-minute in-process tick does the sweep instead; it
