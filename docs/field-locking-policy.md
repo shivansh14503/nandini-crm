@@ -87,8 +87,8 @@ Fields not listed are ○ Free today and stay ○ Free.
 | Add Description | 🔒R | ⭐ | Notes |
 | Commission | 🔒R | ⭐ | Business preference. Fixed Yes / No options, default No |
 | Commission Amount | 🔒 | 🔒 | Conditional: shown and required (above 0) only when Commission is Yes |
-| Commission Type | 🔒 | 🔒 | Conditional: shown and required when Commission is Yes. Fixed Self / Other; Self up to 1,000, Other above |
-| Account Name, Account No, Bank Name, IFSC Code, PAN Number | 🔒 | 🔒 | Conditional: the commission payee's bank details, shown when Commission Type is Other (optional; IFSC / PAN format checked) |
+| Commission Type | 🔒 | 🔒 | Conditional: shown and required when Commission is Yes. Fixed Self / Other, not editable: set from the amount (Self up to 1,000, Other above) |
+| Account Name, Account No, Bank Name, IFSC Code, PAN Number | 🔒 | 🔒 | Conditional: the commission payee's bank details, shown when Commission Type is Other (an amount above 1,000) and then all required; IFSC / PAN format checked |
 
 ### Quotations
 

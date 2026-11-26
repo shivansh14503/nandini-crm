@@ -203,11 +203,11 @@ required field for leads (closed leads have none).
 `leadGivenBy`, `nextFollowupDate`/`Time`, `followupType`, `customerResponse` (as on leads), `remarks`, `description`, `assignedTo`,
 billing (`tallySerialNo` — 9 digits starting with 7, checked by the API, `invoiceNo`, `invoiceDate`), `commission` (fixed `Yes` / `No`, default `No`) with
 `commissionAmount` (DECIMAL(18,2), required above 0 when `Yes`, NULL when `No`), `commissionType` (fixed `Self` /
-`Other` while `Yes`; defaults to `Self` up to 1,000 and `Other` above), the commission payee's bank details kept only
+`Other` while `Yes`; not editable: always `Self` up to 1,000 and `Other` above, set by the API from the amount), the commission payee's bank details kept only
 while `Other` (`accountName`, `accountNo`, `bankName`, `ifscCode`, `panNumber`: the Organization columns' sizes and
-rules), documentation (`addDocument` fixed `Yes` / `No`, must be `Yes` at Sales Stage `PO`; while `Yes` the opportunity
-has a `Document` row (§4.24) with Document No, Document Date, Remarks and the file, which the API returns on the
-opportunity as `documentNo`, `documentDate`, `documentRemarks`, `documentFile`; `No` deletes it), totals (`currency`, `groupName`,
+rules; all five required by the API while `Other`), documentation (`addDocument` fixed `Yes` / `No`, must be `Yes` at Sales Stage `PO`; while `Yes` the opportunity
+has a `Document` row (§4.24) with Document No, Document Date and the file, which the API returns on the
+opportunity as `documentNo`, `documentDate`, `documentFile`; `No` deletes it), totals (`currency`, `groupName`,
 `lumpSumDiscount`, `totalAmount`, `totalDiscount`, `subtotal`, `totalTax`, `grandTotal` — recomputed and verified
 server-side), `customDataJson`, audit/soft-delete.
 
@@ -480,10 +480,10 @@ The document an opportunity records in its Documentation section (migration `202
 moved it here from columns on `Opportunity` and copied the existing ones). Written only by opportunity saves
 (`modules/documents/document.sync.ts`): created when Add Document turns `Yes`, updated when its details change,
 deleted when it turns `No`. `opportunityId` (UNIQUE: one per opportunity) → `Opportunity`, `documentNo`,
-`documentDate` (DATE), `documentRemarks`, `documentFileId` → `RecordFile` (required by the API; NULL only on a
+`documentDate` (DATE), `documentFileId` → `RecordFile` (required by the API; NULL only on a
 migrated document that had no file), `createdBy` (who added it; on migrated rows the file's uploader), `updatedBy`,
 `createdAt`, `updatedAt`. No soft delete of its own: it is listed while its opportunity is live, under the
-opportunity's row-level access, and comes back with a restored opportunity. Both links are `NO ACTION`.
+opportunity's row-level access, and comes back with a restored opportunity. Both links are `NO ACTION`. Remarks (`documentRemarks`) was dropped on 2026-11-26 (migration `20261126210000_document_drop_remarks`).
 
 Indexes: `opportunityId` (unique), `documentFileId`, `createdAt`.
 

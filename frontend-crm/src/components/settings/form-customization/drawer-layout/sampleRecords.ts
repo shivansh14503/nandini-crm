@@ -162,7 +162,6 @@ const SAMPLE_OPPORTUNITY: Record<string, unknown> = {
     addDocument: 'Yes',
     documentNo: 'PO-2026-0188',
     documentDate: '2026-11-18',
-    documentRemarks: 'Signed purchase order from the client',
     documentFile: { id: '__sample', fileName: 'Sunrise-Dairy-PO.pdf', mimeType: 'application/pdf', sizeBytes: 248320, url: '' },
     ...TOTALS,
     customFields: {},

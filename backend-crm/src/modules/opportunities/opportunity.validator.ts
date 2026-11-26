@@ -36,6 +36,25 @@ export function defaultCommissionType(amount: number | undefined): (typeof COMMI
     return Number(amount) > SMALL_COMMISSION_LIMIT ? 'Other' : 'Self';
 }
 
+/** The commission payee's bank details, all required while Commission Type is Other (an amount above 1,000). */
+export const PAYEE_BANK_FIELDS = [
+    { key: 'accountName', label: 'Account Name' },
+    { key: 'accountNo', label: 'Account No' },
+    { key: 'bankName', label: 'Bank Name' },
+    { key: 'ifscCode', label: 'IFSC Code' },
+    { key: 'panNumber', label: 'PAN Number' },
+] as const;
+export type PayeeBankKey = (typeof PAYEE_BANK_FIELDS)[number]['key'];
+
+/** Every payee bank detail left empty while the commission is above 1,000 (Commission Type Other). */
+export function payeeBankIssues(input: { commission?: string; commissionAmount?: number } & Partial<Record<PayeeBankKey, string>>): { path: string[]; message: string }[] {
+    if (!hasCommission(input) || defaultCommissionType(input.commissionAmount) !== 'Other') return [];
+    return PAYEE_BANK_FIELDS.filter((f) => !input[f.key]?.trim()).map((f) => ({
+        path: [f.key],
+        message: `${f.label} is required when Commission Amount is above ₹${SMALL_COMMISSION_LIMIT.toLocaleString('en-IN')}.`,
+    }));
+}
+
 export const CLOSED_SALES_STAGES = ['Closed Won', 'Closed Lost'] as const;
 export const QUOTE_SALES_STAGE = 'Proposal/Price Quote';
 /** Sales Stage that needs a document: Add Document Yes, with the file (Upload Doc). */
@@ -100,7 +119,7 @@ export const opportunityInputSchema = z.object({
         (v) => (v === '' || v === null || v === undefined ? undefined : v),
         z.coerce.number({ error: 'Commission Amount must be a number.' }).min(0, { message: 'Commission Amount cannot be negative.' }).optional(),
     ),
-    /** Self / Other while Commission is Yes; empty takes the amount's default (defaultCommissionType). */
+    /** Self / Other while Commission is Yes. Not editable: the stored type always comes from the amount (defaultCommissionType). */
     commissionType: z.preprocess(
         (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
         z.enum(COMMISSION_TYPES, { error: 'Commission Type must be Self or Other.' }).optional(),
@@ -115,7 +134,6 @@ export const opportunityInputSchema = z.object({
     // The document's details and file, kept while Add Document is Yes (see documentationIssues).
     documentNo: optionalText('Document No', L.shortCode),
     documentDate: optionalDate('Document Date'),
-    documentRemarks: optionalText('Remarks', L.longText),
     documentFile: documentFileRef.default(null),
 
     currency: optionalText('Currency', 30),

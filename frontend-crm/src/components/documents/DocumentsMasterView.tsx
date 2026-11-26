@@ -90,7 +90,6 @@ function useDocumentFilterFields(): ModuleFilterFields {
             { key: 'opportunity', label: L.opportunity, kind: 'text', getValue: (r) => `${row(r).opportunity} ${row(r).opportunityCode}` },
             { key: 'assignedTo', label: L.assignedTo, kind: 'options', options: people, getValue: (r) => row(r).assignedTo, normalizeValue: normalizeUser },
             { key: 'createdBy', label: L.createdBy, kind: 'options', options: people, getValue: (r) => row(r).createdBy, normalizeValue: normalizeUser },
-            { key: 'documentRemarks', label: L.documentRemarks, kind: 'text', getValue: (r) => row(r).documentRemarks },
             { key: 'updatedAt', label: L.updatedAt, kind: 'date', getValue: (r) => row(r).updatedAt },
         ];
         const defaultKeys = ['documentDate', 'createdAt', 'salesStage', 'assignedTo', 'createdBy', 'organizationName', 'fileType'];
@@ -190,7 +189,6 @@ export function DocumentsMasterView() {
             return [
                 d.documentNo,
                 d.documentFile?.fileName,
-                d.documentRemarks,
                 d.opportunity,
                 d.opportunityCode,
                 d.organizationName,
@@ -220,13 +218,12 @@ export function DocumentsMasterView() {
             setToast({ open: true, message: 'Select the documents to export.', severity: 'info' });
             return;
         }
-        const headers = [L.documentNo, L.documentFile, L.documentDate, L.documentRemarks, 'Opportunity Code', L.opportunity, L.salesStage, L.organizationName, L.contact, L.assignedTo, L.createdBy, L.createdAt];
+        const headers = [L.documentNo, L.documentFile, L.documentDate, 'Opportunity Code', L.opportunity, L.salesStage, L.organizationName, L.contact, L.assignedTo, L.createdBy, L.createdAt];
         const rows = records.map((d) =>
             [
                 d.documentNo,
                 d.documentFile?.fileName ?? '',
                 d.documentDate ? formatDay(d.documentDate) : '',
-                d.documentRemarks,
                 d.opportunityCode,
                 d.opportunity,
                 d.salesStage,
