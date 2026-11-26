@@ -850,7 +850,10 @@ guessing slugs hit the rate limit and the negative cache, not SQL.
 Recurring activities (Calendar Phase 4, as of 2026-11-26) add **no new wake**: their nightly step rides the 00:20
 reminders job, while the database is already awake for it. With nothing due it costs two small indexed reads (series
 needing more rows, live calendar connections); when some owner has a usable calendar it adds up to four more (the
-provider switch, the owners' users, occurrences entering the window, gone events to re-dirty). Saving a series writes its first 90 days at once (at most
+provider switch, the owners' users, occurrences entering the window, gone events to re-dirty). The window mark runs in
+batches of 200 (one short transaction each) inside the same wake until nothing is left, at most 10 batches (2,000
+occurrences) a night; past that it logs a warning and the rest go the next night (as of 2026-11-26, review round 2).
+Saving a series writes its first 90 days at once (at most
 120 rows), inside the save request. Without Redis there is no nightly job, so horizons stop growing; the 90-day
 horizon is the slack, and the next nightly run (or any edit of the series) catches up.
 
@@ -1006,13 +1009,19 @@ job and the sweep (connection checks and the nightly connection steps still run)
   control:** an occurrence becomes push-eligible only when it starts within 14 days (`SERIES_SYNC_WINDOW_DAYS`;
   `isCreateEligible`), so a daily series with guests sends invitations for about two weeks, not 90 days, and an
   "All events" edit updates only the events already in the calendar. The 00:20 nightly step marks occurrences that
-  enter the window (200 per run, earliest first). Its query skips what the outbox would skip anyway, so those rows
-  never fill the batch: Task / Note and types whose `calendarSync` is off, and owners without a usable connection (the
-  latest live row already backfilled, provider switched on, user active and not a group login). The actor is the
-  occurrence's last editor, or else the series' last writer (`updatedBy ?? createdBy` of the series), so D41's
-  invitation rules (owner sends, others' copies are held) apply as if that person had saved it. An occurrence that
-  existed before its owner's first-sync backfill gets the link the backfill would have made (D23: a private copy when it
-  has guests, `createdAt` = the backfill stamp). An occurrence whose event is gone (`cancelled` / `removed_remote`,
+  enter the window, earliest first, in batches of 200 (`SERIES_SYNC_BATCH`, one transaction each, keyset on
+  `startAt`) until none is left, at most 10 batches a night (`SERIES_SYNC_MAX_ROUNDS`; more logs a warning and waits
+  for the next night). Its query skips what the outbox would skip anyway, so those rows never fill a batch: Task /
+  Note and types whose `calendarSync` is off, and owners without a usable connection (the latest live row already
+  backfilled, provider switched on, user active and not a group login). The actor (D41) is the series' last writer
+  (`updatedBy ?? createdBy` of the series); for an occurrence changed on its own, the person who last changed it in
+  the CRM (its latest `Activity` CREATE / UPDATE audit entry not written by `system`). `Activity.updatedBy` is not
+  used: organization / contact renames (`shared/nameSync.ts`) and video link retries stamp it without being a
+  decision to send. So D41's invitation rules (owner sends, others' copies are held) apply as if that person had saved
+  it. An occurrence that existed before its owner's first-sync backfill and wasn't changed in the CRM since (no audit
+  entry after the stamp) gets the link the backfill would have made (D23: a private copy when it has guests,
+  `createdAt` = the backfill stamp); one changed after it goes through the outbox like any write (as of 2026-11-26,
+  review round 2). An occurrence whose event is gone (`cancelled` / `removed_remote`,
   settled while it was still outside the window) is dirtied again, so the push creates or restores it. "Invitations
   held" (`calendar_invites_held`) comes once a day per series (dedupe key on the series), and not at all from the
   nightly while another occurrence of that series still waits for its owner. A calendar change to one occurrence
@@ -1048,8 +1057,10 @@ job and the sweep (connection checks and the nightly connection steps still run)
   BullMQ attempt (or an in-process check whose database call failed on the last try) → `conference_timeout`; a push
   that fails for good → `event_refused`; the nightly run (`calendar-nightly`, 00:25) fails links still `requested` an
   hour after the activity's last save (`failStaleConferences`, index `Activity(conferenceState, updatedAt)`, ≤ 200 rows),
-  except recurring occurrences starting more than 13 days ahead: Calendar Phase 4 pushes an occurrence only once it is
-  inside the 14-day window, so its link waits until then (as of 2026-11-26).
+  except recurring occurrences not pushed yet: Calendar Phase 4 pushes an occurrence only once it is inside the 14-day
+  window, so its link waits until the occurrence has a calendar copy and starts within 13 days, or until the day
+  before it starts when no copy came (as of 2026-11-26, review round 2). Until it has a copy, the view says
+  `conference.waitingForCalendar` and the drawer shows a note instead of "Creating…" (no polling).
   A 400 to a write that asked for a link (Google: "Invalid conference type value" when Meet is off for the
   organisation) marks it `failed not_created` and sends the write again without the video part, so the event still
   syncs; Graph answering a Teams request without a Teams meeting (no licence) is `not_created` at once. A new event

@@ -29,8 +29,9 @@ import { ROUTES } from '@/config/constants';
 import { useAuth } from '@/context/AuthContext';
 import { findCrmUser } from '@/services/masterData.store';
 import { isFollowUpActivity, NOTE_TYPE, TASK_TYPE, type Activity } from '@/types/activity.types';
-import { useActivities, useBulkDeleteActivitiesWithResult, useDeleteActivity } from '@/hooks/queries/useActivities';
+import { useActivities, useBulkDeleteActivitiesWithResult, useDeleteActivity, useDeleteActivityScoped } from '@/hooks/queries/useActivities';
 import { calendarRemovalNote } from './ActivitySyncStatus';
+import { useSeriesScopePrompt } from './SeriesScopeDialog';
 import { addDays, instantToZonedWallClock, zonedStartOfDay } from '@/utils/zonedTime';
 import { useSearchScope, useSearchScopedRows } from '../search/SearchScope';
 import { ActivityDetailDrawer } from './ActivityDetailDrawer';
@@ -128,6 +129,9 @@ export function ActivitiesMasterView({ mine = false, type = '', status = '' }: A
     const listLoading = !embeddedInSearch && listPending;
     const allActivities = useSearchScopedRows(loaded);
     const deleteMutation = useDeleteActivity();
+    const deleteScopedMutation = useDeleteActivityScoped();
+    // Recurring activities (Calendar Phase 4): deleting an occurrence asks this / following / all.
+    const scopePrompt = useSeriesScopePrompt();
     const bulkDeleteMutation = useBulkDeleteActivitiesWithResult();
 
     // ?mine=1 / ?type=… from the nav preselect a pill.
@@ -172,6 +176,19 @@ export function ActivitiesMasterView({ mine = false, type = '', status = '' }: A
     const closeDrawer = useCallback(() => setDrawerId(null), []);
 
     const handleDelete = async (activity: Activity) => {
+        // An occurrence of a recurring activity asks This event / This and following / All events, as the drawer does.
+        if (activity.seriesId) {
+            const scope = await scopePrompt.ask({ action: 'delete', calendarNote: calendarRemovalNote(activity, user?.username, 'delete').trim() });
+            if (!scope) return;
+            try {
+                await deleteScopedMutation.mutateAsync({ id: activity.id, scope });
+                if (drawerId === activity.id) closeDrawer();
+                setToast({ open: true, message: scope === 'this' ? 'Activity deleted successfully.' : 'Repeating activities deleted.', severity: 'success' });
+            } catch (err: unknown) {
+                setToast({ open: true, message: err instanceof Error ? err.message : 'Failed to delete activity.', severity: 'error' });
+            }
+            return;
+        }
         if (!window.confirm(`Are you sure you want to delete "${activity.subject}"?${calendarRemovalNote(activity, user?.username, 'delete')}`)) return;
         try {
             await deleteMutation.mutateAsync(activity.id);
@@ -490,7 +507,10 @@ export function ActivitiesMasterView({ mine = false, type = '', status = '' }: A
             }
             isDrawerOpen={Boolean(drawerId)}
             toast={
-                <AppToast open={toast.open} message={toast.message} severity={toast.severity} onClose={() => setToast((prev) => ({ ...prev, open: false }))} />
+                <>
+                    {scopePrompt.dialog}
+                    <AppToast open={toast.open} message={toast.message} severity={toast.severity} onClose={() => setToast((prev) => ({ ...prev, open: false }))} />
+                </>
             }
         />
     );

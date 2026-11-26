@@ -38,6 +38,7 @@ import {
     SERIES_MAX_ROWS_PER_RUN,
     SERIES_NIGHTLY_BATCH,
     SERIES_SYNC_BATCH,
+    SERIES_SYNC_MAX_ROUNDS,
     SERIES_SYNC_WINDOW_DAYS,
 } from './activity.series.constants.js';
 import {
@@ -203,6 +204,36 @@ const shapeColumns = (shape: SeriesShape) => ({
     spanDays: shape.allDay ? shape.spanDays : 1,
     timeZone: shape.timeZone,
 });
+
+const sameInstant = (a: Date | null, b: Date | null) => (a?.getTime() ?? null) === (b?.getTime() ?? null);
+
+/** A save changed the occurrence's start, end or all-day (so its time of day and length may go to the series). Pure. */
+export function timingChanged(before: Pick<ActivityRow, 'startAt' | 'endAt' | 'allDay'>, after: Pick<ActivityRow, 'startAt' | 'endAt' | 'allDay'>): boolean {
+    return !sameInstant(before.startAt, after.startAt) || !sameInstant(before.endAt, after.endAt) || before.allDay !== after.allDay;
+}
+
+const sameValue = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+
+/**
+ * The series template after an "All events" save of one occurrence: `base` (the series' template) with only the fields
+ * the save changed on that occurrence (`was` → `now`; custom fields one by one). What the occurrence had on its own
+ * and the save left alone stays with it. Pure.
+ */
+export function mergeChangedTemplate(base: SeriesTemplate, was: SeriesTemplate, now: SeriesTemplate): SeriesTemplate {
+    const out: Record<string, unknown> = { ...base };
+    for (const key of Object.keys(now) as (keyof SeriesTemplate)[]) {
+        if (key === 'customFields') continue;
+        if (!sameValue(was[key], now[key])) out[key] = now[key];
+    }
+    const customFields: Record<string, unknown> = { ...(base.customFields ?? {}) };
+    for (const key of new Set([...Object.keys(was.customFields ?? {}), ...Object.keys(now.customFields ?? {})])) {
+        if (sameValue(was.customFields?.[key], now.customFields?.[key])) continue;
+        if (now.customFields?.[key] === undefined) delete customFields[key];
+        else customFields[key] = now.customFields[key];
+    }
+    out.customFields = customFields;
+    return out as unknown as SeriesTemplate;
+}
 
 /** The fields of one occurrence: the template on `times`, Planned unless `status` says otherwise. */
 export function occurrenceFields(template: SeriesTemplate, times: OccurrenceTimes, status = PLANNED_STATUS): Record<string, unknown> {
@@ -438,6 +469,18 @@ export async function rewriteSeries(tx: TransactionClient, series: ActivitySerie
         for (const row of [...open.values(), ...extra]) {
             ctx.written.push(await softDeleteActivityRow(tx, row, actorUser(ctx.actor), ctx.now, DETACHED));
             ctx.counts.deleted++;
+        }
+
+        // Rows left alone (exceptions, completed, deleted, kept) take their position under the series' current anchor
+        // and rule, so a split or a new rule never shows "7th of 6" (bookkeeping: no audit entry, updatedAt kept). A day
+        // the rule doesn't have shows no position.
+        const lastDay = [...blocked.keys()].reduce((max, day) => (day > max ? day : max), throughDay);
+        const positions = new Map(occurrenceDays(rule, series.startDay, lastDay).map((slot) => [slot.day, slot.index]));
+        for (const list of blocked.values()) {
+            for (const row of list) {
+                const index = positions.get(slotDay(row.originalStartAt)) ?? null;
+                if (row.seriesIndex !== index) await tx.activity.update({ where: { id: row.id }, data: { seriesIndex: index, updatedAt: row.updatedAt } });
+            }
         }
     }
 
@@ -735,12 +778,12 @@ async function editSeries(
         // An occurrence moved to another day on its own ("This event") keeps its own slot under "All events".
         const offSlot = Boolean(before.originalStartAt) && slotDay(before.startAt) !== pivotDay;
         const keepsSlot = scope === 'all' && offSlot;
-        const updated = await applyCrmUpdate(tx, id, patch, user, config, { seriesException: keepsSlot });
+        const updated = await applyCrmUpdate(tx, id, patch, user, config, { seriesException: keepsSlot || (scope === 'all' && before.seriesException) });
         assertRepeatable(updated.row);
-        const { day: newDay, shape } = shapeOf(updated.row, tz);
+        const { day: newDay, shape: rowShape } = shapeOf(updated.row, tz);
         const movedNow = newDay !== slotDay(before.startAt);
         const oldRule = ruleFromColumns(series);
-        const template = templateOf(updated.row);
+        const rowTemplate = templateOf(updated.row);
         const cancelled = updated.row.status === 'Cancelled' && before.status !== 'Cancelled';
 
         if (scope === 'all' && movedNow) throwFieldIssues([{ path: ['startAt'], message: SERIES_MOVE_DAY_MESSAGE }]);
@@ -780,6 +823,10 @@ async function editSeries(
 
         if (scope === 'all') {
             const rule = askedRule?.rule ?? oldRule;
+            // Only what this save changed goes to the series: an occurrence changed on its own keeps its own time,
+            // place, guests … to itself (another field fixed with "All events" doesn't spread them).
+            const shape = timingChanged(before, updated.row) ? rowShape : shapeOfSeries(series);
+            const template = mergeChangedTemplate(parseTemplate(series.templateJson), templateOf(before), rowTemplate);
             const next = await tx.activitySeries.update({
                 where: { id: seriesId },
                 data: {
@@ -796,7 +843,8 @@ async function editSeries(
                 const times = occurrenceTimes(shape, newDay);
                 await freeSlot(tx, seriesId, times.originalStartAt, id, ctx);
                 const slot = occurrenceDays(rule, series.startDay, newDay).find((s) => s.day === newDay);
-                row = await setSeriesColumns(tx, updated.row, seriesColumnsFor(seriesId, times, slot?.index ?? before.seriesIndex ?? 1));
+                // An exception stays one: its other own changes are still its own.
+                row = await setSeriesColumns(tx, updated.row, { ...seriesColumnsFor(seriesId, times, slot?.index ?? before.seriesIndex ?? 1), seriesException: before.seriesException });
             }
             await rewriteSeries(tx, next, ctx, { keep: new Set([id]), fromDay: today(now) });
             await auditSeries(tx, seriesId, 'UPDATE', user.username, {
@@ -807,18 +855,35 @@ async function editSeries(
             return { existing: updated.existing, row };
         }
 
-        // following: split at this occurrence (or at the day it moved to, when that is earlier).
+        // following: split at this occurrence (or at the day it moved to, when that is earlier). The new series takes
+        // this occurrence's fields and time.
+        const shape = rowShape;
+        const template = rowTemplate;
         let rule = askedRule?.rule ?? oldRule;
-        // "Ends after N" counts from the first occurrence: the new series keeps what is left, unless another count was
-        // asked (the form sends the series' total back unchanged when only the rule's days change).
-        if (rule.ends === 'after' && rule.count && oldRule.ends === 'after' && (!askedRule || rule.count === oldRule.count)) {
-            rule = { ...rule, count: Math.max(1, rule.count - ((before.seriesIndex ?? 1) - 1)) };
-        }
         // Moved to another day without a new rule: a rule tied to the old day follows the move (weekly on Wed → Thu).
-        if (!askedRule && movedNow) rule = shiftRuleToDay(rule, pivotDay, newDay);
+        let shifted = false;
+        if (!askedRule && movedNow) {
+            const moved = shiftRuleToDay(rule, pivotDay, newDay);
+            shifted = moved !== rule;
+            rule = moved;
+        }
         const earlier = newDay < pivotDay;
+        const isOldSlotDay = (day: string) => occurrenceDays(oldRule, series.startDay, day).some((slot) => slot.day === day);
+        // The occurrence stays on its own slot (an exception) when the rule keeps its days and re-anchoring the series
+        // on its day would bring that slot back as an extra event: it was moved alone before and this save doesn't move
+        // it, or it moves earlier onto a day the rule doesn't have.
+        const ownSlot = !askedRule && !shifted && Boolean(before.originalStartAt) && newDay !== pivotDay && (!movedNow || (earlier && !isOldSlotDay(newDay)));
         const cutDay = earlier ? newDay : pivotDay;
-        const cut = earlier ? zonedStartOfDay(newDay, series.timeZone) : pivot;
+        const cut = cutDay === pivotDay ? pivot : zonedStartOfDay(cutDay, series.timeZone);
+        // On its own slot, the new series starts at the first day of the old rule from the cut (same days, same phase).
+        const anchorDay = ownSlot ? (occurrenceDays(oldRule, series.startDay, pivotDay).find((slot) => slot.day >= cutDay)?.day ?? pivotDay) : newDay;
+        // "Ends after N" counts from the first occurrence: the new series keeps what is left after the old one's
+        // occurrences before the cut, unless another count was asked (the form sends the series' total back unchanged
+        // when only the rule's days change).
+        if (rule.ends === 'after' && rule.count && oldRule.ends === 'after' && (!askedRule || rule.count === oldRule.count)) {
+            const kept = occurrenceDays(oldRule, series.startDay, addDays(cutDay, -1)).length;
+            rule = { ...rule, count: Math.max(1, rule.count - kept) };
+        }
         const oldUntil = addDays(cutDay, -1);
         const emptied = cutDay <= series.startDay;
         await tx.activitySeries.update({
@@ -827,15 +892,18 @@ async function editSeries(
                 ? { isDeleted: true, deletedAt: now, endedAt: series.endedAt ?? now, updatedBy: user.username, revision: { increment: 1 } }
                 : { untilDay: oldUntil, count: null, endedAt: series.endedAt ?? now, updatedBy: user.username, revision: { increment: 1 } },
         });
-        const fresh = await createSeriesRow(tx, { rule, anchorDay: newDay, shape, template, actor: user.username, splitFromId: seriesId });
+        const fresh = await createSeriesRow(tx, { rule, anchorDay, shape, template, actor: user.username, splitFromId: seriesId });
         await acquireLocks(tx, [seriesLockKey(fresh.id)]);
-        // Rows of the old series from the cut on move to the new series (bookkeeping, no audit entry each).
+        // Rows of the old series from the cut on move to the new series (bookkeeping, no audit entry each; rewriteSeries
+        // renumbers the ones it doesn't rewrite).
         const moving = await tx.activity.findMany({ where: { seriesId, originalStartAt: { gte: cut } }, select: { id: true } });
         if (moving.length > 0) await tx.activity.updateMany({ where: { id: { in: moving.map((m) => m.id) } }, data: { seriesId: fresh.id } });
-        const times = occurrenceTimes(shape, newDay);
+        const slotDayOfRow = ownSlot ? pivotDay : newDay;
+        const times = occurrenceTimes(shape, slotDayOfRow);
         await freeSlot(tx, fresh.id, times.originalStartAt, id, ctx);
-        const row = await setSeriesColumns(tx, updated.row, seriesColumnsFor(fresh.id, times, 1));
-        await rewriteSeries(tx, fresh, ctx, { keep: new Set([id]), fromDay: newDay, sweepFromDay: cutDay });
+        const index = occurrenceDays(rule, anchorDay, slotDayOfRow).find((slot) => slot.day === slotDayOfRow)?.index ?? 1;
+        const row = await setSeriesColumns(tx, updated.row, { ...seriesColumnsFor(fresh.id, times, index), seriesException: ownSlot });
+        await rewriteSeries(tx, fresh, ctx, { keep: new Set([id]), fromDay: anchorDay, sweepFromDay: cutDay });
         await auditSeries(tx, seriesId, emptied ? 'DELETE' : 'UPDATE', user.username, {
             scope,
             splitInto: fresh.id,
@@ -986,19 +1054,59 @@ async function unsyncedTypes(config: ActivityConfig): Promise<string[]> {
     return [...new Set([...ACTIVITY_ONLY_FOLLOWUP_TYPES, ...off])];
 }
 
+/** Keyset position of a nightly window query: the last start seen and the rows at exactly that start. */
+interface WindowCursor {
+    after: Date | null;
+    seen: string[];
+    done: boolean;
+}
+
+const newCursor = (): WindowCursor => ({ after: null, seen: [], done: false });
+
+const cursorWhere = (cursor: WindowCursor) => (cursor.after ? [{ startAt: { gte: cursor.after } }, ...(cursor.seen.length ? [{ id: { notIn: cursor.seen } }] : [])] : []);
+
+/** Moves `cursor` past `rows` (ordered by startAt); a short page means nothing is left. */
+function advanceCursor(cursor: WindowCursor, rows: readonly { id: string; startAt: Date | null }[]): void {
+    if (rows.length < SERIES_SYNC_BATCH) cursor.done = true;
+    const last = rows.at(-1)?.startAt;
+    if (!last) return;
+    const atLast = rows.filter((row) => row.startAt?.getTime() === last.getTime()).map((row) => row.id);
+    cursor.seen = cursor.after?.getTime() === last.getTime() ? [...cursor.seen, ...atLast] : atLast;
+    cursor.after = last;
+}
+
+/**
+ * The last CRM write of each row: the latest Activity CREATE / UPDATE audit entry not written by a background job.
+ * Bookkeeping writes (organization / contact renames in shared/nameSync.ts, video link retries) leave no entry, so they
+ * never decide who sent a meeting (D41) or whether it was written after the first-sync backfill (D23).
+ */
+async function lastCrmWrites(tx: TransactionClient, ids: readonly string[]): Promise<Map<string, { by: string; at: Date }>> {
+    const out = new Map<string, { by: string; at: Date }>();
+    if (ids.length === 0) return out;
+    const entries = await tx.auditLog.findMany({
+        where: { entityType: 'Activity', entityId: { in: [...ids] }, action: { in: ['CREATE', 'UPDATE'] }, changedBy: { not: 'system' } },
+        orderBy: [{ id: 'desc' }],
+        select: { entityId: true, changedBy: true, createdAt: true },
+    });
+    for (const entry of entries) if (!out.has(entry.entityId)) out.set(entry.entityId, { by: entry.changedBy, at: entry.createdAt });
+    return out;
+}
+
 /**
  * Invitation flood control (design §5): occurrences more than SERIES_SYNC_WINDOW_DAYS ahead are not create-eligible
  * for calendar sync (sync.outbox.ts `isCreateEligible`). Each night (one DB wake shared with the 00:20 job; a few
- * indexed reads when nothing is due):
- * - Occurrences inside the window without a calendar copy (syncable types, owners with a usable connection, at most
- *   SERIES_SYNC_BATCH, earliest first) are marked through the outbox as if just written. The actor is the row's last
- *   editor, or else the series' last writer (D41: a series someone else set up stays a private copy until the owner
- *   sends). An occurrence that existed before its owner's first-sync backfill becomes a backfilled private copy when
- *   it has guests (D23), as the backfill would have made it. One "invitations held" notice per series: none while
- *   another occurrence of it still waits for the owner.
+ * indexed reads when nothing is due), in batches of SERIES_SYNC_BATCH (one short transaction each, earliest first)
+ * until nothing is left, at most SERIES_SYNC_MAX_ROUNDS batches:
+ * - Occurrences inside the window without a calendar copy (syncable types, owners with a usable connection) are marked
+ *   through the outbox as if just written. The actor (D41) is the series' last writer; for an occurrence changed on
+ *   its own, the person who last changed it in the CRM (its audit trail; renames and other bookkeeping writes don't
+ *   count). A series someone else set up stays a private copy until the owner sends. An occurrence that existed before
+ *   its owner's first-sync backfill and wasn't changed in the CRM since becomes a backfilled private copy when it has
+ *   guests (D23), as the backfill would have made it. One "invitations held" notice per series: none while another
+ *   occurrence of it still waits for the owner.
  * - Occurrences whose event is gone (`cancelled` / `removed_remote`, settled while they were outside the window) are
  *   dirtied again, so the push creates or restores them now that they are create-eligible.
- * Then the push is woken.
+ * Each batch wakes the push after its commit.
  */
 export async function markSeriesSyncWindow(now = new Date()): Promise<number> {
     const owners = await windowOwners();
@@ -1013,16 +1121,43 @@ export async function markSeriesSyncWindow(now = new Date()): Promise<number> {
         startAt: { gte: now, lt: until },
         followupType: { notIn: await unsyncedTypes(config) },
     };
+    const cursors = { due: newCursor(), gone: newCursor() };
+    let total = 0;
+    for (let round = 1; round <= SERIES_SYNC_MAX_ROUNDS; round++) {
+        total += await markWindowBatch(now, owners, config, base, cursors);
+        if (cursors.due.done && cursors.gone.done) return total;
+    }
+    logger.warn(
+        { marked: total, batches: SERIES_SYNC_MAX_ROUNDS, batchSize: SERIES_SYNC_BATCH },
+        'More recurring occurrences entered the calendar sync window than one night marks; the rest are marked the next night',
+    );
+    return total;
+}
+
+/** One batch of `markSeriesSyncWindow` (one transaction); moves the cursors. Returns the links marked or dirtied. */
+async function markWindowBatch(
+    now: Date,
+    owners: Map<string, WindowOwner>,
+    config: ActivityConfig,
+    base: Record<string, unknown>,
+    cursors: { due: WindowCursor; gone: WindowCursor },
+): Promise<number> {
     const GONE = ['cancelled', 'removed_remote'];
+    const page = (cursor: WindowCursor, links: Record<string, unknown>) =>
+        cursor.done
+            ? Promise.resolve([] as { id: string; startAt: Date | null }[])
+            : prisma.activity.findMany({
+                  where: { AND: [base, ...cursorWhere(cursor)], externalLinks: links },
+                  orderBy: [{ startAt: 'asc' }, { id: 'asc' }],
+                  take: SERIES_SYNC_BATCH,
+                  select: { id: true, startAt: true },
+              });
     const [due, gone] = await Promise.all([
-        prisma.activity.findMany({ where: { ...base, externalLinks: { none: { role: 'organizer' } } }, orderBy: [{ startAt: 'asc' }], take: SERIES_SYNC_BATCH, select: { id: true } }),
-        prisma.activity.findMany({
-            where: { ...base, externalLinks: { some: { role: 'organizer', state: { in: GONE }, dirtyAt: null } } },
-            orderBy: [{ startAt: 'asc' }],
-            take: SERIES_SYNC_BATCH,
-            select: { id: true, startAt: true },
-        }),
+        page(cursors.due, { none: { role: 'organizer' } }),
+        page(cursors.gone, { some: { role: 'organizer', state: { in: GONE }, dirtyAt: null } }),
     ]);
+    if (!cursors.due.done) advanceCursor(cursors.due, due);
+    if (!cursors.gone.done) advanceCursor(cursors.gone, gone);
     if (due.length === 0 && gone.length === 0) return 0;
     const { markActivityForSync, isCreateEligible } = await import('../calendar-sync/sync.outbox.js');
     const { requestedIdFor } = await import('../calendar-sync/sync.keys.js');
@@ -1058,6 +1193,16 @@ export async function markSeriesSyncWindow(now = new Date()): Promise<number> {
         const seriesIds = [...new Set(rows.map((row) => row.seriesId as string))];
         const seriesRows = await tx.activitySeries.findMany({ where: { id: { in: seriesIds } }, select: { id: true, createdBy: true, updatedBy: true } });
         const seriesById = new Map(seriesRows.map((row) => [row.id, row]));
+        // Who last changed which row in the CRM: only read for occurrences changed on their own (D41) and those older
+        // than their owner's backfill (D23).
+        const backfillEra = (row: ActivityRow) => {
+            const owner = owners.get(row.assignedTo.toLowerCase());
+            return Boolean(owner && row.createdAt.getTime() <= owner.backfilledAt.getTime());
+        };
+        const writes = await lastCrmWrites(
+            tx,
+            rows.filter((row) => row.seriesException || backfillEra(row)).map((row) => row.id),
+        );
         // Series with a private copy still waiting for its owner: the owner was told already.
         const waiting = new Set(
             (
@@ -1070,9 +1215,11 @@ export async function markSeriesSyncWindow(now = new Date()): Promise<number> {
         for (const row of rows) {
             const owner = owners.get(row.assignedTo.toLowerCase());
             if (!owner || !isCreateEligible(row, config, now)) continue;
-            if (row.createdAt.getTime() <= owner.backfilledAt.getTime()) {
-                // Existed before the calendar was connected: the copy the first-sync backfill would have made (D23),
-                // stamped like its other copies (sync.view.ts tells the owner why it is private).
+            const write = writes.get(row.id);
+            if (backfillEra(row) && (write?.at ?? row.createdAt).getTime() <= owner.backfilledAt.getTime()) {
+                // Existed before the calendar was connected and not changed in the CRM since: the copy the first-sync
+                // backfill would have made (D23), stamped like its other copies (sync.view.ts tells the owner why it
+                // is private).
                 const link = await tx.activityExternalLink.create({
                     data: {
                         activityId: row.id,
@@ -1091,7 +1238,8 @@ export async function markSeriesSyncWindow(now = new Date()): Promise<number> {
                 continue;
             }
             const series = seriesById.get(row.seriesId as string);
-            const actor = row.updatedBy ?? series?.updatedBy ?? series?.createdBy ?? row.createdBy;
+            const seriesActor = series?.updatedBy ?? series?.createdBy ?? row.createdBy;
+            const actor = row.seriesException ? (write?.by ?? seriesActor) : seriesActor;
             const result = await markActivityForSync(tx, { before: null, after: row, actor, now, markSync: true, config });
             if (!result) continue;
             if (waiting.has(row.seriesId as string)) result.notices = [];

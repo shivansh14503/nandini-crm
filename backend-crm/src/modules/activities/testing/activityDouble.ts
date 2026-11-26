@@ -248,6 +248,7 @@ const DELEGATES = [
     'notification',
     'userPreference',
     'activitySeries',
+    'auditLog',
     '$transaction',
 ] as const;
 const realDelegates = new Map<string, unknown>();
@@ -333,9 +334,12 @@ export function installActivityDouble(
         if (!('updatedAt' in data)) row.updatedAt = touch();
     };
 
-    /** Activity `where` plus the `externalLinks: { none | some }` relation filter (Calendar Phase 4's window queries). */
-    const matchesActivity = (row: Activity, where: Where = {}) => {
-        const { externalLinks, ...rest } = where as Where & { externalLinks?: { none?: Where; some?: Where } };
+    /** Activity `where` plus the `externalLinks: { none | some }` relation filter (Calendar Phase 4's window queries), also inside OR / AND. */
+    const matchesActivity = (row: Activity, where: Where = {}): boolean => {
+        const { externalLinks, OR, AND, ...rest } = where as Where & { externalLinks?: { none?: Where; some?: Where }; OR?: Where[]; AND?: Where[] };
+        // OR / AND branches may carry the relation filter too (sync.conference.ts's stale sweep).
+        if (OR && !OR.some((branch) => matchesActivity(row, branch))) return false;
+        if (AND && !AND.every((branch) => matchesActivity(row, branch))) return false;
         if (!matches(row as unknown as Record<string, unknown>, rest)) return false;
         if (!externalLinks) return true;
         const own = state.links.filter((l) => l.activityId === row.id);
@@ -694,6 +698,24 @@ export function installActivityDouble(
         },
     };
 
+    // Audit entries as the AuditLog table holds them (id in write order, createdAt from the double's clock), for the
+    // nightly window mark's "last CRM write" read.
+    const auditStamps = new WeakMap<AuditEntry, { id: number; createdAt: Date }>();
+    let auditId = 0;
+    const stampAudit = (entry: AuditEntry) => auditStamps.set(entry, { id: ++auditId, createdAt: touch() });
+    const auditLog = {
+        findMany: async (args: { where?: Where; orderBy?: unknown; select?: Record<string, unknown>; take?: number } = {}) => {
+            call('auditLog.findMany');
+            const rows = state.audits.map((entry) => ({ ...(entry as unknown as Record<string, unknown>), ...(auditStamps.get(entry) ?? { id: 0, createdAt: new Date(0) }) }));
+            const desc = JSON.stringify(args.orderBy ?? '').includes('desc');
+            return rows
+                .filter((row) => matches(row, args.where))
+                .sort((a, b) => (desc ? b.id - a.id : a.id - b.id))
+                .slice(0, args.take ?? undefined)
+                .map((row) => pick(row, args.select));
+        },
+    };
+
     const snapshot = () => ({
         activities: state.activities.map((row) => ({ ...row })),
         attendees: state.attendees.map((row) => ({ ...row })),
@@ -721,6 +743,7 @@ export function installActivityDouble(
             notification,
             userPreference,
             activitySeries,
+            auditLog,
             $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
                 void strings;
                 // acquireLocks passes its keys as one JSON array of `crm:<key>` resources.
@@ -760,11 +783,14 @@ export function installActivityDouble(
     stub('notification', notification);
     stub('userPreference', userPreference);
     stub('activitySeries', activitySeries);
+    stub('auditLog', auditLog);
 
     mock.method(auditService, 'record', async (_tx: unknown, entry: AuditEntry) => {
+        stampAudit(entry);
         state.audits.push(entry);
     });
     mock.method(auditService, 'recordMany', async (_tx: unknown, entries: AuditEntry[]) => {
+        entries.forEach(stampAudit);
         state.audits.push(...entries);
     });
     mock.method(cacheService, 'invalidateEntityCaches', async (entity: string) => {

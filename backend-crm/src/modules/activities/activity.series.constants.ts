@@ -15,5 +15,11 @@ export const SERIES_NIGHTLY_BATCH = 50;
  */
 export const SERIES_SYNC_WINDOW_DAYS = 14;
 export const SERIES_SYNC_WINDOW_MS = SERIES_SYNC_WINDOW_DAYS * 24 * 60 * 60_000;
-/** Occurrences the nightly job marks for calendar sync per night. */
+/** Occurrences the nightly job marks for calendar sync per transaction (one batch). */
 export const SERIES_SYNC_BATCH = 200;
+/**
+ * Batches the nightly job runs per night (inside the same 00:20 wake) until nothing is left to mark: at most
+ * SERIES_SYNC_BATCH × SERIES_SYNC_MAX_ROUNDS (2,000) occurrences a night. More than that logs a warning; the rest are
+ * marked the next night (earliest first), so the window absorbs a backlog of up to 13 nights.
+ */
+export const SERIES_SYNC_MAX_ROUNDS = 10;

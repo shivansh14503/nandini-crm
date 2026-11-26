@@ -143,6 +143,12 @@ export interface ActivityConferenceView {
     canRetry: boolean;
     /** A Teams link exists: its owner can't remove or change it (409 VIDEO_MEETING_LOCKED); a new owner may. */
     locked: boolean;
+    /**
+     * Requested, but the activity has no calendar copy yet because it is an occurrence of a recurring activity that
+     * isn't pushed until SERIES_SYNC_WINDOW_DAYS before it starts (Calendar Phase 4): the link is created then, so
+     * screens show a note instead of "Creating…" and don't poll.
+     */
+    waitingForCalendar: boolean;
 }
 
 export type ActivityView = ActivityDto & {
@@ -223,8 +229,9 @@ export function toActivityDto(row: ActivityRow): ActivityDto {
 
 /** `ActivityView.conference` (pure). */
 export function conferenceViewOf(
-    row: Pick<Activity, 'conferenceProvider' | 'conferenceState' | 'conferenceJoinUrl' | 'conferenceError' | 'status' | 'isDeleted'>,
+    row: Pick<Activity, 'conferenceProvider' | 'conferenceState' | 'conferenceJoinUrl' | 'conferenceError' | 'status' | 'isDeleted' | 'seriesId'>,
     viewerCanEdit: boolean,
+    hasCalendarCopy = false,
 ): ActivityConferenceView | null {
     if (!row.conferenceProvider) return null;
     const state = row.conferenceState ?? 'requested';
@@ -237,6 +244,7 @@ export function conferenceViewOf(
         errorMessage: error?.message ?? null,
         canRetry: viewerCanEdit && canRetryConference(row),
         locked: row.conferenceProvider === 'teams' && state === 'ready',
+        waitingForCalendar: state === 'requested' && Boolean(row.seriesId) && !hasCalendarCopy,
     };
 }
 

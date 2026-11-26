@@ -206,6 +206,11 @@ export interface ActivityConferenceState {
     canRetry: boolean;
     /** A Teams link exists: it can't be removed or changed. */
     locked: boolean;
+    /**
+     * Requested, but this occurrence of a recurring activity isn't in its owner's calendar yet (it goes there about two
+     * weeks before it starts, Calendar Phase 4): the link is created then. Missing from older servers.
+     */
+    waitingForCalendar?: boolean;
 }
 
 /** One Video meeting choice for the form (GET /api/activities/video-options). */

@@ -8,6 +8,7 @@ import { setFakeProviderEnabledForTests } from '../calendar-sync/providers/fakeS
 import { isCreateEligible } from '../calendar-sync/sync.outbox.js';
 import { setInlinePushForTests } from '../calendar-sync/sync.wake.js';
 import { blankConnection, type ConnectionRowState } from '../calendar-sync/testing/connectionDouble.js';
+import { prisma } from '../../config/prisma.js';
 import { runInTransaction } from '../shared/transactions.js';
 import { applySystemPatch } from './activity.system.js';
 import { isoWeekday } from './activity.recurrence.js';
@@ -338,6 +339,83 @@ describe('activitySeriesService.update', () => {
         assert.equal(live(state, seriesId).length + live(state, saved.seriesId).length, 10);
     });
 
+    it('this and following moving earlier onto a day the rule lacks: the old day does not come back as an extra event', async () => {
+        const state = installActivityDouble({ users: USERS });
+        const { seriesId, monday } = await createWeekly(state);
+        const wed = live(state, seriesId).find((a) => dayOf(a) === addDays(monday, 9)) as Activity; // Wednesday of week 2
+        const tuesday = addDays(monday, 8);
+        const saved = await activitySeriesService.update(wed.id, { startAt: at(tuesday, '10:00').toISOString(), endAt: at(tuesday, '10:45').toISOString() }, PALAK, { scope: 'following' });
+        const days = state.activities.filter((a) => !a.isDeleted && a.seriesId).map(dayOf);
+        assert.ok(!days.includes(addDays(monday, 9)), 'no new Wednesday in week 2');
+        assert.deepEqual(days.filter((d) => d >= addDays(monday, 7) && d <= addDays(monday, 13)).sort(), [addDays(monday, 7), tuesday]);
+        assert.ok(days.includes(addDays(monday, 14)) && days.includes(addDays(monday, 16)), 'Mondays and Wednesdays go on');
+        assert.ok(!days.includes(addDays(monday, 15)), 'no Tuesday in week 3: the rule kept its days');
+        assert.equal(saved.series?.exception, true);
+        assert.equal(state.series.find((s) => s.id === saved.seriesId)?.weekdays, '1,3');
+
+        // Weekly on Wed, moved alone to the Monday before, then renamed "This and following": its Wednesday stays empty.
+        const weekly = installActivityDouble({ users: USERS });
+        const made = await createWeekly(weekly, { repeat: { frequency: 'weekly', weekdays: [3] } });
+        // (The series starts on a Monday, so its first event is that Monday; take the second Wednesday.)
+        const target = live(weekly, made.seriesId)[2];
+        const wednesday = dayOf(target);
+        const mon = addDays(wednesday, -2);
+        await activitySeriesService.update(target.id, { startAt: at(mon, '10:00').toISOString(), endAt: at(mon, '10:45').toISOString() }, PALAK, { scope: 'this' });
+        const renamed = await activitySeriesService.update(target.id, { subject: 'Renamed' }, PALAK, { scope: 'following' });
+        const after = weekly.activities.filter((a) => !a.isDeleted && a.seriesId);
+        assert.equal(after.filter((a) => dayOf(a) === wednesday).length, 0, 'no new Wednesday');
+        assert.equal(after.filter((a) => dayOf(a) === mon).length, 1);
+        const fresh = live(weekly, renamed.seriesId);
+        assert.ok(fresh.every((a) => a.subject === 'Renamed'));
+        assert.ok(fresh.filter((a) => a.id !== target.id).every((a) => isoWeekday(dayOf(a)) === 3), 'later events stay on Wednesdays');
+    });
+
+    it('this and following moving a counted series earlier keeps every occurrence left', async () => {
+        const state = installActivityDouble({ users: USERS });
+        const { seriesId, monday } = await createWeekly(state, { repeat: { frequency: 'daily', ends: 'after', count: 20 } });
+        const ninth = live(state, seriesId)[8];
+        const target = addDays(dayOf(ninth), -2);
+        const saved = await activitySeriesService.update(ninth.id, { startAt: at(target, '10:00').toISOString(), endAt: at(target, '10:45').toISOString() }, PALAK, { scope: 'following' });
+        const all = [...live(state, seriesId), ...live(state, saved.seriesId)];
+        assert.equal(all.length, 20);
+        assert.equal(all.map(dayOf).sort().at(-1), addDays(monday, 19));
+    });
+
+    it('this and following renumbers the moved events it leaves alone (no "7th of 6")', async () => {
+        const state = installActivityDouble({ users: USERS });
+        const { seriesId } = await createWeekly(state, { repeat: { frequency: 'daily', ends: 'after', count: 10 } });
+        const rows = live(state, seriesId);
+        await activitySeriesService.update(rows[6].id, { subject: 'On its own' }, PALAK, { scope: 'this' });
+        const saved = await activitySeriesService.update(rows[4].id, { subject: 'New format' }, PALAK, { scope: 'following' });
+        const exception = await activitySeriesService.update(rows[6].id, {}, PALAK, { scope: 'this' });
+        assert.equal(saved.series?.total, 6);
+        assert.equal(exception.series?.index, 3);
+        assert.equal(exception.series?.exception, true);
+        assert.deepEqual(
+            live(state, saved.seriesId).map((a) => a.seriesIndex),
+            [1, 2, 3, 4, 5, 6],
+        );
+    });
+
+    it('all events from an occurrence changed on its own spreads only what this save changed', async () => {
+        const state = installActivityDouble({ users: USERS });
+        const { seriesId } = await createWeekly(state);
+        const rows = live(state, seriesId);
+        const day = dayOf(rows[1]);
+        await activitySeriesService.update(rows[1].id, { startAt: at(day, '16:00').toISOString(), endAt: at(day, '17:30').toISOString(), location: 'Client office' }, PALAK, { scope: 'this' });
+        await activitySeriesService.update(rows[1].id, { subject: 'Weekly review (typo fixed)' }, PALAK, { scope: 'all' });
+        assert.equal(state.series[0].startTime, '10:00');
+        assert.equal(state.series[0].durationMinutes, 45);
+        const others = live(state, seriesId).filter((a) => a.id !== rows[1].id);
+        assert.ok(others.every((a) => a.subject === 'Weekly review (typo fixed)' && a.location === 'Room 1'));
+        assert.ok(others.every((a) => instantToZonedWallClock(a.startAt as Date, TZ).endsWith('T10:00')));
+        const edited = state.activities.find((a) => a.id === rows[1].id) as Activity;
+        assert.equal(instantToZonedWallClock(edited.startAt as Date, TZ).slice(11, 16), '16:00');
+        assert.equal(edited.location, 'Client office');
+        assert.equal(edited.seriesException, true, 'still changed on its own');
+        assert.equal(JSON.parse(state.series[0].templateJson).location, 'Room 1');
+    });
+
     it('does not repeat (all) keeps occurrences that are already over today', async () => {
         const state = installActivityDouble({ users: USERS });
         const { seriesId } = await createWeekly(state);
@@ -506,6 +584,71 @@ describe('markSeriesSyncWindow', () => {
         await markSeriesSyncWindow(new Date((later.startAt as Date).getTime() - 13 * DAY));
         assert.equal(state.links.find((l) => l.activityId === later.id)?.invites, 'withhold');
         assert.equal(notices(), before, 'the owner was told already: copies still wait');
+    });
+
+    it("a rename by someone else doesn't change who sends (D41); an occurrence the owner changed alone sends", async () => {
+        const state = installActivityDouble({ users: USERS, connections: [connection()] });
+        const made = await activitySeriesService.create(
+            { followupType: 'Meeting', subject: 'Client call', assignedTo: 'palak', startAt: at(nextMonday(), '15:00').toISOString(), endAt: at(nextMonday(), '15:30').toISOString(), attendees: [guest], repeat: { frequency: 'daily' } },
+            PALAK,
+        );
+        const unlinked = () => live(state, made.seriesId).filter((a) => !state.links.some((l) => l.activityId === a.id));
+        // Asha corrects the organization's name: shared/nameSync.ts stamps updatedBy on every live row, with no audit entry.
+        for (const a of state.activities) if (a.seriesId === made.seriesId) a.updatedBy = 'asha';
+        const first = unlinked()[0];
+        await markSeriesSyncWindow(new Date((first.startAt as Date).getTime() - 13 * DAY));
+        assert.equal(state.links.find((l) => l.activityId === first.id)?.invites, 'send');
+        assert.equal(state.notifications.filter((n) => n.kind === 'calendar_invites_held').length, 0);
+
+        // The reverse: Asha (admin) set the series up, so it stays private; Palak renaming the customer doesn't send.
+        const other = installActivityDouble({ users: USERS, connections: [connection()] });
+        const setUp = await activitySeriesService.create(
+            { followupType: 'Meeting', subject: 'Client call', assignedTo: 'palak', startAt: at(nextMonday(), '15:00').toISOString(), endAt: at(nextMonday(), '15:30').toISOString(), attendees: [guest], repeat: { frequency: 'daily' } },
+            ASHA_ADMIN,
+        );
+        for (const a of other.activities) if (a.seriesId === setUp.seriesId) a.updatedBy = 'palak';
+        const rest = live(other, setUp.seriesId).filter((a) => !other.links.some((l) => l.activityId === a.id));
+        await markSeriesSyncWindow(new Date((rest[0].startAt as Date).getTime() - 13 * DAY));
+        assert.equal(other.links.find((l) => l.activityId === rest[0].id)?.invites, 'withhold');
+        // Palak changes one later occurrence on her own: she sent that one.
+        const mine = rest[3];
+        await activitySeriesService.update(mine.id, { location: 'Zoom' }, PALAK, { scope: 'this' });
+        await markSeriesSyncWindow(new Date((mine.startAt as Date).getTime() - 13 * DAY));
+        assert.equal(other.links.find((l) => l.activityId === mine.id)?.invites, 'send');
+    });
+
+    it('an occurrence the owner changed after the first-sync backfill is not a backfilled copy (D23)', async () => {
+        const state = installActivityDouble({ users: USERS });
+        const { seriesId } = await createWeekly(state);
+        // The calendar is connected and backfilled now (after every row and its audit entry so far).
+        const [last] = await (prisma as unknown as { auditLog: { findMany: (args: unknown) => Promise<{ createdAt: Date }[]> } }).auditLog.findMany({ orderBy: [{ id: 'desc' }], take: 1, select: { createdAt: true } });
+        state.connections.push(connection({ backfilledAt: last.createdAt }));
+        // Palak adds a customer to every event afterwards.
+        await activitySeriesService.update(live(state, seriesId)[0].id, { attendees: [guest] }, PALAK, { scope: 'all' });
+        const far = live(state, seriesId).find((a) => (a.startAt as Date).getTime() > Date.now() + 30 * DAY) as Activity;
+        assert.ok(far.createdAt.getTime() <= last.createdAt.getTime(), 'existed before the backfill');
+        await markSeriesSyncWindow(new Date((far.startAt as Date).getTime() - 13 * DAY));
+        const link = state.links.find((l) => l.activityId === far.id);
+        assert.equal(link?.invites, 'send');
+        assert.notEqual(link?.createdAt.getTime(), last.createdAt.getTime(), 'not stamped as a backfill copy');
+    });
+
+    it('marks every occurrence entering the window in one night, more than one batch', async () => {
+        const state = installActivityDouble({ users: USERS });
+        const tomorrow = addDays(today(), 1);
+        for (let i = 0; i < 20; i++) {
+            await activitySeriesService.create(
+                { followupType: 'Meeting', subject: `Stand-up ${i}`, assignedTo: 'palak', startAt: at(tomorrow, '10:00').toISOString(), endAt: at(tomorrow, '10:15').toISOString(), repeat: { frequency: 'daily' } },
+                PALAK,
+            );
+        }
+        state.connections.push(connection());
+        const now = new Date();
+        const inWindow = state.activities.filter((a) => a.seriesId && !a.isDeleted && (a.startAt as Date).getTime() >= now.getTime() && (a.startAt as Date).getTime() < now.getTime() + SERIES_SYNC_WINDOW_DAYS * DAY);
+        assert.ok(inWindow.length > 200, String(inWindow.length));
+        const marked = await markSeriesSyncWindow(now);
+        assert.equal(marked, inWindow.length);
+        assert.ok(inWindow.every((a) => state.links.some((l) => l.activityId === a.id && l.role === 'organizer')));
     });
 
     it('skips types that never sync, so they never fill the batch', async () => {

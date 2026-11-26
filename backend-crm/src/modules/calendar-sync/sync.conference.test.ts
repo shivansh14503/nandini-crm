@@ -535,6 +535,33 @@ describe('Video meeting on recurring activities (Calendar Phase 4)', () => {
         assert.equal(failed, 1);
     });
 
+    it('the stale sweep waits for an occurrence inside the window that has no calendar copy yet, until the day before it starts', async () => {
+        install();
+        const { rows } = await meetSeries(20);
+        // As if the nightly window mark hadn't reached these yet (a backlog): no calendar copy at all.
+        const unmarked = rows.filter((r) => linkFor(r.id)).slice(0, 6);
+        state.links = state.links.filter((l) => !unmarked.some((r) => r.id === l.activityId));
+        const tomorrow = unmarked[0]; // starts tomorrow 10:00, less than two days away
+        const later = new Date(Date.now() + STALE_CONFERENCE_MS + 60_000);
+        await failStaleConferences(later);
+        assert.ok(unmarked.slice(2).every((r) => rowOf(r.id).conferenceState === 'requested'), 'no copy yet: still waiting');
+        const nearStart = new Date(tomorrow.startAt!.getTime() - DAY / 2);
+        await failStaleConferences(nearStart);
+        assert.equal(rowOf(tomorrow.id).conferenceState, 'failed', 'starts within a day and no push came: Retry offered');
+    });
+
+    it('an occurrence without a calendar copy shows its link as waiting for the calendar, not as being created', async () => {
+        install();
+        const { rows } = await meetSeries(20);
+        const outside = rows.find((r) => !linkFor(r.id))!;
+        const inside = rows.find((r) => linkFor(r.id))!;
+        const far = await activityService.getById(outside.id, PALAK);
+        assert.equal(far.conference?.state, 'requested');
+        assert.equal(far.conference?.waitingForCalendar, true);
+        const near = await activityService.getById(inside.id, PALAK);
+        assert.equal(near.conference?.waitingForCalendar, false, 'has a calendar copy: the push creates it now');
+    });
+
     it('"All events" changes the choice on future occurrences, never on an exception; a ready Teams occurrence blocks it (409)', async () => {
         install();
         const { rows } = await meetSeries(4);

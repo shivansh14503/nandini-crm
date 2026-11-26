@@ -300,9 +300,9 @@ const STALE_CONFERENCE_LIMIT = 200;
 /**
  * Nightly (calendar-nightly, 00:25, inside the existing nightly database wake): video links still `requested` an hour
  * after the activity's last save (no push ran: the owner's calendar was paused, the type stopped going to calendars,
- * a lost in-process timer) become `failed conference_timeout`, so Retry is offered. Recurring occurrences not pushed
- * yet (more than SERIES_SYNC_WINDOW_DAYS − 1 days ahead) are left waiting. One read on the
- * (conferenceState, updatedAt) index; nothing outside the nightly run.
+ * a lost in-process timer) become `failed conference_timeout`, so Retry is offered. Recurring occurrences without a
+ * calendar copy yet (the nightly window mark hasn't reached them) are left waiting until the day before they start.
+ * One read on the (conferenceState, updatedAt) index; nothing outside the nightly run.
  */
 export async function failStaleConferences(now: Date = new Date()): Promise<number> {
     if (!ENV.INTEGRATIONS.SYNC_ENABLED) return 0;
@@ -311,9 +311,14 @@ export async function failStaleConferences(now: Date = new Date()): Promise<numb
             conferenceState: 'requested',
             updatedAt: { lt: new Date(now.getTime() - STALE_CONFERENCE_MS) },
             // Calendar Phase 4: an occurrence of a recurring series isn't pushed until it comes inside the sync window
-            // (SERIES_SYNC_WINDOW_DAYS; the 00:20 nightly marks those entering it). Its link waits until then: only
-            // occurrences that have been inside the window for a day (pushed by now) can time out.
-            OR: [{ seriesId: null }, { startAt: { lte: new Date(now.getTime() + SERIES_SYNC_WINDOW_MS - DAY_MS) } }],
+            // (SERIES_SYNC_WINDOW_DAYS; the 00:20 nightly marks those entering it). Its link waits until then: only an
+            // occurrence that has a calendar copy and has been inside the window for a day can time out, or one that
+            // starts within a day and still has no copy (no push will come in time, so Retry is offered).
+            OR: [
+                { seriesId: null },
+                { startAt: { lte: new Date(now.getTime() + SERIES_SYNC_WINDOW_MS - DAY_MS) }, externalLinks: { some: { role: 'organizer' } } },
+                { startAt: { lte: new Date(now.getTime() + DAY_MS) } },
+            ],
         },
         select: ACTIVITY_CONFERENCE_SELECT,
         take: STALE_CONFERENCE_LIMIT,

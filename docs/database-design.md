@@ -621,7 +621,8 @@ don't drop them in a later migration).
 as an RRULE master, so reminders (`remindAt` / `reminderSentAt` claim), the `startAt`-bounded range queries, busy
 times, the 31-day cap and the calendar push keep working on single rows. `Activity` gains `seriesId` (→
 `ActivitySeries`, `NO ACTION`; null on a single activity), `originalStartAt` (the rule slot the row fills, UTC; kept when
-the occurrence alone is moved), `seriesIndex` (1-based position from the series' first day) and `seriesException`
+the occurrence alone is moved), `seriesIndex` (1-based position from the series' first day; rows a split or a new
+rule leaves alone are renumbered, null on a day the rule doesn't have) and `seriesException`
 (BIT, default 0: changed on its own, series edits leave it). Index `(seriesId, startAt)` (series edits, the nightly
 sync window) and the hand-written filtered unique `UX_Activity_seriesOccurrence (seriesId, originalStartAt) WHERE
 seriesId IS NOT NULL` (one row per slot, **soft-deleted rows included**, so the nightly extension never re-creates a
@@ -963,7 +964,9 @@ also on the activity as an attendee and in its remarks).
   connection per person and per provider account.
 - **Recurring activities** (Calendar Phase 4, as of 2026-11-26): the nightly reads `ActivitySeries (isDeleted,
   endedAt, materializedThrough)` (an equality pair then a range); series edits read occurrences by `(seriesId,
-  startAt)`; slot pre-reads and the unique guard use `UX_Activity_seriesOccurrence`.
+  startAt)`; slot pre-reads and the unique guard use `UX_Activity_seriesOccurrence`. The nightly window mark reads the
+  last CRM write of occurrences changed on their own or older than their owner's backfill from `AuditLog (entityType,
+  entityId, id)` (D41 / D23; as of 2026-11-26, review round 2).
 - **Calendar push outbox** (P2-3b, as of 2026-11-26): `ActivityExternalLink (dirtyAt, nextAttemptAt)` answers the
   5-minute sweep (07:00–21:55) with a seek on `dirtyAt` (most rows have it null); `(connectionId, state)` serves the
   `enrolled` job and stopping / re-attaching a connection; `UX_ActivityExternalLink_event` and `UX_Activity_syncKey`

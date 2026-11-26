@@ -94,7 +94,7 @@ export function toActivityView(row: ActivityRow, user: AuthUser, links: Calendar
         lockedFields: lockedFieldsFor(row),
         calendar: calendarViewOf(row, links.get(row.id), user.username, canEdit),
         series: row.seriesId ? (series.get(row.id) ?? null) : null,
-        conference: conferenceViewOf(row, canEdit),
+        conference: conferenceViewOf(row, canEdit, links.has(row.id)),
     };
 }
 
