@@ -150,6 +150,47 @@ const NUMBER_RE = /^-?\d+(\.\d+)?$/;
 const AMOUNT_RE = /^\d+(\.\d{1,2})?$/;
 const PINCODE_RE = /^[A-Za-z0-9\s-]{2,12}$/;
 
+/** An option's text for matching a cell: any case, runs of spaces (non-breaking ones included) as one. */
+export const optionKey = (text: string) => text.replace(/[\s\u00a0]+/g, ' ').trim().toLowerCase();
+
+/**
+ * Other spellings of a numeric cell, for percentage options (`18%`): `18` and Excel's fraction of a percent-formatted
+ * cell (`0.18`) both read as `18%`.
+ */
+function numericSpellings(entry: string): string[] {
+    const text = entry.replace(/\s+/g, '');
+    if (!/^\d+(\.\d+)?$/.test(text)) return [];
+    const n = Number(text);
+    const spellings = [`${n}%`];
+    if (n > 0 && n < 1) spellings.push(`${Number((n * 100).toFixed(4))}%`);
+    return spellings;
+}
+
+/**
+ * The stored value of the dropdown option a cell names, by value or label: any case, extra spaces ignored, and a
+ * bare or fractional number matching a percentage option. Undefined when no option matches.
+ * Mirrors `matchImportOption` in backend-crm/src/modules/imports/importValues.ts.
+ */
+export function matchImportOption(options: { value: string; label: string }[], entry: string): string | undefined {
+    const byKey = new Map<string, string>();
+    // Labels first, so a value spelled like another option's label still resolves to itself.
+    options.forEach((o) => byKey.set(optionKey(o.label), o.value));
+    options.forEach((o) => byKey.set(optionKey(o.value), o.value));
+    for (const candidate of [entry, ...numericSpellings(entry)]) {
+        const value = byKey.get(optionKey(candidate));
+        if (value !== undefined) return value;
+    }
+    return undefined;
+}
+
+/** `Allowed: A, B, C … (12 options)`: the options a dropdown cell may name, for its error message. */
+export function allowedOptionsText(labels: string[]): string {
+    const list = [...new Set(labels)];
+    if (list.length === 0) return 'The dropdown has no active options';
+    const shown = list.slice(0, 8).join(', ');
+    return list.length > 8 ? `Allowed: ${shown} … (${list.length} options)` : `Allowed: ${shown}`;
+}
+
 /**
  * Reads one filled cell by its field's type: the value to send (dropdowns as their stored value, dates as
  * `YYYY-MM-DD`, date-times as `YYYY-MM-DDTHH:mm`, checkboxes as Yes / No) and, when it can't be read, the error.
@@ -160,14 +201,13 @@ export function normalizeImportCell(field: ImportFieldDef, cell: string): { valu
         case 'select':
         case 'multiselect': {
             if (!field.options) return { value: cell };
-            const lookup = new Map<string, string>();
-            field.options.forEach((o) => lookup.set(o.label.trim().toLowerCase(), o.value));
-            field.options.forEach((o) => lookup.set(o.value.trim().toLowerCase(), o.value));
             const entries = field.fieldType === 'multiselect' ? splitList(cell) : [cell];
             const matched: string[] = [];
             for (const entry of entries) {
-                const option = lookup.get(entry.toLowerCase());
-                if (option === undefined) return { value: cell, error: `"${entry}" is not an option of ${label}` };
+                const option = matchImportOption(field.options, entry);
+                if (option === undefined) {
+                    return { value: cell, error: `"${entry}" is not an option of ${label}. ${allowedOptionsText(field.options.map((o) => o.label))}` };
+                }
                 if (!matched.includes(option)) matched.push(option);
             }
             return { value: matched.join(', ') };

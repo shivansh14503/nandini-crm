@@ -194,7 +194,7 @@ function DataImportWizard({ open, entity, onClose, onImported }: DataImportModal
                         <ImportPreviewStep config={config} rows={mappedRows} />
                         {validRows.length === 0 && (
                             <Alert severity="warning" sx={{ mt: 2, fontSize: '0.8rem' }}>
-                                No valid rows to import. Go back and adjust the column mapping.
+                                No valid rows to import. Fix the errors listed above in the file and upload it again, or go back and adjust the column mapping.
                             </Alert>
                         )}
                         {error && (

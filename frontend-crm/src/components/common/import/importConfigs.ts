@@ -177,20 +177,28 @@ export function mapAndValidateRows(config: ImportEntityConfig, parsed: ParsedFil
     return parsed.rows.map((raw, idx) => {
         const values: Record<string, string> = {};
         const errors: string[] = [];
+        const cellErrors: Record<string, string> = {};
         config.fields.forEach((f) => {
             const header = mapping[f.key];
             const cell = header ? (raw[header] ?? '').trim() : '';
             if (!cell) {
                 values[f.key] = '';
-                if (f.required) errors.push(`${f.label} is required`);
+                if (f.required) {
+                    const error = header ? `${f.label} is required` : `${f.label} is required: map a column to it`;
+                    errors.push(error);
+                    cellErrors[f.key] = error;
+                }
                 return;
             }
             const read = normalizeImportCell(f, cell);
             values[f.key] = read.value;
-            if (read.error) errors.push(read.error);
+            if (read.error) {
+                errors.push(read.error);
+                cellErrors[f.key] = read.error;
+            }
         });
         errors.push(...(config.rowRules?.(values) ?? []));
-        return { rowNumber: idx + 2, values, errors };
+        return { rowNumber: idx + 2, values, errors, cellErrors };
     });
 }
 

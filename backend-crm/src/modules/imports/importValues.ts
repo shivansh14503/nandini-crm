@@ -99,6 +99,45 @@ const FALSE_WORDS = new Set(['no', 'n', 'false', '0', 'unchecked', 'off']);
 /** 'A, B; C' → ['A', 'B', 'C'] (multi-value spreadsheet cells). */
 export const splitList = (value: string | undefined) => (value ?? '').split(/[,;]/).map((s) => s.trim()).filter(Boolean);
 
+/** An option's text for matching a cell: any case, runs of spaces (non-breaking ones included) as one. */
+export const optionKey = (text: string) => text.replace(/[\s\u00a0]+/g, ' ').trim().toLowerCase();
+
+/**
+ * Other spellings of a numeric cell, for percentage options (`18%`): `18` and Excel's fraction of a percent-formatted
+ * cell (`0.18`) both read as `18%`.
+ */
+function numericSpellings(entry: string): string[] {
+    const text = entry.replace(/\s+/g, '');
+    if (!/^\d+(\.\d+)?$/.test(text)) return [];
+    const n = Number(text);
+    const spellings = [`${n}%`];
+    if (n > 0 && n < 1) spellings.push(`${Number((n * 100).toFixed(4))}%`);
+    return spellings;
+}
+
+/**
+ * The stored value of the dropdown option a cell names, by value or label: any case, extra spaces ignored, and a
+ * bare or fractional number matching a percentage option. Undefined when no option matches.
+ * Mirrors `matchImportOption` in frontend-crm/src/components/common/import/importFields.ts.
+ */
+export function matchImportOption(lookup: ReadonlyMap<string, string>, entry: string): string | undefined {
+    const byKey = new Map<string, string>();
+    for (const [text, value] of lookup) if (!byKey.has(optionKey(text))) byKey.set(optionKey(text), value);
+    for (const candidate of [entry, ...numericSpellings(entry)]) {
+        const value = byKey.get(optionKey(candidate));
+        if (value !== undefined) return value;
+    }
+    return undefined;
+}
+
+/** `Allowed: A, B, C … (12 options)`: the options a dropdown cell may name, for its error message. */
+export function allowedOptionsText(values: Iterable<string>): string {
+    const list = [...new Set(values)];
+    if (list.length === 0) return 'The dropdown has no active options';
+    const shown = list.slice(0, 8).join(', ');
+    return list.length > 8 ? `Allowed: ${shown} … (${list.length} options)` : `Allowed: ${shown}`;
+}
+
 /** Fields of the module's creation form a spreadsheet can fill: active, shown on the form, not a file upload. */
 export function importableFields(config: ModuleFieldConfig): FormFieldDefinitionDto[] {
     return config.fields.filter((f) => f.isActive && f.isVisibleInForm && !f.isDeleted && !NOT_IMPORTABLE_TYPES.has(f.fieldType));
@@ -147,11 +186,11 @@ export function buildImportPayload(config: ModuleFieldConfig, values: Record<str
                     break;
                 }
                 const matched: string[] = [];
+                const hidden = (option: string) => config.module !== 'activities' && field.fieldKey === 'followupType' && isActivityOnlyFollowupType(option);
                 for (const entry of entries) {
-                    const option = lookup.get(entry.toLowerCase());
-                    const offered = option !== undefined && !(config.module !== 'activities' && field.fieldKey === 'followupType' && isActivityOnlyFollowupType(option));
-                    if (offered) matched.push(option);
-                    else fail(`"${entry}" is not an option of ${field.label}.`);
+                    const option = matchImportOption(lookup, entry);
+                    if (option !== undefined && !hidden(option)) matched.push(option);
+                    else fail(`"${entry}" is not an option of ${field.label}. ${allowedOptionsText([...lookup.values()].filter((o) => !hidden(o)))}.`);
                 }
                 value = field.fieldType === 'multiselect' ? [...new Set(matched)] : matched[0];
                 break;
