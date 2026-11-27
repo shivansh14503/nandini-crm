@@ -31,6 +31,7 @@ import type { PartnerCompany, PartnerCompanyContact } from '@/types/partner.type
 import { ticketService } from '@/services';
 import type { RecordAuditStamp } from '../common/Drawer/RecordAuditFooter';
 import { useContacts, useMasterData, useOrganizations } from '@/hooks/queries';
+import { isPickableContact } from '@/components/common/lookup';
 import { formatAddressLine } from '@/utils/address';
 
 import {
@@ -157,11 +158,13 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
     const { natureOfCalls, partnerCompanies, partnerContacts } = useMasterData();
     const organizationNames = useMemo(() => organizations.map((o) => o.organizationName), [organizations]);
 
-    // Narrow contact suggestions to the chosen organization when it has any contacts on file.
+    // Narrow contact suggestions to the chosen organization when it has any contacts on file. Contacts who left their
+    // job aren't offered (the Contact Search popup's Left Job filter is locked to No).
     const contactNames = useMemo(() => {
+        const pickable = contacts.filter(isPickableContact);
         const org = organizationName?.trim().toLowerCase();
-        const inOrg = org ? contacts.filter((c) => c.organizationName.trim().toLowerCase() === org) : [];
-        return (inOrg.length > 0 ? inOrg : contacts).map((c) => c.name);
+        const inOrg = org ? pickable.filter((c) => c.organizationName.trim().toLowerCase() === org) : [];
+        return (inOrg.length > 0 ? inOrg : pickable).map((c) => c.name);
     }, [contacts, organizationName]);
 
     const natureOfCallNames = useMemo(() => natureOfCalls.map((n) => n.name), [natureOfCalls]);

@@ -23,7 +23,7 @@ import { formatDateTime } from '@/utils/date';
 import { fmtMoney } from '@/utils/formats';
 import { opportunityLabel } from '@/utils/opportunityLabel';
 import { splitMulti } from '@/types/lookup.types';
-import type { LookupColumn, LookupCopy, LookupFilterField, LookupSearchPredicate } from '@/types/lookup.types';
+import type { LookupColumn, LookupCopy, LookupFilterField, LookupFilterValues, LookupSearchPredicate } from '@/types/lookup.types';
 
 export interface LookupPreset<T> {
     title: string;
@@ -338,6 +338,21 @@ export const CONTACT_LOOKUP_PRESET: LookupPreset<ContactLookupRow> = {
         return true;
     },
 };
+
+/**
+ * Contact pickers offer only contacts still in their job: the Contact Search popup's Left Job filter is fixed at No
+ * (shown locked, kept by Clear), and type-ahead suggestions leave out contacts who left (`isPickableContact`).
+ */
+export const CONTACT_LOCKED_FILTERS: LookupFilterValues = { leftJob: 'No' };
+
+/** Whether a contact picker may offer this contact: anyone whose Left Job isn't Yes (see CONTACT_LOCKED_FILTERS). */
+export const isPickableContact = (contact: Pick<Contact, 'leftJob'>): boolean => contact.leftJob !== 'Yes';
+
+/** The contacts with those still in their job first, so a name shared with someone who left resolves to the one offered. */
+export const currentContactsFirst = <C extends Pick<Contact, 'leftJob'>>(contacts: readonly C[]): C[] => [
+    ...contacts.filter(isPickableContact),
+    ...contacts.filter((c) => !isPickableContact(c)),
+];
 
 // ─── Opportunities ────────────────────────────────────────────────────────────
 
