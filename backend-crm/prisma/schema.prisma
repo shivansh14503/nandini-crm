@@ -206,6 +206,15 @@ model CompanyFormatSettings {
   updatedAt      DateTime @default(now()) @updatedAt
 }
 
+/// Company details (Admin › Company Details). Single row, id = 1; no row = not set yet.
+model CompanySettings {
+  id           Int      @id
+  /// The company's state (an Indian state's name): line items charge IGST to customers in another state, else CGST + SGST.
+  companyState String   @default("") @db.NVarChar(80)
+  updatedBy    String?  @db.NVarChar(50)
+  updatedAt    DateTime @default(now()) @updatedAt
+}
+
 /// A series an admin added for a module, e.g. NIPL/L/26-27/1004. Series always include the financial year and
 /// restart every year. No row = the module keeps its original numbering (LD-0001, ...).
 model DocumentSeries {
@@ -676,12 +685,21 @@ model Opportunity {
   /// Yes while the opportunity has a document (its Document row); required at Sales Stage PO.
   addDocument      String?  @default("No") @db.NVarChar(3)
 
-  // Line-item totals (verified server-side)
+  // Line-item totals (verified server-side; shared/lineItemMath.ts lineItemSummary)
   lumpSumDiscount Decimal @default(0) @db.Decimal(18, 2)
   totalAmount     Decimal @default(0) @db.Decimal(18, 2)
   totalDiscount   Decimal @default(0) @db.Decimal(18, 2)
+  /// Total Taxable Amount: the lines' Taxable Amounts added up.
   subtotal        Decimal @default(0) @db.Decimal(18, 2)
+  /// Actual (Before Tax): Total Taxable Amount − Lump Sum Discount.
+  actualBeforeTax Decimal @default(0) @db.Decimal(18, 2)
+  /// IGST or CGST_SGST, from the company's state (CompanySettings) and the customer's when saved; NULL = no company state then (plain GST).
+  gstType         String? @db.NVarChar(10)
   totalTax        Decimal @default(0) @db.Decimal(18, 2)
+  /// Round the Grand Total to whole rupees (the Summary Breakdown's Round Off checkbox).
+  roundOff        Boolean @default(true)
+  /// What Round Off added (+) or took off (−); 0 when it is off.
+  roundOffAmount  Decimal @default(0) @db.Decimal(18, 2)
   grandTotal      Decimal @default(0) @db.Decimal(18, 2)
 
   /// Admin-defined custom field values `{ [fieldKey]: value }` (see FormFieldDefinition) as JSON.
@@ -775,8 +793,17 @@ model Quotation {
   lumpSumDiscount Decimal @default(0) @db.Decimal(18, 2)
   totalAmount     Decimal @default(0) @db.Decimal(18, 2)
   totalDiscount   Decimal @default(0) @db.Decimal(18, 2)
+  /// Total Taxable Amount: the lines' Taxable Amounts added up.
   subtotal        Decimal @default(0) @db.Decimal(18, 2)
+  /// Actual (Before Tax): Total Taxable Amount − Lump Sum Discount.
+  actualBeforeTax Decimal @default(0) @db.Decimal(18, 2)
+  /// IGST or CGST_SGST, from the company's state (CompanySettings) and the customer's when saved; NULL = no company state then (plain GST).
+  gstType         String? @db.NVarChar(10)
   totalTax        Decimal @default(0) @db.Decimal(18, 2)
+  /// Round the Grand Total to whole rupees (the Summary Breakdown's Round Off checkbox).
+  roundOff        Boolean @default(true)
+  /// What Round Off added (+) or took off (−); 0 when it is off.
+  roundOffAmount  Decimal @default(0) @db.Decimal(18, 2)
   grandTotal      Decimal @default(0) @db.Decimal(18, 2)
 
   // Customer & address

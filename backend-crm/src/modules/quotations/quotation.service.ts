@@ -9,7 +9,8 @@ import { HttpError } from '../../utils/httpError.js';
 import { daysAgo } from '../../utils/mappers.js';
 import { parsePagination } from '../../utils/pagination.js';
 import { CLOSED_SALES_STAGES, QUOTE_SALES_STAGE } from '../opportunities/opportunity.validator.js';
-import { assertTotalsMatch, calculateLineItems, lineItemsInclude, linkedProductIds, prepareLineItems, toLineItemData, type PreparedLineItems } from '../shared/lineItems.js';
+import { assertLumpSumWithinTotal, assertTotalsMatch, calculateLineItems, lineItemsInclude, linkedProductIds, prepareLineItems, toLineItemData, type PreparedLineItems } from '../shared/lineItems.js';
+import { quotationGstType } from '../shared/lineItemGst.js';
 import { asPayload, checkModulePayload, loadModuleFieldConfig, validateModulePayload } from '../form-configs/customFieldValidator.js';
 import { assertAssigneeValid, assertRecordAccess, buildAccessScopeWhere } from '../shared/accessControl.js';
 import { assertReference } from '../shared/references.js';
@@ -130,11 +131,14 @@ export async function createQuotationRecord(
     const quotationCode = await generateEntityCode(tx, 'QT');
     const lines = await prepareQuotationLines(tx, null, input);
     input.lineItems = lines.items;
-    const computed = calculateLineItems(input.lineItems, input.lumpSumDiscount);
+    assertLumpSumWithinTotal(input.lineItems, input.lumpSumDiscount);
+    // GST: IGST or CGST + SGST by the quotation's address and the company's state (Summary Breakdown, CRM-111).
+    const gstType = await quotationGstType(input);
+    const computed = calculateLineItems(input.lineItems, { lumpSumDiscount: input.lumpSumDiscount, roundOff: input.roundOff, gstType });
     const assignedTo = (await assertAssigneeValid(tx, input.assignedTo)) ?? user.username;
     const links = await resolveLinks(tx, input);
     const row = await tx.quotation.create({
-        data: { ...(await resolveAddressPlaces(tx, 'quotation', toQuotationData({ ...input, assignedTo }, links, computed.totals))), quotationCode, createdBy: user.username },
+        data: { ...(await resolveAddressPlaces(tx, 'quotation', toQuotationData({ ...input, assignedTo }, links, computed.totals, gstType))), quotationCode, createdBy: user.username },
     });
     await replaceLineItems(tx, row.id, computed, lines.knownProductIds);
     const opportunityAdvanced = links.opportunityId ? await advanceOpportunityStage(tx, links.opportunityId, user) : false;
@@ -199,7 +203,7 @@ export const quotationService = {
         const input = quotationInputSchema.parse(body);
         input.customFields = await validateModulePayload('quotations', asPayload(body), input.customFields);
         assertNotInPast(quotationPastChecks(input));
-        assertTotalsMatch(asRecord(body), calculateLineItems(input.lineItems, input.lumpSumDiscount).totals);
+        assertTotalsMatch(asRecord(body), calculateLineItems(input.lineItems, { lumpSumDiscount: input.lumpSumDiscount, roundOff: input.roundOff, gstType: await quotationGstType(input) }).totals);
 
         const { quotation, opportunityAdvanced } = await runInTransaction((tx) => createQuotationRecord(tx, input, user));
         await Promise.all([
@@ -226,16 +230,19 @@ export const quotationService = {
                 previousCustomFields: before.customFields,
             });
             assertNotInPast(quotationPastChecks(input, before));
-            assertTotalsMatch(patch, calculateLineItems(input.lineItems, input.lumpSumDiscount).totals);
+            const gstType = await quotationGstType(input);
+            const options = { lumpSumDiscount: input.lumpSumDiscount, roundOff: input.roundOff, gstType };
+            assertTotalsMatch(patch, calculateLineItems(input.lineItems, options).totals);
             const lines = 'lineItems' in patch ? await prepareQuotationLines(tx, id, input) : null;
             if (lines) input.lineItems = lines.items;
-            const computed = calculateLineItems(input.lineItems, input.lumpSumDiscount);
+            if (lines || 'lumpSumDiscount' in patch) assertLumpSumWithinTotal(input.lineItems, input.lumpSumDiscount);
+            const computed = calculateLineItems(input.lineItems, options);
 
             const links = await resolveLinks(tx, input, existing);
             const assignedTo = (await assertAssigneeValid(tx, input.assignedTo, { previous: existing.assignedTo })) ?? existing.assignedTo;
             await tx.quotation.update({
                 where: { id },
-                data: { ...(await resolveAddressPlaces(tx, 'quotation', toQuotationData({ ...input, assignedTo }, links, computed.totals))), updatedBy: user.username },
+                data: { ...(await resolveAddressPlaces(tx, 'quotation', toQuotationData({ ...input, assignedTo }, links, computed.totals, gstType))), updatedBy: user.username },
             });
             if (lines) await replaceLineItems(tx, id, computed, lines.knownProductIds);
 

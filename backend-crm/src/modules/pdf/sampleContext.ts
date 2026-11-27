@@ -1,13 +1,14 @@
 import type { ContextBuildInput } from './contexts/contextTypes.js';
 import { assembleQuotationContext, sampleCustomValues, type QuotationSource } from './contexts/quotationContext.js';
 import type { PdfContext } from './pdf.types.js';
+import { lineItemTotals } from '../shared/lineItemMath.js';
 
 /**
  * Realistic dummy data for template previews when no record is picked. Goes through the same assembler as
  * real records, so formatting, visibility and columns behave identically.
  */
 
-const SAMPLE_QUOTATION: Omit<QuotationSource, 'customValues'> = {
+const SAMPLE_QUOTATION: Omit<QuotationSource, 'customValues' | 'totals'> = {
     id: 'sample',
     code: 'QT-00042',
     title: 'Network Infrastructure Upgrade',
@@ -32,7 +33,6 @@ const SAMPLE_QUOTATION: Omit<QuotationSource, 'customValues'> = {
     billing: { street: 'Plot 14, GIDC Industrial Estate, Phase II', city: 'Surat', state: 'Gujarat', postalCode: '394230', country: 'India' },
     shipping: { street: 'Unit 3, Textile Market, Ring Road', city: 'Surat', state: 'Gujarat', postalCode: '395002', country: 'India' },
     salesPerson: { username: 'priya.s', fullName: 'Priya Sharma', phone: '+91 99099 88776', email: 'priya.sharma@nandini.example' },
-    totals: { totalAmount: 288000, totalDiscount: 13850, lumpSumDiscount: 1200, subtotal: 274150, totalTax: 49347, grandTotal: 322297 },
     terms: {
         paymentTerms: '50% Advance, 50% on Delivery',
         paymentTermsDescription: '50% advance along with the purchase order.\nBalance 50% within 7 days of delivery.',
@@ -82,6 +82,10 @@ const SAMPLE_QUOTATION: Omit<QuotationSource, 'customValues'> = {
     ],
 };
 
+/** The Summary Breakdown of the sample lines: a same-state (CGST + SGST) customer with a lump sum, rounded off. */
+const SAMPLE_TOTAL_OPTIONS = { lumpSumDiscount: 1200, roundOff: true, gstType: 'CGST_SGST' } as const;
+const SAMPLE_TOTALS: QuotationSource['totals'] = { ...lineItemTotals(SAMPLE_QUOTATION.lineItems, SAMPLE_TOTAL_OPTIONS), ...SAMPLE_TOTAL_OPTIONS };
+
 export function buildSampleQuotationContext(input: ContextBuildInput): PdfContext {
-    return assembleQuotationContext({ ...SAMPLE_QUOTATION, customValues: sampleCustomValues(input.customFields) }, input);
+    return assembleQuotationContext({ ...SAMPLE_QUOTATION, totals: SAMPLE_TOTALS, customValues: sampleCustomValues(input.customFields) }, input);
 }

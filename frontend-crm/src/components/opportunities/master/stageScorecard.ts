@@ -21,9 +21,9 @@ const STAGE_COLORS: Readonly<Record<string, string>> = {
     'Advance Received': 'Teal',
 };
 
-/** A deal's value after discounts, before tax (the list's "Actual (Before Tax)" column). */
+/** A deal's Actual (Before Tax): Total Taxable Amount − Lump Sum Discount (the list's "Actual (Before Tax)" column). */
 export function opportunityAmountBeforeTax(o: Opportunity): number {
-    return o.subtotal !== undefined && o.subtotal !== null ? num(o.subtotal) : num(o.grandTotal) - num(o.totalTax);
+    return LINE_ITEM_CARD_AMOUNTS.actualBeforeTax.of(o);
 }
 
 /** The deal's Commission Amount: what was entered when Commission is Yes, else 0. */
@@ -37,7 +37,7 @@ export function opportunityCommissionAmount(o: Opportunity): number {
  * BUILT_IN_SCORECARD_AMOUNTS (backend scorecard.validator.ts). Labels match the deal's Line Items totals.
  */
 export const OPPORTUNITY_CARD_AMOUNTS: readonly ScorecardAmount<Opportunity>[] = [
-    { key: 'builtin.actualBeforeTax', label: 'Actual (Before Tax)', of: opportunityAmountBeforeTax },
+    LINE_ITEM_CARD_AMOUNTS.actualBeforeTax,
     LINE_ITEM_CARD_AMOUNTS.totalAmount,
     LINE_ITEM_CARD_AMOUNTS.subtotal,
     LINE_ITEM_CARD_AMOUNTS.totalDiscount,
@@ -50,6 +50,7 @@ export const OPPORTUNITY_CARD_AMOUNTS: readonly ScorecardAmount<Opportunity>[] =
         of: opportunityCommissionAmount,
     },
     LINE_ITEM_CARD_AMOUNTS.lumpSumDiscount,
+    LINE_ITEM_CARD_AMOUNTS.roundOffAmount,
 ];
 
 /**

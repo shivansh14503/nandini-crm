@@ -307,8 +307,11 @@ while `Other` (`accountName`, `accountNo`, `bankName`, `ifscCode`, `panNumber`: 
 rules; all five required by the API while `Other`), documentation (`addDocument` fixed `Yes` / `No`, must be `Yes` at Sales Stage `PO`; while `Yes` the opportunity
 has a `Document` row (§4.24) with Document No, Document Date and the file, which the API returns on the
 opportunity as `documentNo`, `documentDate`, `documentFile`; `No` deletes it), totals (`lumpSumDiscount`,
-`totalAmount` (Gross Amount), `totalDiscount`, `subtotal` (Taxable Amount), `totalTax` (GST), `grandTotal` —
-recomputed server-side), `customDataJson`, audit/soft-delete. An opportunity has no currency (its amounts are in ₹):
+`totalAmount` (Gross Amount), `totalDiscount`, `subtotal` (Total Taxable Amount), `actualBeforeTax` (Total Taxable
+Amount − Lump Sum Discount), `totalTax` (GST), `gstType` (NVARCHAR(10) NULL: `IGST`, `CGST_SGST`, or NULL = plain
+GST because no Company State was set when it was saved), `roundOff` (BIT, default 1: the Round Off checkbox),
+`roundOffAmount` (signed: what rounding the Grand Total to the rupee added or took off), `grandTotal` — recomputed
+server-side to the paisa, see "Summary Breakdown" below), `customDataJson`, audit/soft-delete. An opportunity has no currency (its amounts are in ₹):
 `currency` and `groupName` were dropped by `20261221090000_line_items` (Jira CRM-111).
 
 `OpportunityLineItem` (owned, cascades from `Opportunity`; Jira CRM-111): `productId` → `Product` (nullable),
@@ -342,6 +345,40 @@ audit/soft-delete.
 
 `QuotationLineItem`: same shape and rules as `OpportunityLineItem`, cascades from `Quotation`; a quotation needs at
 least one line. `groupName` was dropped by `20261221090000_line_items`.
+
+**Summary Breakdown (Jira CRM-111, migration `20261223090000_line_item_summary`).** Opportunities and quotations work
+out their totals with one shared module (`backend-crm/src/modules/shared/lineItemMath.ts`, mirrored byte for byte in
+`frontend-crm/src/lib/line-items/lineItemMath.ts`), in integer paisa:
+
+1. `subtotal` (Total Taxable Amount) = Σ line `taxableAmount`; `lumpSumDiscount` (at most the subtotal, else `400`).
+2. `actualBeforeTax` = subtotal − lump sum. The lump sum is shared across the GST rates in proportion to their taxable
+   amounts (largest remainder, so the shares add up to it exactly).
+3. GST per rate on its share: `IGST` = rate × base when the customer's state differs from the Company State
+   (`CompanySettings`), `CGST_SGST` = half the rate × base twice (each rounded) when it is the same or the customer has
+   none, plain GST when no Company State is set. The customer's state is the shipping state, else the billing state
+   (the billing one when "copy address from billing" is on): a quotation's own address, an opportunity's
+   organization's. States compare ignoring case and accents, with ISO codes (`IN-GJ`) and old names (`Orissa`) accepted.
+4. `grandTotal` = actual + GST, rounded to the nearest rupee (0.50 up) while `roundOff` is on; `roundOffAmount` holds
+   the difference.
+
+`gstType` is a snapshot taken on every save, so a later Company State change doesn't move saved totals; the one
+exception is records saved while no Company State was set (`gstType` NULL), which take the split when an admin first
+saves one. The migration adds the four columns (existing rows `roundOff = 1`, `actualBeforeTax = max(subtotal −
+lumpSumDiscount, 0)`); on the first start after it, the API recomputes every opportunity and quotation (and their line
+amounts) with this math once (`ModuleSetting (system, lineItemSummaryTotals)` marks it done), keeping `updatedAt`.
+
+### 4.6a `CompanySettings` (Admin › Company Details)
+
+Same migration. Module `backend-crm/src/modules/company-settings`. **Single row, `id = 1`**, written by the first save.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | INT PK | Always 1 |
+| `companyState` | NVARCHAR(80), default `''` | Our company's Indian state or union territory (canonical name from the address master); `''` = not set |
+| `updatedBy` | NVARCHAR(50) NULL | Username of the last admin who saved |
+| `updatedAt` | DATETIME2 | |
+
+Saves are audited as `CompanySettings UPDATE` (entity id `company-settings`, audit module `company-settings`, CONFIG).
 
 Indexes: `opportunityId`, `organizationId`, `contactId`, `quoteStage`, `assignedTo`, city ids, scoped-list composites.
 
@@ -1132,6 +1169,7 @@ choice rows.
 | Option value rename / field key rename | Stored values in records, saved filters and PDF template paths follow (`optionValueRename.ts`, `fieldKeyRename.ts`) |
 | Activity reminder due | One transaction: claim `Activity.reminderSentAt` (matching `remindAt` and `updatedAt`, writing `updatedAt` back unchanged) + insert the missing `Notification` rows |
 | Profile edit / photo (My Profile) | App lock on the user → UPDATE `Users` (or replace the `UserPhoto` row) → `AuditLog` UPDATE; user lookup caches dropped after commit |
+| Company State saved (Admin › Company Details) | Upsert the `CompanySettings` row → `AuditLog` CompanySettings UPDATE; `cache:lookups:company-settings` dropped after commit; when the state changed, opportunities and quotations with `gstType` NULL are recomputed with the new split (`updatedAt` kept) |
 | Company formats saved / reset (Admin › Company formats) | App lock `company-formats` → upsert (or delete) the `CompanyFormatSettings` row → `AuditLog` CompanyFormats UPDATE; `cache:lookups:company-formats` dropped after commit. Nothing else is rewritten: stored notification texts, lead rating reasons and saved PDFs keep the format they were written in |
 | Notification preferences (My Profile › Notifications) | App lock on the user → upsert the `UserPreference` row → `AuditLog` User UPDATE; user lookup caches dropped after commit when the out-of-office changed |
 | User added / edited (Admin › Users) | App locks (username, email address, reports-to chain, admin roster as needed; the per-user lock on edits) → checks → INSERT / UPDATE `Users` → `AuditLog` CREATE / UPDATE; user lookup caches dropped after commit |

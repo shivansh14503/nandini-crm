@@ -66,8 +66,14 @@ describe('system templates', () => {
         it(`${template.name}: renders the sample quotation`, () => {
             const out = renderDocument(template.build(), ctx, pdf);
             assert.match(out.body, /QT-00042/);
-            assert.match(out.body, /₹3,22,297\.00/);
-            assert.match(out.body, /Rupees Three Lakh Twenty Two Thousand Two Hundred Ninety Seven Only/);
+            assert.match(out.body, /₹3,22,081\.00/);
+            assert.match(out.body, /Rupees Three Lakh Twenty Two Thousand Eighty One Only/);
+            // The Summary Breakdown (Jira CRM-111): one CGST and one SGST line per GST rate.
+            assert.match(out.body, />Total Taxable Amount<\/th>/);
+            assert.match(out.body, />Actual \(Before Tax\)<\/th><td[^>]*>₹2,72,950\.00</);
+            assert.match(out.body, />Add: CGST @ 9%<\/th><td[^>]*>₹24,565\.50</);
+            assert.match(out.body, />Add: SGST @ 9%<\/th><td[^>]*>₹24,565\.50</);
+            assert.doesNotMatch(out.body, /GST \(a row per rate\)/);
             // Line item columns as on the quotation form (Jira CRM-111).
             assert.match(out.body, /<th[^>]*>Rate<\/th>/);
             assert.match(out.body, /<th[^>]*>Gross Amount<\/th>/);
@@ -105,13 +111,35 @@ describe('line items saved before CRM-111', () => {
         ]);
     });
 
-    it('leaves current columns alone and relabels the old default total rows', () => {
+    it('leaves current columns alone', () => {
         const current = QUOTATION_LINE_ITEM_COLUMNS.map((c) => ({ key: c.key, label: c.label, visible: true, align: c.align }));
         assert.equal(upgradeLineItemColumns(current), current);
-        assert.deepEqual(upgradeTotalRows([{ key: 'subtotal', label: 'Subtotal', visible: true, hideIfZero: false }, { key: 'totalTax', label: 'VAT', visible: true, hideIfZero: false }]), [
-            { key: 'subtotal', label: 'Taxable Amount', visible: true, hideIfZero: false },
+    });
+
+    it('moves old totals rows to the Summary Breakdown order, keeping the admin\'s labels and choices', () => {
+        const upgraded = upgradeTotalRows([
+            { key: 'totalAmount', label: 'Gross Amount', visible: true, hideIfZero: false },
+            { key: 'subtotal', label: 'Subtotal', visible: true, hideIfZero: false },
+            { key: 'lumpSumDiscount', label: 'Special Discount', visible: false, hideIfZero: true },
             { key: 'totalTax', label: 'VAT', visible: true, hideIfZero: false },
-        ]);
+            { key: 'grandTotal', label: 'Grand Total', visible: true, hideIfZero: false },
+        ]) as { key: string; label: string; visible: boolean }[];
+        assert.deepEqual(
+            upgraded.map((row) => [row.key, row.label, row.visible]),
+            [
+                ['totalAmount', 'Gross Amount', false],
+                ['totalDiscount', 'Discount', false],
+                ['subtotal', 'Total Taxable Amount', true],
+                ['lumpSumDiscount', 'Special Discount', false],
+                ['actualBeforeTax', 'Actual (Before Tax)', true],
+                ['taxes', 'GST (a row per rate)', true],
+                ['totalTax', 'VAT', false],
+                ['roundOffAmount', 'Round Off', true],
+                ['grandTotal', 'Grand Total', true],
+            ],
+        );
+        // Already upgraded rows stay as they are.
+        assert.deepEqual(upgradeTotalRows(upgraded), upgraded);
     });
 });
 

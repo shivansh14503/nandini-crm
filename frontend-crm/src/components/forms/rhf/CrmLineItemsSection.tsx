@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     Alert,
     Box,
     Button,
+    Checkbox,
     Divider,
     FormControl,
     FormHelperText,
@@ -29,6 +30,8 @@ import { ProductLookupModal } from '@/components/common/lookup/PresetLookupModal
 import { useDragReorder } from '@/components/settings/form-customization/useDragReorder';
 import { useProducts } from '@/hooks/queries/useProducts';
 import { useDropdownOptionLabel, useDropdownOptions } from '@/hooks/queries/useFormConfigs';
+import { useCompanySettings } from '@/hooks/queries/useCompanySettings';
+import { useOrganization } from '@/hooks/queries/useOrganizations';
 import { isActiveProduct, type Product } from '@/types/product.types';
 import type { LineItem, LineItemsValues } from '@/types/lineItem.types';
 import { FIELD_MAX_LENGTH, FIELD_SIZE_WIDTH } from '../fieldSizing';
@@ -39,18 +42,26 @@ import { fmtMoney, fmtNumber, useDisplayFormats } from '@/utils/formats';
 import {
     computeLineItem,
     currencyCodeOf,
+    customerStateOf,
     currencySymbolOf,
     DEFAULT_CURRENCY,
+    GST_TYPE_LABELS,
+    gstTypeFor,
     LINE_ITEM_DISCOUNT_TYPE_LABELS,
     LINE_ITEM_LABELS as LABELS,
     LINE_ITEM_TAX_RATE_CATEGORY,
     LINE_ITEM_TAX_RATES,
     LINE_ITEM_TOTAL_LABELS as TOTAL_LABELS,
+    lineItemSummary,
     newLineItem,
     normalizeTaxRate,
     QUOTATION_CURRENCIES,
     roundMoney,
-    totalsOf,
+    roundOffText,
+    taxRowLines,
+    toGstType,
+    toRoundOff,
+    type GstType,
 } from '@/lib/line-items';
 import { LINE_ITEM_DISCOUNT_TYPES, type LineItemDiscountType } from '@/lib/line-items/lineItemMath';
 
@@ -67,6 +78,9 @@ import { LINE_ITEM_DISCOUNT_TYPES, type LineItemDiscountType } from '@/lib/line-
  *   under a percentage.
  * - GST offers the Product Catalog's Tax Rate options; a product with a Tax Rate sets it and it can't be changed.
  * - Only Discount, Description and Note may be left empty.
+ * - Summary Breakdown: Total Taxable Amount, Lump Sum Discount (typed), Actual (Before Tax), a GST line per rate
+ *   (IGST when the customer's state differs from the Company State, else CGST + SGST), Round Off (a checkbox, on by
+ *   default) and the Grand Total. The server recomputes all of it with the same math (lib/line-items/lineItemMath).
  */
 
 export type CrmLineItem = LineItem;
@@ -86,6 +100,13 @@ export interface CrmLineItemsEditorProps {
     lineErrors?: LineItemErrors;
     /** Quotations: shows the Currency picker and the amounts in that currency. Opportunities have no currency (₹). */
     withCurrency?: boolean;
+    /**
+     * How GST is split: IGST, CGST + SGST, or null for plain GST (no Company State). Undefined while the company or
+     * customer state is still loading: the record's saved `gstType` is used until then.
+     */
+    gstType?: GstType | null;
+    /** One line under the GST rows saying why that split applies. */
+    gstHint?: string;
 }
 
 export interface CrmLineItemsSectionProps {
@@ -95,6 +116,8 @@ export interface CrmLineItemsSectionProps {
     setField?: <K extends keyof CrmLineItemsValues>(key: K, value: CrmLineItemsValues[K]) => void;
     error?: string;
     withCurrency?: boolean;
+    gstType?: GstType | null;
+    gstHint?: string;
 }
 
 export { parseTaxRate } from '@/lib/line-items';
@@ -102,12 +125,19 @@ export { parseTaxRate } from '@/lib/line-items';
 export const DEFAULT_LINE_ITEMS_VALUES: CrmLineItemsValues = {
     lineItems: [],
     lumpSumDiscount: 0,
+    roundOff: true,
     totalAmount: 0,
     totalDiscount: 0,
     subtotal: 0,
+    actualBeforeTax: 0,
     totalTax: 0,
+    gstType: null,
+    roundOffAmount: 0,
     grandTotal: 0,
 };
+
+/** The totals the editor writes (with the lines), in the Summary Breakdown's order. */
+const WRITTEN_TOTALS = ['totalAmount', 'totalDiscount', 'subtotal', 'actualBeforeTax', 'totalTax', 'roundOffAmount', 'grandTotal'] as const;
 
 const NO_PRODUCTS: Product[] = [];
 
@@ -121,7 +151,8 @@ const COLUMNS = 'minmax(76px, 0.6fr) minmax(220px, 2.4fr) minmax(112px, 1.1fr) m
 const GRIP_COLUMN = '32px';
 const ACTION_COLUMN = '56px';
 
-const headCellSx = { display: 'flex', alignItems: 'center', gap: 0.25, minWidth: 0 } as const;
+// Every column heading and value is left-aligned (amounts too), as in the view page and the PDF.
+const headCellSx = { display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 0.25, minWidth: 0 } as const;
 const requiredMark = (
     <Box component="span" aria-hidden sx={{ color: 'var(--mui-palette-error-main)', fontWeight: 700 }}>
         *
@@ -138,7 +169,7 @@ const computedSx = (strong = false) => ({
     '& .MuiInputBase-input': {
         fontWeight: strong ? 700 : 600,
         color: strong ? 'var(--crm-text-blue-900)' : 'var(--mui-palette-text-primary)',
-        textAlign: 'right' as const,
+        textAlign: 'left' as const,
         cursor: 'default',
     },
 });
@@ -190,9 +221,11 @@ const removeButtonSx = {
     },
 } as const;
 
-const SummaryRow = ({ label, value, color, strong }: { label: string; value: string; color?: string; strong?: boolean }) => (
-    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
-        <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)' }}>{label}</Typography>
+const SummaryRow = ({ label, value, color, strong, field }: { label: React.ReactNode; value: string; color?: string; strong?: boolean; field?: string }) => (
+    <Box data-field={field} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, minHeight: 28 }}>
+        <Typography component="div" sx={{ fontSize: '0.8rem', fontWeight: strong ? 700 : 400, color: strong ? 'var(--crm-slate-700)' : 'var(--mui-palette-text-secondary)', minWidth: 0 }}>
+            {label}
+        </Typography>
         <Typography sx={{ fontSize: '0.85rem', fontWeight: strong ? 700 : 600, color: color ?? 'var(--mui-palette-text-primary)', whiteSpace: 'nowrap' }}>{value}</Typography>
     </Box>
 );
@@ -200,7 +233,7 @@ const SummaryRow = ({ label, value, color, strong }: { label: string; value: str
 // ══════════════════════════════════════════════════════════════════════
 // COMPONENT A: CrmLineItemsEditor (Pure Controlled UI — Zero RHF Hooks)
 // ══════════════════════════════════════════════════════════════════════
-export function CrmLineItemsEditor({ value, onChange, error, lineErrors, withCurrency = false }: CrmLineItemsEditorProps) {
+export function CrmLineItemsEditor({ value, onChange, error, lineErrors, withCurrency = false, gstType: liveGstType, gstHint }: CrmLineItemsEditorProps) {
     const isView = useFormMode().mode === 'view';
     // Amounts are formatted while rendering: re-render when the company formats change.
     useDisplayFormats();
@@ -215,7 +248,10 @@ export function CrmLineItemsEditor({ value, onChange, error, lineErrors, withCur
     const saved = Array.isArray(value.lineItems) ? value.lineItems : [];
     const lines = saved.length > 0 ? saved : [standIn];
     const lumpSumDiscount = value.lumpSumDiscount || 0;
-    const totals = totalsOf(saved, lumpSumDiscount);
+    const roundOff = toRoundOff(value.roundOff);
+    // The live split once the company and customer states are known; until then the one the record was saved with.
+    const gstType = liveGstType !== undefined ? liveGstType : toGstType(value.gstType);
+    const summary = lineItemSummary(saved, { lumpSumDiscount, roundOff, gstType });
 
     const taxOptions = useDropdownOptions(LINE_ITEM_TAX_RATE_CATEGORY, LINE_ITEM_TAX_RATES, 'products');
     const taxLabel = useDropdownOptionLabel(LINE_ITEM_TAX_RATE_CATEGORY);
@@ -233,18 +269,26 @@ export function CrmLineItemsEditor({ value, onChange, error, lineErrors, withCur
     const [catalogLine, setCatalogLine] = useState<string | null>(null);
 
     // ── Writes: lines and the totals always change together ───────────────────────
-    const commit = useCallback(
-        (items: LineItem[], lumpSum: number = lumpSumDiscount) => {
-            const next = totalsOf(items, lumpSum);
-            onChange('lineItems', items);
-            onChange('totalAmount', next.totalAmount);
-            onChange('totalDiscount', next.totalDiscount);
-            onChange('subtotal', next.subtotal);
-            onChange('totalTax', next.totalTax);
-            onChange('grandTotal', next.grandTotal);
-        },
-        [onChange, lumpSumDiscount],
-    );
+    const writeTotals = (items: readonly LineItem[], options: { lumpSum: number; roundOff: boolean; gstType: GstType | null }) => {
+        const next = lineItemSummary(items, { lumpSumDiscount: options.lumpSum, roundOff: options.roundOff, gstType: options.gstType });
+        for (const key of WRITTEN_TOTALS) onChange(key, next[key]);
+        onChange('gstType', options.gstType);
+    };
+    const commit = (items: LineItem[], changes: Partial<{ lumpSum: number; roundOff: boolean }> = {}) => {
+        onChange('lineItems', items);
+        writeTotals(items, { lumpSum: lumpSumDiscount, roundOff, gstType, ...changes });
+    };
+
+    // The customer's or the company's state changed the GST split (or the totals were never worked out with it):
+    // bring the stored totals up to date. Nothing is written while they already match, so opening a form stays clean.
+    const stale =
+        liveGstType !== undefined &&
+        saved.length > 0 &&
+        (toGstType(value.gstType) !== liveGstType || WRITTEN_TOTALS.some((key) => value[key] !== undefined && Math.abs(Number(value[key]) - summary[key]) >= 0.005));
+    useEffect(() => {
+        if (stale) writeTotals(saved, { lumpSum: lumpSumDiscount, roundOff, gstType });
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when the totals go stale, with the current values
+    }, [stale]);
 
     const updateLine = (id: string, updates: Partial<LineItem>) =>
         commit(lines.map((item) => (item.id === id ? computeLineItem({ ...item, ...updates }) : item)));
@@ -309,12 +353,20 @@ export function CrmLineItemsEditor({ value, onChange, error, lineErrors, withCur
         });
     };
 
-    const changeLumpSum = (lumpSum: number) => {
+    /** A typed Lump Sum Discount: within 0 and the Total Taxable Amount. */
+    const changeLumpSum = (typed: number) => {
+        const lumpSum = roundMoney(Math.min(summary.subtotal, Math.max(0, typed)));
         onChange('lumpSumDiscount', lumpSum);
-        commit(saved, lumpSum);
+        commit(saved, { lumpSum });
     };
+    const changeRoundOff = (next: boolean) => {
+        onChange('roundOff', next);
+        commit(saved, { roundOff: next });
+    };
+    const lumpSumTooLarge = lumpSumDiscount > summary.subtotal;
+    const taxLines = summary.taxes.flatMap((row) => taxRowLines(row, gstType).map((line) => ({ ...line, id: `${row.rate}-${line.key}` })));
 
-    if (isView) return <CrmLineItemsReadOnly value={value} withCurrency={withCurrency} />;
+    if (isView) return <CrmLineItemsReadOnly value={value} withCurrency={withCurrency} gstType={gstType} />;
 
     const showActions = lines.length > 1;
     const gridTemplateColumns = [showActions ? GRIP_COLUMN : '', COLUMNS, showActions ? ACTION_COLUMN : ''].filter(Boolean).join(' ');
@@ -399,17 +451,17 @@ export function CrmLineItemsEditor({ value, onChange, error, lineErrors, withCur
                                 {LABELS.productName}
                                 {requiredMark}
                             </Box>
-                            <Box sx={{ ...headCellSx, justifyContent: 'flex-end' }}>
+                            <Box sx={headCellSx}>
                                 {amountHeading(LABELS.rate)}
                                 {requiredMark}
                             </Box>
-                            <Box sx={{ ...headCellSx, justifyContent: 'flex-end' }}>{amountHeading(LABELS.grossAmount)}</Box>
+                            <Box sx={headCellSx}>{amountHeading(LABELS.grossAmount)}</Box>
                             <Box sx={headCellSx}>{LABELS.discount}</Box>
                             <Box sx={headCellSx}>
                                 {LABELS.taxRate}
                                 {requiredMark}
                             </Box>
-                            <Box sx={{ ...headCellSx, justifyContent: 'flex-end' }}>{amountHeading(LABELS.taxableAmount)}</Box>
+                            <Box sx={headCellSx}>{amountHeading(LABELS.taxableAmount)}</Box>
                             {showActions && <Box sx={{ ...headCellSx, justifyContent: 'center' }}>Action</Box>}
                         </Box>
 
@@ -503,7 +555,7 @@ export function CrmLineItemsEditor({ value, onChange, error, lineErrors, withCur
                                                     }}
                                                     error={Boolean(errs.rate)}
                                                     slotProps={{
-                                                        htmlInput: { min: 0, step: 'any', readOnly: lockedRate, 'aria-label': LABELS.rate, style: { textAlign: 'right' } },
+                                                        htmlInput: { min: 0, step: 'any', readOnly: lockedRate, 'aria-label': LABELS.rate },
                                                         input: lockedRate
                                                             ? {
                                                                   startAdornment: (
@@ -685,51 +737,78 @@ export function CrmLineItemsEditor({ value, onChange, error, lineErrors, withCur
                 </Button>
             </Paper>
 
-            {/* ════════════ SUMMARY & TOTALS ════════════ */}
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'repeat(2, minmax(0, 1fr))' }, gap: 3 }}>
+            {/* ════════════ SUMMARY BREAKDOWN ════════════ */}
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
                 <Paper
                     variant="outlined"
-                    sx={{ p: 2.5, borderRadius: '8px', border: '1px solid var(--mui-palette-border-strong)', backgroundColor: 'var(--mui-palette-background-paper)' }}
-                >
-                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--crm-slate-700)', mb: 2 }}>Overall Deal Adjustments</Typography>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                        <SummaryRow label={TOTAL_LABELS.totalAmount} value={money(totals.totalAmount)} />
-                        <SummaryRow label={TOTAL_LABELS.totalDiscount} value={`− ${money(totals.totalDiscount)}`} color="var(--mui-palette-error-main)" />
-                        <Box data-field="lumpSumDiscount" sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
-                            <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)' }}>{TOTAL_LABELS.lumpSumDiscount}</Typography>
-                            <TextField
-                                size="small"
-                                type="number"
-                                value={lumpSumDiscount === 0 ? '' : lumpSumDiscount}
-                                placeholder="0"
-                                onChange={(e) => changeLumpSum(Math.max(0, parseFloat(e.target.value) || 0))}
-                                sx={{ width: FIELD_SIZE_WIDTH.xs, maxWidth: '100%', ...fieldSx }}
-                                slotProps={{
-                                    htmlInput: { min: 0, step: 'any', 'aria-label': TOTAL_LABELS.lumpSumDiscount },
-                                    input: { startAdornment: <InputAdornment position="start">{symbol}</InputAdornment> },
-                                }}
-                            />
-                        </Box>
-                    </Box>
-                </Paper>
-
-                <Paper
-                    variant="outlined"
-                    sx={{ p: 2.5, borderRadius: '8px', border: '1.5px solid var(--mui-palette-primary-softBorder)', backgroundColor: 'var(--mui-palette-background-subtle)' }}
+                    sx={{
+                        p: { xs: 2, sm: 2.5 },
+                        width: '100%',
+                        maxWidth: { md: 560 },
+                        minWidth: 0,
+                        borderRadius: '8px',
+                        border: '1.5px solid var(--mui-palette-primary-softBorder)',
+                        backgroundColor: 'var(--mui-palette-background-subtle)',
+                    }}
                 >
                     <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--crm-text-blue-900)', mb: 2 }}>Summary Breakdown</Typography>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.2 }}>
-                        <SummaryRow label={TOTAL_LABELS.totalAmount} value={money(totals.totalAmount)} />
-                        <SummaryRow label={TOTAL_LABELS.totalDiscount} value={`− ${money(totals.totalDiscount)}`} color="var(--mui-palette-error-main)" />
-                        <SummaryRow label={TOTAL_LABELS.subtotal} value={money(totals.subtotal)} strong />
-                        <SummaryRow label={TOTAL_LABELS.totalTax} value={`+ ${money(totals.totalTax)}`} color="var(--crm-text-blue-600)" />
-                        {lumpSumDiscount > 0 && (
-                            <SummaryRow label={TOTAL_LABELS.lumpSumDiscount} value={`− ${money(lumpSumDiscount)}`} color="var(--mui-palette-error-main)" />
+                        <SummaryRow label={TOTAL_LABELS.subtotal} value={money(summary.subtotal)} strong />
+
+                        <Box data-field="lumpSumDiscount">
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
+                                <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)' }}>{TOTAL_LABELS.lumpSumDiscount}</Typography>
+                                <TextField
+                                    size="small"
+                                    type="number"
+                                    value={lumpSumDiscount === 0 ? '' : lumpSumDiscount}
+                                    placeholder="0"
+                                    onChange={(e) => changeLumpSum(parseFloat(e.target.value) || 0)}
+                                    error={lumpSumTooLarge}
+                                    sx={{ width: FIELD_SIZE_WIDTH.xs, maxWidth: '100%', ...fieldSx }}
+                                    slotProps={{
+                                        htmlInput: { min: 0, max: summary.subtotal, step: 'any', 'aria-label': TOTAL_LABELS.lumpSumDiscount },
+                                        input: { startAdornment: <InputAdornment position="start">{symbol}</InputAdornment> },
+                                    }}
+                                />
+                            </Box>
+                            {lumpSumTooLarge && (
+                                <FormHelperText error sx={{ textAlign: 'right' }}>
+                                    Lump Sum Discount cannot exceed the {TOTAL_LABELS.subtotal} ({money(summary.subtotal)}).
+                                </FormHelperText>
+                            )}
+                        </Box>
+
+                        <SummaryRow label={TOTAL_LABELS.actualBeforeTax} value={money(summary.actualBeforeTax)} strong />
+
+                        {taxLines.length > 0 ? (
+                            taxLines.map((line) => <SummaryRow key={line.id} label={line.label} value={money(line.amount)} color="var(--crm-text-blue-600)" />)
+                        ) : (
+                            <SummaryRow label={`Add: ${gstType ? GST_TYPE_LABELS[gstType] : TOTAL_LABELS.totalTax}`} value={money(0)} color="var(--crm-text-blue-600)" />
                         )}
+                        {gstHint && <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-muted)', mt: -0.5 }}>{gstHint}</Typography>}
+
+                        <SummaryRow
+                            field="roundOff"
+                            label={
+                                <Box component="label" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, cursor: 'pointer', ml: -1 }}>
+                                    <Checkbox
+                                        size="small"
+                                        checked={roundOff}
+                                        onChange={(e) => changeRoundOff(e.target.checked)}
+                                        slotProps={{ input: { 'aria-label': TOTAL_LABELS.roundOffAmount } }}
+                                        sx={{ p: 0.75 }}
+                                    />
+                                    {TOTAL_LABELS.roundOffAmount}
+                                </Box>
+                            }
+                            value={roundOffText(summary.roundOffAmount, money)}
+                        />
+
                         <Divider sx={{ my: 0.5 }} />
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
                             <Typography sx={{ fontSize: '0.92rem', fontWeight: 800, color: 'var(--crm-slate-900)' }}>{TOTAL_LABELS.grandTotal}</Typography>
-                            <Typography sx={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--crm-green-700)', whiteSpace: 'nowrap' }}>{money(totals.grandTotal)}</Typography>
+                            <Typography sx={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--crm-green-700)', whiteSpace: 'nowrap' }}>{money(summary.grandTotal)}</Typography>
                         </Box>
                     </Box>
                 </Paper>
@@ -764,18 +843,59 @@ function splitLineItemErrors(errors: FieldErrors<CrmLineItemsValues>['lineItems'
     return { error: messageOf(list) ?? messageOf(list.root), lineErrors };
 }
 
+/** The customer's address fields a form with line items may hold (quotations: their own; opportunities: none). */
+interface CustomerAddressValues {
+    organizationId?: string;
+    billingState?: string;
+    shippingState?: string;
+    copyAddressFromBilling?: boolean;
+}
+
+/**
+ * The GST split for a record: IGST when the customer's state (shipping, else billing) differs from the Company State,
+ * CGST + SGST when it is the same (or the customer has none), plain GST while no Company State is set. Quotations use
+ * their own address; opportunities their organization's. Undefined while either state is loading.
+ */
+export function useLineItemGst(customer: CustomerAddressValues, source: 'record' | 'organization'): { gstType: GstType | null | undefined; gstHint: string } {
+    const company = useCompanySettings();
+    const organizationId = source === 'organization' ? customer.organizationId || undefined : undefined;
+    const organization = useOrganization(organizationId);
+    const companyState = company.data?.companyState ?? '';
+    const address = source === 'organization' ? organization.data : customer;
+    const customerState = customerStateOf(address ?? null);
+    if (company.isPending || (organizationId && organization.isPending)) return { gstType: undefined, gstHint: '' };
+    const gstType = gstTypeFor(companyState, customerState);
+    if (!gstType) return { gstType, gstHint: 'Set the Company State in Admin › Company Details to charge IGST or CGST + SGST.' };
+    if (!customerState) return { gstType, gstHint: `CGST + SGST: the customer has no state, so ${companyState} is assumed.` };
+    return {
+        gstType,
+        gstHint: gstType === 'IGST' ? `IGST: the customer is in ${customerState}, outside ${companyState}.` : `CGST + SGST: the customer is in ${companyState}, like the company.`,
+    };
+}
+
 function RhfLineItemsConnected({ withCurrency = false }: { withCurrency?: boolean }) {
-    const { control, setValue } = useFormContext<CrmLineItemsValues>();
+    const { control, setValue } = useFormContext<CrmLineItemsValues & CustomerAddressValues>();
     const { errors, isSubmitted } = useFormState({ control, name: 'lineItems' });
 
     const currency = useWatch({ control, name: 'currency' });
     const lineItems = useWatch({ control, name: 'lineItems' });
     const lumpSumDiscount = useWatch({ control, name: 'lumpSumDiscount' });
+    const roundOff = useWatch({ control, name: 'roundOff' });
+    const stored = useWatch({ control, name: ['gstType', ...WRITTEN_TOTALS] });
+    const [organizationId, billingState, shippingState, copyAddressFromBilling] = useWatch({
+        control,
+        name: ['organizationId', 'billingState', 'shippingState', 'copyAddressFromBilling'],
+    });
+    // Quotations (the ones with a currency) carry their own address; opportunities take their organization's.
+    const { gstType, gstHint } = useLineItemGst({ organizationId, billingState, shippingState, copyAddressFromBilling }, withCurrency ? 'record' : 'organization');
 
     const currentValue: CrmLineItemsValues = {
         ...(withCurrency ? { currency: currency || DEFAULT_CURRENCY } : {}),
         lineItems: Array.isArray(lineItems) ? lineItems : [],
         lumpSumDiscount: typeof lumpSumDiscount === 'number' ? lumpSumDiscount : 0,
+        roundOff: toRoundOff(roundOff),
+        gstType: toGstType(stored[0]),
+        ...Object.fromEntries(WRITTEN_TOTALS.map((key, i) => [key, stored[i + 1]])),
     };
 
     const handleChange = useCallback(
@@ -790,7 +910,17 @@ function RhfLineItemsConnected({ withCurrency = false }: { withCurrency?: boolea
     );
 
     const { error, lineErrors } = splitLineItemErrors(errors.lineItems);
-    return <CrmLineItemsEditor value={currentValue} onChange={handleChange} error={error} lineErrors={lineErrors} withCurrency={withCurrency} />;
+    return (
+        <CrmLineItemsEditor
+            value={currentValue}
+            onChange={handleChange}
+            error={error}
+            lineErrors={lineErrors}
+            withCurrency={withCurrency}
+            gstType={gstType}
+            gstHint={gstHint}
+        />
+    );
 }
 
 export function RhfLineItemsSection({ withCurrency = false }: { withCurrency?: boolean } = {}) {
@@ -808,7 +938,7 @@ export function CrmLineItemsSection(props: CrmLineItemsSectionProps = {}) {
 
     // 1. If explicit value and onChange are provided, render pure controlled component
     if (props.value && props.onChange) {
-        return <CrmLineItemsEditor value={props.value} onChange={props.onChange} error={props.error} withCurrency={withCurrency} />;
+        return <CrmLineItemsEditor value={props.value} onChange={props.onChange} error={props.error} withCurrency={withCurrency} gstType={props.gstType} gstHint={props.gstHint} />;
     }
 
     // 2. If legacy form & setField are provided, adapt without RHF
@@ -817,8 +947,10 @@ export function CrmLineItemsSection(props: CrmLineItemsSectionProps = {}) {
             ...(withCurrency ? { currency: props.form.currency || DEFAULT_CURRENCY } : {}),
             lineItems: Array.isArray(props.form.lineItems) ? props.form.lineItems : [],
             lumpSumDiscount: props.form.lumpSumDiscount || 0,
+            roundOff: toRoundOff(props.form.roundOff),
+            gstType: props.form.gstType,
         };
-        return <CrmLineItemsEditor value={legacyValue} onChange={props.setField} error={props.error} withCurrency={withCurrency} />;
+        return <CrmLineItemsEditor value={legacyValue} onChange={props.setField} error={props.error} withCurrency={withCurrency} gstType={props.gstType} gstHint={props.gstHint} />;
     }
 
     // 3. If within a FormProvider, delegate to the RHF connected wrapper

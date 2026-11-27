@@ -13,6 +13,8 @@ import { DRAWER_LAYOUTS_QUERY_KEY } from '@/hooks/queries/useDrawerLayouts';
 import { MASTER_DATA_SYNC_ENTITY } from '@/services/masterData.service';
 import { COMPANY_FORMATS_SYNC_ENTITY } from '@/services/companyFormats.service';
 import { COMPANY_FORMATS_QUERY_KEY } from '@/hooks/queries/useCompanyFormats';
+import { COMPANY_SETTINGS_SYNC_ENTITY } from '@/services/companySettings.service';
+import { COMPANY_SETTINGS_QUERY_KEY } from '@/hooks/queries/useCompanySettings';
 
 export function QueryProvider({ children }: { children: React.ReactNode }) {
     const [queryClient] = useState(
@@ -47,6 +49,13 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
                 // Admin › Company formats: refetch even where nothing observes the query, so the display store updates.
                 if (entity === COMPANY_FORMATS_SYNC_ENTITY) {
                     queryClient.invalidateQueries({ queryKey: COMPANY_FORMATS_QUERY_KEY, refetchType: 'all' });
+                    return;
+                }
+                // Admin › Company Details: records saved without a company state take the GST split, so their totals change too.
+                if (entity === COMPANY_SETTINGS_SYNC_ENTITY) {
+                    queryClient.invalidateQueries({ queryKey: COMPANY_SETTINGS_QUERY_KEY });
+                    queryClient.invalidateQueries({ queryKey: queryKeys.opportunities.all });
+                    queryClient.invalidateQueries({ queryKey: queryKeys.quotations.all });
                     return;
                 }
                 // Writes that change the user directory / masters behind the lookups (e.g. a user's company email).

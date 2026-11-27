@@ -226,14 +226,23 @@ function totalsHtml(block: BlockOf<'totals'>, ctx: RenderContext, theme: Theme, 
     const border = p.bordered ? `border:1px solid ${BORDER};` : '';
     const grandBg = resolveColor(p.grandTotalBackground ?? 'accent', theme) ?? theme.accentColor;
     const grandColor = resolveColor(p.grandTotalColor ?? '#ffffff', theme) ?? '#ffffff';
+    const line = (key: string, label: string, value: string) => {
+        const grand = key === 'grandTotal' && p.highlightGrandTotal ? `background:${grandBg};color:${grandColor};font-weight:700;` : '';
+        return `<tr><th data-total="${key}" style="text-align:left;font-weight:${key === 'grandTotal' ? 700 : 600};padding:1mm 2mm;width:${num(p.labelWidthPct)}%;${border}${grand}">${escapeHtml(label)}</th><td style="text-align:right;padding:1mm 2mm;white-space:nowrap;${border}${grand}">${escapeHtml(value)}</td></tr>`;
+    };
     const rows = p.rows
         .filter((row) => row.visible)
         .filter((row) => opts.mode === 'editor' || !row.hideIfZero || Number(totals[row.key] ?? 0) !== 0)
         .map((row) => {
+            // One "Add: IGST @ 18%" (or CGST + SGST) line per GST rate, from totals.taxRows.
+            if (row.key === 'taxes') {
+                const taxRows = Array.isArray(totals.taxRows) ? totals.taxRows.filter(isRecord) : [];
+                if (taxRows.length === 0) return opts.mode === 'editor' ? line('taxes', row.label, '') : '';
+                return taxRows.map((tax) => line('taxes', String(tax.label ?? ''), String(tax.amountFormatted ?? ''))).join('');
+            }
             const value = getValue(ctx, `totals.${row.key}Formatted`);
             const minus = (row.key === 'totalDiscount' || row.key === 'lumpSumDiscount') && value ? '- ' : '';
-            const grand = row.key === 'grandTotal' && p.highlightGrandTotal ? `background:${grandBg};color:${grandColor};font-weight:700;` : '';
-            return `<tr><th data-total="${row.key}" style="text-align:left;font-weight:${row.key === 'grandTotal' ? 700 : 600};padding:1mm 2mm;width:${num(p.labelWidthPct)}%;${border}${grand}">${escapeHtml(row.label)}</th><td style="text-align:right;padding:1mm 2mm;white-space:nowrap;${border}${grand}">${minus}${escapeHtml(value)}</td></tr>`;
+            return line(row.key, row.label, `${minus}${value}`);
         })
         .join('');
     return { html: `<table style="width:100%;border-collapse:collapse">${rows}</table>`, empty: rows === '' };

@@ -386,6 +386,11 @@ function TotalsSettings({ block, set, disabled, accent }: Props<'totals'>) {
                         </Box>
                     ))}
                     <Typography sx={{ fontSize: '0.68rem', color: 'var(--mui-palette-text-muted)' }}>Second tick box: hide the row when its amount is zero.</Typography>
+                    {p.rows.some((row) => row.key === 'taxes') && (
+                        <Typography sx={{ fontSize: '0.68rem', color: 'var(--mui-palette-text-muted)' }}>
+                            The GST rows print one line per GST rate (Add: IGST @ 18%, or Add: CGST @ 9% and Add: SGST @ 9%), labelled by the record.
+                        </Typography>
+                    )}
                 </Box>
             </Field>
             <SwitchRow label="Highlight grand total" checked={p.highlightGrandTotal} onChange={(v) => set((pp) => void (pp.highlightGrandTotal = v))} disabled={disabled} />

@@ -1,3 +1,4 @@
+import type { GstType } from '@/lib/line-items/lineItemMath';
 import type { LineItem } from './lineItem.types';
 import type { RecordFile } from './recordFile.types';
 
@@ -83,10 +84,19 @@ export interface OpportunityFormData {
     // Line Items Tab (no currency: it is set per quotation)
     lineItems: OpportunityLineItem[];
     lumpSumDiscount: number;
+    /** Round Off checkbox (on by default). */
+    roundOff: boolean;
+    /** Gross Amount. */
     totalAmount: number;
     totalDiscount: number;
+    /** Total Taxable Amount. */
     subtotal: number;
+    /** Actual (Before Tax): Total Taxable Amount − Lump Sum Discount. */
+    actualBeforeTax: number;
     totalTax: number;
+    /** IGST or CGST_SGST as saved; null = plain GST (no company state then). */
+    gstType?: GstType | null;
+    roundOffAmount: number;
     grandTotal: number;
 }
 

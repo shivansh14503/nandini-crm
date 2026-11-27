@@ -1,6 +1,6 @@
 import type { Prisma, Quotation, QuotationLineItem } from '../../generated/prisma/client.js';
 import { decimalToNumber, fromDateOnly, nullable, parseCustomFields, serializeCustomFields, text, toDateOnly, toIso } from '../../utils/mappers.js';
-import { toLineItemDtos, type LineItemDto, type LineItemTotals } from '../shared/lineItems.js';
+import { toGstType, toLineItemDtos, type GstType, type LineItemDto, type LineItemTotals } from '../shared/lineItems.js';
 import type { QuotationInput } from './quotation.validator.js';
 
 export type QuotationRow = Quotation & {
@@ -33,10 +33,19 @@ export interface QuotationDto {
     currency: string;
     lineItems: LineItemDto[];
     lumpSumDiscount: number;
+    /** Gross Amount. */
     totalAmount: number;
     totalDiscount: number;
+    /** Total Taxable Amount. */
     subtotal: number;
+    /** Actual (Before Tax): Total Taxable Amount − Lump Sum Discount. */
+    actualBeforeTax: number;
+    /** IGST or CGST_SGST as saved; null = plain GST (no company state then). */
+    gstType: GstType | null;
     totalTax: number;
+    /** Round Off checkbox. */
+    roundOff: boolean;
+    roundOffAmount: number;
     grandTotal: number;
     organizationName: string;
     organizationId?: string;
@@ -99,7 +108,11 @@ export function toQuotationDto(row: QuotationRow): QuotationDto {
         totalAmount: decimalToNumber(row.totalAmount),
         totalDiscount: decimalToNumber(row.totalDiscount),
         subtotal: decimalToNumber(row.subtotal),
+        actualBeforeTax: decimalToNumber(row.actualBeforeTax),
+        gstType: toGstType(row.gstType),
         totalTax: decimalToNumber(row.totalTax),
+        roundOff: row.roundOff,
+        roundOffAmount: decimalToNumber(row.roundOffAmount),
         grandTotal: decimalToNumber(row.grandTotal),
         organizationName: text(row.organizationName),
         organizationId: row.organizationId ?? undefined,
@@ -146,6 +159,7 @@ export function toQuotationData(
     input: QuotationInput,
     links: QuotationLinks,
     totals: LineItemTotals,
+    gstType: GstType | null,
 ): Omit<Prisma.QuotationUncheckedCreateInput, 'quotationCode' | 'createdBy'> {
     const billing = {
         address: input.billingAddress,
@@ -184,6 +198,8 @@ export function toQuotationData(
         preparedFor: input.preparedFor,
         currency: input.currency ?? DEFAULT_CURRENCY,
         lumpSumDiscount: input.lumpSumDiscount,
+        roundOff: input.roundOff,
+        gstType,
         ...totals,
         organizationName: nullable(input.organizationName),
         organizationId: links.organizationId,

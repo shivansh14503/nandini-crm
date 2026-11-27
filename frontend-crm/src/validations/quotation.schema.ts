@@ -16,6 +16,7 @@ import {
     customFieldsSchema,
 } from './common';
 import { lineItemListSchema } from './lineItem.schema';
+import { GST_TYPES } from '@/lib/line-items/lineItemMath';
 
 /** Same line items as opportunities (Jira CRM-111): see lineItem.schema.ts. A quotation needs at least one. */
 export const quotationLineItemsSchema = lineItemListSchema({ required: true, record: 'quotation' });
@@ -45,10 +46,17 @@ export const quotationFormSchema = z.object({
     currency: optionalString.default('Indian Rupee: ₹'),
     lineItems: quotationLineItemsSchema,
     lumpSumDiscount: zodAmount.default(0),
+    // Round Off checkbox: on by default.
+    roundOff: z.boolean().default(true),
     totalAmount: zodAmount.default(0),
     totalDiscount: zodAmount.default(0),
     subtotal: zodAmount.default(0),
+    actualBeforeTax: zodAmount.default(0),
     totalTax: zodAmount.default(0),
+    // Set by the API from the company and customer states.
+    gstType: z.enum(GST_TYPES).nullish(),
+    // Signed: the Grand Total can round down.
+    roundOffAmount: z.coerce.number().default(0),
     grandTotal: zodAmount.default(0),
 
     // ── Tab 3: Address Information ────────────────────────────────

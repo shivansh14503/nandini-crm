@@ -2,7 +2,7 @@ import type { Opportunity } from '../types/opportunity.types';
 import type { ExtendedOrganization } from '../types/organization.types';
 import type { Contact } from '../types/contact.types';
 import type { Quotation, QuotationFormData, QuotationLineItem } from '../types/quotation.types';
-import { DEFAULT_CURRENCY, toLineItem, totalsOf } from '../lib/line-items';
+import { DEFAULT_CURRENCY, toGstType, toLineItem, toRoundOff, totalsOf } from '../lib/line-items';
 import { TERMS_TEMPLATE_DESCRIPTIONS, PAYMENT_TERMS_DESCRIPTIONS } from '../types/quotation.types';
 import { createCrudService } from './base.service';
 import { DEFAULT_COUNTRY_CODE, normalizeLegacyStateName } from '../data/addressMaster';
@@ -98,8 +98,11 @@ export function buildQuotationDefaultsFromOpportunity(
         currency: DEFAULT_CURRENCY,
         lineItems: mappedLineItems,
         lumpSumDiscount: opportunity.lumpSumDiscount || 0,
+        roundOff: toRoundOff(opportunity.roundOff),
+        // The opportunity's GST split until the quotation's own address is checked (the Line Items editor does it).
+        gstType: toGstType(opportunity.gstType),
         // Recomputed from the lines, exactly as the API checks them.
-        ...totalsOf(mappedLineItems, opportunity.lumpSumDiscount || 0),
+        ...totalsOf(mappedLineItems, { lumpSumDiscount: opportunity.lumpSumDiscount || 0, roundOff: opportunity.roundOff, gstType: opportunity.gstType }),
 
         // Tab 3: Address Information
         organizationName: opportunity.organizationName,

@@ -32,6 +32,7 @@ import importRouter from './modules/imports/import.routes.js';
 import formConfigRouter from './modules/form-configs/formConfig.routes.js';
 import documentSeriesRouter from './modules/document-series/documentSeries.routes.js';
 import companyFormatsRouter from './modules/company-formats/companyFormats.routes.js';
+import companySettingsRouter from './modules/company-settings/companySettings.routes.js';
 import holidayRouter from './modules/holidays/holiday.routes.js';
 import emailValidationRouter from './modules/email-verification/emailValidation.routes.js';
 import { resumeEmailValidationRuns } from './modules/email-verification/emailValidation.admin.service.js';
@@ -42,6 +43,7 @@ import { dropUnreadCountsOnRedisReady } from './modules/notifications/notificati
 import { drawerLayoutRouter, drawerPieceRouter } from './modules/drawer-layouts/drawerLayout.routes.js';
 import { seedFormConfigsSafely } from './modules/form-configs/formConfig.seed.js';
 import { loadProductCatalogSheetSafely } from './modules/products/productCatalog.load.js';
+import { recalculateLineItemTotalsOnceSafely } from './modules/shared/lineItemTotals.recalculate.js';
 import { pdfAssetRouter, pdfSavedItemRouter, pdfTemplateRouter } from './modules/pdf/pdf.routes.js';
 import recordFileRouter from './modules/files/recordFile.routes.js';
 import profileRouter from './modules/profile/profile.routes.js';
@@ -146,6 +148,7 @@ app.use('/api/admin/audit-logs', auditAdminRouter);
 app.use('/api/form-configs', formConfigRouter);
 app.use('/api/document-series', documentSeriesRouter);
 app.use('/api/company-formats', companyFormatsRouter);
+app.use('/api/company-settings', companySettingsRouter);
 app.use('/api/holidays', holidayRouter);
 app.use('/api/email-validation', emailValidationRouter);
 app.use('/api/table-filters', tableFilterRouter);
@@ -187,6 +190,8 @@ async function start(): Promise<Server> {
     await seedFormConfigsSafely();
     // The Product Catalog sheet, once (after the dropdowns its products use).
     await loadProductCatalogSheetSafely();
+    // Line item totals of every opportunity and quotation recomputed once with the Summary Breakdown (Jira CRM-111).
+    await recalculateLineItemTotalsOnceSafely();
     // Built-in PDF templates (Classic / Modern / Compact); admin-created templates are never touched.
     await seedPdfTemplatesSafely();
     // Admin › Roles: a row for every role users hold (with the access its name gave before); saved roles untouched.

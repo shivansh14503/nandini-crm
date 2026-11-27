@@ -109,10 +109,14 @@ const DEFAULT_OPPORTUNITY_FORM: OpportunityFormData = {
     // Line Items: the editor always shows one empty line (saved only once something is entered on it).
     lineItems: [],
     lumpSumDiscount: 0,
+    roundOff: true,
     totalAmount: 0,
     totalDiscount: 0,
     subtotal: 0,
+    actualBeforeTax: 0,
     totalTax: 0,
+    gstType: null,
+    roundOffAmount: 0,
     grandTotal: 0,
 };
 

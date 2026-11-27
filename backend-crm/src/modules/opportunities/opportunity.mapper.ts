@@ -1,7 +1,7 @@
 import type { Opportunity, OpportunityLineItem, Prisma } from '../../generated/prisma/client.js';
 import { decimalToNumber, fromDateOnly, fromOptionalDateOnly, nullable, parseCustomFields, parseStringArray, serializeCustomFields, stringifyStringArray, text, toDateOnly, toIso } from '../../utils/mappers.js';
 import { partnerCompanyFor } from '../shared/leadSource.js';
-import { toLineItemDtos, type LineItemDto, type LineItemTotals } from '../shared/lineItems.js';
+import { toGstType, toLineItemDtos, type GstType, type LineItemDto, type LineItemTotals } from '../shared/lineItems.js';
 import { toRecordFileDto, type RecordFileDto } from '../files/recordFile.service.js';
 import type { OpportunityDocumentRow } from '../documents/document.sync.js';
 import { defaultCommissionType, hasCommission, type OpportunityInput } from './opportunity.validator.js';
@@ -60,10 +60,19 @@ export interface OpportunityDto {
     documentFile: RecordFileDto | null;
     lineItems: LineItemDto[];
     lumpSumDiscount: number;
+    /** Gross Amount. */
     totalAmount: number;
     totalDiscount: number;
+    /** Total Taxable Amount. */
     subtotal: number;
+    /** Actual (Before Tax): Total Taxable Amount − Lump Sum Discount. */
+    actualBeforeTax: number;
+    /** IGST or CGST_SGST as saved; null = plain GST (no company state then). */
+    gstType: GstType | null;
     totalTax: number;
+    /** Round Off checkbox. */
+    roundOff: boolean;
+    roundOffAmount: number;
     grandTotal: number;
     createdAt: string;
     updatedAt: string;
@@ -120,7 +129,11 @@ export function toOpportunityDto(row: OpportunityRow): OpportunityDto {
         totalAmount: decimalToNumber(row.totalAmount),
         totalDiscount: decimalToNumber(row.totalDiscount),
         subtotal: decimalToNumber(row.subtotal),
+        actualBeforeTax: decimalToNumber(row.actualBeforeTax),
+        gstType: toGstType(row.gstType),
         totalTax: decimalToNumber(row.totalTax),
+        roundOff: row.roundOff,
+        roundOffAmount: decimalToNumber(row.roundOffAmount),
         grandTotal: decimalToNumber(row.grandTotal),
         createdAt: toIso(row.createdAt),
         updatedAt: toIso(row.updatedAt),
@@ -149,6 +162,7 @@ export function toOpportunityData(
     input: OpportunityInput,
     links: { organization: { id: string | null; name: string }; contact: { id: string | null; name: string } },
     totals: LineItemTotals,
+    gstType: GstType | null,
 ): Omit<Prisma.OpportunityUncheckedCreateInput, 'opportunityCode' | 'createdBy'> {
     return {
         customDataJson: serializeCustomFields(input.customFields),
@@ -184,6 +198,8 @@ export function toOpportunityData(
         // The document itself is written to the Document table (syncOpportunityDocument).
         addDocument: input.addDocument,
         lumpSumDiscount: input.lumpSumDiscount,
+        roundOff: input.roundOff,
+        gstType,
         ...totals,
     };
 }

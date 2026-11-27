@@ -17,7 +17,7 @@ import {
     requiredText,
     textWithDefault,
 } from '../../validators/common.js';
-import { requiredLineItemListSchema } from '../shared/lineItems.js';
+import { requiredLineItemListSchema, roundOffSchema } from '../shared/lineItems.js';
 
 /** QUOTE_STAGES / QUOTATION_STATUSES from frontend-crm/src/types/quotation.types.ts. */
 export const QUOTE_STAGES = ['Draft', 'Negotiation', 'Delivered', 'On Hold', 'Confirmed', 'Closed Accepted', 'Closed Lost', 'Closed Dead'] as const;
@@ -67,6 +67,8 @@ export const quotationInputSchema = z.preprocess(
             currency: optionalText('Currency', 30),
             lineItems: requiredLineItemListSchema,
             lumpSumDiscount: z.coerce.number({ error: 'Lump Sum Discount must be a number.' }).min(0, { message: 'Lump Sum Discount cannot be negative.' }).default(0),
+            // Summary Breakdown's Round Off checkbox (on unless sent false). GST type and the totals are computed, never taken.
+            roundOff: roundOffSchema,
 
             // Customer & address
             organizationName: optionalUpperText('Organization', L.organizationName),
