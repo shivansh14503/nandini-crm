@@ -18,7 +18,7 @@ import {
 import { lineItemListSchema } from './lineItem.schema';
 
 /** Same line items as opportunities (Jira CRM-111): see lineItem.schema.ts. A quotation needs at least one. */
-export const quotationLineItemsSchema = lineItemListSchema({ required: true });
+export const quotationLineItemsSchema = lineItemListSchema({ required: true, record: 'quotation' });
 
 export const quotationFormSchema = z.object({
     // ── Tab 1: Overview ───────────────────────────────────────────

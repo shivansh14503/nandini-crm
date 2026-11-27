@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { TransactionClient } from '../../config/prisma.js';
 import { Prisma } from '../../generated/prisma/client.js';
-import { calculateLineItems, lineItemListSchema, normalizeTaxRate, prepareLineItems, requiredLineItemListSchema } from './lineItems.js';
+import { assertHasLineItems, calculateLineItems, lineItemListSchema, normalizeTaxRate, prepareLineItems, requiredLineItemListSchema } from './lineItems.js';
 
 const line = { productName: 'TallyPrime Silver', quantity: 2, rate: 1000, discount: 10, taxRate: '18%' };
 
@@ -36,6 +36,12 @@ describe('line item math (CRM-111)', () => {
         assert.deepEqual(lineItemListSchema.parse([blank]), []);
         assert.equal(lineItemListSchema.parse([line, blank]).length, 1);
         assert.equal(requiredLineItemListSchema.safeParse([blank]).success, false);
+    });
+
+    it('an opportunity save needs one real line', () => {
+        const blank = { productName: '', quantity: 1, rate: 0, discount: 0, taxRate: '18%', description: '', note: '' };
+        assert.throws(() => assertHasLineItems(lineItemListSchema.parse([blank]), 'opportunity'), /line item is required to save the opportunity/);
+        assert.doesNotThrow(() => assertHasLineItems(lineItemListSchema.parse([line, blank]), 'opportunity'));
     });
 
     it('reads lines in the format before CRM-111', () => {

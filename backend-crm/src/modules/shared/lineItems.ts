@@ -18,7 +18,7 @@ export type { LineItemAmounts, LineItemTotals } from './lineItemMath.js';
  * Fields: Product, Quantity, Rate (the product's MRP; typed only for products without one), Gross Amount
  * (Quantity × Rate), Discount (a percentage), Taxable Amount (Gross − Discount), GST (the product's Tax Rate) and the
  * optional Description and Note. Only Discount, Description and Note may be left empty. A line with nothing entered
- * is dropped (the form always shows one empty line).
+ * is dropped (the form always shows one empty line). Quotations and opportunities both need at least one line.
  */
 
 const MAX_LINE_ITEMS = 200;
@@ -86,14 +86,28 @@ const dropBlankLines = (value: unknown): unknown =>
 
 const lineItemArray = z.array(lineItemInputSchema).max(MAX_LINE_ITEMS, { message: `At most ${MAX_LINE_ITEMS} line items are allowed.` });
 
-/** Opportunity line items: optional (an opportunity can be saved before its products are known). */
+/**
+ * Opportunity line items as stored: may be empty (opportunities made by Convert Lead, imports, or saved before the
+ * line was required). Create and form saves check requiredOpportunityLineItemsSchema on top.
+ */
 export const lineItemListSchema = z.preprocess(dropBlankLines, lineItemArray);
 
+/** "At least one line item" message for a record (`quotation`, `opportunity`). */
+export const lineItemsRequiredMessage = (record: string) => `At least one line item is required to save the ${record}.`;
+
+/** Line items with at least one filled line (quotations; opportunities saved from their form). */
+export const requiredLineItemList = (record: string) =>
+    z.preprocess(dropBlankLines, lineItemArray.min(1, { message: lineItemsRequiredMessage(record) }));
+
 /** Quotation line items: at least one. */
-export const requiredLineItemListSchema = z.preprocess(
-    dropBlankLines,
-    lineItemArray.min(1, { message: 'At least one line item is required to create a quotation.' }),
-);
+export const requiredLineItemListSchema = requiredLineItemList('quotation');
+
+/** Rejects a save with no filled line item (blank lines are already dropped by the list schemas). */
+export function assertHasLineItems(lineItems: readonly unknown[], record: string): void {
+    if (lineItems.length > 0) return;
+    const message = lineItemsRequiredMessage(record);
+    throw HttpError.badRequest(message, [{ path: ['lineItems'], message }]);
+}
 
 export interface ComputedLineItem extends LineItemInput, LineItemAmounts {}
 
