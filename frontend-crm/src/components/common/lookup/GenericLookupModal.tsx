@@ -87,6 +87,10 @@ const lockedFilterSx = {
     '& .MuiInputBase-input.Mui-disabled': { WebkitTextFillColor: 'var(--crm-slate-600)', color: 'var(--crm-slate-600)' },
     '& .MuiInputLabel-root.Mui-disabled': { color: 'var(--mui-palette-text-secondary)' },
     '& .MuiSelect-icon': { display: 'none' },
+    // A select keeps its end adornment clear of the (hidden) arrow; with no arrow the lock sits at the far right, as in
+    // a locked text filter.
+    '& .MuiSelect-select.MuiInputBase-input.MuiOutlinedInput-input': { paddingRight: '36px' },
+    '& .MuiOutlinedInput-root .MuiInputAdornment-positionEnd': { right: '10px' },
 } as const;
 
 const lockAdornment = (
