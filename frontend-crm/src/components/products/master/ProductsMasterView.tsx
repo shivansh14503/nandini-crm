@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation';
 import InventoryOutlinedIcon from '@mui/icons-material/InventoryOutlined';
 import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
 import NewReleasesOutlinedIcon from '@mui/icons-material/NewReleasesOutlined';
-import StarBorderIcon from '@mui/icons-material/StarBorder';
 import { CommonMasterView } from '../../common/CommonMasterView';
 import { useTableFilter } from '../../common/TableFilter';
 import { MasterHeaderActions } from '../../common/MasterHeaderActions';
@@ -19,11 +18,12 @@ import { ROUTES } from '@/config/constants';
 import type { Product } from '@/types/product.types';
 import { useProducts, useBulkDeleteProducts } from '@/hooks/queries';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
-import type { ProductFilterTab } from './types';
+import { productTypePill, typeOfPill, type ProductFilterTab } from './types';
 import { ProductDetailDrawer } from '../ProductDetailDrawer';
 import { useSearchScope, useSearchScopedRows } from '../../search/SearchScope';
 import { useProductColumns } from './productColumns';
 import { ModuleScorecardSummary, useModuleScorecard } from '../../common/scorecard/useModuleScorecard';
+import { sameOption, useDropdownPillOptions } from '../../common/filterPills/useDropdownPillOptions';
 
 const RECENTLY_ADDED_DAYS = 7;
 
@@ -84,19 +84,23 @@ export function ProductsMasterView() {
     // ── Filter Logic ──────────────────────────────────────────────────────────
     const showNumber = useShowRecordNumber();
     /** Products in the active pill view: the scorecard counts these. */
+    // One pill per active Product Type option (Admin › Dropdown Manager), so removing or renaming a type there
+    // removes or relabels its pill. A pill whose option was removed while selected falls back to All Products.
+    const productTypes = useDropdownPillOptions('product_type', 'products');
+    const selectedType = typeOfPill(activeTab);
+    const tabType = selectedType ? productTypes.find(selectedType) : undefined;
+    const effectiveTab: ProductFilterTab = selectedType && !tabType ? 'all' : activeTab;
     const tabProducts = useMemo(() => {
         const now = new Date().getTime();
         return products.filter((p) => {
-            if (activeTab === 'hardware' && !['Hardware', 'Networking', 'Storage', 'Security', 'Peripherals'].includes(p.category || '')) return false;
-            if (activeTab === 'software' && !['Software', 'License', 'Subscription'].includes(p.type || '')) return false;
-            if (activeTab === 'services' && !['AMC / Service', 'Cloud Services'].includes(p.category || '')) return false;
-            if (activeTab === 'recently_added') {
+            if (tabType && !sameOption(p.type, tabType.value)) return false;
+            if (effectiveTab === 'recently_added') {
                 const created = new Date(p.createdAt).getTime();
                 if (now - created > RECENTLY_ADDED_DAYS * 86400000) return false;
             }
             return true;
         });
-    }, [products, activeTab]);
+    }, [products, tabType, effectiveTab]);
 
     // Summary cards, once an admin switches them on under Admin › List Scorecards.
     const goToFirstPage = useCallback(() => setPage(0), []);
@@ -190,24 +194,12 @@ export function ProductsMasterView() {
                 icon: <InventoryOutlinedIcon sx={{ fontSize: 16 }} />,
                 count: products.length,
             },
-            {
-                id: 'hardware',
-                label: 'Hardware',
+            ...productTypes.options.map((option) => ({
+                id: productTypePill(option.value),
+                label: option.label,
                 icon: <CategoryOutlinedIcon sx={{ fontSize: 16 }} />,
-                count: products.filter((p) => ['Hardware', 'Networking', 'Storage', 'Security', 'Peripherals'].includes(p.category || '')).length,
-            },
-            {
-                id: 'software',
-                label: 'Software & Licenses',
-                icon: <StarBorderIcon sx={{ fontSize: 16 }} />,
-                count: products.filter((p) => ['Software', 'License', 'Subscription'].includes(p.type || '')).length,
-            },
-            {
-                id: 'services',
-                label: 'Services & AMC',
-                icon: <NewReleasesOutlinedIcon sx={{ fontSize: 16 }} />,
-                count: products.filter((p) => ['AMC / Service', 'Cloud Services'].includes(p.category || '')).length,
-            },
+                count: products.filter((p) => sameOption(p.type, option.value)).length,
+            })),
             {
                 id: 'recently_added',
                 label: 'Recently Added',
@@ -215,7 +207,7 @@ export function ProductsMasterView() {
                 count: products.filter((p) => now - new Date(p.createdAt).getTime() <= RECENTLY_ADDED_DAYS * 86400000).length,
             },
         ];
-    }, [products]);
+    }, [products, productTypes]);
 
 
     return (
@@ -225,7 +217,7 @@ export function ProductsMasterView() {
             summary={<ModuleScorecardSummary state={scorecard} loading={listLoading} />}
             filterConfig={{
                 filters: filterItems,
-                activeFilter: activeTab,
+                activeFilter: effectiveTab,
                 onFilterChange: (tab) => {
                     setActiveTab(tab);
                     setPage(0);

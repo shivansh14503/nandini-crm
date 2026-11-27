@@ -1,5 +1,6 @@
 'use client';
 
+import { CLOSED_STAGES } from '@/utils/opportunityResponseRules';
 import React, { useState, useMemo, useCallback } from 'react';
 import { useResetTab } from '@/hooks/useResetTab';
 import { useRouter } from 'next/navigation';
@@ -31,7 +32,8 @@ import { useOpportunityColumns } from './opportunityColumns';
 /** Stable empty list while the first page loads (keeps memoized filters from recomputing). */
 const NO_RECORDS: Opportunity[] = [];
 /** Still in the pipeline (not closed won / lost). */
-const isOpen = (o: Opportunity) => !['Closed Won', 'Closed Lost'].includes(o.salesStage);
+/** Closed Won / Closed Lost are system Sales Stage options (they can't be removed), shared with the form. */
+const isOpen = (o: Opportunity) => !CLOSED_STAGES.has(o.salesStage);
 export function OpportunitiesMasterView() {
     const router = useRouter();
     const { user } = useAuth();
