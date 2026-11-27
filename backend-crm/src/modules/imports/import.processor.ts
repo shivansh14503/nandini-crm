@@ -9,15 +9,19 @@ import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
 import { wallClockNow } from '../../utils/mappers.js';
 import { createContactRecord } from '../contacts/contact.service.js';
-import { checkModulePayload, loadModuleFieldConfig, type ModuleFieldConfig } from '../form-configs/customFieldValidator.js';
+import { checkModulePayload, loadModuleFieldConfig, throwFieldIssues, type ModuleFieldConfig } from '../form-configs/customFieldValidator.js';
 import { contactInputSchema } from '../contacts/contact.validator.js';
 import { assertStatusTransition, createLeadRecord } from '../leads/lead.service.js';
 import { loadRatingConfig, newLeadRatingColumns, type RatingConfig } from '../leads/lead.followUp.js';
-import { leadImportSchema } from '../leads/lead.validator.js';
+import { leadInputSchema } from '../leads/lead.validator.js';
 import { assertLeadSourceDetails } from '../shared/leadSource.js';
 import { createOrganizationRecord } from '../organizations/organization.service.js';
-import { organizationImportSchema } from '../organizations/organization.validator.js';
-import { createOpportunityRecord } from '../opportunities/opportunity.service.js';
+import { organizationInputSchema } from '../organizations/organization.validator.js';
+import { assertNatureOfPartner } from '../shared/customerType.js';
+import { activityOnlyTypeIssues } from '../shared/followupTypes.js';
+import { applyFollowUpPlan, assertDocumentation, assertPayeeBank, clearedKeys, createOpportunityRecord } from '../opportunities/opportunity.service.js';
+import { loadResponseRules, planOpportunityFollowUp, type ResponseRules } from '../opportunities/opportunity.followUp.js';
+import { buildImportPayload, splitDateTime } from './importValues.js';
 import { opportunityInputSchema } from '../opportunities/opportunity.validator.js';
 import { createPartnerCompanyRecord, invalidatePartnerCaches } from '../partner-companies/partnerCompany.service.js';
 import { partnerCompanyImportSchema } from '../partner-companies/partnerCompany.validator.js';
@@ -100,10 +104,12 @@ export const importCancelKey = (importId: string) => `import:cancel:${importId}`
 
 /** Progress is pushed at most this often (plus the first and last row), so a fast import doesn't flood Redis. */
 const PROGRESS_MIN_INTERVAL_MS = 250;
-/** Lead fields the template doesn't offer but the record requires; documented defaults, applied only when blank. */
-const LEAD_IMPORT_DEFAULTS = { leadSource: 'Other', remarks: 'Imported via bulk import', followupType: 'Call' } as const;
+/**
+ * Values the import fills in when a row leaves the field blank (the form would make the user pick them). Mirrored by
+ * IMPORT_DEFAULTS in frontend-crm/src/components/common/import/importFields.ts, which shows them on the mapping step.
+ */
+const LEAD_IMPORT_DEFAULTS = { leadSource: 'Other', remarks: 'Imported via bulk import', followupType: 'Call', status: 'New' } as const;
 
-/** Opportunity fields the template doesn't offer (or left blank) but the record requires. */
 const OPPORTUNITY_IMPORT_DEFAULTS = {
     productCategory: 'TallyPrime',
     type: 'New Business',
@@ -114,7 +120,6 @@ const OPPORTUNITY_IMPORT_DEFAULTS = {
     // Same "no commission" option lead conversion uses for new opportunities.
     commission: 'No',
 } as const;
-/** Ticket fields the template doesn't offer (or left blank) but the record requires. */
 const TICKET_IMPORT_DEFAULTS = {
     ticketPriority: 'Normal',
     ticketStatus: 'New',
@@ -123,19 +128,21 @@ const TICKET_IMPORT_DEFAULTS = {
     supportMode: 'Phone Consultation',
 } as const;
 const TICKET_IMPORT_DUE_IN_MS = 24 * 60 * 60 * 1000;
+/** A Due Date given without a time is due at the end of that working day. */
+const TICKET_IMPORT_DUE_TIME = '18:00';
 /** Partner companies: Nature of Partner is required by the form; 'Other' is a standing option of that list. */
 const PARTNER_IMPORT_DEFAULT_NATURE = 'Other';
-
-/** 'A, B; C' → ['A', 'B', 'C'] (multi-value spreadsheet cells). */
-const splitList = (value: string | undefined) => (value ?? '').split(/[,;]/).map((s) => s.trim()).filter(Boolean);
-
-const emailList = (email: string | undefined) =>
-    email ? [{ email, isPrimary: true, isOptedOut: false, isInvalidBounce: false }] : [];
+/** Imported Remarks shorter than this are replaced by the default (the form asks for at least 3 characters). */
+const MIN_REMARKS_LENGTH = 3;
 
 const businessToday = () => wallClockNow(ENV.BUSINESS_TIMEZONE).toISOString().slice(0, 10);
 
 /** '18' → '18%' (spreadsheets often drop the percent sign). */
-const normalizeTaxRate = (value: string | undefined) => (value && /^\d+$/.test(value) ? `${value}%` : value);
+const normalizeTaxRate = (value: string | undefined) => (value && /^\d+$/.test(value.trim()) ? `${value.trim()}%` : value);
+
+const text = (value: unknown): string => (typeof value === 'string' ? value : '');
+const orDefault = (value: unknown, fallback: string): string => text(value).trim() || fallback;
+const remarksOr = (value: unknown, fallback: string): string => (text(value).trim().length >= MIN_REMARKS_LENGTH ? text(value) : fallback);
 
 type RowWriter = (tx: TransactionClient) => Promise<unknown>;
 
@@ -148,7 +155,7 @@ const hasFollowUpRows = (value: unknown): value is FollowUpRows =>
 
 /** Per-import data loaded once before the row loop. */
 interface ImportContext {
-    /** The entity's admin form configuration (required fields, formats, validation rules). */
+    /** The entity's admin form configuration: which fields the rows carry, required fields, formats, options. */
     fieldConfig: ModuleFieldConfig;
     /** Active users and the organizations the rows name, read once instead of once per row. */
     lookups: PrefetchedLookups;
@@ -159,6 +166,8 @@ interface ImportContext {
      * inside a row's transaction.
      */
     followUp?: FollowUpContext;
+    /** Opportunity imports: the Customer Response rules (Sales Stages a response is allowed at, no follow-up). */
+    responseRules?: ResponseRules;
 }
 
 /** Entities whose rows link to an organization by name. */
@@ -176,99 +185,78 @@ async function loadImportContext(data: ImportJobData): Promise<ImportContext> {
         : undefined;
     const ratingConfig = data.entity === 'leads' ? await loadRatingConfig(prisma) : undefined;
     const followUp = data.entity === 'leads' || data.entity === 'opportunities' ? await loadFollowUpContext() : undefined;
-    return { fieldConfig, lookups: { activeUsernames, organizationsByName }, ratingConfig, followUp };
+    const responseRules = data.entity === 'opportunities' ? await loadResponseRules(prisma) : undefined;
+    return { fieldConfig, lookups: { activeUsernames, organizationsByName }, ratingConfig, followUp, responseRules };
 }
 
 /**
- * Applies the admin form rules to a row. Required fields are enforced only for the columns the template maps
- * (the keys of `raw`): a field the template can't carry, such as a custom field, can't be required of a spreadsheet.
+ * Applies the admin form rules to a row exactly as the creation form does: every required field (custom fields
+ * included) must be filled, unless the import defaults it or `notRequired` names it; formats, rules and options are
+ * checked. Imports carry historical data, so custom dates before today are accepted. Returns the custom fields to store.
  */
-function checkRow(ctx: ImportContext, raw: Record<string, unknown>): void {
-    // Imports carry historical data, so custom dates before today are accepted.
-    checkModulePayload(ctx.fieldConfig, raw, undefined, { submittedKeys: new Set(Object.keys(raw)), allowPastDates: true });
+function checkRow(
+    ctx: ImportContext,
+    raw: Record<string, unknown>,
+    customFields: Record<string, unknown>,
+    notRequired?: ReadonlySet<string>,
+): Record<string, unknown> {
+    return checkModulePayload(ctx.fieldConfig, raw, customFields, { allowPastDates: true, notRequired });
 }
 
 /**
- * Maps a row's template values onto the entity's input, validates it, and returns the write to run.
- * Mirrors `importRows` in the frontend, but with values the server would otherwise reject defaulted explicitly.
+ * Maps a row's cells (keyed by the form's field keys, see importValues.ts) onto the entity's input, validates it
+ * with the creation form's rules, and returns the write to run. Fields the record needs but the row leaves blank
+ * get the documented import defaults above.
  */
 const rowBuilders: Record<ImportEntity, (v: Record<string, string>, user: AuthUser, ctx: ImportContext) => RowWriter> = {
     organizations: (v, user, ctx) => {
+        const { payload, customFields } = buildImportPayload(ctx.fieldConfig, v);
         const raw = {
-            organizationName: v.organizationName,
-            natureOfBusiness: v.natureOfBusiness,
-            customerType: v.customerType,
-            natureOfPartner: v.natureOfPartner,
-            accountStatus: v.accountStatus || 'Active',
-            billingAddress: v.billingStreet,
-            billingCity: v.billingCity,
-            billingState: v.billingState,
-            gstNumber: v.gstNumber,
-            registrationType: v.gstNumber ? 'Registered' : 'Unregistered',
-            assignedTo: user.username,
+            ...payload,
+            accountStatus: orDefault(payload.accountStatus, 'Active'),
+            registrationType: orDefault(payload.registrationType, payload.gstNumber ? 'Registered' : 'Unregistered'),
+            assignedTo: orDefault(payload.assignedTo, user.username),
+            customFields,
         };
-        const input = organizationImportSchema.parse(raw);
-        checkRow(ctx, raw);
+        const input = organizationInputSchema.parse(raw);
+        assertNatureOfPartner(input);
+        input.customFields = checkRow(ctx, raw, customFields);
         return (tx) => createOrganizationRecord(tx, input, user, ctx.lookups);
     },
     contacts: (v, user, ctx) => {
-        const raw = {
-            name: v.name,
-            organizationName: v.organizationName,
-            mobile: v.mobile,
-            officePhone: v.officePhone,
-            emailAddress: emailList(v.email),
-            assignedTo: user.username,
-            designation: v.designation,
-            department: v.department,
-            addDescription: v.addDescription,
-            communicationType: [],
-        };
+        const { payload, customFields } = buildImportPayload(ctx.fieldConfig, v);
+        const raw = { ...payload, assignedTo: orDefault(payload.assignedTo, user.username), customFields };
         const input = contactInputSchema.parse(raw);
-        checkRow(ctx, raw);
+        input.customFields = checkRow(ctx, raw, customFields);
         return (tx) => createContactRecord(tx, input, user, ctx.lookups);
     },
     products: (v, user, ctx) => {
-        const taxRate = normalizeTaxRate(v.taxRate);
-        const raw = {
-            productName: v.productName,
-            hsnCode: v.hsnCode,
-            category: v.category,
-            type: v.type,
-            manufacturer: v.manufacturer,
-            taxType: taxRate ? 'GST' : undefined,
-            taxRate,
-            cost: v.cost,
-            mrp: v.mrp,
-            description: v.description,
-        };
+        const { payload, customFields } = buildImportPayload(ctx.fieldConfig, { ...v, taxRate: normalizeTaxRate(v.taxRate) ?? '' });
+        const raw = { ...payload, taxType: orDefault(payload.taxType, payload.taxRate ? 'GST' : ''), customFields };
         const input = productInputSchema.parse(raw);
-        checkRow(ctx, raw);
+        input.customFields = checkRow(ctx, raw, customFields);
         return (tx) => createProductRecord(tx, input, user);
     },
     leads: (v, user, ctx) => {
-        const status = v.status || 'New';
+        const { payload, customFields } = buildImportPayload(ctx.fieldConfig, v);
+        const followUp = splitDateTime(payload.nextFollowupDate);
+        const status = orDefault(payload.status, LEAD_IMPORT_DEFAULTS.status);
         assertStatusTransition(null, status);
         const raw = {
-            name: v.name,
-            mobile: v.mobile,
-            emailAddress: emailList(v.email),
-            organizationName: v.organizationName,
-            leadSource: v.leadSource || LEAD_IMPORT_DEFAULTS.leadSource,
-            referredBy: v.referredBy,
-            partnerCompany: v.partnerCompany,
-            leadType: v.leadType,
+            ...payload,
+            leadSource: orDefault(payload.leadSource, LEAD_IMPORT_DEFAULTS.leadSource),
             status,
-            primaryCity: v.primaryCity,
-            primaryState: v.primaryState,
-            remarks: v.remarks && v.remarks.length >= 3 ? v.remarks : LEAD_IMPORT_DEFAULTS.remarks,
-            followupType: LEAD_IMPORT_DEFAULTS.followupType,
-            nextFollowupDate: businessToday(),
-            assignedTo: user.username,
+            remarks: remarksOr(payload.remarks, LEAD_IMPORT_DEFAULTS.remarks),
+            followupType: orDefault(payload.followupType, LEAD_IMPORT_DEFAULTS.followupType),
+            nextFollowupDate: followUp.date ?? businessToday(),
+            nextFollowupTime: followUp.time,
+            assignedTo: orDefault(payload.assignedTo, user.username),
+            customFields,
         };
-        const input = leadImportSchema.parse(raw);
+        const input = leadInputSchema.parse(raw);
         assertLeadSourceDetails(input);
-        checkRow(ctx, raw);
+        throwFieldIssues(activityOnlyTypeIssues(input.followupType));
+        input.customFields = checkRow(ctx, raw, customFields);
         // Rated like any new lead: by the new-lead rule, from today to its follow-up.
         if (!ctx.ratingConfig) throw new Error('Lead import context has no Rating rules.');
         const rating = newLeadRatingColumns(ctx.ratingConfig, businessToday(), input.nextFollowupDate);
@@ -283,28 +271,34 @@ const rowBuilders: Record<ImportEntity, (v: Record<string, string>, user: AuthUs
         };
     },
     opportunities: (v, user, ctx) => {
-        const productCategory = splitList(v.productCategory);
+        const { payload, customFields } = buildImportPayload(ctx.fieldConfig, v);
+        const followUp = splitDateTime(payload.nextFollowupDate);
+        const productCategory = Array.isArray(payload.productCategory) ? payload.productCategory : [];
         const raw = {
-            organizationName: v.organizationName,
-            contact: v.contact,
-            contactNumber: v.contactNumber,
-            contactEmail: v.contactEmail,
+            ...payload,
             productCategory: productCategory.length ? productCategory : [OPPORTUNITY_IMPORT_DEFAULTS.productCategory],
-            type: v.type || OPPORTUNITY_IMPORT_DEFAULTS.type,
-            salesStage: v.salesStage || OPPORTUNITY_IMPORT_DEFAULTS.salesStage,
-            leadSource: v.leadSource || OPPORTUNITY_IMPORT_DEFAULTS.leadSource,
-            referredBy: v.referredBy,
-            partnerCompany: v.partnerCompany,
-            leadGivenBy: v.leadGivenBy || user.username,
-            nextFollowupDate: businessToday(),
-            followupType: OPPORTUNITY_IMPORT_DEFAULTS.followupType,
-            remarks: v.remarks && v.remarks.length >= 3 ? v.remarks : OPPORTUNITY_IMPORT_DEFAULTS.remarks,
-            commission: OPPORTUNITY_IMPORT_DEFAULTS.commission,
-            assignedTo: user.username,
+            type: orDefault(payload.type, OPPORTUNITY_IMPORT_DEFAULTS.type),
+            salesStage: orDefault(payload.salesStage, OPPORTUNITY_IMPORT_DEFAULTS.salesStage),
+            leadSource: orDefault(payload.leadSource, OPPORTUNITY_IMPORT_DEFAULTS.leadSource),
+            leadGivenBy: orDefault(payload.leadGivenBy, user.username),
+            nextFollowupDate: followUp.date ?? businessToday(),
+            nextFollowupTime: followUp.time,
+            followupType: orDefault(payload.followupType, OPPORTUNITY_IMPORT_DEFAULTS.followupType),
+            remarks: remarksOr(payload.remarks, OPPORTUNITY_IMPORT_DEFAULTS.remarks),
+            commission: orDefault(payload.commission, OPPORTUNITY_IMPORT_DEFAULTS.commission),
+            assignedTo: orDefault(payload.assignedTo, user.username),
+            customFields,
         };
         const input = opportunityInputSchema.parse(raw);
+        assertDocumentation(input);
+        assertPayeeBank(input);
         assertLeadSourceDetails(input);
-        checkRow(ctx, raw);
+        throwFieldIssues(activityOnlyTypeIssues(input.followupType));
+        // Sales Stage → Customer Response → follow-up, as on the form; imports may carry a follow-up already past.
+        if (!ctx.responseRules) throw new Error('Opportunity import context has no Response rules.');
+        const plan = planOpportunityFollowUp(input, Boolean(input.customerResponse?.trim()), ctx.responseRules, '');
+        applyFollowUpPlan(input, plan);
+        input.customFields = checkRow(ctx, { ...raw, ...plan }, customFields, clearedKeys(plan, input.salesStage));
         const context = ctx.followUp;
         if (!context) throw new Error('Opportunity import context has no follow-up context.');
         return async (tx): Promise<FollowUpRows> => {
@@ -314,46 +308,41 @@ const rowBuilders: Record<ImportEntity, (v: Record<string, string>, user: AuthUs
         };
     },
     tickets: (v, user, ctx) => {
-        // Nature Of Call is resolved against the master inside the write (blank / unknown → first active entry).
-        const dueDate = new Date(wallClockNow(ENV.BUSINESS_TIMEZONE).getTime() + TICKET_IMPORT_DUE_IN_MS).toISOString().slice(0, 16);
+        const { payload, customFields } = buildImportPayload(ctx.fieldConfig, v);
+        const due = splitDateTime(payload.dueDate);
+        const dueDate = due.date
+            ? `${due.date}T${due.time ?? TICKET_IMPORT_DUE_TIME}`
+            : new Date(wallClockNow(ENV.BUSINESS_TIMEZONE).getTime() + TICKET_IMPORT_DUE_IN_MS).toISOString().slice(0, 16);
         const raw = {
-            organizationName: v.organizationName,
-            contact: v.contact,
-            contactNumber: v.contactNumber,
-            contactEmail: v.contactEmail,
-            ticketSubject: v.ticketSubject,
-            problemReported: v.problemReported,
-            ticketPriority: v.ticketPriority || TICKET_IMPORT_DEFAULTS.ticketPriority,
-            ticketStatus: v.ticketStatus || TICKET_IMPORT_DEFAULTS.ticketStatus,
-            source: TICKET_IMPORT_DEFAULTS.source,
-            supportType: v.supportType || TICKET_IMPORT_DEFAULTS.supportType,
-            supportMode: v.supportMode || TICKET_IMPORT_DEFAULTS.supportMode,
+            ...payload,
+            ticketPriority: orDefault(payload.ticketPriority, TICKET_IMPORT_DEFAULTS.ticketPriority),
+            ticketStatus: orDefault(payload.ticketStatus, TICKET_IMPORT_DEFAULTS.ticketStatus),
+            source: orDefault(payload.source, TICKET_IMPORT_DEFAULTS.source),
+            supportType: orDefault(payload.supportType, TICKET_IMPORT_DEFAULTS.supportType),
+            supportMode: orDefault(payload.supportMode, TICKET_IMPORT_DEFAULTS.supportMode),
             dueDate,
-            assignedTo: user.username,
+            assignedTo: orDefault(payload.assignedTo, user.username),
+            customFields,
         };
         const fields = ticketInputSchema.omit({ natureOfCall: true }).parse(raw);
-        checkRow(ctx, raw);
+        // Nature Of Call is resolved against the master inside the write (blank / unknown → first active entry).
+        fields.customFields = checkRow(ctx, raw, customFields, new Set(['natureOfCall']));
+        const natureOfCallCell = text(payload.natureOfCall);
         return async (tx) => {
-            const natureOfCall = await resolveImportNatureOfCall(tx, v.natureOfCall);
+            const natureOfCall = await resolveImportNatureOfCall(tx, natureOfCallCell);
             return createTicketRecord(tx, { ...fields, natureOfCall }, user, ctx.lookups);
         };
     },
     'partner-companies': (v, user, ctx) => {
+        const { payload, customFields } = buildImportPayload(ctx.fieldConfig, v);
         const raw = {
-            partnerName: v.partnerName,
-            natureOfPartner: v.natureOfPartner || PARTNER_IMPORT_DEFAULT_NATURE,
-            officePhone: v.officePhone,
-            emailAddress: emailList(v.email),
-            billingAddress: v.billingStreet,
-            billingCity: v.billingCity,
-            billingState: v.billingState,
-            billingPostalCode: v.billingPostalCode,
-            gstNumber: v.gstNumber,
-            principalCompany: v.principalCompany,
-            assignedTo: user.username,
+            ...payload,
+            natureOfPartner: orDefault(payload.natureOfPartner, PARTNER_IMPORT_DEFAULT_NATURE),
+            assignedTo: orDefault(payload.assignedTo, user.username),
+            customFields,
         };
         const input = partnerCompanyImportSchema.parse(raw);
-        checkRow(ctx, raw);
+        input.customFields = checkRow(ctx, raw, customFields);
         return (tx) => createPartnerCompanyRecord(tx, input, user);
     },
 };

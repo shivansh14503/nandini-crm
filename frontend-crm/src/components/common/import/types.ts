@@ -8,12 +8,21 @@ export type ImportEntityType =
     | 'partner-companies';
 
 export interface ImportFieldDef {
+    /** The form's field key (custom fields: `customFields.<key>`), which is also the key the row values are sent under. */
     key: string;
     label: string;
     required: boolean;
     /** Lower-case alternative header names used for smart auto-matching. */
     aliases: string[];
     sample: [string, string];
+    /** Form Builder field type (text, select, multiselect, date, datetime, checkbox, phone, email, amount …). */
+    fieldType?: string;
+    /** Active dropdown options of a select / multi-select field (value stored, label shown). */
+    options?: { value: string; label: string }[];
+    /** One line under the field on the mapping step: the expected format, or what a blank cell becomes. */
+    hint?: string;
+    /** Form section the field sits in (groups the mapping step). */
+    section?: string;
 }
 
 export interface ImportEntityConfig {
@@ -22,6 +31,8 @@ export interface ImportEntityConfig {
     singular: string;
     plural: string;
     fields: ImportFieldDef[];
+    /** Conditional rules across a row's normalized values (e.g. Referred By for Lead Source CA); error messages. */
+    rowRules?: (values: Record<string, string>) => string[];
 }
 
 /** A raw parsed row keyed by the file's own header names. */

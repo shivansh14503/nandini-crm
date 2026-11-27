@@ -58,11 +58,11 @@ const notFound = () => HttpError.notFound('Opportunity not found');
 
 /** Keys a save leaves empty on purpose (closed stage / "no follow-up" response), so they aren't required. */
 const FOLLOW_UP_KEYS = ['nextFollowupDate', 'nextFollowupTime'] as const;
-const clearedKeys = (plan: FollowUpPlan, salesStage: string): Set<string> =>
+export const clearedKeys = (plan: FollowUpPlan, salesStage: string): Set<string> =>
     new Set(plan.followUpCleared ? [...FOLLOW_UP_KEYS, ...(CLOSED_STAGES.has(salesStage.trim()) ? ['customerResponse'] : [])] : []);
 
 /** Puts the planned response and follow-up on the parsed input. */
-function applyFollowUpPlan(input: OpportunityInput, plan: FollowUpPlan): void {
+export function applyFollowUpPlan(input: OpportunityInput, plan: FollowUpPlan): void {
     input.customerResponse = plan.customerResponse;
     input.nextFollowupDate = plan.nextFollowupDate ?? undefined;
     input.nextFollowupTime = plan.nextFollowupTime;
@@ -135,13 +135,13 @@ const opportunityPastChecks = (input: OpportunityInput, before?: OpportunityDto)
 ];
 
 /** Add Document Yes at Sales Stage PO, and a file whenever it is Yes (documentationIssues). */
-function assertDocumentation(input: OpportunityInput): void {
+export function assertDocumentation(input: OpportunityInput): void {
     const issues = documentationIssues(input);
     if (issues.length) throw HttpError.badRequest(issues[0].message, issues);
 }
 
 /** Commission above 1,000 (Type Other): every payee bank detail is required (payeeBankIssues). */
-function assertPayeeBank(input: OpportunityInput): void {
+export function assertPayeeBank(input: OpportunityInput): void {
     const issues = payeeBankIssues(input);
     if (issues.length) throw HttpError.badRequest(issues[0].message, issues);
 }

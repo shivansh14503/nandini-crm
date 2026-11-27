@@ -29,6 +29,8 @@ export function ImportPreviewStep({ config, rows, previewLimit = 8 }: ImportPrev
     const validCount = rows.filter((r) => r.errors.length === 0).length;
     const errorCount = rows.length - validCount;
     const preview = rows.slice(0, previewLimit);
+    // Only the columns the file fills: a form can have dozens of fields, most of them left unmapped.
+    const shownFields = config.fields.filter((f) => rows.some((r) => r.values[f.key]));
 
     return (
         <Box>
@@ -45,7 +47,7 @@ export function ImportPreviewStep({ config, rows, previewLimit = 8 }: ImportPrev
                         <TableRow>
                             <TableCell sx={headCellSx}>ROW</TableCell>
                             <TableCell sx={headCellSx}>STATUS</TableCell>
-                            {config.fields.map((f) => (
+                            {shownFields.map((f) => (
                                 <TableCell key={f.key} sx={headCellSx}>
                                     {f.label.toUpperCase()}
                                 </TableCell>
@@ -65,7 +67,7 @@ export function ImportPreviewStep({ config, rows, previewLimit = 8 }: ImportPrev
                                             </Box>
                                         </Tooltip>
                                     </TableCell>
-                                    {config.fields.map((f) => (
+                                    {shownFields.map((f) => (
                                         <TableCell key={f.key} sx={{ fontSize: '0.78rem', color: 'var(--crm-slate-700)', maxWidth: 180 }}>
                                             <Typography noWrap sx={{ fontSize: 'inherit' }}>
                                                 {r.values[f.key] || '-'}

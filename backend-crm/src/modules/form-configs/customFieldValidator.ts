@@ -31,6 +31,8 @@ export interface ModuleFieldConfig {
     fields: readonly FormFieldDefinitionDto[];
     /** Active option values by dropdown category id. */
     activeOptions: ReadonlyMap<string, ReadonlySet<string>>;
+    /** Active options by dropdown category id: lower-cased value and label → stored value (imports match typed text). */
+    optionLookup?: ReadonlyMap<string, ReadonlyMap<string, string>>;
 }
 
 export interface PayloadCheckOptions {
@@ -69,10 +71,17 @@ const sameValue = (a: unknown, b: unknown) => a === b || JSON.stringify(a) === J
 export function buildModuleFieldConfig(configs: FormConfigsPayload, module: CrmModuleKey): ModuleFieldConfig {
     const fields = (configs.fieldsByModule[module] ?? []).filter((f) => !f.isDeleted);
     const activeOptions = new Map<string, Set<string>>();
+    const optionLookup = new Map<string, Map<string, string>>();
     for (const category of configs.categories) {
-        activeOptions.set(category.id, new Set(category.options.filter((o) => o.isActive).map((o) => o.value)));
+        const active = category.options.filter((o) => o.isActive);
+        activeOptions.set(category.id, new Set(active.map((o) => o.value)));
+        const lookup = new Map<string, string>();
+        // Labels first, so a value spelled like another option's label still resolves to itself.
+        for (const o of active) lookup.set(o.label.trim().toLowerCase(), o.value);
+        for (const o of active) lookup.set(o.value.trim().toLowerCase(), o.value);
+        optionLookup.set(category.id, lookup);
     }
-    return { module, fields, activeOptions };
+    return { module, fields, activeOptions, optionLookup };
 }
 
 /**

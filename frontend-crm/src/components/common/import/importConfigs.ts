@@ -1,5 +1,12 @@
 import type { ColumnMapping, ImportEntityConfig, ImportEntityType, MappedRow, ParsedFile } from './types';
+import { normalizeImportCell } from './importFields';
 
+/**
+ * Familiar spreadsheet columns of each import: the header aliases auto-mapping recognizes and the sample cells of the
+ * downloadable template, keyed by the form's field key. The mapping step itself offers every field of the module's
+ * creation form (`buildImportConfig` in importFields.ts, from the Form Builder configuration); this list is only its
+ * fallback while that configuration loads.
+ */
 export const IMPORT_CONFIGS: Record<ImportEntityType, ImportEntityConfig> = {
     organizations: {
         entity: 'organizations',
@@ -11,7 +18,7 @@ export const IMPORT_CONFIGS: Record<ImportEntityType, ImportEntityConfig> = {
             { key: 'customerType', label: 'Customer Type', required: false, aliases: ['type', 'customer'], sample: ['End User', 'Partner'] },
             { key: 'natureOfPartner', label: 'Nature of Partner', required: false, aliases: ['partner type', 'nature of partner'], sample: ['', 'TALLY-3STAR PARTNER'] },
             { key: 'accountStatus', label: 'Status', required: false, aliases: ['status', 'account status'], sample: ['Active', 'Active'] },
-            { key: 'billingStreet', label: 'Billing Street', required: false, aliases: ['street', 'address', 'billing address'], sample: ['12 MG Road', '45 Park Street'] },
+            { key: 'billingAddress', label: 'Billing Street', required: false, aliases: ['street', 'address', 'billing address', 'billing street'], sample: ['12 MG Road', '45 Park Street'] },
             { key: 'billingCity', label: 'Billing City', required: false, aliases: ['city'], sample: ['Mumbai', 'Bengaluru'] },
             { key: 'billingState', label: 'Billing State', required: false, aliases: ['state'], sample: ['Maharashtra', 'Karnataka'] },
             { key: 'gstNumber', label: 'GST Number', required: false, aliases: ['gst', 'gstin', 'gst no'], sample: ['27ABCDE1234F1Z5', '29ABCDE1234F1Z5'] },
@@ -24,7 +31,7 @@ export const IMPORT_CONFIGS: Record<ImportEntityType, ImportEntityConfig> = {
         fields: [
             { key: 'name', label: 'Name', required: true, aliases: ['full name', 'contact name', 'contact'], sample: ['Rahul Sharma', 'Priya Verma'] },
             { key: 'mobile', label: 'Mobile', required: false, aliases: ['phone', 'mobile no', 'mobile_no', 'telephone', 'cell', 'contact number'], sample: ['9876543210', '9123456780'] },
-            { key: 'email', label: 'Email', required: false, aliases: ['email address', 'e-mail', 'mail', 'email id'], sample: ['rahul@example.com', 'priya@example.com'] },
+            { key: 'emailAddress', label: 'Email Address', required: false, aliases: ['email', 'e-mail', 'mail', 'email id'], sample: ['rahul@example.com', 'priya@example.com'] },
             { key: 'organizationName', label: 'Organization', required: false, aliases: ['organization', 'company', 'company name', 'account'], sample: ['Acme Traders Pvt Ltd', 'Bright Tech Solutions'] },
             { key: 'designation', label: 'Designation', required: false, aliases: ['title', 'job title', 'role', 'position'], sample: ['Purchase Head / Manager', 'Director / Partner'] },
             { key: 'department', label: 'Department', required: false, aliases: ['dept'], sample: ['Purchase', 'Management'] },
@@ -55,16 +62,19 @@ export const IMPORT_CONFIGS: Record<ImportEntityType, ImportEntityConfig> = {
         fields: [
             { key: 'name', label: 'Name', required: true, aliases: ['full name', 'lead name', 'contact name'], sample: ['Amit Patel', 'Neha Gupta'] },
             { key: 'mobile', label: 'Mobile', required: false, aliases: ['phone', 'mobile no', 'mobile_no', 'telephone', 'contact number'], sample: ['9988776655', '9090909090'] },
-            { key: 'email', label: 'Email', required: false, aliases: ['email address', 'e-mail', 'mail', 'email id'], sample: ['amit@example.com', 'neha@example.com'] },
+            { key: 'emailAddress', label: 'Email Address', required: false, aliases: ['email', 'e-mail', 'mail', 'email id'], sample: ['amit@example.com', 'neha@example.com'] },
             { key: 'organizationName', label: 'Organization', required: false, aliases: ['organization', 'company', 'company name'], sample: ['Patel Enterprises', 'Gupta & Co'] },
+            { key: 'registrationType', label: 'Registration Type', required: false, aliases: ['gst registration', 'gst type'], sample: ['Unregistered', 'Registered'] },
+            { key: 'gstNumber', label: 'GST Number', required: false, aliases: ['gst', 'gstin', 'gst no'], sample: ['', '27ABCDE1234F1Z5'] },
+            { key: 'customerResponse', label: 'Customer Response', required: false, aliases: ['response'], sample: ['', ''] },
             { key: 'leadSource', label: 'Lead Source', required: false, aliases: ['source'], sample: ['Website Enquiry', 'CA'] },
             // Required when Lead Source is CA / Reference (Referred By) or Partner (Partner Company).
             { key: 'referredBy', label: 'Referred By', required: false, aliases: ['referred by', 'reference by', 'referrer'], sample: ['', 'Rajesh Kumar'] },
             { key: 'partnerCompany', label: 'Partner Company', required: false, aliases: ['partner', 'partner company', 'partner name'], sample: ['', ''] },
             { key: 'leadType', label: 'Lead Type', required: false, aliases: ['type'], sample: ['Inbound', 'Outbound'] },
             { key: 'status', label: 'Status', required: false, aliases: ['lead status', 'stage'], sample: ['New', 'Contacted'] },
-            { key: 'primaryCity', label: 'City', required: false, aliases: ['city'], sample: ['Pune', 'Delhi'] },
-            { key: 'primaryState', label: 'State', required: false, aliases: ['state'], sample: ['Maharashtra', 'Delhi'] },
+            { key: 'primaryCity', label: 'City', required: false, aliases: ['city', 'billing city'], sample: ['Pune', 'Delhi'] },
+            { key: 'primaryState', label: 'State / Region', required: false, aliases: ['state', 'billing state'], sample: ['Maharashtra', 'Delhi'] },
             { key: 'remarks', label: 'Remarks', required: false, aliases: ['notes', 'follow up remarks', 'description'], sample: ['Interested in TallyPrime', ''] },
         ],
     },
@@ -84,6 +94,10 @@ export const IMPORT_CONFIGS: Record<ImportEntityType, ImportEntityConfig> = {
             // Required when Lead Source is CA / Reference (Referred By) or Partner (Partner Company).
             { key: 'referredBy', label: 'Referred By', required: false, aliases: ['reference by', 'referrer'], sample: ['', ''] },
             { key: 'partnerCompany', label: 'Partner Company', required: false, aliases: ['partner', 'partner company', 'partner name'], sample: ['', 'ACME PARTNERS PVT LTD'] },
+            // Blank samples: a response needs a follow-up time, Commission Yes an amount and Add Document Yes a file.
+            { key: 'customerResponse', label: 'Customer Response', required: false, aliases: ['response'], sample: ['', ''] },
+            { key: 'commission', label: 'Commission', required: false, aliases: [], sample: ['No', 'No'] },
+            { key: 'addDocument', label: 'Add Document', required: false, aliases: [], sample: ['No', 'No'] },
             { key: 'leadGivenBy', label: 'Lead Given By', required: false, aliases: ['given by', 'referred by'], sample: ['Direct', 'Partner Network'] },
             { key: 'remarks', label: 'Remarks', required: false, aliases: ['notes', 'follow up remarks', 'requirement', 'add description'], sample: ['Requirement for 5 TallyPrime Silver licenses', 'Annual cloud renewal discussion'] },
         ],
@@ -115,8 +129,8 @@ export const IMPORT_CONFIGS: Record<ImportEntityType, ImportEntityConfig> = {
             { key: 'partnerName', label: 'Partner Name', required: true, aliases: ['partner name', 'name', 'company', 'organization', 'partner company'], sample: ['Apex Tally Solutions', 'Synergy Softwares'] },
             { key: 'natureOfPartner', label: 'Nature of Partner', required: false, aliases: ['nature', 'partner type', 'type'], sample: ['TALLY-3STAR PARTNER', 'TALLY-REFERRAL PARTNER'] },
             { key: 'officePhone', label: 'Office Phone', required: false, aliases: ['phone', 'mobile', 'contact number', 'telephone'], sample: ['9876543210', '9123456780'] },
-            { key: 'email', label: 'Email', required: true, aliases: ['email address', 'e-mail', 'mail'], sample: ['info@apextally.com', 'contact@synergysoft.in'] },
-            { key: 'billingStreet', label: 'Billing Street', required: false, aliases: ['street', 'address', 'billing address'], sample: ['12 Nehru Place', '45 MG Road'] },
+            { key: 'emailAddress', label: 'Email Address', required: true, aliases: ['email address', 'e-mail', 'mail'], sample: ['info@apextally.com', 'contact@synergysoft.in'] },
+            { key: 'billingAddress', label: 'Billing Street', required: false, aliases: ['street', 'address', 'billing address', 'billing street'], sample: ['12 Nehru Place', '45 MG Road'] },
             { key: 'billingCity', label: 'Billing City', required: false, aliases: ['city'], sample: ['New Delhi', 'Mumbai'] },
             { key: 'billingState', label: 'Billing State', required: false, aliases: ['state'], sample: ['Delhi', 'Maharashtra'] },
             { key: 'billingPostalCode', label: 'Billing PIN Code', required: false, aliases: ['pin', 'pincode', 'postal code', 'zip'], sample: ['110019', '400001'] },
@@ -128,14 +142,12 @@ export const IMPORT_CONFIGS: Record<ImportEntityType, ImportEntityConfig> = {
 
 const normalize = (s: string) => s.toLowerCase().replace(/[\s_\-./]+/g, ' ').trim();
 
-const configOf = (entity: ImportEntityType | ImportEntityConfig): ImportEntityConfig => (typeof entity === 'string' ? IMPORT_CONFIGS[entity] : entity);
-
 /** Pre-selects a file header for each entity field using exact label/key matches, then aliases. */
-export function autoMapColumns(entity: ImportEntityType | ImportEntityConfig, headers: string[]): ColumnMapping {
+export function autoMapColumns(config: ImportEntityConfig, headers: string[]): ColumnMapping {
     const mapping: ColumnMapping = {};
     const used = new Set<string>();
     const normHeaders = headers.map((h) => ({ header: h, norm: normalize(h) }));
-    const fields = configOf(entity).fields;
+    const fields = config.fields;
 
     const claim = (fieldKey: string, candidates: string[]) => {
         const hit = normHeaders.find((h) => !used.has(h.header) && candidates.includes(h.norm));
@@ -156,38 +168,44 @@ export function autoMapColumns(entity: ImportEntityType | ImportEntityConfig, he
     return mapping;
 }
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-/** Applies the column mapping and validates required fields / email format. */
-export function mapAndValidateRows(entity: ImportEntityType, parsed: ParsedFile, mapping: ColumnMapping): MappedRow[] {
-    const fields = IMPORT_CONFIGS[entity].fields;
+/**
+ * Applies the column mapping, then reads and checks every cell as the creation form would (required fields,
+ * dropdown options, dates, phones, emails, numbers) plus the row's conditional rules. Values come back normalized
+ * (dropdowns as their stored value, dates as `YYYY-MM-DD`), ready to send.
+ */
+export function mapAndValidateRows(config: ImportEntityConfig, parsed: ParsedFile, mapping: ColumnMapping): MappedRow[] {
     return parsed.rows.map((raw, idx) => {
         const values: Record<string, string> = {};
         const errors: string[] = [];
-        fields.forEach((f) => {
+        config.fields.forEach((f) => {
             const header = mapping[f.key];
-            values[f.key] = header ? (raw[header] ?? '').trim() : '';
-            if (f.required && !values[f.key]) errors.push(`${f.label} is required`);
+            const cell = header ? (raw[header] ?? '').trim() : '';
+            if (!cell) {
+                values[f.key] = '';
+                if (f.required) errors.push(`${f.label} is required`);
+                return;
+            }
+            const read = normalizeImportCell(f, cell);
+            values[f.key] = read.value;
+            if (read.error) errors.push(read.error);
         });
-        // Each entity names its email column differently.
-        for (const key of ['email', 'emailAddress', 'contactEmail']) {
-            if (values[key] && !EMAIL_RE.test(values[key])) errors.push('Invalid email');
-        }
+        errors.push(...(config.rowRules?.(values) ?? []));
         return { rowNumber: idx + 2, values, errors };
     });
 }
 
 const csvCell = (s: string) => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
 
-/** Downloads a CSV with the exact header labels and two illustrative rows. */
-export function downloadSampleTemplate(entity: ImportEntityType | ImportEntityConfig): void {
-    const { fields, plural } = configOf(entity);
+/** Downloads a CSV with every importable field's header label and two illustrative rows. */
+export function downloadSampleTemplate(config: ImportEntityConfig): void {
+    const { fields, plural } = config;
     const lines = [
         fields.map((f) => csvCell(f.label)).join(','),
         fields.map((f) => csvCell(f.sample[0])).join(','),
         fields.map((f) => csvCell(f.sample[1])).join(','),
     ];
-    const blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+    // A BOM so Excel opens the UTF-8 file (₹, accented names) correctly.
+    const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
