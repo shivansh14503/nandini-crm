@@ -145,6 +145,7 @@ const ACTION_LABELS: Record<string, string> = {
     EMAIL_CHECK: 'Email checked',
     RSVP: 'Replied',
     SEND_INVITES: 'Invitations sent',
+    PURGE: 'Purged',
     IMPORT: 'Imported',
     LOGIN: 'Signed in',
     LOGIN_FAILED: 'Failed sign-in',
@@ -420,6 +421,10 @@ export function summarize(action: string, module: string, changes: unknown, labe
         case 'SEND_INVITES': {
             const guests = count(c.guests);
             return `Sent calendar invitations${guests !== undefined ? ` to ${guests} guest${guests === 1 ? '' : 's'}` : ''}`;
+        }
+        case 'PURGE': {
+            const emails = count(c.copies);
+            return `Deleted ${emails !== undefined ? `${emails} ` : ''}logged email${emails === 1 ? '' : 's'} of ${text(c.username) || 'a person'}`;
         }
         case 'REVERT':
             return fields.length > 0 ? `Undid change to ${listOf(fields)}` : 'Change undone';

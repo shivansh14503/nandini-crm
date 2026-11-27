@@ -59,6 +59,8 @@ import calendarConnectionRouter from './modules/calendar-sync/connection.routes.
 import calendarWebhookRouter from './modules/calendar-sync/webhook.routes.js';
 import bookingLinkRouter from './modules/booking-links/bookingLink.routes.js';
 import publicBookingRouter from './modules/booking-links/bookingLink.public.routes.js';
+import emailLogRouter from './modules/email-log/emailLog.routes.js';
+import emailLogAdminRouter from './modules/email-log/emailLogAdmin.routes.js';
 
 const app: Express = express();
 
@@ -155,6 +157,8 @@ app.use('/api/admin/integrations', integrationRouter);
 app.use('/api/admin/users', userAdminRouter);
 app.use('/api/calendar-connections', calendarConnectionRouter);
 app.use('/api/booking-links', bookingLinkRouter);
+app.use('/api/email-logs', emailLogRouter);
+app.use('/api/admin/email-logging', emailLogAdminRouter);
 
 // ── 404 + global error handler ─────────────────────────────────────────────────
 app.use(notFoundHandler);

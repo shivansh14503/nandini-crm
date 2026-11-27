@@ -9,6 +9,7 @@ import NotificationsNoneRoundedIcon from '@mui/icons-material/NotificationsNoneR
 import LinkRoundedIcon from '@mui/icons-material/LinkRounded';
 import { AppToast } from '@/components/common/AppToast';
 import { CalendarConnectionsCard } from '@/components/integrations/CalendarConnectionsCard';
+import { EmailLoggingStatusCard } from '@/components/integrations/EmailLoggingStatusCard';
 import { useAuth } from '@/context/AuthContext';
 import { PillTabs, errorMessage, secondaryButtonSx, surfaceSx, type PillTabItem } from '@/components/settings/form-customization/builderUi';
 import { useMyProfile } from '@/hooks/queries/useProfile';
@@ -93,6 +94,7 @@ export function ProfileView() {
                 return (
                     <Box role="tabpanel" aria-label="Connected accounts" sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
                         <CalendarConnectionsCard />
+                        <EmailLoggingStatusCard />
                     </Box>
                 );
             case 'security':

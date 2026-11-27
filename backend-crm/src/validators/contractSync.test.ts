@@ -80,6 +80,8 @@ import { PROVIDER_WEBHOOK_STATUSES } from '../modules/integrations/integration.s
 import { WEBHOOKS_OFF_REASONS } from '../config/env.js';
 import { NOTIFICATION_KINDS } from '../modules/notifications/notification.producer.js';
 import * as bookingConstants from '../modules/booking-links/bookingLink.constants.js';
+import * as emailLogConstants from '../modules/email-log/emailLog.constants.js';
+import { EMAIL_LOGGING_SETTING_KEY } from '../modules/email-log/emailLog.settings.js';
 import { normalizeUsername, RESERVED_USERNAMES, USERNAME_MAX_LENGTH, USERNAME_MIN_LENGTH, USERNAME_PATTERN, usernameIssue } from '../modules/user-admin/username.js';
 import {
     ADMIN_ROLES,
@@ -709,6 +711,24 @@ describe('backend ↔ frontend contract', { skip }, () => {
         assert.deepEqual([...frontend.USER_STATUS_FILTERS], [...ADMIN_USER_STATUSES]);
         assert.equal(frontend.JOB_TITLE_MAX_LENGTH, JOB_TITLE_MAX_LENGTH);
         assert.equal(frontend.DEPARTMENT_MAX_LENGTH, DEPARTMENT_MAX_LENGTH);
+    });
+    it('frontend types/emailLog.types.ts matches the email logging constants', async () => {
+        type EmailLogConstants = typeof emailLogConstants;
+        const frontend = await loadFrontend<
+            Pick<EmailLogConstants, 'EMAIL_LOG_MODULES' | 'MAILBOX_MODES' | 'EMAIL_VISIBILITIES' | 'RETENTION_MONTH_CHOICES' | 'NOT_LOGGED_REASONS'> & {
+                EMAIL_LOGGING_SETTING_KEY: string;
+                EMAIL_VISIBILITY_LABELS: Record<string, string>;
+                NOT_LOGGED_LABELS: Record<string, string>;
+            }
+        >('types/emailLog.types.ts');
+        assert.deepEqual([...frontend.EMAIL_LOG_MODULES], [...emailLogConstants.EMAIL_LOG_MODULES]);
+        assert.deepEqual([...frontend.MAILBOX_MODES], [...emailLogConstants.MAILBOX_MODES]);
+        assert.deepEqual([...frontend.EMAIL_VISIBILITIES], [...emailLogConstants.EMAIL_VISIBILITIES]);
+        assert.deepEqual(Object.keys(frontend.EMAIL_VISIBILITY_LABELS), [...emailLogConstants.EMAIL_VISIBILITIES]);
+        assert.deepEqual([...frontend.RETENTION_MONTH_CHOICES], [...emailLogConstants.RETENTION_MONTH_CHOICES]);
+        assert.deepEqual([...frontend.NOT_LOGGED_REASONS], [...emailLogConstants.NOT_LOGGED_REASONS]);
+        assert.deepEqual(Object.keys(frontend.NOT_LOGGED_LABELS), [...emailLogConstants.NOT_LOGGED_REASONS]);
+        assert.equal(frontend.EMAIL_LOGGING_SETTING_KEY, EMAIL_LOGGING_SETTING_KEY);
     });
     it('frontend types/bookingLink.types.ts matches the booking-link constants', async () => {
         const frontend = await loadFrontend<BookingConstants & { BOOKING_CREATOR_SCOPE_LABELS: Record<string, string>; BOOKING_WEEKDAY_LABELS: Record<string, string> }>(
