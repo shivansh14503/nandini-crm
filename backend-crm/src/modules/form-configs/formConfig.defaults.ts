@@ -956,7 +956,8 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
 
     // ── Opportunities ──
     ...section('opportunities', 'basic', 'Primary Opportunity Details', [
-        t('organizationName', 'Organization name', { type: 'lookup', req: true }),
+        // Plain text (no picker); the API links the organization of that name when there is one.
+        t('organizationName', 'Organization name', { req: true }),
         t('contact', 'Contact', { type: 'lookup', req: true }),
         t('contactNumber', 'Contact Number', { type: 'phone' }),
         t('contactEmail', 'Contact Email', { type: 'email' }),
