@@ -51,7 +51,7 @@ export interface FilterCriteria {
 }
 
 /** How a field is filtered (and which control the Advanced tab shows for it). */
-export type FilterFieldKind = 'options' | 'date' | 'text' | 'days' | 'boolean';
+export type FilterFieldKind = 'options' | 'date' | 'text' | 'days' | 'number' | 'boolean';
 
 export interface FilterOption {
     value: string;
@@ -106,8 +106,28 @@ export const DATE_OPERATORS: { op: FilterOp; label: string; inputs: 0 | 1 | 2 }[
     { op: 'next_7_days', label: 'Next 7 Days', inputs: 0 },
 ];
 
+/** Operators of `days` and `number` fields. */
 export const DAYS_OPERATORS: { op: FilterOp; label: string }[] = [
     { op: 'gte', label: 'At least' },
     { op: 'lte', label: 'At most' },
     { op: 'equals', label: 'Exactly' },
 ];
+
+/**
+ * Filter of a table column that isn't a form field (e.g. the lead Rating, an opportunity's Quote Sent, a quotation's
+ * Grand Total). Set on `DataTableColumn.filter`; the Filter dialog offers every such column, so the dialog and the
+ * table can't drift apart. Columns that show a form field are filtered through the form field instead.
+ */
+export interface ColumnFilterSpec<T = unknown> {
+    kind: FilterFieldKind;
+    /** The value the filter compares (default: the record property named by the column's `sortKey` / `id`). */
+    getValue?: (row: T) => unknown;
+    /** `options` fields. */
+    options?: FilterOption[];
+    /** Default: the column header in title case. */
+    label?: string;
+    digitsOnly?: boolean;
+    normalizeValue?: (value: string) => string;
+    /** `text` fields: hint shown in the empty box. */
+    placeholder?: string;
+}

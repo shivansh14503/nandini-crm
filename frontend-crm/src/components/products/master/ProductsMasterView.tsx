@@ -46,9 +46,15 @@ export function ProductsMasterView() {
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [sortField, setSortField] = useState<string>('productName');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+    // Tracked by id so the drawer always shows the cached copy and closes if the product is deleted.
+    const [drawerProductId, setDrawerProductId] = useState<string | null>(null);
+    // ── Declarative Column Definitions ────────────────────────────────────────
+    const openDrawerRecord = useCallback((record: Product) => setDrawerProductId(record.id), []);
+    const columns = useProductColumns(openDrawerRecord);
     const tableFilter = useTableFilter<Product>({
         module: 'products',
         rows: allProducts,
+        columns,
         onSortChange: (s) => {
             setSortField(s.field);
             setSortOrder(s.order);
@@ -57,8 +63,6 @@ export function ProductsMasterView() {
     });
     /** Records left by the Filter dialog: tabs, counts, search and bulk actions work on these. */
     const products = tableFilter.filteredRows;
-    // Tracked by id so the drawer always shows the cached copy and closes if the product is deleted.
-    const [drawerProductId, setDrawerProductId] = useState<string | null>(null);
     const selectedDrawerProduct = useMemo(
         () => (drawerProductId ? products.find((p) => p.id === drawerProductId) ?? null : null),
         [products, drawerProductId]
@@ -213,9 +217,6 @@ export function ProductsMasterView() {
         ];
     }, [products]);
 
-    // ── Declarative Column Definitions ────────────────────────────────────────
-    const openDrawerRecord = useCallback((record: Product) => setDrawerProductId(record.id), []);
-    const columns = useProductColumns(openDrawerRecord);
 
     return (
         <CommonMasterView<Product, ProductFilterTab>

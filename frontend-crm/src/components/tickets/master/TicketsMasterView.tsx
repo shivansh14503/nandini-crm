@@ -74,9 +74,15 @@ export function TicketsMasterView() {
     const [rowsPerPage, setRowsPerPage] = useState(25);
     const [sortField, setSortField] = useState<TicketSortField>('ticketNumber');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+    // Tracked by id so the drawer always shows the cached copy and closes if the ticket is deleted.
+    const [drawerTicketId, setDrawerTicketId] = useState<string | null>(null);
+    // ── Declarative Column Definitions ────────────────────────────────────────
+    const openDrawerRecord = useCallback((record: Ticket) => setDrawerTicketId(record.id), []);
+    const columns = useTicketColumns(openDrawerRecord, now);
     const tableFilter = useTableFilter<Ticket>({
         module: 'tickets',
         rows: allTickets,
+        columns,
         onSortChange: (s) => {
             setSortField(s.field as TicketSortField);
             setSortOrder(s.order);
@@ -85,8 +91,6 @@ export function TicketsMasterView() {
     });
     /** Records left by the Filter dialog: tabs, counts, search and bulk actions work on these. */
     const tickets = tableFilter.filteredRows;
-    // Tracked by id so the drawer always shows the cached copy and closes if the ticket is deleted.
-    const [drawerTicketId, setDrawerTicketId] = useState<string | null>(null);
     const selectedDrawerTicket = useMemo(
         () => (drawerTicketId ? tickets.find((t) => t.id === drawerTicketId) ?? null : null),
         [tickets, drawerTicketId]
@@ -212,10 +216,6 @@ export function TicketsMasterView() {
             { id: 'recently_added', label: 'Recently Added', icon: <NewReleasesOutlinedIcon sx={{ fontSize: 16 }} />, count: count('recently_added') },
         ];
     }, [tickets, matchesTab]);
-
-    // ── Declarative Column Definitions ────────────────────────────────────────
-    const openDrawerRecord = useCallback((record: Ticket) => setDrawerTicketId(record.id), []);
-    const columns = useTicketColumns(openDrawerRecord, now);
 
     // Row clicks only open the drawer; its eye button leads on to the detail page with the related modules.
     const closeDrawer = useCallback(() => setDrawerTicketId(null), []);

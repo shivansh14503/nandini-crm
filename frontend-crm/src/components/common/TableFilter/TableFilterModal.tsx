@@ -633,8 +633,10 @@ function FieldControl({
                     </MenuItem>
                 </TextField>
             );
-        case 'days': {
+        case 'days':
+        case 'number': {
             const op = condition?.op ?? 'gte';
+            const isDays = field.kind === 'days';
             return (
                 <Box sx={{ display: 'flex', gap: 1 }}>
                     <TextField
@@ -654,10 +656,10 @@ function FieldControl({
                         size="small"
                         fullWidth
                         type="number"
-                        placeholder="Days"
+                        placeholder={isDays ? 'Days' : 'Value'}
                         value={condition?.value ?? ''}
                         onChange={(e) => onChange(e.target.value === '' ? null : { op, value: e.target.value })}
-                        slotProps={{ htmlInput: { min: 0, max: 36500 } }}
+                        slotProps={{ htmlInput: isDays ? { min: 0, max: 36500 } : { step: 'any' } }}
                         sx={inputSx}
                     />
                 </Box>

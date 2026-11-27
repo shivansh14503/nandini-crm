@@ -52,9 +52,15 @@ export function OpportunitiesMasterView() {
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [sortField, setSortField] = useState<OpportunitySortField>('createdAt');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+    // Tracked by id so the drawer always shows the cached copy and closes if the deal is deleted.
+    const [drawerOppId, setDrawerOppId] = useState<string | null>(null);
+    // ── Declarative Column Definitions ────────────────────────────────────────
+    const openDrawerRecord = useCallback((record: Opportunity) => setDrawerOppId(record.id), []);
+    const columns = useOpportunityColumns(openDrawerRecord);
     const tableFilter = useTableFilter<Opportunity>({
         module: 'opportunities',
         rows: allOpportunities,
+        columns,
         onSortChange: (s) => {
             setSortField(s.field as OpportunitySortField);
             setSortOrder(s.order);
@@ -63,8 +69,6 @@ export function OpportunitiesMasterView() {
     });
     /** Records left by the Filter dialog: tabs, counts, search and bulk actions work on these. */
     const opportunities = tableFilter.filteredRows;
-    // Tracked by id so the drawer always shows the cached copy and closes if the deal is deleted.
-    const [drawerOppId, setDrawerOppId] = useState<string | null>(null);
     const selectedDrawerOpp = useMemo(
         () => (drawerOppId ? opportunities.find((o) => o.id === drawerOppId) ?? null : null),
         [opportunities, drawerOppId]
@@ -261,10 +265,6 @@ export function OpportunitiesMasterView() {
             }
         }
     };
-
-    // ── Declarative Column Definitions ────────────────────────────────────────
-    const openDrawerRecord = useCallback((record: Opportunity) => setDrawerOppId(record.id), []);
-    const columns = useOpportunityColumns(openDrawerRecord);
 
     // Row clicks only open the drawer; its eye button leads on to the detail page with the related modules.
     const closeDrawer = useCallback(() => setDrawerOppId(null), []);

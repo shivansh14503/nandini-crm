@@ -80,9 +80,15 @@ export function ContractsMasterView({ view }: ContractsMasterViewProps) {
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [sortField, setSortField] = useState<ContractSortField>('createdAt');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+    // Tracked by id so the drawer always shows the cached copy and closes if the contract is deleted.
+    const [drawerContractId, setDrawerContractId] = useState<string | null>(null);
+    // ── Columns ───────────────────────────────────────────────────────────────
+    const openDrawerRecord = useCallback((record: Contract) => setDrawerContractId(record.id), []);
+    const columns = useContractColumns(openDrawerRecord);
     const tableFilter = useTableFilter<Contract>({
         module: 'contracts',
         rows: allContracts,
+        columns,
         onSortChange: (s) => {
             setSortField(s.field);
             setSortOrder(s.order);
@@ -91,8 +97,6 @@ export function ContractsMasterView({ view }: ContractsMasterViewProps) {
     });
     /** Records left by the Filter dialog: pills, cards, search and bulk actions work on these. */
     const contracts = tableFilter.filteredRows;
-    // Tracked by id so the drawer always shows the cached copy and closes if the contract is deleted.
-    const [drawerContractId, setDrawerContractId] = useState<string | null>(null);
     const selectedDrawerContract = useMemo(
         () => (drawerContractId ? contracts.find((c) => c.id === drawerContractId) ?? null : null),
         [contracts, drawerContractId]
@@ -209,9 +213,6 @@ export function ContractsMasterView({ view }: ContractsMasterViewProps) {
         return filteredContracts.slice(start, start + rowsPerPage);
     }, [filteredContracts, page, rowsPerPage]);
 
-    // ── Columns ───────────────────────────────────────────────────────────────
-    const openDrawerRecord = useCallback((record: Contract) => setDrawerContractId(record.id), []);
-    const columns = useContractColumns(openDrawerRecord);
 
     const handleSort = (field: string) => {
         const isAsc = sortField === field && sortOrder === 'asc';

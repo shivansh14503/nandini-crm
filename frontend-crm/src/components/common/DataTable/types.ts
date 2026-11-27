@@ -1,4 +1,5 @@
 import React from 'react';
+import type { ColumnFilterSpec } from '../TableFilter/types';
 
 export type SortOrder = 'asc' | 'desc';
 
@@ -35,6 +36,11 @@ export interface DataTableColumn<T> {
      * browser's menu over them is theirs. Record links (RecordLink) don't need this.
      */
     interactive?: boolean;
+    /**
+     * How the list's Filter dialog filters this column when it isn't a form field (form fields are filtered from the
+     * form config). `false`: not offered (the same data is already a filter under another field).
+     */
+    filter?: ColumnFilterSpec<T> | false;
 }
 
 export interface DataTableFilterItem<TFilter extends string = string> {

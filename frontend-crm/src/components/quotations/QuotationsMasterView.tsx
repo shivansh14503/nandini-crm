@@ -52,9 +52,15 @@ export function QuotationsMasterView() {
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [sortField, setSortField] = useState<QuotationSortField>('createdAt');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+    // Tracked by id so the drawer always shows the cached copy and closes if the quotation is deleted.
+    const [drawerQuotationId, setDrawerQuotationId] = useState<string | null>(null);
+    // ── Columns ───────────────────────────────────────────────────────────────
+    const openDrawerRecord = useCallback((record: Quotation) => setDrawerQuotationId(record.id), []);
+    const columns = useQuotationColumns(openDrawerRecord);
     const tableFilter = useTableFilter<Quotation>({
         module: 'quotations',
         rows: allQuotations,
+        columns,
         onSortChange: (s) => {
             setSortField(s.field as QuotationSortField);
             setSortOrder(s.order);
@@ -63,8 +69,6 @@ export function QuotationsMasterView() {
     });
     /** Records left by the Filter dialog: tabs, counts, search and bulk actions work on these. */
     const quotations = tableFilter.filteredRows;
-    // Tracked by id so the drawer always shows the cached copy and closes if the quotation is deleted.
-    const [drawerQuotationId, setDrawerQuotationId] = useState<string | null>(null);
     const selectedDrawerQuotation = useMemo(
         () => (drawerQuotationId ? quotations.find((q) => q.id === drawerQuotationId) ?? null : null),
         [quotations, drawerQuotationId]
@@ -208,9 +212,6 @@ export function QuotationsMasterView() {
         return filteredQuotations.slice(start, start + rowsPerPage);
     }, [filteredQuotations, page, rowsPerPage]);
 
-    // ── Columns ───────────────────────────────────────────────────────────────
-    const openDrawerRecord = useCallback((record: Quotation) => setDrawerQuotationId(record.id), []);
-    const columns = useQuotationColumns(openDrawerRecord);
 
     const handleSort = (field: string) => {
         const isAsc = sortField === field && sortOrder === 'asc';

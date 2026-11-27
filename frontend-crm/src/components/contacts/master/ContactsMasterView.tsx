@@ -46,9 +46,15 @@ export function ContactsMasterView() {
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [sortField, setSortField] = useState<string>('createdAt');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+    // Tracked by id so the drawer always shows the cached copy and closes if the contact is deleted.
+    const [drawerContactId, setDrawerContactId] = useState<string | null>(null);
+    // ── Declarative Column Definitions ──────────────────────────────────────
+    const openDrawerRecord = useCallback((record: Contact) => setDrawerContactId(record.id), []);
+    const columns = useContactColumns(openDrawerRecord);
     const tableFilter = useTableFilter<Contact>({
         module: 'contacts',
         rows: allContacts,
+        columns,
         onSortChange: (s) => {
             setSortField(s.field);
             setSortOrder(s.order);
@@ -57,8 +63,6 @@ export function ContactsMasterView() {
     });
     /** Records left by the Filter dialog: tabs, counts, search and bulk actions work on these. */
     const contacts = tableFilter.filteredRows;
-    // Tracked by id so the drawer always shows the cached copy and closes if the contact is deleted.
-    const [drawerContactId, setDrawerContactId] = useState<string | null>(null);
 
     const selectedDrawerContact = useMemo(
         () => (drawerContactId ? contacts.find((c) => c.id === drawerContactId) ?? null : null),
@@ -217,10 +221,6 @@ export function ContactsMasterView() {
             setToast({ open: true, message: 'Failed to delete contacts.', severity: 'error' });
         }
     };
-
-    // ── Declarative Column Definitions ──────────────────────────────────────
-    const openDrawerRecord = useCallback((record: Contact) => setDrawerContactId(record.id), []);
-    const columns = useContactColumns(openDrawerRecord);
 
     // Row clicks only open the drawer; its eye button leads on to the detail page with the related modules.
     const closeDrawer = useCallback(() => setDrawerContactId(null), []);

@@ -97,6 +97,7 @@ export function useQuotationColumns(openRecord: (record: Quotation) => void): Da
                 id: 'revised',
                 label: 'REVISED',
                 sortable: false,
+                filter: { kind: 'boolean', getValue: wasModified },
                 minWidth: 100,
                 render: (row) => {
                     const revised = wasModified(row);
@@ -173,6 +174,7 @@ export function useQuotationColumns(openRecord: (record: Quotation) => void): Da
                 id: 'grandTotal',
                 label: 'GRAND TOTAL',
                 sortable: true,
+                filter: { kind: 'number' },
                 align: 'right',
                 minWidth: 130,
                 render: (row) => (

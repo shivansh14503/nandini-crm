@@ -146,9 +146,13 @@ export function ActivitiesMasterView({ mine = false, type = '', status = '' }: A
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [sortField, setSortField] = useState<string>('startAt');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+    const [drawerId, setDrawerId] = useState<string | null>(null);
+    const openDrawerRecord = useCallback((record: Activity) => setDrawerId(record.id), []);
+    const columns = useActivityColumns(openDrawerRecord);
     const tableFilter = useTableFilter<Activity>({
         module: 'activities',
         rows: allActivities,
+        columns,
         onSortChange: (s) => {
             setSortField(s.field);
             setSortOrder(s.order);
@@ -160,7 +164,6 @@ export function ActivitiesMasterView({ mine = false, type = '', status = '' }: A
         () => (status ? tableFilter.filteredRows.filter((a) => a.status.toLowerCase() === status.toLowerCase()) : tableFilter.filteredRows),
         [tableFilter.filteredRows, status]
     );
-    const [drawerId, setDrawerId] = useState<string | null>(null);
     const drawerActivity = useMemo(() => (drawerId ? activities.find((a) => a.id === drawerId) ?? null : null), [activities, drawerId]);
     const [toast, setToast] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' | 'warning' }>({
         open: false,
@@ -360,8 +363,6 @@ export function ActivitiesMasterView({ mine = false, type = '', status = '' }: A
 
     const paginated = useMemo(() => filtered.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage), [filtered, page, rowsPerPage]);
 
-    const openDrawerRecord = useCallback((record: Activity) => setDrawerId(record.id), []);
-    const columns = useActivityColumns(openDrawerRecord);
 
     const handleSort = (field: string) => {
         const isAsc = sortField === field && sortOrder === 'asc';

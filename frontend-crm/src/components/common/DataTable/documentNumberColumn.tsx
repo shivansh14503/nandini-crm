@@ -35,6 +35,7 @@ export function documentNumberColumn<T>({
         sortable: true,
         locked,
         minWidth: 140,
+        filter: { kind: 'text', getValue: getNumber },
         render: (row) => {
             const value = getNumber(row);
             if (!value) return <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-muted)' }}>-</Typography>;
