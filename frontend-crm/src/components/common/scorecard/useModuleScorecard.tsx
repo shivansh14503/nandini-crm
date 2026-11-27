@@ -36,8 +36,6 @@ export interface ModuleScorecardState<T> {
     expectsCards: boolean;
     /** The cards show amounts (the screen has built-in totals and a total applies). */
     withAmount: boolean;
-    /** Many cards: one row that scrolls sideways. */
-    singleRow: boolean;
     scorecard: ResolvedScorecard | null;
     /** Cards for StatusSummaryCards ("All" first). Empty when not configured. */
     items: StatusSummaryItem<string>[];
@@ -108,7 +106,6 @@ export function useModuleScorecard<T>({ module, rows, onActiveChange }: UseModul
         hidden,
         expectsCards: !hidden && (info.builtInCards || Boolean(savedConfig)),
         withAmount: cards?.withAmount ?? Boolean(amounts?.length),
-        singleRow: info.singleRow,
         scorecard,
         items: cards?.items ?? [],
         activeId,
@@ -140,7 +137,7 @@ export function ModuleScorecardSummary<T>({
     if (loading || state.loading) {
         if (!state.expectsCards) return null;
         const count = state.items.length || fallbackCount || (state.scorecard ? state.scorecard.config.options.length + 1 : 5);
-        return <StatusSummaryCardsSkeleton count={count} singleRow={state.singleRow} withAmount={state.withAmount} />;
+        return <StatusSummaryCardsSkeleton count={count} withAmount={state.withAmount} />;
     }
     if (!state.configured) return <>{fallback}</>;
     return (
@@ -149,7 +146,7 @@ export function ModuleScorecardSummary<T>({
             activeId={state.activeId}
             onChange={state.setActiveId}
             settingsHref={state.settingsHref}
-            singleRow={state.singleRow}
+           
         />
     );
 }

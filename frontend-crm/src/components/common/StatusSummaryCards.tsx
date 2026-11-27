@@ -1,12 +1,9 @@
 'use client';
 
-import React, { useCallback, useState } from 'react';
+import React from 'react';
 import NextLink from 'next/link';
 import { Box, ButtonBase, IconButton, Skeleton, Tooltip, Typography } from '@mui/material';
-import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
-import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
-import { useTableScroll } from './DataTable/useTableScroll';
 import { fmtCount, useDisplayFormats } from '@/utils/formats';
 
 /** Colour family of a card; each maps to theme tokens so light (blue) / dark (green) stay consistent. */
@@ -38,12 +35,6 @@ export interface StatusSummaryCardsProps<TId extends string = string> {
     allId?: TId;
     /** Shows a gear on the "All" card that opens these cards' settings (admins: Admin › List Scorecards). */
     settingsHref?: string;
-    /**
-     * Many cards: one row at every screen size that scrolls sideways (swipe, trackpad, the arrow buttons on mouse
-     * devices, or holding the scroll-wheel button and moving the mouse) instead of wrapping. Without it, more
-     * than 6 cards fill rows left to right.
-     */
-    singleRow?: boolean;
 }
 
 /** Theme colour per tone: `-main` tokens already switch for dark mode (brand = blue / green). */
@@ -62,193 +53,142 @@ const tint = (color: string, pct: number) => `linear-gradient(145deg, ${mix(colo
 const formatCount = (n: number) => fmtCount(n);
 const formatShare = (share: number) => (share > 0 && share < 0.1 ? '<0.1' : share.toFixed(1).replace(/\.0$/, ''));
 
-/** Same grid as the cards, so swapping the skeleton for real cards doesn't shift the page. */
-const gridSx = (count: number) =>
-    ({
-        display: 'grid',
-        gap: 1.75,
-        mb: 2,
-        minWidth: 0,
-        // Phones: one swipeable row. Wider screens: equal columns.
-        gridAutoFlow: { xs: 'column', md: 'row' },
-        gridAutoColumns: { xs: 'minmax(170px, 1fr)', md: 'unset' },
-        // Up to 6 cards share one row; more wrap onto further rows.
-        gridTemplateColumns: {
-            xs: 'none',
-            md: count > 6 ? 'repeat(auto-fill, minmax(190px, 1fr))' : `repeat(${count}, minmax(0, 1fr))`,
-        },
-        overflowX: { xs: 'auto', md: 'visible' },
-        // Room for the hover lift and focus ring inside the scroll container.
-        pt: 0.5,
-        pb: { xs: 1, md: 0.5 },
-        px: { xs: 0.25, md: 0 },
-    }) as const;
+/* ------------------------------------------------------------------------------------------------------------
+ * Fit-to-width sizing. The cards never scroll sideways: they share the row equally, and the more cards there
+ * are, the smaller each one gets (padding, icon, fonts, gaps). Only when a card would get narrower than a
+ * readable minimum does the row wrap onto a second line (phones, or a very long list of cards).
+ * ---------------------------------------------------------------------------------------------------------- */
 
-/** Width of a card in the single scrolling row; cards stretch to fill the row when they all fit. */
-const SINGLE_ROW_CARD_PX = 230;
+/** Size steps from roomy (0) to dense (3). */
+type Density = 0 | 1 | 2 | 3;
 
-const singleRowSx = {
-    display: 'grid',
-    gap: 1.75,
-    minWidth: 0,
-    gridAutoFlow: 'column',
-    gridAutoColumns: `minmax(${SINGLE_ROW_CARD_PX}px, 1fr)`,
-    overflowX: 'auto',
-    overscrollBehaviorX: 'contain',
-    scrollSnapType: 'x proximity',
-    scrollPaddingInline: '2px',
-    '& > *': { scrollSnapAlign: 'start' },
-    // Room for the hover lift and focus ring inside the scroll container.
-    pt: 0.5,
-    pb: 1,
-    px: 0.25,
+const SIZES = {
+    /** Gap between cards (theme spacing units: 8 px). */
+    gap: [1.75, 1.25, 1, 0.75],
+    pad: [2, 1.5, 1.25, 1],
+    /** Gap between the rows inside a card (theme spacing units). */
+    stack: [1.25, 1, 0.75, 0.6],
+    radius: ['14px', '12px', '11px', '10px'],
+    tile: [38, 32, 28, 24],
+    tileRadius: ['11px', '9px', '8px', '7px'],
+    tileIcon: [20, 18, 16, 14],
+    labelGap: [1.25, 1, 0.75, 0.6],
+    label: ['0.74rem', '0.7rem', '0.66rem', '0.62rem'],
+    labelSpacing: ['0.05em', '0.045em', '0.035em', '0.03em'],
+    count: ['2rem', '1.65rem', '1.4rem', '1.2rem'],
+    hint: ['0.74rem', '0.7rem', '0.66rem', '0.62rem'],
+    amountLabel: ['0.68rem', '0.64rem', '0.6rem', '0.58rem'],
+    amount: ['0.95rem', '0.88rem', '0.8rem', '0.74rem'],
+    pill: ['0.7rem', '0.66rem', '0.62rem', '0.6rem'],
+    bar: [6, 5, 5, 4],
+    watermark: [96, 80, 66, 54],
+    /** The settings gear on the "All" card (mouse screens; touch screens keep 32 px). */
+    gear: [28, 26, 24, 24],
+    gearInset: [10, 8, 7, 6],
 } as const;
 
-/** Round arrow at one end of the scrolling row (mouse devices; touch screens swipe). */
-function RowScrollArrow({ direction, visible, onClick }: { direction: -1 | 1; visible: boolean; onClick: () => void }) {
-    const Icon = direction < 0 ? ChevronLeftIcon : ChevronRightIcon;
-    return (
-        <IconButton
-            aria-label={direction < 0 ? 'Show earlier cards' : 'Show more cards'}
-            tabIndex={-1}
-            onClick={onClick}
-            sx={{
-                position: 'absolute',
-                top: '50%',
-                [direction < 0 ? 'left' : 'right']: -6,
-                transform: 'translateY(-50%)',
-                zIndex: 2,
-                width: 32,
-                height: 32,
-                backgroundColor: 'var(--mui-palette-background-paper)',
-                border: '1px solid var(--mui-palette-border-strong)',
-                boxShadow: '0 2px 8px rgba(15, 23, 42, 0.15)',
-                color: 'var(--crm-slate-700)',
-                opacity: visible ? 1 : 0,
-                pointerEvents: visible ? 'auto' : 'none',
-                transition: 'opacity 0.15s ease, background-color 0.15s ease, border-color 0.15s ease',
-                '&:hover': {
-                    borderColor: 'var(--crm-blue-300)',
-                    backgroundColor: 'var(--mui-palette-primary-soft)',
-                    color: 'var(--crm-text-blue-700)',
-                },
-                '@media (hover: none)': { display: 'none' },
-            }}
-        >
-            <Icon sx={{ fontSize: 20 }} />
-        </IconButton>
-    );
-}
+/** Narrowest a card may get before the row wraps, per breakpoint. */
+const MIN_CARD_PX = { xs: 136, sm: 124, md: 104 } as const;
+
+type Bp = 'xs' | 'sm' | 'md' | 'lg';
+const BPS: readonly Bp[] = ['xs', 'sm', 'md', 'lg'];
+
+/** Density for a number of cards on a wide (lg+) screen. */
+const densityForCount = (count: number): Density => (count <= 4 ? 0 : count <= 6 ? 1 : count <= 8 ? 2 : 3);
 
 /**
- * One row of cards that scrolls sideways: arrows at whichever end has more cards, and the same mouse panning as
- * the list table (hold the scroll-wheel button anywhere, or drag the gaps between cards with the left button).
+ * Density per breakpoint: phones and small tablets wrap into a grid of narrow cards, so they always use a small
+ * step; laptops (md) are one step denser than wide screens for the same number of cards.
  */
-function SingleRow({ children, ...rest }: { children: React.ReactNode } & React.HTMLAttributes<HTMLDivElement>) {
-    const { setContainer, canScrollLeft, canScrollRight, isPanning, onPointerDown } = useTableScroll();
-    const [el, setEl] = useState<HTMLDivElement | null>(null);
-    const ref = useCallback(
-        (node: HTMLDivElement | null) => {
-            setEl(node);
-            setContainer(node);
-        },
-        [setContainer]
-    );
+const densityByBp = (count: number): Record<Bp, Density> => {
+    const wide = densityForCount(count);
+    return {
+        xs: count <= 2 ? 1 : 2,
+        sm: count <= 3 ? 1 : 2,
+        md: Math.min(wide + 1, 3) as Density,
+        lg: wide,
+    };
+};
 
-    // Most of a screen at a time, keeping the last card in view for context.
-    const scrollByPage = (direction: -1 | 1) => el?.scrollBy({ left: direction * el.clientWidth * 0.8, behavior: 'smooth' });
+/** A responsive `sx` value for one size: `{ xs, sm, md, lg }` picked from `SIZES[key]` by density. */
+const sized = <K extends keyof typeof SIZES>(d: Record<Bp, Density>, key: K, map?: (v: (typeof SIZES)[K][number]) => unknown) =>
+    Object.fromEntries(BPS.map((bp) => [bp, map ? map(SIZES[key][d[bp]]) : SIZES[key][d[bp]]])) as Record<Bp, never>;
 
-    return (
-        <Box sx={{ position: 'relative', mb: 2, minWidth: 0 }}>
-            <Box
-                ref={ref}
-                {...rest}
-                onPointerDown={onPointerDown}
-                sx={{
-                    ...singleRowSx,
-                    // Snapping would fight the pointer while panning.
-                    ...(isPanning ? { scrollSnapType: 'none', cursor: 'grabbing', userSelect: 'none' } : null),
-                }}
-            >
-                {children}
-            </Box>
-            <RowScrollArrow direction={-1} visible={canScrollLeft} onClick={() => scrollByPage(-1)} />
-            <RowScrollArrow direction={1} visible={canScrollRight} onClick={() => scrollByPage(1)} />
-        </Box>
-    );
-}
-
-/** The cards' grid (one scrolling row with `singleRow`). */
-function CardsGrid({
-    count,
-    singleRow,
-    children,
-    ...rest
-}: { count: number; singleRow?: boolean; children: React.ReactNode } & React.HTMLAttributes<HTMLDivElement>) {
-    if (singleRow) return <SingleRow {...rest}>{children}</SingleRow>;
-    return (
-        <Box {...rest} sx={gridSx(count)}>
-            {children}
-        </Box>
-    );
-}
+/**
+ * The cards' grid: every card gets an equal share of the row (`100% / count`, less the gaps); when that share
+ * would be below the breakpoint's minimum card width, columns of the minimum width wrap instead. Never scrolls.
+ */
+const gridSx = (count: number, d: Record<Bp, Density>) => {
+    const n = Math.max(count, 1);
+    const columns = (bp: Bp) => {
+        const gapPx = SIZES.gap[d[bp]] * 8;
+        const min = MIN_CARD_PX[bp === 'lg' ? 'md' : bp];
+        // 0.5 px of slack so rounding never pushes the last card onto a new line.
+        return `repeat(auto-fit, minmax(max(${min}px, calc((100% - ${(n - 1) * gapPx}px) / ${n} - 0.5px)), 1fr))`;
+    };
+    return {
+        display: 'grid',
+        minWidth: 0,
+        mb: 2,
+        gap: sized(d, 'gap'),
+        gridTemplateColumns: Object.fromEntries(BPS.map((bp) => [bp, columns(bp)])),
+        // Room for the hover lift and focus ring.
+        pt: 0.5,
+    } as const;
+};
 
 const skeletonSx = { bgcolor: 'var(--mui-palette-background-hover)' } as const;
 
 /** Placeholder row of cards while the records / scorecard load. */
 export function StatusSummaryCardsSkeleton({
     count = 5,
-    singleRow,
     withAmount,
 }: {
     count?: number;
-    singleRow?: boolean;
     /** The cards will show amounts: same shape, so they don't jump when they load. */
     withAmount?: boolean;
 }) {
+    const d = densityByBp(count);
     return (
-        <CardsGrid count={count} singleRow={singleRow} aria-busy="true" aria-label="Loading summary">
+        <Box sx={gridSx(count, d)} aria-busy="true" aria-label="Loading summary">
             {Array.from({ length: count }, (_, i) => (
                 <Box
                     key={i}
                     sx={{
                         display: 'flex',
                         flexDirection: 'column',
-                        gap: 1.25,
-                        p: 2,
-                        borderRadius: '14px',
+                        minWidth: 0,
+                        gap: sized(d, 'stack'),
+                        p: sized(d, 'pad'),
+                        borderRadius: sized(d, 'radius'),
                         border: '1px solid var(--mui-palette-border-main)',
                         backgroundColor: 'var(--mui-palette-background-paper)',
                     }}
                 >
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
-                        <Skeleton variant="rounded" width={38} height={38} sx={{ ...skeletonSx, borderRadius: '11px', flexShrink: 0 }} />
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: sized(d, 'labelGap') }}>
+                        <Skeleton
+                            variant="rounded"
+                            sx={{ ...skeletonSx, width: sized(d, 'tile'), height: sized(d, 'tile'), borderRadius: sized(d, 'tileRadius'), flexShrink: 0 }}
+                        />
                         <Skeleton variant="rounded" height={12} width="45%" sx={skeletonSx} />
                     </Box>
+                    <Skeleton variant="rounded" width="40%" sx={{ ...skeletonSx, height: sized(d, 'count', (v) => `calc(${v} * 1.1)`) }} />
                     {withAmount ? (
-                        <Box sx={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 1.5 }}>
-                            <Skeleton variant="rounded" height={32} width={48} sx={{ ...skeletonSx, flexShrink: 0 }} />
-                            <Box sx={{ flex: '0 1 55%', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 0.5 }}>
-                                <Skeleton variant="rounded" height={9} width="85%" sx={skeletonSx} />
-                                <Skeleton variant="rounded" height={14} width="100%" sx={skeletonSx} />
-                            </Box>
-                        </Box>
+                        <Skeleton variant="rounded" height={12} width="70%" sx={skeletonSx} />
                     ) : (
-                        <>
-                            <Skeleton variant="rounded" height={32} width={48} sx={skeletonSx} />
-                            <Skeleton variant="rounded" height={10} width="60%" sx={skeletonSx} />
-                        </>
+                        <Skeleton variant="rounded" height={10} width="60%" sx={skeletonSx} />
                     )}
-                    <Skeleton variant="rounded" height={6} sx={{ ...skeletonSx, mt: 'auto' }} />
+                    <Skeleton variant="rounded" sx={{ ...skeletonSx, height: sized(d, 'bar'), mt: 'auto' }} />
                 </Box>
             ))}
-        </CardsGrid>
+        </Box>
     );
 }
 
 /**
  * Status summary cards (KPI tiles) shown above a master list: one card per status bucket with its count and
  * share of the total. Clicking a card filters the list to that bucket; clicking the active card clears it.
+ * The cards always fit the width (no sideways scrolling): more cards means smaller cards.
  */
 export function StatusSummaryCards<TId extends string = string>({
     items,
@@ -257,62 +197,21 @@ export function StatusSummaryCards<TId extends string = string>({
     total,
     allId,
     settingsHref,
-    singleRow,
 }: StatusSummaryCardsProps<TId>) {
     useDisplayFormats();
     const base = total ?? items[0]?.count ?? 0;
     const resetId = allId ?? items[0]?.id;
+    const d = densityByBp(items.length);
 
     return (
-        <CardsGrid count={items.length} singleRow={singleRow} role="group" aria-label="Status summary">
+        <Box sx={gridSx(items.length, d)} role="group" aria-label="Status summary">
             {items.map((item) => {
                 const c = item.color ?? TONE_COLOR[item.tone ?? 'brand'];
                 const isActive = item.id === activeId;
                 const isAll = item.id === resetId;
+                const showGear = isAll && Boolean(settingsHref);
                 const share = base > 0 ? (item.count / base) * 100 : 0;
                 const multiWord = /[\s/]/.test(item.label.trim());
-                const sharePill = (
-                    <Box
-                        component="span"
-                        sx={{
-                            flexShrink: 0,
-                            px: 0.9,
-                            py: 0.25,
-                            borderRadius: '999px',
-                            fontSize: '0.7rem',
-                            fontWeight: 700,
-                            color: c,
-                            backgroundColor: mix(c, 13),
-                            fontVariantNumeric: 'tabular-nums',
-                        }}
-                    >
-                        {formatShare(share)}%
-                    </Box>
-                );
-                const shareBar = (
-                    <Box
-                        sx={{
-                            position: 'relative',
-                            flex: 1,
-                            minWidth: 0,
-                            height: 6,
-                            borderRadius: 3,
-                            overflow: 'hidden',
-                            backgroundColor: mix(c, 12),
-                        }}
-                    >
-                        <Box
-                            sx={{
-                                height: '100%',
-                                width: `${Math.min(isAll ? 100 : share, 100)}%`,
-                                minWidth: item.count > 0 ? 6 : 0,
-                                borderRadius: 3,
-                                background: `linear-gradient(90deg, ${mix(c, 65)} 0%, ${c} 100%)`,
-                                transition: 'width 0.4s ease',
-                            }}
-                        />
-                    </Box>
-                );
 
                 return (
                     <Box key={item.id} sx={{ position: 'relative', display: 'flex', minWidth: 0 }}>
@@ -328,9 +227,9 @@ export function StatusSummaryCards<TId extends string = string>({
                             // Cards without a hint are shorter than the row; keep their content at the top.
                             justifyContent: 'flex-start',
                             textAlign: 'left',
-                            gap: 1.25,
-                            p: 2,
-                            borderRadius: '14px',
+                            gap: sized(d, 'stack'),
+                            p: sized(d, 'pad'),
+                            borderRadius: sized(d, 'radius'),
                             background: tint(c, isActive ? 16 : 7),
                             border: `1px solid ${isActive ? c : mix(c, 22, 'var(--mui-palette-border-main)')}`,
                             boxShadow: isActive
@@ -362,28 +261,28 @@ export function StatusSummaryCards<TId extends string = string>({
                                 opacity: isActive ? 0.12 : 0.07,
                                 pointerEvents: 'none',
                                 transition: 'opacity 0.18s ease, transform 0.25s ease',
-                                '& svg': { fontSize: 96 },
+                                '& svg': { fontSize: sized(d, 'watermark') },
                                 '.MuiButtonBase-root:hover > &': { transform: 'rotate(-8deg) scale(1.05)' },
                             }}
                         >
                             {item.icon}
                         </Box>
 
-                        {/* Icon tile + label + share */}
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, position: 'relative' }}>
+                        {/* Icon tile + label */}
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: sized(d, 'labelGap'), position: 'relative', minWidth: 0 }}>
                             <Box
                                 sx={{
-                                    width: 38,
-                                    height: 38,
+                                    width: sized(d, 'tile'),
+                                    height: sized(d, 'tile'),
                                     flexShrink: 0,
-                                    borderRadius: '11px',
+                                    borderRadius: sized(d, 'tileRadius'),
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
                                     color: c,
                                     backgroundColor: mix(c, 15),
                                     border: `1px solid ${mix(c, 26)}`,
-                                    '& svg': { fontSize: 20 },
+                                    '& svg': { fontSize: sized(d, 'tileIcon') },
                                 }}
                             >
                                 {item.icon}
@@ -393,10 +292,10 @@ export function StatusSummaryCards<TId extends string = string>({
                                 sx={{
                                     flex: 1,
                                     minWidth: 0,
-                                    fontSize: '0.74rem',
+                                    fontSize: sized(d, 'label'),
                                     fontWeight: 700,
                                     lineHeight: 1.3,
-                                    letterSpacing: '0.05em',
+                                    letterSpacing: sized(d, 'labelSpacing'),
                                     textTransform: 'uppercase',
                                     color: isActive ? 'var(--crm-slate-900)' : 'var(--mui-palette-text-secondary)',
                                     overflow: 'hidden',
@@ -408,11 +307,10 @@ export function StatusSummaryCards<TId extends string = string>({
                                 }}
                             >
                                 {/* A slash is a place to wrap, like a space. */}
-                                {multiWord ? item.label.replace(/\//g, '/\u200B') : item.label}
+                                {multiWord ? item.label.replace(/\//g, '/​') : item.label}
                             </Typography>
                             {/* Room for the settings gear, which sits over this corner. */}
-                            {isAll && settingsHref && <Box sx={{ width: { xs: 30, md: 26 }, flexShrink: 0 }} />}
-                            {!isAll && !singleRow && sharePill}
+                            {showGear && <Box sx={{ width: { ...sized(d, 'gear', (v) => v + 2), xs: 30, sm: 30 }, flexShrink: 0 }} />}
                         </Box>
 
                         {/* Count + hint, with the money total beside the count (below it when the card is narrow) */}
@@ -424,13 +322,13 @@ export function StatusSummaryCards<TId extends string = string>({
                                 flexWrap: 'wrap',
                                 alignItems: 'flex-end',
                                 columnGap: 1.5,
-                                rowGap: 0.5,
+                                rowGap: 0.25,
                             }}
                         >
                             <Box sx={{ minWidth: 0, maxWidth: '100%' }}>
                                 <Typography
                                     sx={{
-                                        fontSize: '2rem',
+                                        fontSize: sized(d, 'count'),
                                         fontWeight: 800,
                                         lineHeight: 1.1,
                                         letterSpacing: '-0.02em',
@@ -445,7 +343,7 @@ export function StatusSummaryCards<TId extends string = string>({
                                         title={item.hint}
                                         sx={{
                                             mt: 0.25,
-                                            fontSize: '0.74rem',
+                                            fontSize: sized(d, 'hint'),
                                             color: 'var(--mui-palette-text-muted)',
                                             whiteSpace: 'nowrap',
                                             overflow: 'hidden',
@@ -462,7 +360,7 @@ export function StatusSummaryCards<TId extends string = string>({
                                     {item.amountLabel && (
                                         <Typography
                                             sx={{
-                                                fontSize: '0.68rem',
+                                                fontSize: sized(d, 'amountLabel'),
                                                 fontWeight: 600,
                                                 lineHeight: 1.3,
                                                 color: 'var(--mui-palette-text-muted)',
@@ -477,7 +375,7 @@ export function StatusSummaryCards<TId extends string = string>({
                                     <Typography
                                         title={item.amountLabel ? `${item.amountLabel}: ${item.amount}` : item.amount}
                                         sx={{
-                                            fontSize: '0.95rem',
+                                            fontSize: sized(d, 'amount'),
                                             fontWeight: 700,
                                             lineHeight: 1.3,
                                             color: 'var(--crm-slate-900)',
@@ -493,18 +391,53 @@ export function StatusSummaryCards<TId extends string = string>({
                             )}
                         </Box>
 
-                        {/* Share bar (pinned to the bottom so bars line up across cards); in a single row the share
-                            pill sits at its end, leaving the label the width of the card. */}
-                        {singleRow ? (
-                            <Box sx={{ position: 'relative', mt: 'auto', minHeight: 21, display: 'flex', alignItems: 'center', gap: 1 }}>
-                                {shareBar}
-                                {!isAll && sharePill}
+                        {/* Share bar, pinned to the bottom so bars line up across cards, with the share pill at its
+                            end (leaving the label the full width of the card). */}
+                        <Box sx={{ position: 'relative', mt: 'auto', display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
+                            <Box
+                                sx={{
+                                    position: 'relative',
+                                    flex: 1,
+                                    minWidth: 0,
+                                    height: sized(d, 'bar'),
+                                    borderRadius: 3,
+                                    overflow: 'hidden',
+                                    backgroundColor: mix(c, 12),
+                                }}
+                            >
+                                <Box
+                                    sx={{
+                                        height: '100%',
+                                        width: `${Math.min(isAll ? 100 : share, 100)}%`,
+                                        minWidth: item.count > 0 ? 6 : 0,
+                                        borderRadius: 3,
+                                        background: `linear-gradient(90deg, ${mix(c, 65)} 0%, ${c} 100%)`,
+                                        transition: 'width 0.4s ease',
+                                    }}
+                                />
                             </Box>
-                        ) : (
-                            <Box sx={{ position: 'relative', mt: 'auto', display: 'flex' }}>{shareBar}</Box>
-                        )}
+                            {!isAll && (
+                                <Box
+                                    component="span"
+                                    sx={{
+                                        flexShrink: 0,
+                                        px: 0.75,
+                                        py: 0.2,
+                                        borderRadius: '999px',
+                                        fontSize: sized(d, 'pill'),
+                                        fontWeight: 700,
+                                        lineHeight: 1.4,
+                                        color: c,
+                                        backgroundColor: mix(c, 13),
+                                        fontVariantNumeric: 'tabular-nums',
+                                    }}
+                                >
+                                    {formatShare(share)}%
+                                </Box>
+                            )}
+                        </Box>
                     </ButtonBase>
-                    {isAll && settingsHref && (
+                    {showGear && settingsHref && (
                         <Tooltip title="Scorecard settings">
                             <IconButton
                                 component={NextLink}
@@ -513,11 +446,11 @@ export function StatusSummaryCards<TId extends string = string>({
                                 aria-label="Scorecard settings"
                                 sx={{
                                     position: 'absolute',
-                                    top: 10,
-                                    right: 10,
+                                    top: { ...sized(d, 'gearInset'), xs: 8, sm: 8 },
+                                    right: { ...sized(d, 'gearInset'), xs: 8, sm: 8 },
                                     // At least 32 px to tap on touch screens.
-                                    width: { xs: 32, md: 28 },
-                                    height: { xs: 32, md: 28 },
+                                    width: { ...sized(d, 'gear'), xs: 32, sm: 32 },
+                                    height: { ...sized(d, 'gear'), xs: 32, sm: 32 },
                                     border: '1px solid var(--mui-palette-border-main)',
                                     color: 'var(--mui-palette-text-secondary)',
                                     backgroundColor: 'var(--mui-palette-background-paper)',
@@ -536,6 +469,6 @@ export function StatusSummaryCards<TId extends string = string>({
                     </Box>
                 );
             })}
-        </CardsGrid>
+        </Box>
     );
 }

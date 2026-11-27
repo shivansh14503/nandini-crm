@@ -33,8 +33,6 @@ export interface ScorecardModuleInfo {
      * Quotations their stage cards, Contracts its status cards. The other lists show none until an admin switches their scorecard on.
      */
     builtInCards: boolean;
-    /** Many cards: one row that scrolls sideways (see StatusSummaryCards' `singleRow`). */
-    singleRow: boolean;
     /**
      * Totals the list works out from each record (not form fields), offered above the form's amount fields in the
      * currency dropdown. The first is the default, saved as no currency field. Keep in step with the API's
@@ -44,35 +42,32 @@ export interface ScorecardModuleInfo {
 }
 
 export const SCORECARD_MODULES: Readonly<Record<CrmModuleKey, ScorecardModuleInfo>> = {
-    leads: { allLabel: 'All Leads', allIcon: <GroupOutlinedIcon />, builtInCards: true, singleRow: false },
+    leads: { allLabel: 'All Leads', allIcon: <GroupOutlinedIcon />, builtInCards: true },
     opportunities: {
         allLabel: 'All Opportunities',
         allIcon: <TrendingUpOutlinedIcon />,
         builtInCards: true,
-        singleRow: true,
         amounts: OPPORTUNITY_CARD_AMOUNTS as readonly ScorecardAmount<never>[],
     },
     quotations: {
         allLabel: 'All Quotations',
         allIcon: <RequestQuoteOutlinedIcon />,
         builtInCards: true,
-        singleRow: true,
         amounts: QUOTATION_CARD_AMOUNTS as readonly ScorecardAmount<never>[],
     },
-    organizations: { allLabel: 'All Organizations', allIcon: <BusinessOutlinedIcon />, builtInCards: false, singleRow: false },
-    contacts: { allLabel: 'All Contacts', allIcon: <PeopleOutlinedIcon />, builtInCards: false, singleRow: false },
-    products: { allLabel: 'All Products', allIcon: <CategoryOutlinedIcon />, builtInCards: false, singleRow: false },
-    tickets: { allLabel: 'All Tickets', allIcon: <ConfirmationNumberOutlinedIcon />, builtInCards: false, singleRow: false },
-    'partner-companies': { allLabel: 'All Partner Companies', allIcon: <HandshakeOutlinedIcon />, builtInCards: false, singleRow: false },
-    referrals: { allLabel: 'All Referrals', allIcon: <ConnectWithoutContactOutlinedIcon />, builtInCards: false, singleRow: false },
+    organizations: { allLabel: 'All Organizations', allIcon: <BusinessOutlinedIcon />, builtInCards: false },
+    contacts: { allLabel: 'All Contacts', allIcon: <PeopleOutlinedIcon />, builtInCards: false },
+    products: { allLabel: 'All Products', allIcon: <CategoryOutlinedIcon />, builtInCards: false },
+    tickets: { allLabel: 'All Tickets', allIcon: <ConfirmationNumberOutlinedIcon />, builtInCards: false },
+    'partner-companies': { allLabel: 'All Partner Companies', allIcon: <HandshakeOutlinedIcon />, builtInCards: false },
+    referrals: { allLabel: 'All Referrals', allIcon: <ConnectWithoutContactOutlinedIcon />, builtInCards: false },
     contracts: {
         allLabel: 'All Contracts',
         allIcon: <HistoryEduOutlinedIcon />,
         builtInCards: true,
-        singleRow: true,
         amounts: CONTRACT_CARD_AMOUNTS as readonly ScorecardAmount<never>[],
     },
-    activities: { allLabel: 'All Activities', allIcon: <EventNoteOutlinedIcon />, builtInCards: false, singleRow: false },
+    activities: { allLabel: 'All Activities', allIcon: <EventNoteOutlinedIcon />, builtInCards: false },
 };
 
 /** The module's own totals, typed for its records. */

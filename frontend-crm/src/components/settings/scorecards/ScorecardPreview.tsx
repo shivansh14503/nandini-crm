@@ -133,7 +133,7 @@ export function ScorecardPreview({ module, configs, draft, mode, defaults }: Sco
             </Box>
         );
     } else if (loading || !configs) {
-        body = <StatusSummaryCardsSkeleton count={Math.min(draft.options.filter((o) => !o.hidden).length + 1, 8) || 5} singleRow={info.singleRow} withAmount={Boolean(info.amounts?.length)} />;
+        body = <StatusSummaryCardsSkeleton count={Math.min(draft.options.filter((o) => !o.hidden).length + 1, 8) || 5} withAmount={Boolean(info.amounts?.length)} />;
     } else if (!items) {
         body = (
             <Typography sx={{ py: 3, px: 2, textAlign: 'center', fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)' }}>
@@ -141,7 +141,7 @@ export function ScorecardPreview({ module, configs, draft, mode, defaults }: Sco
             </Typography>
         );
     } else {
-        body = <StatusSummaryCards<string> items={items} activeId={shownActiveId} onChange={setActiveId} singleRow={info.singleRow} />;
+        body = <StatusSummaryCards<string> items={items} activeId={shownActiveId} onChange={setActiveId} />;
     }
 
     return (
