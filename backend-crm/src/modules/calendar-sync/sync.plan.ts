@@ -80,7 +80,12 @@ export function planPush(input: PlanInput): PushPlan {
         return input.createEligible ? { action: 'create', restore: false, newGeneration: false } : { action: 'noop', state: 'cancelled' };
     }
 
-    const changed = link.base ? crmChangedGroups(crmNow, link.base.crm).filter((g) => g !== 'status') : [...PATCHABLE_GROUPS];
+    // P2-8: the description of a meeting brought in from the calendar is the employee's own text (their agenda, the
+    // Teams join block): the CRM never writes it (a patch replaces the whole description). Google keeps the Meet link
+    // in its conference data, so nothing is lost.
+    const changed = (link.base ? crmChangedGroups(crmNow, link.base.crm).filter((g) => g !== 'status') : [...PATCHABLE_GROUPS]).filter(
+        (g) => activity.origin !== 'calendar' || g !== 'description',
+    );
     const groups = activity.status === 'Completed' ? changed.filter((g) => COMPLETED_GROUPS.has(g)) : changed;
     return groups.length > 0 ? { action: 'patch', groups } : { action: 'noop', state: 'synced' };
 }

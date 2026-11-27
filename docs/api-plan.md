@@ -143,12 +143,16 @@ too (on `followupType`, "… It can't become a Task: that would drop the times, 
 another type is fine; as of 2026-11-27). The organizer's `ready` Meet / Teams link is still shown:
 `videoMeeting` / `conferenceJoinUrl` / `conference` (state `ready`, `canRetry: false`) come from the event, read only (never
 on a Task / Note). A meeting the employee organized brings its own `ready` Meet / Teams link along at import (taken over
-as on a pull, P3-1; as of 2026-11-27). Such a meeting can't repeat (`repeat` → `400`, "Only activities made in the CRM can repeat.").
+as on a pull, P3-1; as of 2026-11-27). The CRM never writes the description of a meeting brought in from the calendar
+(origin `calendar`): it is the employee's own agenda / Teams block, so no push sends the description group and no
+join-details push follows an adopted link (as of 2026-11-27, review fix). Such a meeting can't repeat (`repeat` → `400`, "Only activities made in the CRM can repeat.").
 The related record, remarks, customer response, Completed and custom fields stay editable. Two colleagues on one
 meeting share one activity (one `syncKey` = iCalUID), each with their own calendar link (the second is an `attendee`
-link). Deleting an imported activity detaches the links and keeps `syncKey`, so it is never imported again; restoring it
-(Admin › Audit Log) re-attaches its invitation copies on live calendars and pulls those calendars in full once (as of
-2026-11-27). When the last invitation copy the CRM follows is cancelled and the owner holds none of their own (a colleague
+link). Deleting an imported activity detaches the links and keeps `syncKey`, so it is never imported again; restoring an
+activity (Admin › Audit Log; imported or CRM-made) re-attaches its detached invitation copies on live calendars, and
+the next pull of each such calendar reads each copy back once, so a change or a cancellation made while it was in the
+bin is applied (a gone copy cancels as usual). Re-activating a stopped connection row re-attaches its invitation copies
+of live activities ending after yesterday the same way (as of 2026-11-27, review fix). When the last invitation copy the CRM follows is cancelled and the owner holds none of their own (a colleague
 who doesn't import organized it), the meeting is set Cancelled, and back to Planned if that copy returns. An imported
 meeting with no related record that ended before today and is still Planned is completed by the nightly maintenance
 (`completedBy` `calendar-sync`). Turning either switch on starts one full pull of each affected calendar, so meetings

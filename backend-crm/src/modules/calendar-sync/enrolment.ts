@@ -17,7 +17,7 @@ import {
 } from './connection.constants.js';
 import { isFakeProviderEnabled } from './providers/fakeSwitch.js';
 import { CREATE_ELIGIBLE_PAST_MS } from './sync.constants.js';
-import { reattachedState } from './sync.outbox.js';
+import { REATTACHED_COPY, reattachedState } from './sync.outbox.js';
 import { enqueueCheck } from './sync.wake.js';
 import { loadProviderAccess } from './providers/registry.js';
 import { tokenSource } from './tokenSource.js';
@@ -269,10 +269,34 @@ async function startRow(
 /**
  * A re-activated row: its detached organizer links of activities the user still owns, not deleted and ending after
  * now − 1 day, become dirty again (the outbox sweep pushes them once the row is checked). Older ones stay detached.
+ * Its detached invitation copies come back too (`reattachAttendeeLinks`, P2-8).
  * Guests a non-owner added meanwhile were held on the link by the outbox (D41), so the push doesn't invite them; a
  * link whose event the CRM had deleted comes back `cancelled` (restored, never patched).
  */
 async function reattachLinks(tx: TransactionClient, connectionId: string, username: string, now: Date): Promise<number> {
+    const count = await reattachOrganizerLinks(tx, connectionId, username, now);
+    return count + (await reattachAttendeeLinks(tx, connectionId, now));
+}
+
+/**
+ * P2-8: a re-activated row's detached invitation copies (attendee links, imported meetings and colleagues' CRM
+ * meetings) of live activities ending after now − 1 day come back as REATTACHED_COPY: the row's first pull reads each
+ * back once (`readReattached`, sync.pull.ts), so a meeting moved or cancelled while the row was stopped is applied.
+ */
+async function reattachAttendeeLinks(tx: TransactionClient, connectionId: string, now: Date): Promise<number> {
+    const detached = await tx.activityExternalLink.findMany({ where: { connectionId, state: 'detached', role: 'attendee' }, select: { id: true, activityId: true } });
+    if (detached.length === 0) return 0;
+    const current = await tx.activity.findMany({
+        where: { id: { in: [...new Set(detached.map((l) => l.activityId))] }, isDeleted: false, endAt: { gt: new Date(now.getTime() - CREATE_ELIGIBLE_PAST_MS) } },
+        select: { id: true },
+    });
+    const ids = new Set(current.map((a) => a.id));
+    const linkIds = detached.filter((l) => ids.has(l.activityId)).map((l) => l.id);
+    if (linkIds.length === 0) return 0;
+    return (await tx.activityExternalLink.updateMany({ where: { id: { in: linkIds }, state: 'detached' }, data: REATTACHED_COPY })).count;
+}
+
+async function reattachOrganizerLinks(tx: TransactionClient, connectionId: string, username: string, now: Date): Promise<number> {
     const detached = await tx.activityExternalLink.findMany({
         where: { connectionId, state: 'detached', role: 'organizer' },
         select: { id: true, activityId: true, externalEventId: true, baseJson: true },

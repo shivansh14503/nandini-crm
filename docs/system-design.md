@@ -376,7 +376,8 @@ which see every record (`modules/user-admin/roles.ts`, mirrored and contract-tes
     nightly job. A new row gets an immediate health check: a `check` job on `crm-calendar-sync` (§5.4), or in-process
     when Redis is down (as of 2026-11-26, P2-3b). Stopping a row sets its links `detached` (the calendar events stay);
     re-activating it re-attaches the organizer links of the person's activities that end after yesterday (dirty, so
-    they push again). Unique-index races surface outside the transaction (D45).
+    they push again) and, since P2-8 (as of 2026-11-27), its invitation copies of live activities ending after
+    yesterday (`synced` with no etag: the row's first pull reads each back once). Unique-index races surface outside the transaction (D45).
   - **Problems go to admins**, never to employees: `calendar_sync_issue` notifications (§5.1), the provider card's
     health and the People table. The employee's My Profile card and the Calendar page notice show a calm status only.
   - Provider calls go through `providerFetch` (timeouts, Retry-After, full-jitter backoff, a per-process pause after a
@@ -845,11 +846,16 @@ attendee copies ride the existing pulls (poll, webhook, Sync now), with the impo
 keys per query) and only for events that aren't linked yet; a CRM reply's `rsvp` job runs right after the reply,
 while the database is awake for it; the auto-complete is a step of the existing 00:25 calendar nightly. Turning import
 on (the company switch, or an admin's per-person switch) drops the cursor of each affected synced calendar and queues
-one full pull (`rebaseline`), once per person per switch-on, while an admin is using the app anyway; without Redis the
-next poll does it inside the sync hours. Without Redis a reply that meets a busy lease, a rate limit or a transient
+one full pull (`rebaseline`, with the pending-only job id rule so a poll job of the same 10 s that already started
+can't absorb it), once per person per switch-on, while an admin is using the app anyway; without Redis the
+next poll does it inside the sync hours. A pull saves its cursor only over the one it started from, so a cursor dropped
+while it ran stays dropped (as of 2026-11-27). Without Redis a reply that meets a busy lease, a rate limit or a transient
 failure is tried again in-process up to 5 times (15 s × attempt apart, or the provider's wait), no extra wake-up.
-Restoring an imported meeting from the audit log (as of 2026-11-27) re-attaches its invitation copies and queues one
-full pull of each such calendar (its cursor dropped), only on that admin action.
+Restoring an activity from the audit log (as of 2026-11-27) re-attaches its detached invitation copies (`synced`, no
+etag) and queues one prompt pull of each such calendar (an admin pull, pending-only), only on that admin action. Every
+pull first reads such copies back (one indexed query per pull, inside the pull's own wake; at most 50 reads per pull),
+so no full pull or cursor drop is needed and a copy cancelled or deleted meanwhile is seen. The CRM never writes the
+description of an imported meeting, so an adopted Meet / Teams link queues no extra push.
 
 The navbar bell's unread count is served from Redis, so open browser tabs polling it don't keep the database awake:
 the key lives 24 h and is dropped only by a change to the user's notifications (which already used the database), by

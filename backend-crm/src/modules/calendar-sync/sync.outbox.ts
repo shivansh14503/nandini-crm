@@ -64,7 +64,7 @@ export interface HeldNotice {
 export interface OutboxResult {
     links: DirtyLink[];
     notices: HeldNotice[];
-    /** P2-8: connections whose cursor was dropped for one full pull (a restored imported meeting's copies re-attached). */
+    /** P2-8: connections that get one prompt pull (a restored meeting's invitation copies re-attached: read back there). */
     pulls?: string[];
 }
 
@@ -170,6 +170,12 @@ const guestCount = (row: ActivityRow) => row.attendees.filter((a) => !(a.kind ==
 const hasLiveEvent = (link: { externalEventId: string | null; state: string }) => Boolean(link.externalEventId) && link.state !== 'cancelled' && link.state !== 'removed_remote';
 
 /**
+ * P2-8: what a re-attached invitation copy (attendee link) becomes (a restore, a re-activated connection row): live,
+ * with no etag, so the next pull reads it back once (`readReattached`, sync.pull.ts) and applies its current state.
+ */
+export const REATTACHED_COPY = { state: 'synced', etag: null, dirtyAt: null, nextAttemptAt: null, lastErrorCode: null, lastErrorMessage: null } as const;
+
+/**
  * The state a `detached` link goes back to when its row is re-activated: `cancelled` when the CRM had deleted its
  * event before the row stopped (an event id kept without a base, §8.6), else `pending`. A gone event must not be
  * patched (a 404 there reads as a deletion in the calendar and would cancel the activity).
@@ -179,13 +185,14 @@ export function reattachedState(link: { externalEventId: string | null; baseJson
 }
 
 /**
- * P2-8: an imported meeting brought back from the bin (Admin › Audit Log restore). Deleting it detached its invitation
- * copies (attendee links) on their next pull; on live connections they are made live again with no etag, and each such
- * connection drops its cursor for one full pull, so the meeting's current state in the calendar (changed meanwhile or
- * not) is applied again and later changes keep arriving. Returns those connection ids (none: nothing was detached).
- * Only on a restore, so it adds no regular database wake-up.
+ * P2-8: a meeting brought back from the bin (Admin › Audit Log restore; imported or CRM-made). Deleting it detached
+ * the invitation copies (attendee links) of employees who import, on their next pull. On live connections they are
+ * made live again as `synced` with no etag: every pull reads such a copy back once before its listing
+ * (`readReattached`, sync.pull.ts), so the copy's current state is applied whatever the cursor or the listing shows (a
+ * time moved meanwhile, or a copy cancelled or deleted while the meeting was in the bin). Returns those connection
+ * ids, which get one prompt pull (none: nothing was detached). Only on a restore, so it adds no regular database wake-up.
  */
-async function reattachImportedCopies(db: OutboxDb, activityId: string): Promise<string[]> {
+async function reattachAttendeeCopies(db: OutboxDb, activityId: string): Promise<string[]> {
     const detached = await db.activityExternalLink.findMany({ where: { activityId, role: 'attendee', state: 'detached' }, select: { id: true, connectionId: true } });
     if (detached.length === 0) return [];
     const live = await db.calendarConnection.findMany({
@@ -196,9 +203,8 @@ async function reattachImportedCopies(db: OutboxDb, activityId: string): Promise
     if (liveIds.length === 0) return [];
     await db.activityExternalLink.updateMany({
         where: { id: { in: detached.filter((l) => liveIds.includes(l.connectionId)).map((l) => l.id) }, state: 'detached' },
-        data: { state: 'synced', etag: null, dirtyAt: null, nextAttemptAt: null, lastErrorCode: null, lastErrorMessage: null },
+        data: REATTACHED_COPY,
     });
-    await db.calendarConnection.updateMany({ where: { id: { in: liveIds } }, data: { syncCursor: null } });
     return liveIds;
 }
 
@@ -206,7 +212,7 @@ export async function markActivityForSync(db: OutboxDb, event: ActivityWriteEven
     const { before, after, actor, now, config } = event;
     if (!event.markSync || !pushableChanged(before, after)) return null;
 
-    const pulls = before?.isDeleted && !after.isDeleted && after.origin === 'calendar' ? await reattachImportedCopies(db, after.id) : [];
+    const pulls = before?.isDeleted && !after.isDeleted ? await reattachAttendeeCopies(db, after.id) : [];
     const owner = after.assignedTo;
     const ownerConn = await ownerConnectionOf(db, owner);
     const links = before ? await db.activityExternalLink.findMany({ where: { activityId: after.id, role: 'organizer' } }) : [];

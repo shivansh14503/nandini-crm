@@ -781,8 +781,9 @@ Migration `20261127090000_calendar_connections` (Calendar Phase 2 P2-2) created 
 Module `backend-crm/src/modules/calendar-sync`. Rows are created and stopped only by the enrolment reconcile
 (`enrolment.ts`), never by the employee. One row per (user, provider, mailbox) identity: an email or provider change
 stops the old row and starts a new one; stopped rows are kept for link history (their `ActivityExternalLink` rows
-become `detached`; re-activation re-attaches the organizer links of activities ending after yesterday, P2-3b). No FK
-to `Users`.
+become `detached`; re-activation re-attaches the organizer links of activities ending after yesterday, P2-3b, and the
+invitation copies (attendee links) of live activities ending after yesterday as `synced` with no etag, which the next
+pull reads back once, P2-8 as of 2026-11-27). No FK to `Users`.
 
 | Column | Type | Notes |
 | --- | --- | --- |
@@ -794,7 +795,7 @@ to `Users`.
 | `statusReason` | NVARCHAR(50) NULL | `error`: `user_not_found`, `user_unavailable`, `calendar_unavailable`, `mailbox_out_of_scope`, `no_mailbox`; `stopped`: `excluded`, `user_inactive`, `email_changed`, `provider_changed`, `provider_removed`, `no_email`, `oauth_retired` (P2-2's OAuth rows; never reactivated) |
 | `source` | NVARCHAR(10), default `domain` | How the provider was chosen: `domain` \| `override` |
 | `calendarId` | NVARCHAR(200), default `primary` | `primary` (Google) / `''` = default calendar (Graph) |
-| `syncCursor`, `syncWindowStart`, `syncWindowEnd`, `fullSyncAt` | | The pull (P2-5, as of 2026-11-26): Google sync token / Graph delta link (never logged; stored only when every change of the run applied; null = the next pull is a full sync), the full sync's window (now − 7 days … now + 400 days; an Outlook window is re-baselined nightly 30 days after its full sync, i.e. once `syncWindowStart` is older than 37 days), the last full sync |
+| `syncCursor`, `syncWindowStart`, `syncWindowEnd`, `fullSyncAt` | | The pull (P2-5, as of 2026-11-26): Google sync token / Graph delta link (never logged; stored only when every change of the run applied, and only over the cursor the pull started from, so a cursor dropped while it ran stays dropped, P2-8 as of 2026-11-27; null = the next pull is a full sync), the full sync's window (now − 7 days … now + 400 days; an Outlook window is re-baselined nightly 30 days after its full sync, i.e. once `syncWindowStart` is older than 37 days), the last full sync |
 | `backfilledAt`, `backfillCount` | | The first-sync backfill (as of 2026-11-26, P2-3c): `backfilledAt` = its run stamp, claimed when the first run starts (`WHERE backfilledAt IS NULL`) and reused by a run started again; `backfillCount` = how many activities it copied (links on the row carrying the stamp), written last (`WHERE backfillCount IS NULL`). `backfillCount` null = not done (the `enrolled` job and the poll re-queue it). Never reset, so it runs once per row |
 | `lastPulledAt`, `lastPushedAt`, `lastSuccessAt`, `lastCheckedAt` | | Sync health |
 | `nextCheckAt` | DATETIME2 NULL | Earliest next health check after a user-level error (backoff 15 min → 1 h → 6 h → 24 h) |

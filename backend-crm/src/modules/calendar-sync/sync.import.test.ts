@@ -5,7 +5,7 @@ import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
 import { activityService } from '../activities/activity.service.js';
 import { blankActivity, blankLink, EMPTY_CONFIGS, installActivityDouble, restoreActivityDouble, type ActivityDoubleState } from '../activities/testing/activityDouble.js';
-import { fakeAddEvent, fakeEditEvent, fakeMeetUrl, fakeProviderState, resetFakeProvider } from './providers/fake.js';
+import { fakeAddEvent, fakeDeleteEvent, fakeEditEvent, fakeMeetUrl, fakeProviderState, resetFakeProvider } from './providers/fake.js';
 import { resetProviderPauses } from './providers/http.js';
 import { getAdapter, setAdapterForTests, setFakeHealth, setFakeProviderEnabledForTests } from './providers/registry.js';
 import type { GoogleEventWire } from './providers/wire.js';
@@ -633,9 +633,9 @@ describe('customer meetings: second review fixes', () => {
         assert.equal(imported()[0].conferenceJoinUrl, null);
     });
 
-    it('the person’s own meeting brings its Meet link along at import (adopted: the push neither asks for nor removes one)', async () => {
+    it('the person’s own meeting brings its Meet link along at import (adopted: the push neither asks for nor removes one, and never touches the agenda)', async () => {
         install();
-        fakeAddEvent(calendarMeeting('m1', meet('own-meet-xyz')));
+        fakeAddEvent(calendarMeeting('m1', { ...meet('own-meet-xyz'), description: 'Agenda: pricing, rollout dates' }));
         done(await pullConnection('c1', 'poll'));
         const [row] = imported();
         assert.equal(row.externalOrganizer, false);
@@ -644,14 +644,38 @@ describe('customer meetings: second review fixes', () => {
         assert.equal(row.conferenceJoinUrl, fakeMeetUrl('own-meet-xyz'));
         const [link] = linksOf(row.id);
         assert.equal(JSON.parse(link.baseJson as string).crm.conference?.provider, 'meet', 'the base records the adopted link');
-        assert.ok(link.dirtyAt, 'one push for the join details');
+        assert.equal(link.dirtyAt, null, 'no join-details push: the description is the person’s own');
+        assert.equal(link.state, 'synced');
         const view = await activityService.getById(row.id, PALAK);
         assert.equal(view.videoMeeting, 'meet');
 
+        // A later CRM change goes out without the description (a patch would replace the whole agenda).
+        await activityService.update(row.id, { ...view, location: 'Room 2' }, PALAK);
         await pushLink(link.id);
+        const patches = fakeProviderState.eventCalls.filter((c) => c.op === 'patch');
+        assert.equal(patches.length, 1);
+        assert.ok(!('description' in (patches[0].body ?? {})), JSON.stringify(patches[0].body));
         assert.equal(fakeProviderState.eventCalls.filter((c) => c.op === 'create').length, 0, 'no new event');
+        const event = fakeProviderState.events.get('m1');
+        assert.equal(event?.location, 'Room 2');
+        assert.equal(event?.description, 'Agenda: pricing, rollout dates', 'the agenda stays');
         assert.equal(imported()[0].conferenceJoinUrl, fakeMeetUrl('own-meet-xyz'), 'the link stays');
-        assert.equal(fakeProviderState.events.get('m1')?.hangoutLink, fakeMeetUrl('own-meet-xyz'), 'never removed from the event');
+        assert.equal(event?.hangoutLink, fakeMeetUrl('own-meet-xyz'), 'never removed from the event');
+    });
+
+    it('a Meet link added later to the person’s imported meeting is taken over without a push over its agenda', async () => {
+        install();
+        fakeAddEvent(calendarMeeting('m1', { description: 'Agenda: pricing' }));
+        done(await pullConnection('c1', 'poll'));
+        const [row] = imported();
+        fakeEditEvent('m1', meet('later-meet'), new Date(Date.now() + 60_000));
+        done(await pullConnection('c1', 'poll'));
+        assert.equal(imported()[0].conferenceJoinUrl, fakeMeetUrl('later-meet'));
+        const [link] = linksOf(row.id);
+        assert.equal(link.dirtyAt, null, 'nothing to push');
+        await pushLink(link.id);
+        assert.equal(fakeProviderState.eventCalls.filter((c) => c.op === 'patch').length, 0);
+        assert.equal(fakeProviderState.events.get('m1')?.description, 'Agenda: pricing');
     });
 
     it('a cancelled copy can’t be answered: no reply buttons, 403, and the meeting stays Cancelled', async () => {
@@ -745,7 +769,7 @@ describe('customer meetings: second review fixes', () => {
         assert.equal(attendeeOf(row.id, 'palak')?.responseStatus, 'declined');
     });
 
-    it('restoring a removed outside meeting re-attaches its copies and pulls in full: the organizer’s changes reach it again', async () => {
+    it('restoring a removed outside meeting re-attaches its copies; the next pull reads them back: the organizer’s changes reach it again', async () => {
         install();
         fakeAddEvent(customerMeeting('m1'));
         done(await pullConnection('c1', 'poll'));
@@ -755,15 +779,96 @@ describe('customer meetings: second review fixes', () => {
         done(await pullConnection('c1', 'poll'));
         assert.equal(linksOf(row.id)[0].state, 'detached');
 
+        const cursor = state.connections[0].syncCursor;
         await activityService.restore(row.id, ADMIN);
         const link = linksOf(row.id)[0];
         assert.equal(link.state, 'synced');
         assert.equal(link.etag, null);
-        assert.equal(state.connections[0].syncCursor, null, 'one full pull');
-        const full = done(await pullConnection('c1', 'poll'));
-        assert.equal(full.full, true);
+        assert.equal(state.connections[0].syncCursor, cursor, 'no full pull needed: the copy is read back directly');
+        const next = done(await pullConnection('c1', 'poll'));
+        assert.equal(next.full, false);
+        assert.equal(next.counts.verified, 1);
         assert.equal(imported()[0].subject, 'Moved while removed');
+        assert.ok(linksOf(row.id)[0].etag, 'read once: the etag is stored');
+        assert.equal(done(await pullConnection('c1', 'poll')).counts.verified, 0, 'not read again');
         assert.equal((await activityService.getById(row.id, PALAK)).viewer.myResponse, 'accepted', 'the owner can answer again');
+    });
+
+    for (const [how, purge] of [
+        ['cancelled', false],
+        ['deleted for good (the read back finds nothing)', true],
+    ] as const) {
+        it(`restoring a removed outside meeting whose copy was ${how} meanwhile brings it back Cancelled (never auto-completed, no reply buttons)`, async () => {
+            install();
+            fakeAddEvent(customerMeeting('m1'));
+            done(await pullConnection('c1', 'poll'));
+            const [row] = imported();
+            await activityService.remove(row.id, PALAK);
+            fakeDeleteEvent('m1', new Date(Date.now() + 60_000));
+            done(await pullConnection('c1', 'poll'));
+            assert.equal(linksOf(row.id)[0].state, 'detached', 'the pull that saw the cancel only detached the copy');
+            if (purge) fakeProviderState.events.delete('m1');
+
+            await activityService.restore(row.id, ADMIN);
+            assert.equal(imported()[0].status, 'Planned');
+            // A full listing never shows a gone event; the read back does.
+            state.connections[0].syncCursor = null;
+            done(await pullConnection('c1', 'poll'));
+            assert.equal(imported()[0].status, 'Cancelled');
+            assert.equal(linksOf(row.id)[0].state, 'cancelled');
+            assert.equal((await activityService.getById(row.id, PALAK)).viewer.myResponse, null, 'nothing to answer');
+            assert.equal(await autoCompleteImported(new Date(Date.now() + 10 * DAY)), 0, 'never completed');
+        });
+    }
+
+    it('restoring a CRM-made meeting re-attaches a colleague’s invitation copy too (not only imported ones)', async () => {
+        install({ importing: ['palak'] });
+        const start = inDays(2);
+        state.activities.push(
+            blankActivity({ id: 'crm1', subject: 'Quarterly review with ACME', assignedTo: 'asha', createdBy: 'asha', origin: 'crm', status: 'Planned', startAt: start, endAt: new Date(start.getTime() + HOUR) }),
+        );
+        state.links.push(blankLink({ id: 'l-asha', activityId: 'crm1', connectionId: 'c2', provider: 'fake', requestedId: 'crmffff', role: 'organizer', state: 'detached' }));
+        state.links.push(
+            blankLink({ id: 'l-palak', activityId: 'crm1', connectionId: 'c1', provider: 'fake', requestedId: 'x', role: 'attendee', state: 'detached', externalEventId: 'm1', externalEventKey: 'm1', etag: '"old"' }),
+        );
+        state.activities.find((a) => a.id === 'crm1')!.isDeleted = true;
+        await activityService.restore('crm1', ADMIN);
+        const copy = state.links.find((l) => l.id === 'l-palak');
+        assert.equal(copy?.state, 'synced');
+        assert.equal(copy?.etag, null);
+    });
+
+    it('a cursor dropped while a pull runs (meeting import switched on) stays dropped: the next pull is full', async () => {
+        install({ importing: [] });
+        fakeAddEvent(calendarMeeting('m1'));
+        done(await pullConnection('c1', 'poll'));
+        assert.ok(state.connections[0].syncCursor);
+        const real = getAdapter('fake');
+        let dropped = false;
+        setAdapterForTests('fake', {
+            ...real,
+            listChanges: async (ctx, input) => {
+                const page = await real.listChanges(ctx, input);
+                if (!dropped) {
+                    dropped = true;
+                    // The admin switches import on while this incremental pull is listing.
+                    state.calendarSyncUsers.push({ username: 'palak', provider: null, excluded: false, note: null, importMeetings: true } as (typeof state.calendarSyncUsers)[number]);
+                    assert.equal(await startImportPulls(['palak']), 1);
+                }
+                return page;
+            },
+        });
+        try {
+            const before = state.connections[0].lastPulledAt;
+            assert.equal(done(await pullConnection('c1', 'poll')).full, false);
+            assert.equal(state.connections[0].syncCursor, null, 'the running pull did not put its cursor back');
+            assert.notEqual(state.connections[0].lastPulledAt, before, 'bookkeeping still written');
+            const full = done(await pullConnection('c1', 'poll'));
+            assert.equal(full.full, true);
+            assert.equal(full.counts.imported, 1);
+        } finally {
+            setAdapterForTests('fake', null);
+        }
     });
 });
 

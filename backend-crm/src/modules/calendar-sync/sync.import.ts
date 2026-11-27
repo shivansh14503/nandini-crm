@@ -30,7 +30,7 @@ import { scheduleFieldsOf } from './sync.merge.js';
 import { crmWhenOf, sameWhen, type AttendeeResponse, type CrmAttendee, type ProviderEvent } from './sync.shapes.js';
 import { parseReplyBase } from './sync.view.js';
 import { recordConference, settleConference } from './sync.conference.js';
-import type { DirtyLink } from './sync.outbox.js';
+import { withJoinDetails } from './conference.rules.js';
 
 /**
  * Customer meetings from the calendar (Calendar Phase 2 spec §13.1–§13.2, D17, D18; P2-8), run by the pull
@@ -371,8 +371,6 @@ export interface ImportOutcome {
     outcome: ImportOutcomeKind;
     /** This person's organizer copy of an activity assigned to them that another pull brought in meanwhile: the pull relinks it (§8.2). */
     relinkActivityId?: string;
-    /** Links left dirty (an imported organizer copy whose join link was taken over: one push for the join details). */
-    wake?: DirtyLink[];
 }
 
 const UNCHANGED: ImportOutcome = { rows: [], outcome: 'unchanged' };
@@ -506,7 +504,6 @@ export class MeetingImporter {
             });
 
             let baseJson: string;
-            let joinReady = false;
             if (decision.role === 'organizer') {
                 const { crmNow } = await inboundCrmNow(
                     tx,
@@ -518,10 +515,13 @@ export class MeetingImporter {
                 );
                 // P3-1 inbound adoption, as the pull's merge does for organizer copies: a ready Meet / Teams link the
                 // person made in their calendar is taken over, and the base records it so the push never asks for
-                // another (or removes it). One more push then carries the join details, as after a push answer.
+                // another (or removes it). No join-details push follows: the description of an imported meeting is
+                // the person's own (their agenda, the Teams block) and the CRM never writes it (`planPush`). The base
+                // records the description the push would work out, so it sees nothing to send.
                 const conference = settleConference(written.after, event, this.connection.provider, null, crmNow);
-                joinReady = conference.outcome.columns?.conferenceState === 'ready' && (await recordConference(tx, written.after, conference.outcome));
-                baseJson = JSON.stringify({ crm: joinReady ? conference.crm : crmNow, provider: event.shape });
+                const joinReady = conference.outcome.columns?.conferenceState === 'ready' && (await recordConference(tx, written.after, conference.outcome));
+                const crm = joinReady ? { ...conference.crm, description: withJoinDetails(crmNow.description, { ...written.after, ...conference.outcome.columns }) } : crmNow;
+                baseJson = JSON.stringify({ crm, provider: event.shape });
             } else {
                 baseJson = selfBaseJson(event.selfResponse ?? 'needsAction');
             }
@@ -531,18 +531,17 @@ export class MeetingImporter {
                     connectionId: this.connection.id,
                     provider: this.connection.provider,
                     role: decision.role,
-                    state: joinReady ? 'pending' : 'synced',
+                    state: 'synced',
                     invites: 'send',
                     requestedId: requestedIdFor(written.after.id, this.connection.id, 0),
                     ...this.linkIdentity(event, now),
                     baseJson,
                     crmSyncedAt: written.after.updatedAt,
-                    ...(joinReady ? { dirtyAt: now } : {}),
                 },
                 select: { id: true },
             });
             logger.info({ activityId: written.after.id, connectionId: this.connection.id, role: decision.role }, 'Customer meeting brought in from the calendar');
-            return { rows: [written], outcome: 'imported', ...(joinReady ? { wake: [{ id: link.id, dirtyAt: now }] } : {}) };
+            return { rows: [written], outcome: 'imported' };
         });
         if ('attend' in result) return this.attend(event, result.attend);
         return result;

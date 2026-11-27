@@ -153,12 +153,15 @@ export function setPullJobQueueForTests(queue: PullJobQueue | null): void {
  * When the state read times out or fails (UNREADABLE_JOB_STATE), an on-demand pull returns null at once instead of
  * also trying the add: Redis isn't answering, and the person waits on the request, so the caller pulls in-process
  * (under the lease) after at most one 3 s timeout, as before the state read existed.
+ *
+ * `pendingOnly` (P2-8) applies the same rule to another reason: the full pulls an admin's switch-on of meeting import
+ * starts (`rebaseline` after a cursor drop), which a poll job of the same bucket that already started must not absorb.
  */
-export async function enqueuePull(connectionId: string, reason: PullReason, now: Date = new Date()): Promise<string | null> {
+export async function enqueuePull(connectionId: string, reason: PullReason, now: Date = new Date(), options: { pendingOnly?: boolean } = {}): Promise<string | null> {
     if (!ENV.INTEGRATIONS.SYNC_ENABLED) return null;
     const data: PullJobData = { connectionId, reason };
     const bucketId = pullJobId(connectionId, now);
-    if (!ON_DEMAND_PULL_REASONS.has(reason)) return pullJobs.add(bucketId, data);
+    if (!ON_DEMAND_PULL_REASONS.has(reason) && !options.pendingOnly) return pullJobs.add(bucketId, data);
     const state = await pullJobs.stateOf(bucketId);
     // Redis didn't answer the state read: don't wait out a second timeout on the add.
     if (state === UNREADABLE_JOB_STATE) return null;
@@ -172,8 +175,10 @@ export async function enqueuePull(connectionId: string, reason: PullReason, now:
  * P2-8: customer-meeting import was just turned on (the company switch: `usernames` null = everyone who imports; an
  * admin's per-person switch: that person). Pulls are incremental (a Google sync token / Graph delta only returns events
  * that changed), so meetings already in the calendar would never reach the importer: each affected live connection
- * drops its cursor and gets one full pull (`rebaseline`). The cursor drop is durable, so without Redis the next poll
- * pulls in full. One full pull per person per switch-on; never throws. Returns how many connections start over.
+ * drops its cursor and gets one full pull (`rebaseline`, pending-only so a poll job of the same 10 s that already
+ * started can't absorb it). The cursor drop is durable: without Redis the next poll pulls in full, and a pull already
+ * running when the cursor was dropped doesn't put its cursor back (`finish` in sync.pull.ts saves it only over the
+ * one it started from). One full pull per person per switch-on; never throws. Returns how many connections start over.
  */
 export async function startImportPulls(usernames: readonly string[] | null, now: Date = new Date()): Promise<number> {
     try {
@@ -198,7 +203,7 @@ export async function startImportPulls(usernames: readonly string[] | null, now:
         }
         for (const { id } of connections) {
             await prisma.calendarConnection.updateMany({ where: { id }, data: { syncCursor: null } });
-            await enqueuePull(id, 'rebaseline', now).catch(() => null);
+            await enqueuePull(id, 'rebaseline', now, { pendingOnly: true }).catch(() => null);
         }
         if (connections.length > 0) logger.info({ connections: connections.length }, 'Customer-meeting import turned on; full calendar pulls started');
         return connections.length;
@@ -229,8 +234,9 @@ export async function runCalendarPostCommit(rows: readonly { after: object }[]):
         notices.push(...result.notices);
         for (const id of result.pulls ?? []) pulls.add(id);
     }
-    // P2-8: a restored imported meeting's calendars pull in full (the dropped cursor makes the next poll full without Redis).
-    for (const id of pulls) await enqueuePull(id, 'rebaseline').catch(() => null);
+    // P2-8: a restored meeting's re-attached invitation copies: one prompt pull of each calendar reads them back (an
+    // admin's action: the on-demand pending-only rule). Without Redis, or if this add is lost, the next poll reads them.
+    for (const id of pulls) await enqueuePull(id, 'admin').catch(() => null);
     try {
         await wakePushes(links);
     } catch (err) {
