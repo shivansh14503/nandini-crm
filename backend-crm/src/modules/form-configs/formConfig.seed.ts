@@ -2,6 +2,7 @@ import { prisma } from '../../config/prisma.js';
 import type { TransactionClient } from '../../config/prisma.js';
 import { logger } from '../../config/logger.js';
 import { CACHE_KEYS, cacheService } from '../../services/cache.service.js';
+import { splitLegacyCustomerResponse } from './customerResponseSplit.js';
 import { CONVERT_FIELD_NAMES, DEFAULT_CATEGORIES, DEFAULT_FIELDS, DEFAULT_SELECTED_OPTIONS, isConvertModule, isFieldTombstoned, sectionKeyFromLabel, type DefaultOption } from './formConfig.defaults.js';
 
 const toOption = (option: string | DefaultOption): DefaultOption => (typeof option === 'string' ? { value: option } : option);
@@ -15,7 +16,9 @@ const toOption = (option: string | DefaultOption): DefaultOption => (typeof opti
  *  • built-in fields stay system, and core-locked ones stay visible, active and (if required) required.
  */
 export async function ensureFormConfigsSeeded(): Promise<void> {
-    let changed = 0;
+    // One list per module for Customer Response (was one shared list): before the defaults, so the split copies
+    // the admin's options instead of the defaults creating fresh lists.
+    let changed = await splitLegacyCustomerResponse();
 
     // ── Categories & options ──
     const existingCategories = await prisma.dropdownCategory.findMany({ include: { options: true } });

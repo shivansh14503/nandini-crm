@@ -140,7 +140,7 @@ export interface ActivityFormData {
     attendees: ActivityAttendee[];
 
     // Outcome & Notes
-    /** Option of shared_customer_response (the Leads / Opportunities list, every active option); recorded only. */
+    /** Option of the related lead's / opportunity's Customer Response list, else activity_customer_response; recorded only. */
     customerResponse: string;
     remarks: string;
 }

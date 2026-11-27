@@ -55,7 +55,7 @@ export interface OpportunityFormData {
     nextFollowupDate: string;
     nextFollowupTime?: string;
     followupType: string;
-    /** What the customer said on the last follow-up (shared_customer_response); picked on every edit. */
+    /** What the customer said on the last follow-up (opportunity_customer_response, the Opportunities own list); picked on every edit. */
     customerResponse?: string;
 
     // Basic Details - Row 8

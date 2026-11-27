@@ -257,7 +257,7 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
       reply only) and global roles. Related record (lead, opportunity, contact, organization, quotation, ticket,
       contract) checked against the caller's access; organization / contact derived from it; renames written through
       to activities and contact attendees. Form Builder: Activities module (15 fields, `activity_status`,
-      `activity_reminder`; Customer Response is the leads / opportunities list `shared_customer_response`, recorded
+      `activity_reminder`; Customer Response is its own `activity_customer_response`, or the related lead's / opportunity's list, recorded
       only: no Rating, Sales Stage or follow-up rules), Task / Note as Activities-only Followup Types (hidden on
       lead / opportunity / Convert Lead forms, refused by their APIs unless unchanged, never the dropdown default),
       option meta `durationMinutes` / `icon`. Audit: undo / restore for activities. Frontend: types, service, React

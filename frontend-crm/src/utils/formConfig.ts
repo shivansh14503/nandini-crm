@@ -33,6 +33,35 @@ export function activeOptionValues(category: DropdownCategoryDto | undefined, fa
         .map((o) => o.value);
 }
 
+/**
+ * Customer Response has the same key (`customerResponse`) and label on Leads, Opportunities and Activities, but it is
+ * NOT one shared field: each module has its own list, configured on its own in the Form Builder (a deliberate
+ * exception, see UNSHARED_FIELD_KEYS). Mirrors backend CUSTOMER_RESPONSE_CATEGORY_KEYS (formConfig.defaults.ts).
+ */
+export const CUSTOMER_RESPONSE_CATEGORIES = {
+    leads: 'lead_customer_response',
+    opportunities: 'opportunity_customer_response',
+    activities: 'activity_customer_response',
+} as const;
+
+/**
+ * The list an activity's Customer Response uses: an activity related to a lead or an opportunity records that
+ * record's response (its follow-up activities carry it), so it offers that module's list; any other activity offers
+ * the Activities list.
+ */
+export function activityResponseCategory(relatedModule: string | null | undefined): string {
+    if (relatedModule === 'leads') return CUSTOMER_RESPONSE_CATEGORIES.leads;
+    if (relatedModule === 'opportunities') return CUSTOMER_RESPONSE_CATEGORIES.opportunities;
+    return CUSTOMER_RESPONSE_CATEGORIES.activities;
+}
+
+/**
+ * Field keys that are not one shared field across modules even though key and label match: the Form Builder doesn't
+ * mark them "Also on" other forms, and each module's copy keeps its own list and settings. Today only Customer
+ * Response (leads and opportunities need different options). Mirrors backend UNSHARED_FIELD_KEYS.
+ */
+export const UNSHARED_FIELD_KEYS: ReadonlySet<string> = new Set(['customerResponse']);
+
 /** The Followup Type list leads, opportunities and activities share. */
 export const FOLLOWUP_TYPE_CATEGORY_KEY = 'shared_followup_type';
 

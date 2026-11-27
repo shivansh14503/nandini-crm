@@ -1,5 +1,5 @@
 import { CRM_MODULE_KEYS, moduleNavLabel, type CrmModuleKey, type FormConfigsPayload, type FormFieldDefinitionDto } from '@/types/formConfig.types';
-import { moduleFields } from '@/utils/formConfig';
+import { moduleFields, UNSHARED_FIELD_KEYS } from '@/utils/formConfig';
 import { isShownOnConvert } from '@/utils/convertLeadFields';
 import { CONVERT_FIELD_NAMES, type ConvertModule } from '@/validations/convertLead.schema';
 
@@ -24,14 +24,17 @@ const CONVERT_RECORD_LABELS: Record<ConvertModule, string> = { contacts: 'Contac
 /**
  * Every other form that has `field` (a field with the same key on another module's form), in navbar order, then
  * Convert Lead when it shows the field. `includeConvert: false` leaves Convert Lead out (its own builder view).
+ * Fields in UNSHARED_FIELD_KEYS (Customer Response) are separate fields per module: other modules' forms don't count,
+ * only Convert Lead's section of the field's own module.
  */
 export function fieldPlaces(configs: FormConfigsPayload, field: FormFieldDefinitionDto, { includeConvert = true } = {}): FieldPlace[] {
     const places: FieldPlace[] = [];
+    const unshared = UNSHARED_FIELD_KEYS.has(field.fieldKey);
     const differentLabel = (other: FormFieldDefinitionDto) =>
         other.label.trim().toLowerCase() !== field.label.trim().toLowerCase() ? other.label : undefined;
 
     for (const formModule of CRM_MODULE_KEYS) {
-        if (formModule === field.module) continue;
+        if (formModule === field.module || unshared) continue;
         const other = moduleFields(configs, formModule).find((f) => f.isActive && f.fieldKey === field.fieldKey);
         if (!other) continue;
         const tab = configs.moduleTabs[formModule]?.find((t) => t.key === other.tabKey)?.label ?? other.tabLabel ?? other.tabKey;
@@ -46,7 +49,7 @@ export function fieldPlaces(configs: FormConfigsPayload, field: FormFieldDefinit
     }
 
     if (includeConvert) {
-        const records = CONVERT_MODULES.flatMap((record) => {
+        const records = CONVERT_MODULES.filter((record) => !unshared || record === field.module).flatMap((record) => {
             const shown = moduleFields(configs, record).find((f) => f.fieldKey === field.fieldKey && isShownOnConvert(record, f));
             return shown ? [{ module: record, shown }] : [];
         });

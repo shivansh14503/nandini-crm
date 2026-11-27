@@ -231,7 +231,7 @@ Indexes: `organizationId`, `mobile`, `name`, `assignedTo`, `(isDeleted, createdA
 | Group | Columns |
 | --- | --- |
 | Identity | `id`, `leadCode` (UNIQUE), `name`, `mobile`, `otherPhone`, `mailingName`, `tradeName`, `organizationName`, `designation`, `department` |
-| Qualification | `leadSource`, `leadType` (Lead Type: admin dropdown `lead_type`, e.g. Inbound / Outbound / Marketing), `rating` (Rating: `Hot` / `Warm` / `Cold`, set by the system and never on a form — not a form-builder field), `status` (default `New`), `productCategoryJson`, `followupType`, `customerResponse` (latest follow-up outcome from `shared_customer_response`, the list leads and opportunities share; option meta `ratingRule` for leads, `opportunityStages` / `noFollowUp` for opportunities; migration `20261125220000_shared_customer_response`, which folded the short-lived leads-only `lead_customer_response` back in), `nextFollowupDate` (DATE), `nextFollowupTime`, `registrationType`, `gstNumber`, `turnover`, `noOfEmployee`, `referredBy` (shown, and required, when `leadSource` is CA or Reference: the name of the linked Referral) + `referredById` → `Referral` (NO ACTION, migration `20261125230000_referrals`; NULL for a value typed before that migration, which is kept as it is), `partnerCompany` (set, and required, when `leadSource` is Partner: the name of an organization whose Customer Type is Partner, picked in the organization picker; migration `20261125210000_lead_partner_company`, which replaced the short-lived `natureOfPartner` column of `20261125180000_lead_source_details`), `assignedTo`, `remarks`, `description` |
+| Qualification | `leadSource`, `leadType` (Lead Type: admin dropdown `lead_type`, e.g. Inbound / Outbound / Marketing), `rating` (Rating: `Hot` / `Warm` / `Cold`, set by the system and never on a form — not a form-builder field), `status` (default `New`), `productCategoryJson`, `followupType`, `customerResponse` (latest follow-up outcome from the leads' own list `lead_customer_response`, option meta `ratingRule`; opportunities have their own `opportunity_customer_response` with `opportunityStages` / `noFollowUp`. History: migration `20261125220000_shared_customer_response` had merged them into one shared list; start-up seeding (`customerResponseSplit.ts`) splits that list again, copying the admin's options to each module, and the old row becomes `activity_customer_response`. Customer Response is the documented exception to "same key = same field": `UNSHARED_FIELD_KEYS`), `nextFollowupDate` (DATE), `nextFollowupTime`, `registrationType`, `gstNumber`, `turnover`, `noOfEmployee`, `referredBy` (shown, and required, when `leadSource` is CA or Reference: the name of the linked Referral) + `referredById` → `Referral` (NO ACTION, migration `20261125230000_referrals`; NULL for a value typed before that migration, which is kept as it is), `partnerCompany` (set, and required, when `leadSource` is Partner: the name of an organization whose Customer Type is Partner, picked in the organization picker; migration `20261125210000_lead_partner_company`, which replaced the short-lived `natureOfPartner` column of `20261125180000_lead_source_details`), `assignedTo`, `remarks`, `description` |
 | Addresses | `primary*` (with `primaryCityId` → `City`), `other*` (with `otherCityId`), `copyAddressFromLeft` |
 | Conversion | `convertedAt`, `convertedBy`, `convertedOrganizationId`, `convertedContactId`, `convertedOpportunityId` (FKs) — set only by the convert endpoint |
 | Other | `customDataJson`, audit/soft-delete columns |
@@ -365,7 +365,7 @@ Per the project's rules, deletes in the form builder are permanent (no reset/res
 Option `metaJson` keys the app reads: `ratingRule` on the options of the list the leads Customer Response field
 uses (`{ rule: followUpGap | daysSinceResponse | unansweredCalls, hot, warm }` or `{ rule: always, rating }`),
 `opportunityStages` (Sales Stage values; absent = every open stage) and `noFollowUp: true` on the options of the list
-the opportunities Customer Response field uses (today the same `shared_customer_response`),
+the opportunities Customer Response field uses (`opportunity_customer_response`; the leads use their own `lead_customer_response`),
 `closesLead: true` on lead Status options (all validated by the API), and `durationMinutes` / `icon` on
 `shared_followup_type` options (an activity's default length and its calendar icon; seeded on the built-in types and
 kept across a rename; an option without them falls back to 30 minutes and the generic icon).
@@ -689,8 +689,9 @@ NOT NULL` (one link per provider event and connection). A unique-index clash is 
 Dropdowns (`DropdownCategory.module = 'activities'`): `activity_status` (fixed system options `Planned`, `Completed`,
 `Cancelled`; default `Planned`) and `activity_reminder` (fixed system options; value = label, e.g. `15 minutes before`;
 the minutes live in code, `ACTIVITY_REMINDER_MINUTES`). Activities share `shared_followup_type` (see §4.14) and
-`shared_customer_response` with leads and opportunities. An activity's Customer Response is any active option of that
-list, stored as text; activities read none of its option meta (no Rating, no Sales Stage check, no follow-up cleared).
+have their own Customer Response list `activity_customer_response`. An activity related to a lead or an opportunity
+offers that record's list instead (`lead_customer_response` / `opportunity_customer_response`, see §4.14); stored as
+text; activities read none of the option meta (no Rating, no Sales Stage check, no follow-up cleared).
 
 ### 4.26 `Notification` and `EmailLog`
 

@@ -7,12 +7,14 @@ import {
     ACTIVITY_ONLY_FOLLOWUP_TYPES,
     APP_REQUIRED_CATEGORY_KEYS,
     CRM_MODULES,
+    CUSTOMER_RESPONSE_CATEGORY_KEYS,
     DEFAULT_CATEGORIES,
     DEFAULT_FIELDS,
     DEFAULT_SELECTED_OPTIONS,
     FIXED_OPTION_CATEGORY_KEYS,
     FOLLOWUP_TYPE_CATEGORY_KEY,
     MODULE_TABS,
+    UNSHARED_FIELD_KEYS,
 } from './formConfig.defaults.js';
 
 /** docs/field-locking-policy.md: which built-in fields the form builder may relax. */
@@ -147,9 +149,9 @@ describe('activities defaults', () => {
         assert.equal(fields.filter((f) => f.isCoreLocked && !f.isRequired).length, 2);
     });
 
-    it('links its dropdowns to the shared Followup Type / Customer Response and its own fixed lists', () => {
+    it('links its dropdowns to the shared Followup Type, its own Customer Response and its own fixed lists', () => {
         assert.equal(byKey('activities', 'followupType').dropdownCategoryKey, FOLLOWUP_TYPE_CATEGORY_KEY);
-        assert.equal(byKey('activities', 'customerResponse').dropdownCategoryKey, 'shared_customer_response');
+        assert.equal(byKey('activities', 'customerResponse').dropdownCategoryKey, 'activity_customer_response');
         assert.equal(byKey('activities', 'status').dropdownCategoryKey, 'activity_status');
         assert.equal(byKey('activities', 'reminder').dropdownCategoryKey, 'activity_reminder');
         // Same key and list as on leads and opportunities.
@@ -197,25 +199,39 @@ describe('dropdown option naming', () => {
     });
 });
 
-describe('Customer Response list', () => {
-    const list = DEFAULT_CATEGORIES.find((c) => c.key === 'shared_customer_response');
-    const options = (list?.options ?? []).map((o) => (typeof o === 'string' ? { value: o, meta: undefined } : o));
+describe('Customer Response lists', () => {
+    const optionsOf = (key: string) =>
+        (DEFAULT_CATEGORIES.find((c) => c.key === key)?.options ?? []).map((o) => (typeof o === 'string' ? { value: o, meta: undefined } : o));
+    const leadOptions = optionsOf('lead_customer_response');
+    const options = optionsOf('opportunity_customer_response');
     const stages = (DEFAULT_CATEGORIES.find((c) => c.key === 'opportunity_sales_stage')?.options ?? []).map((o) => (typeof o === 'string' ? o : o.value));
 
-    it('is one list for the same field (key and label) on leads, opportunities and activities', () => {
-        for (const module of ['leads', 'opportunities', 'activities']) {
-            assert.equal(byKey(module, 'customerResponse').dropdownCategoryKey, 'shared_customer_response', module);
+    it('gives Leads, Opportunities and Activities their own list under the same key and label (not a shared field)', () => {
+        assert.ok(UNSHARED_FIELD_KEYS.has('customerResponse'));
+        for (const module of ['leads', 'opportunities', 'activities'] as const) {
+            const key = CUSTOMER_RESPONSE_CATEGORY_KEYS[module];
+            assert.equal(byKey(module, 'customerResponse').dropdownCategoryKey, key, module);
             assert.equal(byKey(module, 'customerResponse').label, 'Customer Response', module);
+            assert.equal(DEFAULT_CATEGORIES.find((c) => c.key === key)?.module, module, `${key} belongs to ${module}`);
+            assert.ok(APP_REQUIRED_CATEGORY_KEYS.has(key), `${key} is app-required`);
         }
+        assert.ok(!DEFAULT_CATEGORIES.some((c) => c.key === 'shared_customer_response'), 'the old shared list is gone');
     });
 
-    it('gives every option a valid starting Rating rule', () => {
-        assert.equal(options.length, 15);
-        for (const option of options) assert.ok(ratingRuleFromMeta(option.meta), `${option.value} has a valid ratingRule`);
+    it('keeps the Rating rules on the Leads list only and the Sales Stages on the Opportunities list only', () => {
+        assert.equal(leadOptions.length, 15);
+        assert.deepEqual(leadOptions.map((o) => o.value), options.map((o) => o.value));
+        for (const o of leadOptions) assert.ok(!allowedStagesFromMeta(o.meta) && !noFollowUpFromMeta(o.meta), `lead ${o.value} has no stage meta`);
+        for (const o of options) assert.equal(ratingRuleFromMeta(o.meta), null, `opportunity ${o.value} has no ratingRule`);
+        for (const o of optionsOf('activity_customer_response')) assert.equal(o.meta, undefined);
+    });
+
+    it('gives every lead option a valid starting Rating rule', () => {
+        for (const option of leadOptions) assert.ok(ratingRuleFromMeta(option.meta), `${option.value} has a valid ratingRule`);
     });
 
     it('rates the dead ends Cold and shares the unanswered-call counter between No Response and Not Reachable', () => {
-        const rule = (value: string) => ratingRuleFromMeta(options.find((o) => o.value === value)?.meta);
+        const rule = (value: string) => ratingRuleFromMeta(leadOptions.find((o) => o.value === value)?.meta);
         for (const value of ['Not Interested', 'Using Other Software', 'No Requirement', 'Wrong Number', 'Do Not Contact']) {
             assert.deepEqual(rule(value), { rule: 'always', rating: 'Cold' }, value);
         }

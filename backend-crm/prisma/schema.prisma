@@ -432,7 +432,7 @@ model Lead {
   /// string[] as JSON.
   productCategoryJson String?   @db.NVarChar(Max)
   followupType        String?   @db.NVarChar(30)
-  /// Latest follow-up outcome (shared_customer_response dropdown), picked on every edit.
+  /// Latest follow-up outcome (the module's own Customer Response dropdown), picked on every edit.
   customerResponse    String?   @db.NVarChar(100)
   remarks             String?   @db.NVarChar(2000)
   registrationType    String?   @db.NVarChar(30)
@@ -595,7 +595,7 @@ model Opportunity {
   nextFollowupDate    DateTime? @db.Date
   nextFollowupTime    String?   @db.NVarChar(20)
   followupType        String?   @db.NVarChar(30)
-  /// Latest follow-up outcome (shared_customer_response dropdown), picked on every edit.
+  /// Latest follow-up outcome (the module's own Customer Response dropdown), picked on every edit.
   customerResponse    String?   @db.NVarChar(100)
   remarks             String?   @db.NVarChar(2000)
   description         String?   @db.NVarChar(2000)
@@ -988,7 +988,7 @@ model Activity {
   reminderSentAt DateTime?
 
   // Outcome & notes
-  /// Option of shared_customer_response (same field and list as Lead / Opportunity.customerResponse). Recorded only:
+  /// Option of the related lead's / opportunity's Customer Response list, else activity_customer_response. Recorded only:
   /// never changes a lead's Rating or follow-up, and isn't checked against an opportunity's Sales Stage.
   customerResponse String?   @db.NVarChar(100)
   remarks          String?   @db.NVarChar(2000)

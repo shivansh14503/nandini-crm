@@ -39,9 +39,9 @@ import { RecordLink } from '@/components/common/RecordLink';
 import { AppToast } from '@/components/common/AppToast';
 import { NestedDrawerLayer, RaisedLayer } from '@/components/common/RaisedLayer';
 import { fieldSx } from '@/components/forms/FormField';
-import { CUSTOMER_RESPONSE_CATEGORY, CUSTOMER_RESPONSES } from '@/components/forms/FollowUpDecision';
+import { activityResponseCategory, CUSTOMER_RESPONSES } from '@/components/forms/FollowUpDecision';
 import { useActivity, useDeleteActivity, useDeleteActivityScoped } from '@/hooks/queries/useActivities';
-import { useDropdownOptionLabel, useModuleFormConfig } from '@/hooks/queries/useFormConfigs';
+import { useActivityResponseLabel, useDropdownOptionLabel, useModuleFormConfig } from '@/hooks/queries/useFormConfigs';
 import { activityService } from '@/services/activity.service';
 import { ActivityBusyTimes } from './ActivityBusyTimes';
 import { ActivityCalendarNotes } from './ActivityCalendarNotes';
@@ -161,8 +161,10 @@ function PersonBlock({ username }: { username: string }) {
 
 function CompleteDialog({ activity, onClose, onDone }: { activity: Activity; onClose: () => void; onDone: (message: string, error?: boolean) => void }) {
     const config = useModuleFormConfig('activities');
-    const responses = config.getOptions(CUSTOMER_RESPONSE_CATEGORY, CUSTOMER_RESPONSES);
-    const responseLabel = useDropdownOptionLabel(CUSTOMER_RESPONSE_CATEGORY);
+    // The related lead's / opportunity's list, else the Activities list.
+    const responseCategory = activityResponseCategory(activity.relatedModule);
+    const responses = config.getOptions(responseCategory, CUSTOMER_RESPONSES);
+    const responseLabel = useDropdownOptionLabel(responseCategory);
     const responseField = config.getFieldProps('customerResponse', { label: 'Customer Response' });
     const remarksField = config.getFieldProps('remarks', { label: 'Remarks' });
     const [customerResponse, setCustomerResponse] = useState(activity.customerResponse ?? '');
@@ -385,7 +387,7 @@ export function ActivityDetailDrawer({ activity, activityId, open, onClose, onEd
     const a = fresh ?? activity ?? null;
     const clock = useBusinessClock();
     const typeLabel = useActivityTypeLabel();
-    const responseLabel = useDropdownOptionLabel(CUSTOMER_RESPONSE_CATEGORY);
+    const responseLabel = useActivityResponseLabel();
     const deleteMutation = useDeleteActivity();
     const deleteScopedMutation = useDeleteActivityScoped();
     const [dialog, setDialog] = useState<ActivityDialog>(null);
@@ -638,7 +640,7 @@ export function ActivityDetailDrawer({ activity, activityId, open, onClose, onEd
                             </Field>
                         )}
                         {a.conference && <VideoMeetingPanel activity={a} onMessage={notify} />}
-                        {a.customerResponse && <Field label="Customer Response">{responseLabel(a.customerResponse)}</Field>}
+                        {a.customerResponse && <Field label="Customer Response">{responseLabel(a)}</Field>}
                         {a.remarks && (
                             <Field label="Remarks">
                                 <Typography sx={{ ...valueSx, fontWeight: 500, whiteSpace: 'pre-wrap' }}>{a.remarks}</Typography>
