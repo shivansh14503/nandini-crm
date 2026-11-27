@@ -303,6 +303,7 @@ A user's role is the name in `Users.role`; what it allows is the matching row of
 | Global search | Results are cached unscoped as before; the categories the role can't view are emptied per request (`hideUnviewable`) |
 | Referrals | Follow the role like every module. Roles seeded from the old names keep Referrals View **All** (they were never scoped; the Referred By pickers read the lookups anyway) |
 | Export | Partner Companies' CSV export is built in the browser; the button shows only with the Export permission |
+| Inactive organizations | Only roles with the admin panel (`isAdminUser`) can open an Inactive organization for editing; others get the view page. Enforced in the app only (`OrganizationForm`, `OrganizationsMasterView`); the API doesn't check it |
 
 **Role registry** (`roles/roleRegistry.ts`): an in-process snapshot of every role and of each user's current role,
 refreshed every 15 s (`ensureFresh` in `authenticate`) and at once after a role or user write in this process

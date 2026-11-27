@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
-import { isSuperAdminRole } from '@/utils/roleAccess';
+import { isAdminUser } from '@/utils/adminRoles';
 import { useResetTab } from '@/hooks/useResetTab';
 import { useRouter } from 'next/navigation';
 import { FormProvider, useForm, type Path } from 'react-hook-form';
@@ -240,8 +240,8 @@ export default function OrganizationForm({
 }: OrganizationFormProps) {
     const router = useRouter();
     const { user } = useAuth();
-    // Admin, and Super Admin (full access everywhere), may open and edit an inactive account.
-    const isAdmin = user?.role?.toLowerCase() === 'admin' || isSuperAdminRole(user?.role);
+    // Roles with the admin panel (Admin › Roles) may open and edit an inactive account.
+    const isAdmin = isAdminUser(user);
 
     // A new record starts from the admin's dropdown defaults (Form Builder › Dropdowns); read once, like useForm.
     const [startValues] = useState<OrganizationFormData>(() =>
