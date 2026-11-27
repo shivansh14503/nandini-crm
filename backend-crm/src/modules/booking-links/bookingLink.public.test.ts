@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, it, mock } from 'node:test';
 import { prisma } from '../../config/prisma.js';
 import type { ActivityConfig } from '../activities/activity.service.js';
 import type { BusyTimesDto } from '../calendar-sync/busy.service.js';
-import { bookingDeps, bookingPublicService } from './bookingLink.public.js';
+import { bookingDeps, bookingPublicService, bookingVideo, confirmationVideo, type ActivityVideo } from './bookingLink.public.js';
 import type { LinkConfig, PublicLink } from './bookingLink.service.js';
 import { addDays } from '../../utils/zonedTime.js';
 import { busyBlocks } from './bookingLink.slots.js';
@@ -27,6 +27,7 @@ const LINK: LinkConfig = {
     followupType: 'Meeting',
     durations: [30, 60],
     location: 'Office, Pune',
+    videoMeeting: null,
     note: null,
     reminder: '15 minutes before',
     askPhone: true,
@@ -78,6 +79,13 @@ interface World {
     charges: string[];
     /** busyTimes calls: the window and the budget key. */
     busyCalls: { from: string; to: string; budgetKey?: string }[];
+    /** What the owner's company calendar creates video links for, and how often it was asked. */
+    ownerVideo: 'meet' | 'teams' | null;
+    ownerVideoReads: number;
+    /** Conference columns of booked activities (by activity id), for resubmitted confirmations. */
+    activityVideo: Map<string, ActivityVideo>;
+    /** Followup Type options of the activity configuration. */
+    typeOptions: { value: string; label: string; isActive: boolean; meta?: Record<string, unknown> }[];
 }
 
 let world: World;
@@ -103,7 +111,7 @@ function installTransaction(): void {
                 }
                 const row = { ...data, id: `booking-${world.bookings.length + 1}` };
                 world.bookings.push(row);
-                return { id: row.id, startAt: row.startAt, endAt: row.endAt };
+                return { id: row.id, startAt: row.startAt, endAt: row.endAt, activityId: row.activityId };
             },
         },
         activity: {
@@ -162,6 +170,10 @@ beforeEach(() => {
         transactions: 0,
         charges: [],
         busyCalls: [],
+        ownerVideo: 'meet',
+        ownerVideoReads: 0,
+        activityVideo: new Map(),
+        typeOptions: [],
     };
     installTransaction();
     mock.method(bookingDeps, 'now', () => NOW);
@@ -190,7 +202,12 @@ beforeEach(() => {
                     : [{ username: 'priya', name: 'Priya Sharma', provider: 'google', status: world.calendarStatus, sources: [], busy: [...crm, ...provider] }],
         };
     });
-    mock.method(bookingDeps, 'loadActivityConfig', async () => ({ followupTypes: { options: [] } }) as unknown as ActivityConfig);
+    mock.method(bookingDeps, 'loadActivityConfig', async () => ({ followupTypes: { options: world.typeOptions } }) as unknown as ActivityConfig);
+    mock.method(bookingDeps, 'ownerVideo', async () => {
+        world.ownerVideoReads += 1;
+        return world.ownerVideo;
+    });
+    mock.method(bookingDeps, 'activityVideo', async (id: string) => world.activityVideo.get(id) ?? null);
     mock.method(bookingDeps, 'loadCalendarSettings', async () => ({ followUpActivities: false }) as never);
     mock.method(bookingDeps, 'insertSystemActivity', async (_tx: unknown, fields: Record<string, unknown>, actor: string, _now: Date, opts: Record<string, unknown>) => {
         world.inserted.push({ fields, actor, opts });
@@ -437,5 +454,97 @@ describe('public booking: book', () => {
         assert.equal(world.transactions, 2);
         assert.equal(world.inserted.length, 0, 'the first try rolled back');
         assert.equal(world.afterCommit, 0);
+    });
+});
+
+describe('public booking: the link\'s video meeting', () => {
+    const MEETING_WITH_VIDEO = { value: 'Meeting', label: 'Meeting', isActive: true, meta: { videoMeeting: true } };
+    const withVideo = (videoMeeting: 'meet' | 'teams' = 'meet') => {
+        world.link = { link: { ...LINK, videoMeeting }, ownerName: 'Priya Sharma' };
+        world.typeOptions = [MEETING_WITH_VIDEO];
+    };
+
+    it('the page names the video meeting from the link and type only (never the owner’s calendar)', async () => {
+        withVideo('teams');
+        world.ownerVideo = null;
+        const view = await bookingPublicService.view(LINK.slug);
+        assert.deepEqual(view.videoMeeting, { provider: 'teams', label: 'Microsoft Teams' });
+        assert.equal(world.ownerVideoReads, 0, 'the page view reads no calendar');
+        world.typeOptions = [{ ...MEETING_WITH_VIDEO, meta: {} }];
+        assert.equal((await bookingPublicService.view(LINK.slug)).videoMeeting, null, 'a type that no longer offers video');
+        world.link = { link: LINK, ownerName: 'Priya Sharma' };
+        assert.equal((await bookingPublicService.view(LINK.slug)).videoMeeting, null);
+    });
+
+    it('a booking asks for the link with the meeting; the confirmation and .ics say the organiser sends it', async () => {
+        withVideo('meet');
+        const result = await bookingPublicService.book(LINK.slug, visitor(tokenFor(ist('2026-11-30', '11:00'))));
+        assert.equal(world.inserted[0].fields.videoMeeting, 'meet');
+        assert.doesNotMatch(String(world.inserted[0].fields.remarks), /video|Meet/i);
+        assert.deepEqual(result.video, { provider: 'meet', label: 'Google Meet', joinUrl: null });
+        const unfolded = result.ics.replace(/\r\n /g, '');
+        assert.match(unfolded, /DESCRIPTION:Google Meet link: sent by Priya Sharma/);
+        assert.doesNotMatch(unfolded, /\r\nURL:/);
+        assert.equal(world.ownerVideoReads, 1);
+    });
+
+    it('no video meeting on the link: nothing asked, no calendar read', async () => {
+        world.typeOptions = [MEETING_WITH_VIDEO];
+        const result = await bookingPublicService.book(LINK.slug, visitor(tokenFor(ist('2026-11-30', '11:00'))));
+        assert.equal(world.inserted[0].fields.videoMeeting, null);
+        assert.equal(result.video, null);
+        assert.equal(world.ownerVideoReads, 0);
+    });
+
+    it('books without the link (and notes why for the owner) when the calendar or the type no longer allows it', async () => {
+        withVideo('meet');
+        world.ownerVideo = 'teams';
+        const first = await bookingPublicService.book(LINK.slug, visitor(tokenFor(ist('2026-11-30', '10:00'))));
+        assert.equal(world.inserted[0].fields.videoMeeting, null);
+        assert.match(String(world.inserted[0].fields.remarks), /No Google Meet link was requested: The owner's company calendar creates Microsoft Teams links/);
+        assert.equal(first.video, null);
+        assert.doesNotMatch(first.ics, /Meet/, 'the visitor hears nothing about a link that won’t come');
+
+        world.ownerVideo = 'meet';
+        world.typeOptions = [{ ...MEETING_WITH_VIDEO, meta: {} }];
+        const second = await bookingPublicService.book(LINK.slug, visitor(tokenFor(ist('2026-11-30', '12:00')), { email: 'b@example.com' }));
+        assert.equal(world.inserted[1].fields.videoMeeting, null);
+        assert.match(String(world.inserted[1].fields.remarks), /Meeting doesn't offer video meetings any more/);
+        assert.equal(second.video, null);
+    });
+
+    it('a resubmit shows the join link once the calendar made it (and only a trusted one)', async () => {
+        withVideo('meet');
+        const token = tokenFor(ist('2026-11-30', '11:00'));
+        const first = await bookingPublicService.book(LINK.slug, visitor(token));
+        const activityId = world.bookings[0].activityId;
+        world.activityVideo.set(activityId, { conferenceProvider: 'meet', conferenceState: 'ready', conferenceJoinUrl: 'https://meet.google.com/abc-defg-hij', status: 'Planned', isDeleted: false });
+        const again = await bookingPublicService.book(LINK.slug, visitor(token));
+        assert.equal(again.booking.id, first.booking.id);
+        assert.deepEqual(again.video, { provider: 'meet', label: 'Google Meet', joinUrl: 'https://meet.google.com/abc-defg-hij' });
+        const unfolded = again.ics.replace(/\r\n /g, '');
+        assert.match(unfolded, /\r\nURL:https:\/\/meet.google.com\/abc-defg-hij\r\n/);
+        assert.match(unfolded, /DESCRIPTION:Google Meet: https:\/\/meet.google.com\/abc-defg-hij/);
+
+        world.activityVideo.set(activityId, { conferenceProvider: 'meet', conferenceState: 'ready', conferenceJoinUrl: 'https://evil.example.com/x', status: 'Planned', isDeleted: false });
+        assert.deepEqual((await bookingPublicService.book(LINK.slug, visitor(token))).video, { provider: 'meet', label: 'Google Meet', joinUrl: null });
+        world.activityVideo.set(activityId, { conferenceProvider: 'meet', conferenceState: 'ready', conferenceJoinUrl: 'https://meet.google.com/abc-defg-hij', status: 'Cancelled', isDeleted: false });
+        assert.equal((await bookingPublicService.book(LINK.slug, visitor(token))).video, null, 'a cancelled meeting shows no link');
+    });
+
+    it('bookingVideo and confirmationVideo (pure)', () => {
+        const config = { followupTypes: { options: [MEETING_WITH_VIDEO] } } as unknown as ActivityConfig;
+        assert.deepEqual(bookingVideo({ videoMeeting: null, followupType: 'Meeting' }, config, 'meet'), { videoMeeting: null, note: null });
+        assert.deepEqual(bookingVideo({ videoMeeting: 'teams', followupType: 'Meeting' }, config, 'teams'), { videoMeeting: 'teams', note: null });
+        assert.match(bookingVideo({ videoMeeting: 'teams', followupType: 'Meeting' }, config, null).note ?? '', /needs the owner's company calendar/);
+        assert.equal(bookingVideo({ videoMeeting: 'meet', followupType: 'Task' }, config, 'meet').videoMeeting, null);
+        assert.equal(confirmationVideo(null), null);
+        assert.equal(confirmationVideo({ conferenceProvider: 'zoom', conferenceState: 'ready', conferenceJoinUrl: 'https://zoom.us/j/1', status: 'Planned', isDeleted: false }), null);
+        assert.deepEqual(confirmationVideo({ conferenceProvider: 'teams', conferenceState: 'requested', conferenceJoinUrl: null, status: 'Planned', isDeleted: false }), {
+            provider: 'teams',
+            label: 'Microsoft Teams',
+            joinUrl: null,
+        });
+        assert.equal(confirmationVideo({ conferenceProvider: 'teams', conferenceState: 'failed', conferenceJoinUrl: null, status: 'Planned', isDeleted: true }), null);
     });
 });

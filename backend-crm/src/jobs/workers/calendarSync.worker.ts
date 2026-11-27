@@ -34,7 +34,8 @@ import { throttledLogger } from './throttledLogger.js';
  *   conference  read an event again until its video link is ready (`conference-<linkId>-<request>-<attempt>`, 5 s
  *             apart, at most 5 tries; Calendar Phase 3 P3-1)
  *   pull      calendar → CRM changes of one connection (`pull-<connectionId>-<10 s bucket>`, P2-5): poll fan-out,
- *             Sync now, the calendar page, the nightly Outlook re-baseline; one attempt (the next poll retries)
+ *             Sync now, the calendar page, the nightly Outlook re-baseline; one attempt (the next poll retries).
+ *             On-demand pulls get `…-<ms>` when the bucket's job already started or finished (pending-only rule)
  *   watch     a webhook channel of one connection (`watch-<connectionId>-<op>-<minute>`, P2-7): ensure | renew |
  *             recreate | stop (Graph lifecycle notifications)
  *   poll      scheduler 'calendar-poll', every CALENDAR_POLL_MINUTES (5) inside CALENDAR_SYNC_HOURS (07:00–22:00):

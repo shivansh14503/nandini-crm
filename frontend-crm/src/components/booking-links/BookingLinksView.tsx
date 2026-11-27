@@ -28,6 +28,7 @@ import AutorenewRoundedIcon from '@mui/icons-material/AutorenewRounded';
 import ListAltRoundedIcon from '@mui/icons-material/ListAltRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import { AppToast } from '@/components/common/AppToast';
+import { VIDEO_PROVIDER_LABELS } from '@/types/activity.types';
 import { ConfirmDeleteDialog, EmptyState, errorMessage, primaryButtonSx, secondaryButtonSx, surfaceSx } from '@/components/settings/form-customization/builderUi';
 import { StatusChip, formatDateTime, hintSx } from '@/components/settings/integrations/integrationUi';
 import { useBookingLinkBookings, useBookingLinks, useNewBookingAddress, useUpdateBookingLink } from '@/hooks/queries/useBookingLinks';
@@ -142,7 +143,15 @@ function LinkCard({
                         {link.title}
                     </Typography>
                     <Typography sx={{ ...hintSx, mt: 0.25 }}>
-                        {[typeLabel(link.followupType) || link.followupType, link.durations.map(durationLabel).join(' / '), daysSummary(link), showOwner ? link.ownerName : ''].filter(Boolean).join(' · ')}
+                        {[
+                            typeLabel(link.followupType) || link.followupType,
+                            link.durations.map(durationLabel).join(' / '),
+                            daysSummary(link),
+                            link.videoMeeting ? VIDEO_PROVIDER_LABELS[link.videoMeeting] : '',
+                            showOwner ? link.ownerName : '',
+                        ]
+                            .filter(Boolean)
+                            .join(' · ')}
                     </Typography>
                 </Box>
                 <FormControlLabel

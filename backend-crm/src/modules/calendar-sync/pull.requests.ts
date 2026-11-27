@@ -15,7 +15,8 @@ import { enqueuePull } from './sync.wake.js';
  *
  * - Only a live row in `ok` pulls. A pull no sooner than 30 s (Sync now) / 3 minutes (page) after the last one or the
  *   last request (in-process memory per connection, so repeated clicks don't queue repeated jobs).
- * - Redis up: a `pull` job (`queued`); jobs of one connection within 10 s share one id. Redis down: the pull runs in
+ * - Redis up: a `pull` job (`queued`); a still-pending job of the same connection and 10 s absorbs the request, one
+ *   that already started or finished doesn't (P2-7's pending-only rule, `enqueuePull`). Redis down: the pull runs in
  *   the API process, awaited (`done`, with the number of activities it changed), still under the lease and the
  *   `job:calendar-sync` audit origin.
  * - Route rate limits: 6 / minute per user (Redis, in-process while Redis can't count).

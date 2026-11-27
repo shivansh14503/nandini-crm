@@ -26,6 +26,8 @@ import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import { useQuery } from '@tanstack/react-query';
 import { errorMessage, inputSx, primaryButtonSx, secondaryButtonSx } from '@/components/settings/form-customization/builderUi';
 import { fieldErrorsOf } from '@/components/settings/integrations/integrationUi';
+import { useTypeOffersVideo } from '@/components/activities/VideoMeeting';
+import { useVideoOptions } from '@/hooks/queries/useActivities';
 import { useCreateBookingLink, useUpdateBookingLink } from '@/hooks/queries/useBookingLinks';
 import { useDropdownOptionLabel, useDropdownOptions } from '@/hooks/queries/useFormConfigs';
 import { useMasterData } from '@/hooks/queries/useMasterData';
@@ -40,6 +42,7 @@ import {
     ACTIVITY_REMINDERS,
     NOTE_TYPE,
     TASK_TYPE,
+    VIDEO_PROVIDER_LABELS,
     isActivityRelatedModule,
     type ActivityLinkTarget,
 } from '@/types/activity.types';
@@ -51,9 +54,11 @@ import {
     BOOKING_NOTE_MAX,
     BOOKING_SLOT_STEPS,
     BOOKING_TITLE_MAX,
+    BOOKING_VIDEO_PROVIDERS,
     durationLabel,
     type BookingLink,
     type BookingLinkPayload,
+    type BookingVideoProvider,
     type WeeklyAvailability,
 } from '@/types/bookingLink.types';
 import { AvailabilityEditor, availabilityIssues } from './AvailabilityEditor';
@@ -72,6 +77,7 @@ const NOTICE_CHOICES: { value: number; label: string }[] = [
     { value: 10080, label: '1 week' },
 ];
 const NO_REMINDER = '__none__';
+const NO_VIDEO = '__none__';
 
 const DEFAULT_AVAILABILITY: WeeklyAvailability = Object.fromEntries(
     ['1', '2', '3', '4', '5'].map((d) => [d, [{ start: '10:00', end: '13:00' }, { start: '14:00', end: '18:00' }]]),
@@ -84,6 +90,8 @@ interface Draft {
     durations: number[];
     slotStepMinutes: number;
     location: string;
+    /** '' = none. */
+    videoMeeting: BookingVideoProvider | '';
     note: string;
     availability: WeeklyAvailability;
     bufferBeforeMinutes: number;
@@ -108,6 +116,7 @@ function draftOf(link: BookingLink | null, me: string): Draft {
             durations: [30],
             slotStepMinutes: 30,
             location: '',
+            videoMeeting: '',
             note: '',
             availability: DEFAULT_AVAILABILITY,
             bufferBeforeMinutes: 0,
@@ -130,6 +139,7 @@ function draftOf(link: BookingLink | null, me: string): Draft {
         durations: link.durations,
         slotStepMinutes: link.slotStepMinutes,
         location: link.location,
+        videoMeeting: link.videoMeeting ?? '',
         note: link.note,
         availability: link.availability,
         bufferBeforeMinutes: link.bufferBeforeMinutes,
@@ -148,6 +158,80 @@ function draftOf(link: BookingLink | null, me: string): Draft {
 
 const sectionTitleSx = { fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--mui-palette-text-secondary)', mt: 1 } as const;
 const twoColSx = { display: 'grid', gridTemplateColumns: { xs: 'minmax(0,1fr)', sm: 'repeat(2, minmax(0,1fr))' }, gap: 1.5 } as const;
+
+/**
+ * Default video meeting of booked meetings: None / Google Meet / Microsoft Teams (Zoom is never offered on links). The
+ * choices follow the link OWNER's company calendar (GET /api/activities/video-options?owner=); ones it can't make are
+ * disabled with the reason under the field. The saved choice stays selectable (re-saving it is allowed even when the
+ * calendar or the type changed since; the booking then goes without a link and notes why). The API checks again (409
+ * VIDEO_PROVIDER_NOT_CONNECTED).
+ */
+function VideoMeetingSelect({
+    owner,
+    ownerName,
+    typeLabel,
+    typeOffersVideo,
+    value,
+    saved,
+    error,
+    disabled,
+    onChange,
+}: {
+    owner: string;
+    ownerName: string;
+    typeLabel: string;
+    typeOffersVideo: boolean;
+    value: BookingVideoProvider | '';
+    saved: BookingVideoProvider | '';
+    error: string;
+    disabled?: boolean;
+    onChange: (value: BookingVideoProvider | '') => void;
+}) {
+    const { data, isLoading, isError } = useVideoOptions(owner, { enabled: Boolean(owner) && typeOffersVideo });
+    const available = useMemo(() => new Set((data?.options ?? []).filter((o) => o.available).map((o) => o.value)), [data]);
+    const reasonOf = (provider: BookingVideoProvider) => data?.options.find((o) => o.value === provider)?.reason;
+    const selectable = (provider: BookingVideoProvider) => typeOffersVideo && (available.has(provider) || provider === saved);
+    const firstReason = BOOKING_VIDEO_PROVIDERS.map(reasonOf).find(Boolean);
+
+    let hint: string;
+    if (!typeOffersVideo) {
+        hint = value
+            ? `Video meetings aren't offered for ${typeLabel} any more, so booked meetings get no link. Choose None.`
+            : `Video meetings aren't offered for ${typeLabel}. An admin can switch them on in Admin › API Integrations › What goes to calendars.`;
+    } else if (isLoading) {
+        hint = 'Checking the owner’s calendar…';
+    } else if (isError) {
+        hint = 'Couldn’t check the owner’s calendar. You can still save; the server checks again.';
+    } else if (value && !available.has(value)) {
+        hint = `${reasonOf(value) ?? ''} Booked meetings get no link until this is fixed; choose another option or None.`.trim();
+    } else if (value) {
+        hint = `Each booked meeting gets a ${VIDEO_PROVIDER_LABELS[value]} link from ${ownerName}'s calendar; the page says ${ownerName} sends it.`;
+    } else {
+        hint = available.size === 0 && firstReason ? firstReason : 'Booked meetings get no video link.';
+    }
+
+    return (
+        <TextField
+            select
+            size="small"
+            label="Video meeting"
+            value={value || NO_VIDEO}
+            onChange={(e) => onChange(e.target.value === NO_VIDEO ? '' : (e.target.value as BookingVideoProvider))}
+            disabled={disabled || (!typeOffersVideo && !value)}
+            error={Boolean(error)}
+            helperText={error || hint}
+            sx={inputSx}
+        >
+            <MenuItem value={NO_VIDEO}>None</MenuItem>
+            {BOOKING_VIDEO_PROVIDERS.map((p) => (
+                <MenuItem key={p} value={p} disabled={!selectable(p)} sx={{ whiteSpace: 'normal' }}>
+                    {VIDEO_PROVIDER_LABELS[p]}
+                    {!selectable(p) && typeOffersVideo && !isLoading ? ' (not available for this owner)' : ''}
+                </MenuItem>
+            ))}
+        </TextField>
+    );
+}
 
 /** Related record picker (records the user may see), the same source as an activity's Related To. */
 function RelatedPicker({ module, value, onChange, disabled }: { module: string; value: Draft['related']; onChange: (v: Draft['related']) => void; disabled?: boolean }) {
@@ -239,6 +323,9 @@ export function BookingLinkDialog({
     }, [allTypes, draft.followupType]);
     const { users } = useMasterData();
     const owners = useMemo(() => users.filter((u) => u.status === 'Active' && !u.isGroupUser).sort((a, b) => (a.name || a.username).localeCompare(b.name || b.username)), [users]);
+    const offersVideo = useTypeOffersVideo();
+    const typeOffersVideo = offersVideo(draft.followupType);
+    const ownerName = (link && draft.ownerUsername === link.ownerUsername ? link.ownerName : owners.find((u) => u.username === draft.ownerUsername)?.name) || draft.ownerUsername;
 
     const set = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft((d) => ({ ...d, [key]: value }));
     const toggleDuration = (m: number) =>
@@ -269,6 +356,7 @@ export function BookingLinkDialog({
             durations: draft.durations,
             slotStepMinutes: draft.slotStepMinutes,
             location: draft.location.trim() || null,
+            videoMeeting: draft.videoMeeting || null,
             note: draft.note.trim() || null,
             availability: draft.availability,
             bufferBeforeMinutes: draft.bufferBeforeMinutes,
@@ -339,7 +427,17 @@ export function BookingLinkDialog({
                         helperText={errorOf('title') || 'Shown on the page, e.g. "Product demo".'}
                         sx={inputSx}
                     />
-                    <TextField select size="small" label="Activity type" value={draft.followupType} onChange={(e) => set('followupType', e.target.value)} sx={inputSx} error={Boolean(errorOf('followupType'))} helperText={errorOf('followupType') || ' '}>
+                    <TextField
+                        select
+                        size="small"
+                        label="Activity type"
+                        value={draft.followupType}
+                        // A type without video meetings drops the choice (the API would refuse it for the new type).
+                        onChange={(e) => setDraft((d) => ({ ...d, followupType: e.target.value, videoMeeting: offersVideo(e.target.value) ? d.videoMeeting : '' }))}
+                        sx={inputSx}
+                        error={Boolean(errorOf('followupType'))}
+                        helperText={errorOf('followupType') || ' '}
+                    >
                         {types.map((t) => (
                             <MenuItem key={t} value={t}>
                                 {typeLabel(t) || t}
@@ -381,9 +479,20 @@ export function BookingLinkDialog({
                         value={draft.location}
                         onChange={(e) => set('location', e.target.value)}
                         slotProps={{ htmlInput: { maxLength: BOOKING_LOCATION_MAX } }}
-                        helperText={errorOf('location') || 'An address, a phone number, or "Google Meet link follows".'}
+                        helperText={errorOf('location') || 'An address or a phone number. For a Meet / Teams link, use Video meeting.'}
                         error={Boolean(errorOf('location'))}
                         sx={inputSx}
+                    />
+                    <VideoMeetingSelect
+                        owner={draft.ownerUsername}
+                        ownerName={ownerName}
+                        typeLabel={typeLabel(draft.followupType) || draft.followupType}
+                        typeOffersVideo={typeOffersVideo}
+                        value={draft.videoMeeting}
+                        saved={link && draft.followupType === link.followupType ? (link.videoMeeting ?? '') : ''}
+                        error={errorOf('videoMeeting')}
+                        disabled={saving}
+                        onChange={(v) => set('videoMeeting', v)}
                     />
                     <TextField select size="small" label="Reminder for you" value={draft.reminder} onChange={(e) => set('reminder', e.target.value)} sx={inputSx} helperText=" ">
                         <MenuItem value={NO_REMINDER}>No reminder</MenuItem>

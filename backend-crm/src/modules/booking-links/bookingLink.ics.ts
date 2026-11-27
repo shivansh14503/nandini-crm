@@ -12,6 +12,8 @@ export interface IcsEvent {
     summary: string;
     location?: string | null;
     description?: string | null;
+    /** URL property (the meeting's video link once it is ready; RFC 5545 §3.8.4.6). */
+    url?: string | null;
     /** DTSTAMP (when the booking was made). */
     stamp: Date;
 }
@@ -59,6 +61,8 @@ export function buildIcs(event: IcsEvent): string {
         `SUMMARY:${escapeIcsText(event.summary)}`,
         ...(event.location ? [`LOCATION:${escapeIcsText(event.location)}`] : []),
         ...(event.description ? [`DESCRIPTION:${escapeIcsText(event.description)}`] : []),
+        // URI value: not TEXT-escaped (only https links from the allow-list reach here); line breaks dropped.
+        ...(event.url ? [`URL:${event.url.replace(/[\r\n]/g, '')}`] : []),
         'STATUS:CONFIRMED',
         'TRANSP:OPAQUE',
         'END:VEVENT',

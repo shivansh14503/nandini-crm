@@ -719,6 +719,7 @@ describe('backend ↔ frontend contract', { skip }, () => {
         assert.deepEqual([...frontend.BOOKING_WEEKDAYS], [...bookingConstants.BOOKING_WEEKDAYS]);
         assert.deepEqual(Object.keys(frontend.BOOKING_WEEKDAY_LABELS), [...bookingConstants.BOOKING_WEEKDAYS]);
         assert.deepEqual([...frontend.BOOKING_SLOT_STEPS], [...bookingConstants.BOOKING_SLOT_STEPS]);
+        assert.deepEqual([...frontend.BOOKING_VIDEO_PROVIDERS], [...bookingConstants.BOOKING_VIDEO_PROVIDERS]);
         assert.deepEqual(frontend.BOOKING_ERROR_CODES, bookingConstants.BOOKING_ERROR_CODES);
         for (const key of [
             'BOOKING_DURATION_MIN_MINUTES',

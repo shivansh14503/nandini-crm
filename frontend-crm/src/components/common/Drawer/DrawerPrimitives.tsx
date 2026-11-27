@@ -60,11 +60,19 @@ export interface DrawerCopyButtonProps {
     text: string;
     title?: string;
     iconColor?: string;
-    /** Minimum tap target in px (e.g. 32 in touch-dense rows); default: MUI's small IconButton. */
+    /**
+     * Minimum tap target in px (default 32, the responsive-UI minimum). Only the hit area grows: an invisible `::before`
+     * centred on the button, so the icon, its hover circle and the surrounding layout stay as they are.
+     */
     minTarget?: number;
+    /** Visual size in px (min width / height); default MUI's small IconButton (about 24 px). Join meeting uses 32. */
+    boxSize?: number;
 }
 
-export function DrawerCopyButton({ text, title = 'Copy', iconColor, minTarget }: DrawerCopyButtonProps) {
+/** The responsive-UI rule's minimum tap target (.claude/rules/responsive-ui.md). */
+export const MIN_TAP_TARGET_PX = 32;
+
+export function DrawerCopyButton({ text, title = 'Copy', iconColor, minTarget = MIN_TAP_TARGET_PX, boxSize }: DrawerCopyButtonProps) {
     const [status, setStatus] = React.useState<'idle' | 'copied' | 'failed'>('idle');
     React.useEffect(() => {
         if (status === 'idle') return;
@@ -81,7 +89,24 @@ export function DrawerCopyButton({ text, title = 'Copy', iconColor, minTarget }:
     const tooltip = status === 'copied' ? 'Copied!' : status === 'failed' ? 'Copy failed' : title;
     return (
         <Tooltip title={tooltip} open={status !== 'idle' ? true : undefined} placement="top">
-            <IconButton size="small" onClick={handleClick} aria-label={title} sx={minTarget ? { minWidth: minTarget, minHeight: minTarget } : undefined}>
+            <IconButton
+                size="small"
+                onClick={handleClick}
+                aria-label={title}
+                sx={{
+                    ...(boxSize ? { minWidth: boxSize, minHeight: boxSize } : {}),
+                    // A larger hit area than the visual button (ButtonBase is position: relative).
+                    '&::before': {
+                        content: '""',
+                        position: 'absolute',
+                        top: '50%',
+                        left: '50%',
+                        width: `max(100%, ${minTarget}px)`,
+                        height: `max(100%, ${minTarget}px)`,
+                        transform: 'translate(-50%, -50%)',
+                    },
+                }}
+            >
                 {status === 'copied' ? (
                     <CheckIcon sx={{ fontSize: 14, color: 'var(--mui-palette-success-main)' }} />
                 ) : (

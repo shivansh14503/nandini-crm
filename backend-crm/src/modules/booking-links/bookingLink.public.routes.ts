@@ -14,15 +14,17 @@ import { SLUG_PATTERN } from './bookingLink.validator.js';
  * query, or a valid unused slot token); Redis, in process when Redis can't count, never unlimited. A slug that isn't well-formed gets the same
  * 404 as a missing link, before any read.
  *
- *   GET  /:slug        → PublicLinkDto { slug, title, ownerName, typeLabel, durations, defaultDuration, location, note,
- *                        askPhone, askCompany, timeZone, firstDay, lastDay }                         60 / min / IP
+ *   GET  /:slug        → PublicLinkDto { slug, title, ownerName, typeLabel, durations, defaultDuration, location,
+ *                        videoMeeting: { provider, label } | null, note, askPhone, askCompany, timeZone, firstDay,
+ *                        lastDay }                                                                  60 / min / IP
  *   GET  /:slug/slots  ?from=YYYY-MM-DD&days=1..14 (7)&duration=<offered minutes>
  *                      → { timeZone, duration, days: [{ date, slots: [{ start, token }] }], firstDay, lastDay, prevFrom,
  *                          nextFrom }                                  60 / min / IP, 3000 / min / link
  *                        503 CALENDAR_UNAVAILABLE when the owner's company calendar can't be read now.
  *   POST /:slug/book   { token, name, email, phone?, company?, message?, website (honeypot, must be empty) }
  *                      → 201 { booking: { id, title, typeLabel, ownerName, start, end, durationMinutes, timeZone,
- *                          location }, ics }                           10 / hour / IP, 30 / hour / link (valid tokens only)
+ *                          location }, video: { provider, label, joinUrl | null } | null, ics }
+ *                                                                      10 / hour / IP, 30 / hour / link (valid tokens only)
  *                        409 SLOT_UNAVAILABLE (taken, expired or edited link), 409 BOOKING_DAY_FULL, 400 BOOKING_REJECTED
  *                        (honeypot), 400 VALIDATION_ERROR, 503 CALENDAR_UNAVAILABLE.
  * Every route: 404 NOT_FOUND (one message) for a missing, turned-off or unusable link or when booking links are off;

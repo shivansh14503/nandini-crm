@@ -44,6 +44,13 @@ export const BOOKING_VISITOR_NAME_MAX = 100;
 export const BOOKING_VISITOR_COMPANY_MAX = 200;
 export const BOOKING_VISITOR_MESSAGE_MAX = 1000;
 
+/**
+ * Default video meeting of a link's booked meetings: what the owner's admin-managed company calendar creates (Google
+ * Meet with Google, Microsoft Teams with Microsoft 365). Zoom is never offered on booking links.
+ */
+export const BOOKING_VIDEO_PROVIDERS = ['meet', 'teams'] as const;
+export type BookingVideoProvider = (typeof BOOKING_VIDEO_PROVIDERS)[number];
+
 /** Error codes the booking-link API answers with (api-plan). */
 export const BOOKING_ERROR_CODES = {
     off: 'BOOKING_LINKS_OFF',
@@ -93,6 +100,8 @@ export interface BookingLink {
     durations: number[];
     slotStepMinutes: number;
     location: string;
+    /** Default video meeting of booked meetings (null = none). */
+    videoMeeting: BookingVideoProvider | null;
     note: string;
     availability: WeeklyAvailability;
     bufferBeforeMinutes: number;
@@ -128,6 +137,8 @@ export interface BookingLinkPayload {
     durations: number[];
     slotStepMinutes: number;
     location: string | null;
+    /** 409 VIDEO_PROVIDER_NOT_CONNECTED unless the owner's company calendar creates that kind of link. */
+    videoMeeting: BookingVideoProvider | null;
     note: string | null;
     availability: WeeklyAvailability;
     bufferBeforeMinutes: number;
@@ -168,6 +179,8 @@ export interface PublicBookingLink {
     durations: number[];
     defaultDuration: number;
     location: string;
+    /** The video meeting booked meetings get ("Google Meet link: sent by <owner>"); null = none. */
+    videoMeeting: { provider: BookingVideoProvider; label: string } | null;
     note: string;
     askPhone: boolean;
     askCompany: boolean;
@@ -209,6 +222,8 @@ export interface BookingConfirmation {
         timeZone: string;
         location: string;
     };
+    /** The meeting's video link: joinUrl only when it was already ready, else the organiser sends it. Null = none. */
+    video: { provider: BookingVideoProvider; label: string; joinUrl: string | null } | null;
     /** iCalendar text for "Add to my calendar". */
     ics: string;
 }
