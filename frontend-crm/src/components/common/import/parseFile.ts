@@ -1,5 +1,6 @@
 import Papa from 'papaparse';
 import type { ParsedFile, RawRow } from './types';
+import { IMPORT_ERRORS_HEADER } from './importErrorsFile';
 
 export const ACCEPTED_EXTENSIONS = ['.csv', '.xlsx', '.xls'];
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
@@ -26,7 +27,9 @@ function buildParsed(fileName: string, matrix: unknown[][]): ParsedFile {
     const nonEmpty = matrix.filter((r) => r.some((c) => cellToString(c) !== ''));
     if (nonEmpty.length === 0) throw new Error('The file is empty.');
 
-    const rawHeaders = nonEmpty[0].map(cellToString);
+    let rawHeaders = nonEmpty[0].map(cellToString);
+    // A downloaded error file (`downloadImportErrors`) re-uploaded after fixing: its last "Errors" column is dropped.
+    if (rawHeaders.length > 1 && rawHeaders[rawHeaders.length - 1] === IMPORT_ERRORS_HEADER) rawHeaders = rawHeaders.slice(0, -1);
     const seen = new Map<string, number>();
     const headers = rawHeaders.map((h, i) => {
         const base = h || `Column ${i + 1}`;

@@ -662,6 +662,10 @@ tracker (`frontend-crm/src/services/importTracker.ts`), not in the wizard, so cl
 to a background card (`BackgroundImports`, kept across reloads in sessionStorage) and the module's lists still refresh
 (`notifyCrmUpdate`) when it finishes. Every finished import raises a snackbar, and the module's list
 (`CommonMasterView` with `importEntity`) switches to its largest page size on the first page so the new rows are in view.
+The background card has an expand button that reopens the import in the full-size window (live progress or results),
+which can be minimized back to the card. Rows that weren't imported download as an .xlsx (exceljs, loaded on click):
+exactly the uploaded file's columns plus a red-filled `Errors` column (a CSV can't carry colors); re-uploading that
+file drops a trailing `Errors` column so the fixed rows import again.
 
 **Audit write paths** (`services/audit.service.ts`):
 

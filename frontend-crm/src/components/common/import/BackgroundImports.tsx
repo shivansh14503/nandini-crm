@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Box, Button, IconButton, Paper, Typography } from '@mui/material';
-import { CloseRounded } from '@mui/icons-material';
+import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, Paper, Step, StepLabel, Stepper, Typography } from '@mui/material';
+import { CloseFullscreenRounded, CloseRounded, OpenInFullRounded } from '@mui/icons-material';
 import { importTracker, isImportFinished, onImportFinished, useTrackedImports, type TrackedImport } from '@/services/importTracker';
 import { AppToast } from '../AppToast';
-import { ImportProgressPanel } from './ImportProgressPanel';
+import { ImportProgressPanel, minimizeBtnSx } from './ImportProgressPanel';
+import { IMPORT_STEPS } from './types';
 
 const cancelBtnSx = {
     textTransform: 'none',
@@ -52,7 +53,9 @@ function toastFor(item: TrackedImport): ImportToast {
  * progress, Cancel, and the final summary (with the error-rows download). Mounted once in the root layout.
  */
 export function BackgroundImports() {
-    const items = useTrackedImports().filter((item) => item.background);
+    const all = useTrackedImports().filter((item) => item.background);
+    const items = all.filter((item) => !item.expanded);
+    const expanded = all.find((item) => item.expanded) ?? null;
     // Every finished import (wizard open or not) is announced by a snackbar.
     const [toast, setToast] = useState<ImportToast | null>(null);
     const [toastOpen, setToastOpen] = useState(false);
@@ -78,6 +81,7 @@ export function BackgroundImports() {
                 />
             )}
             {items.length > 0 && <BackgroundImportCards items={items} />}
+            {expanded && <ExpandedImportDialog item={expanded} />}
         </>
     );
 }
@@ -117,6 +121,15 @@ function BackgroundImportCards({ items }: { items: TrackedImport[] }) {
                             <Typography sx={{ flex: 1, minWidth: 0, fontSize: '0.82rem', fontWeight: 800, color: 'var(--crm-slate-900)' }} noWrap>
                                 Import {item.plural}
                             </Typography>
+                            <IconButton
+                                aria-label="Expand"
+                                title="Open the full import window"
+                                size="small"
+                                onClick={() => importTracker.expand(item.importId)}
+                                sx={minimizeBtnSx}
+                            >
+                                <OpenInFullRounded fontSize="small" />
+                            </IconButton>
                             {!finished && (
                                 <Button size="small" onClick={() => void importTracker.cancel(item.importId)} disabled={item.cancelling} sx={cancelBtnSx}>
                                     {item.cancelling ? 'Cancelling…' : 'Cancel'}
@@ -133,5 +146,56 @@ function BackgroundImportCards({ items }: { items: TrackedImport[] }) {
                 );
             })}
         </Box>
+    );
+}
+
+const textBtnSx = { textTransform: 'none', fontWeight: 600, color: 'var(--crm-slate-600)' } as const;
+
+/**
+ * A background import opened again from its corner card: the same full-size window as the wizard's Results step,
+ * showing the live progress or the final summary. Minimize (or Run in background, Esc, a click outside) shrinks it
+ * back to the card; Close on a finished import dismisses it.
+ */
+function ExpandedImportDialog({ item }: { item: TrackedImport }) {
+    const finished = isImportFinished(item);
+    const minimize = () => importTracker.minimize(item.importId);
+    return (
+        <Dialog
+            open
+            onClose={minimize}
+            fullWidth
+            maxWidth="md"
+            slotProps={{ paper: { sx: { borderRadius: '14px', boxShadow: '0 20px 50px rgba(15,23,42,0.18)' } } }}
+        >
+            <DialogTitle sx={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--crm-slate-900)', pb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Box component="span" sx={{ flex: 1, minWidth: 0 }}>
+                    Import {item.plural}
+                </Box>
+                <IconButton aria-label="Minimize" title="Minimize" size="small" onClick={minimize} sx={minimizeBtnSx}>
+                    <CloseFullscreenRounded fontSize="small" />
+                </IconButton>
+            </DialogTitle>
+            <DialogContent sx={{ pt: 1 }}>
+                <Stepper activeStep={3} sx={{ mb: 3, mt: 1 }}>
+                    {IMPORT_STEPS.map((label) => (
+                        <Step key={label}>
+                            <StepLabel>{label}</StepLabel>
+                        </Step>
+                    ))}
+                </Stepper>
+                <ImportProgressPanel item={item} />
+            </DialogContent>
+            <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid var(--mui-palette-border-main)' }}>
+                <Button onClick={finished ? () => importTracker.dismiss(item.importId) : minimize} sx={textBtnSx}>
+                    {finished ? 'Close' : 'Run in background'}
+                </Button>
+                <Box sx={{ flex: 1 }} />
+                {!finished && (
+                    <Button onClick={() => void importTracker.cancel(item.importId)} disabled={item.cancelling} sx={{ ...textBtnSx, ...cancelBtnSx, fontSize: undefined }}>
+                        {item.cancelling ? 'Cancelling…' : 'Cancel import'}
+                    </Button>
+                )}
+            </DialogActions>
+        </Dialog>
     );
 }

@@ -40,6 +40,22 @@ const outlinedBtnSx = {
     },
 } as const;
 
+/** The minimize / expand icon buttons of the import dialog and its corner card. */
+export const minimizeBtnSx = {
+    width: 32,
+    height: 32,
+    color: 'var(--mui-palette-text-secondary)',
+    border: '1px solid var(--mui-palette-border-main)',
+    borderRadius: '8px',
+    backgroundColor: 'var(--mui-palette-background-paper)',
+    transition: 'all 0.15s ease',
+    '&:hover': {
+        borderColor: 'var(--crm-blue-300)',
+        backgroundColor: 'var(--mui-palette-primary-soft)',
+        color: 'var(--crm-text-blue-700)',
+    },
+} as const;
+
 function Stat({ label, value, color }: { label: string; value: number; color: string }) {
     return (
         <Box
@@ -167,8 +183,8 @@ export function ImportProgressPanel({ item, compact = false }: { item: TrackedIm
                         <Typography sx={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--crm-slate-900)' }}>
                             Rows not imported
                         </Typography>
-                        <Button size="small" startIcon={<FileDownloadOutlined fontSize="small" />} onClick={() => downloadImportErrors(item)} sx={outlinedBtnSx}>
-                            Download error rows (CSV)
+                        <Button size="small" startIcon={<FileDownloadOutlined fontSize="small" />} onClick={() => void downloadImportErrors(item)} sx={outlinedBtnSx}>
+                            Download error rows
                         </Button>
                     </Box>
                     <Box
