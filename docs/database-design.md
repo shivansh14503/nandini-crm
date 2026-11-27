@@ -325,7 +325,7 @@ Indexes: `ticketStatus`, `ticketPriority`, `assignedTo`, `dueDate`, `organizatio
 `category` until `20261219100000_product_catalog_fields`), `type`, `manufacturer`, `taxRate` (Tax Type was dropped in
 that migration: products with Tax Type None got Tax Rate `0%`), `discount` DECIMAL(5,2), `cost`/`mrp`/`msp` DECIMAL(18,2) (returned as strings by the API),
 `contractCreate`, `description`, `termsAndConditions`, `status` NVARCHAR(30) (`Active` / `Inactive`, default
-`Active`; fixed dropdown `product_status`), `inactivityReason` NVARCHAR(500), `inactiveSince` DATETIME2 and
+`Active`; fixed dropdown `product_status`), `inactivityReason` NVARCHAR(500), `inactiveSince` DATETIME2 (the exact moment, shown as date + time) and
 `inactivatedBy` NVARCHAR(50) (username), `customDataJson`, audit/soft-delete. Only Admins (`isAdminAccessRole`) change
 `status`; making a product Inactive needs a reason and stamps `inactiveSince` / `inactivatedBy` (kept while it stays
 Inactive, cleared when it is made Active again; both changes are in the audit diff). Only Active products can be put

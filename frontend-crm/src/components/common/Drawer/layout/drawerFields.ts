@@ -5,7 +5,7 @@ import { distinctFieldLabels, findCategory, formatCustomValue, isBuiltInCountryF
 import { formatPhoneDisplay } from '@/utils/phone';
 import { findCrmUser } from '@/services/masterData.store';
 import { isPrimaryEntry, primaryFirst } from '@/utils/primaryFirst';
-import { fmtDay, fmtInstantDay, fmtMoney, fmtTime, getDisplayFormats } from '@/utils/formats';
+import { fmtDay, fmtInstant, fmtInstantDay, fmtMoney, fmtTime, getDisplayFormats } from '@/utils/formats';
 
 /**
  * The values a drawer layout can show for a module: the form's active fields (built-in and custom, labelled so no
@@ -40,7 +40,7 @@ const SYSTEM_FIELD_DEFS: Record<string, { label: string; type: FieldType }> = {
     quotationCode: { label: 'Quotation Code', type: 'text' },
     grandTotal: { label: 'Grand Total', type: 'amount' },
     productCode: { label: 'Product Code', type: 'text' },
-    inactiveSince: { label: 'Inactive Since', type: 'date' },
+    inactiveSince: { label: 'Inactive Since', type: 'datetime' },
     inactivityReason: { label: 'Inactivity Reason', type: 'textarea' },
     inactivatedBy: { label: 'Made Inactive By', type: 'text' },
     ticketNumber: { label: 'Ticket Number', type: 'text' },
@@ -157,9 +157,11 @@ export function fieldDisplayEntries(record: AnyRecord | null | undefined, def: D
         const text = typeof value === 'string' ? value : String(value);
         if (def.type === 'phone') return formatPhoneDisplay(text) || text;
         if (def.form && isBuiltInCountryField(def.form)) return getCountryNameByCode(text) || text;
-        // A date stored as an instant (a product's Inactive Since) reads as its day on the business clock.
+        // A date stored as an instant reads as its day on the business clock.
         if (def.type === 'date') return ISO_INSTANT.test(text) ? fmtInstantDay(text) : formatDay(text);
         if (def.type === 'datetime') {
+            // An instant (a product's Inactive Since) reads as date + time on the business clock.
+            if (ISO_INSTANT.test(text)) return fmtInstant(text);
             // The time is either a paired field (nextFollowupTime) or part of the value itself (dueDate, renewalReminderDate: 'YYYY-MM-DDTHH:mm').
             const paired = record?.[def.key.replace(/Date$/, 'Time')];
             const time = typeof paired === 'string' && paired.trim() ? paired : (/^\d{4}-\d{2}-\d{2}T(\d{2}:\d{2})/.exec(text)?.[1] ?? '');
