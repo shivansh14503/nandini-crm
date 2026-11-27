@@ -20,6 +20,7 @@ import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import { formatDateTime } from '@/utils/date';
 import { fmtDayOrRaw, fmtTimeOrRaw } from '@/utils/formats';
 import { formatPhoneDisplay } from '@/utils/phone';
+import { ClampedText } from '@/components/common/ClampedText';
 
 const plainCellSx = { fontSize: '0.78rem', color: 'var(--crm-slate-700)' } as const;
 
@@ -248,7 +249,7 @@ export function useLeadColumns(openRecord: (record: Lead) => void): DataTableCol
                 sortable: true,
                 minWidth: 220,
                 width: 280,
-                render: (l) => <Typography sx={plainCellSx}>{l.remarks || '-'}</Typography>,
+                render: (l) => <Typography component="div" sx={plainCellSx}>{l.remarks ? <ClampedText toggleFontSize="0.72rem">{l.remarks}</ClampedText> : '-'}</Typography>,
             },
             {
                 id: 'nextFollowupDate',

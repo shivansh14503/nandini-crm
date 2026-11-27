@@ -27,9 +27,14 @@ export const FIELD_MAX_LENGTH = {
     shortText: 80,
     title: 200,
     address: 250,
-    /** Organization "Description & Scope" (shows a live x / 1000 counter). */
+    /** Organization "Description & Scope". */
     organizationDescription: 1000,
+    /** Descriptions, remarks, notes and other long text (shows a live "x / 2,000" counter). */
     longText: 2000,
+    /** Quotation terms (Terms & Condition / Payment Terms descriptions, Terms and Conditions): legal text runs long. */
+    termsText: 4000,
+    /** Long text fields an admin adds in the Form Builder (type Long Text). */
+    customLongText: 4000,
     /** Reason asked when an organization or product is made Inactive. */
     inactivityReason: 500,
     /** Option values (stage, source, category, …) and usernames. */

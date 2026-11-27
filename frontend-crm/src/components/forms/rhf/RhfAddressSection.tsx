@@ -212,6 +212,7 @@ export function RhfAddressSection<T extends FieldValues>({
                             required={required}
                             hint="Street address, building, premises"
                             multiline
+                            expandable={false}
                             minRows={3}
                             maxRows={4}
                             placeholder="Enter street and building address..."
@@ -260,6 +261,7 @@ export function RhfAddressSection<T extends FieldValues>({
                             label={shippingStreetLabel}
                             hint="Delivery warehouse, facility, or office"
                             multiline
+                            expandable={false}
                             minRows={3}
                             maxRows={4}
                             placeholder="Enter street and building address..."

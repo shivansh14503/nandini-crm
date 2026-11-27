@@ -14,7 +14,6 @@ export function ContactPreferencesSection() {
             name="addDescription"
             label="Add Description"
             multiline
-            minRows={3}
             placeholder="Enter additional contact details, background, notes, or special instructions..."
         />
     );

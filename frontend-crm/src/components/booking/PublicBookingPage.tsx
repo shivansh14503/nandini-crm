@@ -17,6 +17,7 @@ import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-quer
 import { ApiClientError } from '@/services/apiClient';
 import { publicBookingService } from '@/services/bookingLink.service';
 import { APP_CONFIG } from '@/config/constants';
+import { LongTextInput } from '@/components/forms/LongTextInput';
 import {
     BOOKING_ERROR_CODES,
     BOOKING_VISITOR_COMPANY_MAX,
@@ -313,7 +314,17 @@ function BookingForm({
             <TextField label="Email" type="email" required value={values.email} onChange={set('email')} autoComplete="email" error={Boolean(errors.email)} helperText={errors.email} slotProps={{ htmlInput: { maxLength: 120, inputMode: 'email' } }} sx={inputSx} />
             {link.askPhone && <TextField label="Phone (optional)" type="tel" value={values.phone} onChange={set('phone')} autoComplete="tel" error={Boolean(errors.phone)} helperText={errors.phone} slotProps={{ htmlInput: { maxLength: 30, inputMode: 'tel' } }} sx={inputSx} />}
             {link.askCompany && <TextField label="Company (optional)" value={values.company} onChange={set('company')} autoComplete="organization" error={Boolean(errors.company)} helperText={errors.company} slotProps={{ htmlInput: { maxLength: BOOKING_VISITOR_COMPANY_MAX } }} sx={inputSx} />}
-            <TextField label="Anything we should know? (optional)" multiline minRows={3} value={values.message} onChange={set('message')} error={Boolean(errors.message)} helperText={errors.message} slotProps={{ htmlInput: { maxLength: BOOKING_VISITOR_MESSAGE_MAX } }} sx={inputSx} />
+            <LongTextInput
+                label="Anything we should know? (optional)"
+                inputLabel="Anything we should know? (optional)"
+                value={values.message}
+                onChange={(message) => setValues((v) => ({ ...v, message }))}
+                error={errors.message}
+                maxLength={BOOKING_VISITOR_MESSAGE_MAX}
+                size="medium"
+                crmFieldStyle={false}
+                sx={inputSx}
+            />
             {/* Honeypot: hidden from people and screen readers; automated form fillers tend to fill it. */}
             <Box aria-hidden="true" sx={{ position: 'absolute', left: '-10000px', top: 'auto', width: 1, height: 1, overflow: 'hidden' }}>
                 <label>

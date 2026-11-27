@@ -335,7 +335,7 @@ export function LeadOverviewSection({ leadId, notify, onDecisionPendingChange, o
             <FormGrid columns={1}>
                 <FormGridItem>
                     {/* Remarks go with a recorded follow-up, so a details-only edit doesn't ask for them. */}
-                    <RhfTextField<LeadFormData> name="remarks" label="Remarks" required={!isEdit || Boolean(response.trim())} hint="Action items / requirement brief" multiline minRows={3} maxRows={5} placeholder="Enter specific followup requirement, client demand, or notes..." />
+                    <RhfTextField<LeadFormData> name="remarks" label="Remarks" required={!isEdit || Boolean(response.trim())} hint="Action items / requirement brief" multiline placeholder="Enter specific followup requirement, client demand, or notes..." />
                 </FormGridItem>
             </FormGrid>
         </Box>

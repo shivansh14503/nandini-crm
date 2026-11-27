@@ -3,6 +3,7 @@
 import React from 'react';
 import { Box, Chip, Typography, type SxProps, type Theme } from '@mui/material';
 import { DrawerCopyButton } from '../common/Drawer/DrawerPrimitives';
+import { ClampedText } from '../common/ClampedText';
 
 export interface ReadOnlyFieldProps {
     label: string;
@@ -19,6 +20,11 @@ export interface ReadOnlyFieldProps {
     actions?: React.ReactNode;
     /** Render nothing at all when there is no value (record views only show filled-in data). */
     hideWhenEmpty?: boolean;
+    /**
+     * Long values show their first 3 lines with "Show more". On by default for text values (the toggle appears only
+     * when the text runs past 3 lines); pass true for a value wrapped in an element (e.g. double-click-to-copy).
+     */
+    clamp?: boolean;
     sx?: SxProps<Theme>;
 }
 
@@ -36,11 +42,14 @@ export function ReadOnlyField({
     hint,
     actions,
     hideWhenEmpty,
+    clamp,
     sx,
 }: ReadOnlyFieldProps) {
     const empty = isEmpty(value);
     if (empty && hideWhenEmpty) return null;
-    const textToCopy = copyText ?? (typeof value === 'string' || typeof value === 'number' ? String(value) : undefined);
+    const isText = typeof value === 'string' || typeof value === 'number';
+    const textToCopy = copyText ?? (isText ? String(value) : undefined);
+    const clamped = clamp ?? isText;
 
     return (
         <Box sx={sx}>
@@ -81,6 +90,7 @@ export function ReadOnlyField({
                         <Typography
                             component="div"
                             sx={{
+                                minWidth: 0,
                                 fontSize: '0.86rem',
                                 fontWeight: 600,
                                 color: 'var(--crm-slate-900)',
@@ -89,7 +99,7 @@ export function ReadOnlyField({
                                 whiteSpace: 'pre-wrap',
                             }}
                         >
-                            {value}
+                            {clamped ? <ClampedText>{value}</ClampedText> : value}
                         </Typography>
                     )}
                     {actions ?? (copyable && textToCopy && <DrawerCopyButton text={textToCopy} title={`Copy ${label}`} />)}

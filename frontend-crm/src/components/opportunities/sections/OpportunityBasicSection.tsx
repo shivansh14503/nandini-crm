@@ -383,8 +383,6 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
                         required
                         hint="Stage summary & action items"
                         multiline
-                        minRows={4}
-                        maxRows={8}
                         placeholder="Provide current milestone details or immediate actions..."
                         maxLength={FIELD_MAX_LENGTH.longText}
                     />

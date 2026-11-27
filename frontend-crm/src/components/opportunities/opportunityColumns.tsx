@@ -17,6 +17,7 @@ import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import type { Quotation } from '@/types/quotation.types';
 import { formatDateTime } from '@/utils/date';
 import { fmtDayOrRaw, fmtMoney, fmtTimeOrRaw } from '@/utils/formats';
+import { ClampedText } from '@/components/common/ClampedText';
 
 /** ₹ without decimals, in the company number grouping. */
 const formatCurrency = (val: number) => fmtMoney(val, { maxDecimals: 0 });
@@ -308,7 +309,7 @@ export function useOpportunityColumns(openRecord: (record: Opportunity) => void,
                 sortable: false,
                 minWidth: 220,
                 width: 280,
-                render: (o) => <Typography sx={plainCellSx}>{o.remarks || '-'}</Typography>,
+                render: (o) => <Typography component="div" sx={plainCellSx}>{o.remarks ? <ClampedText toggleFontSize="0.72rem">{o.remarks}</ClampedText> : '-'}</Typography>,
             },
             {
                 // Derived: a linked quotation has moved past Draft.

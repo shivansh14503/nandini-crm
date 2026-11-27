@@ -11,10 +11,10 @@ import {
     DialogActions,
     DialogContent,
     DialogTitle,
-    TextField,
     Typography,
 } from '@mui/material';
 import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
+import { LongTextInput } from '@/components/forms/LongTextInput';
 
 export interface CommonActionModalProps {
     open: boolean;
@@ -127,35 +127,25 @@ export function CommonActionModal({
                     </Box>
                 )}
 
-                <TextField
+                <LongTextInput
                     autoFocus
-                    fullWidth
-                    multiline
-                    minRows={3}
-                    maxRows={6}
                     label={reasonLabel}
+                    inputLabel={reasonLabel}
                     placeholder={reasonPlaceholder}
                     value={reason}
                     required={required}
-                    onChange={(e) => setReason(maxLength ? e.target.value.slice(0, maxLength) : e.target.value)}
-                    slotProps={maxLength ? { htmlInput: { maxLength } } : undefined}
+                    onChange={setReason}
+                    maxLength={maxLength}
+                    // A reason is short and this is already a dialog: no larger editor.
+                    expandable={false}
                     onKeyDown={(e) => {
                         if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                             e.preventDefault();
                             void handleConfirm();
                         }
                     }}
-                    error={showError}
-                    helperText={
-                        <Box component="span" sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
-                            <span>{showError ? `${reasonLabel} is required.` : 'Press Enter to confirm, Shift+Enter for a new line.'}</span>
-                            {maxLength ? (
-                                <span>
-                                    {reason.length}/{maxLength}
-                                </span>
-                            ) : null}
-                        </Box>
-                    }
+                    error={showError ? `${reasonLabel} is required.` : undefined}
+                    helperText="Press Enter to confirm, Shift+Enter for a new line."
                 />
             </DialogContent>
 

@@ -98,8 +98,6 @@ export function ConvertOpportunitySection() {
                             required
                             hint="Stage summary & action items"
                             multiline
-                            minRows={4}
-                            maxRows={8}
                             placeholder="Provide current milestone details or immediate actions..."
                         />
                     ),

@@ -1,6 +1,7 @@
 import { StatusCodes } from 'http-status-codes';
 import { HttpError, type ApiFieldError } from '../../utils/httpError.js';
 import { businessNow } from '../../validators/notInPast.js';
+import { FIELD_MAX_LENGTH } from '../../config/fieldLimits.js';
 import type { CrmModuleKey } from './formConfig.defaults.js';
 // Type-only: the service (and with it the Prisma client and env checks) is loaded on first use, so the pure checks
 // below import cleanly in unit tests.
@@ -103,7 +104,7 @@ const AMOUNT_PATTERN = /^\d+(\.\d{1,2})?$/;
 const PINCODE_PATTERN = /^[A-Za-z0-9\s-]{2,12}$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}(T[\d:.]+(Z|[+-]\d{2}:?\d{2})?)?$/;
 const MAX_TEXT = 500;
-const MAX_TEXTAREA = 4000;
+const MAX_TEXTAREA = FIELD_MAX_LENGTH.customLongText;
 /** Admin-entered patterns longer than this are ignored rather than compiled. */
 const MAX_PATTERN_LENGTH = 200;
 

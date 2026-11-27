@@ -62,6 +62,7 @@ import {
     type WeeklyAvailability,
 } from '@/types/bookingLink.types';
 import { AvailabilityEditor, availabilityIssues } from './AvailabilityEditor';
+import { LongTextInput } from '@/components/forms/LongTextInput';
 
 const DURATION_CHOICES = [15, 20, 30, 45, 60, 90, 120, 180, 240];
 const BUFFER_CHOICES = [0, 5, 10, 15, 30, 45, 60, 90, 120];
@@ -505,17 +506,14 @@ export function BookingLinkDialog({
                         ))}
                     </TextField>
                 </Box>
-                <TextField
-                    size="small"
+                <LongTextInput
                     label="Note for visitors"
-                    multiline
-                    minRows={2}
+                    inputLabel="Note for visitors"
                     value={draft.note}
-                    onChange={(e) => set('note', e.target.value)}
-                    slotProps={{ htmlInput: { maxLength: BOOKING_NOTE_MAX } }}
-                    helperText={errorOf('note') || 'Shown above the times (what to prepare, what the meeting covers).'}
-                    error={Boolean(errorOf('note'))}
-                    sx={inputSx}
+                    onChange={(value) => set('note', value)}
+                    maxLength={BOOKING_NOTE_MAX}
+                    helperText="Shown above the times (what to prepare, what the meeting covers)."
+                    error={errorOf('note')}
                 />
 
                 <Typography sx={sectionTitleSx}>When</Typography>

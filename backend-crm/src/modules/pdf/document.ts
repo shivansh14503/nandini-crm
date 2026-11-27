@@ -60,7 +60,7 @@ export const FONT_STACK = `'Noto Sans PDF', 'Noto Sans', 'Segoe UI', Arial, sans
 const BASE_CSS = `
 *,*::before,*::after{box-sizing:border-box}
 html,body{margin:0;padding:0}
-body{font-family:${FONT_STACK};font-size:10pt;line-height:1.4;color:#1f2937;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{font-family:${FONT_STACK};font-size:10pt;line-height:1.4;color:#1f2937;overflow-wrap:break-word;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 img{max-width:100%}
 table{border-collapse:collapse;width:100%;page-break-inside:auto}
 tr{page-break-inside:avoid;break-inside:avoid}
