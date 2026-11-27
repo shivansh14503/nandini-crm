@@ -513,6 +513,7 @@ function OverviewTabInner({
                         reasonLabel="Reason"
                         reasonPlaceholder="Why is this organization being deactivated?"
                         presetReasons={INACTIVITY_REASONS}
+                        maxLength={FIELD_MAX_LENGTH.inactivityReason}
                         confirmLabel="Deactivate Organization"
                         confirmColor="warning"
                         onConfirm={(reason) => {
