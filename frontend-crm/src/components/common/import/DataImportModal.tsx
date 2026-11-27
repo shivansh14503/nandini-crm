@@ -10,6 +10,7 @@ import {
     DialogActions,
     DialogContent,
     DialogTitle,
+    IconButton,
     Step,
     StepLabel,
     Stepper,
@@ -24,7 +25,9 @@ import { useFormConfigs } from '@/hooks/queries/useFormConfigs';
 import { autoMapColumns, downloadSampleTemplate, mapAndValidateRows } from './importConfigs';
 import { buildImportConfig } from './importFields';
 import { parseFile } from './parseFile';
-import type { ColumnMapping, ImportEntityType, ParsedFile } from './types';
+import { CloseFullscreenRounded } from '@mui/icons-material';
+import { IMPORT_STEPS, type ColumnMapping, type ImportEntityType, type ParsedFile } from './types';
+import { minimizeBtnSx } from './ImportProgressPanel';
 
 export interface DataImportModalProps {
     open: boolean;
@@ -37,7 +40,6 @@ export interface DataImportModalProps {
     onImported?: (count: number) => void;
 }
 
-const STEPS = ['Upload File', 'Map Columns', 'Preview & Import', 'Results'];
 
 const primaryBtnSx = {
     background: 'linear-gradient(135deg, var(--crm-fill-blue-700) 0%, var(--crm-fill-blue-600) 100%)',
@@ -153,12 +155,20 @@ function DataImportWizard({ open, entity, onClose, onImported }: DataImportModal
             maxWidth="md"
             slotProps={{ paper: { sx: { borderRadius: '14px', boxShadow: '0 20px 50px rgba(15,23,42,0.18)' } } }}
         >
-            <DialogTitle sx={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--crm-slate-900)', pb: 1 }}>
-                Import {config.plural}
+            <DialogTitle sx={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--crm-slate-900)', pb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Box component="span" sx={{ flex: 1, minWidth: 0 }}>
+                    Import {config.plural}
+                </Box>
+                {step === 3 && running && (
+                    // Same as "Run in background": the import shrinks to the corner card, which can expand it again.
+                    <IconButton aria-label="Minimize" title="Minimize (run in background)" size="small" onClick={onClose} sx={minimizeBtnSx}>
+                        <CloseFullscreenRounded fontSize="small" />
+                    </IconButton>
+                )}
             </DialogTitle>
             <DialogContent sx={{ pt: 1 }}>
                 <Stepper activeStep={step} sx={{ mb: 3, mt: 1 }}>
-                    {STEPS.map((label) => (
+                    {IMPORT_STEPS.map((label) => (
                         <Step key={label}>
                             <StepLabel>{label}</StepLabel>
                         </Step>

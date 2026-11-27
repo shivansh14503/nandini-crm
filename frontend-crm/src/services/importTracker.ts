@@ -49,6 +49,8 @@ export interface TrackedImport {
     cancelling: boolean;
     /** Shown in the background card (the wizard was closed while it ran). */
     background: boolean;
+    /** A background import opened again in the full-size dialog (the card's expand button). */
+    expanded: boolean;
 }
 
 const POLL_MS = 1000;
@@ -117,7 +119,7 @@ function restore() {
 function blank(
     init: Pick<TrackedImport, 'importId' | 'entity' | 'plural' | 'total' | 'skipped' | 'startedAt' | 'background'> & { source?: ImportSourceFile }
 ): TrackedImport {
-    return { ...init, phase: 'queued', processed: 0, created: 0, failedCount: 0, result: null, error: null, cancelling: false };
+    return { ...init, phase: 'queued', processed: 0, created: 0, failedCount: 0, result: null, error: null, cancelling: false, expanded: false };
 }
 
 function schedule(importId: string, delay: number) {
@@ -139,7 +141,10 @@ function finish(importId: string, changes: Partial<TrackedImport>) {
     if (item.created > 0 || item.phase === 'lost') refreshLists(item);
     finishedListeners.forEach((listener) => listener(item));
     if (item.background && item.phase === 'completed' && item.failedCount === 0 && item.skipped.length === 0) {
-        setTimeout(() => dismissImport(importId), AUTO_DISMISS_MS);
+        // Left alone while someone is looking at it in the full-size dialog.
+        setTimeout(() => {
+            if (!find(importId)?.expanded) dismissImport(importId);
+        }, AUTO_DISMISS_MS);
     }
 }
 
@@ -247,6 +252,16 @@ export const importTracker = {
     },
 
     dismiss: (importId: string) => dismissImport(importId),
+
+    /** Opens a background import in the full-size dialog again (progress or results, as it stands). */
+    expand(importId: string) {
+        if (find(importId)?.background) patch(importId, { expanded: true });
+    },
+
+    /** Shrinks the full-size dialog of a background import back to its corner card. */
+    minimize(importId: string) {
+        patch(importId, { expanded: false });
+    },
 };
 
 function dismissImport(importId: string) {

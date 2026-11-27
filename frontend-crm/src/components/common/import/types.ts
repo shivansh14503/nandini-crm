@@ -52,3 +52,6 @@ export interface MappedRow {
     values: Record<string, string>;
     errors: string[];
 }
+
+/** The import wizard's steps (the full-size progress dialog of a background import shows the last one). */
+export const IMPORT_STEPS = ['Upload File', 'Map Columns', 'Preview & Import', 'Results'] as const;
