@@ -11,8 +11,7 @@ import { RecordLink } from '../common/RecordLink';
 import { type DataTableColumn } from '../common/DataTable';
 import { ROUTES } from '@/config/constants';
 import { findCrmUser } from '@/services/masterData.store';
-import { useDropdownOptionLabel } from '@/hooks/queries/useFormConfigs';
-import { CUSTOMER_RESPONSE_CATEGORY } from '@/components/forms/FollowUpDecision';
+import { useActivityResponseLabel } from '@/hooks/queries/useFormConfigs';
 import type { Activity, ActivityCalendarState } from '@/types/activity.types';
 import { isFollowUpActivity, isVideoProvider, NOTE_TYPE, PLANNED_STATUS, VIDEO_PROVIDER_LABELS } from '@/types/activity.types';
 import { ActivityStatusPill, ActivityTypeChip, ActivityTypeIcon, FollowUpChip } from './ActivityBadges';
@@ -71,7 +70,7 @@ const textCellSx = { fontSize: '0.8rem', fontWeight: 600, color: 'var(--crm-slat
  */
 export function useActivityColumns(openRecord: (record: Activity) => void): DataTableColumn<Activity>[] {
     const clock = useBusinessClock();
-    const responseLabel = useDropdownOptionLabel(CUSTOMER_RESPONSE_CATEGORY);
+    const responseLabel = useActivityResponseLabel();
     const { timeZone } = clock;
 
     return useMemo(() => {
@@ -215,7 +214,7 @@ export function useActivityColumns(openRecord: (record: Activity) => void): Data
                 label: 'CUSTOMER RESPONSE',
                 sortable: true,
                 minWidth: 170,
-                render: (a) => <Typography sx={plainCellSx}>{responseLabel(a.customerResponse) || '-'}</Typography>,
+                render: (a) => <Typography sx={plainCellSx}>{responseLabel(a) || '-'}</Typography>,
             },
             // Hidden at first; formatted in the business timezone rather than the form field's raw value.
             {

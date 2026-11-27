@@ -19,11 +19,12 @@ import type { ConfigValidationIssue } from '@/utils/formConfig';
  */
 
 /**
- * The Customer Response field is the same on both forms (key `customerResponse`, this flow) and uses one list
- * (`shared_customer_response`). Each form reads it through the field's link: leads for the Rating rules
- * (`useLeadRatingConfig`), opportunities for the Sales Stages each option fits (`useOpportunityResponseConfig`).
+ * Customer Response has its own list on Leads, Opportunities and Activities (not one shared field): see
+ * CUSTOMER_RESPONSE_CATEGORIES in utils/formConfig.ts. Lead and opportunity forms read theirs through the field's link:
+ * leads for the Rating rules (`useLeadRatingConfig`), opportunities for the Sales Stages each option fits
+ * (`useOpportunityResponseConfig`).
  */
-export const CUSTOMER_RESPONSE_CATEGORY = 'shared_customer_response';
+export { activityResponseCategory, CUSTOMER_RESPONSE_CATEGORIES } from '@/utils/formConfig';
 
 /** Fallback options while the admin configuration loads (same defaults as the backend seed). */
 export const CUSTOMER_RESPONSES: string[] = [

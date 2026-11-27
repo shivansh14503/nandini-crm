@@ -129,7 +129,10 @@ export const APP_REQUIRED_CATEGORY_KEYS: ReadonlySet<string> = new Set([
     'shared_product_category',
     'shared_lead_source',
     'shared_followup_type',
-    'shared_customer_response',
+    // Customer Response: one list per module (see CUSTOMER_RESPONSE_CATEGORY_KEYS).
+    'lead_customer_response',
+    'opportunity_customer_response',
+    'activity_customer_response',
     'opportunity_type',
     'opportunity_commission_type',
     'org_nature_of_business',
@@ -171,16 +174,66 @@ export const ACTIVITY_ONLY_FOLLOWUP_TYPES = ['Task', 'Note'] as const;
 /** The Followup Type dropdown, shared by Leads, Opportunities and Activities. */
 export const FOLLOWUP_TYPE_CATEGORY_KEY = 'shared_followup_type';
 
+/**
+ * Customer Response is a deliberate exception to "same field key = same field" (docs/build-plan.md, field rules):
+ * Leads, Opportunities and Activities each have their own Customer Response field with its own list, so each can be
+ * configured on its own in the Form Builder (lead options set the Rating, opportunity options the Sales Stages they
+ * fit). The key stays `customerResponse` on every module (each record keeps its own column); only the list differs.
+ * An activity related to a lead / opportunity offers that record's list (the follow-up it logs records it).
+ */
+export const CUSTOMER_RESPONSE_CATEGORY_KEYS = {
+    leads: 'lead_customer_response',
+    opportunities: 'opportunity_customer_response',
+    activities: 'activity_customer_response',
+} as const;
+
+/** The single list all three modules used before the split; start-up seeding splits it (formConfig.seed.ts). */
+export const LEGACY_CUSTOMER_RESPONSE_CATEGORY_KEY = 'shared_customer_response';
+
+/**
+ * Field keys that are NOT one shared field across modules even though the key and label match: the Form Builder
+ * doesn't mark them "Also on" other forms and each module's copy keeps its own list and settings. Mirrored in
+ * frontend-crm/src/utils/formConfig.ts (UNSHARED_FIELD_KEYS).
+ */
+export const UNSHARED_FIELD_KEYS: ReadonlySet<string> = new Set(['customerResponse']);
+
 const yesNo = (first: 'No' | 'Yes'): DefaultOption[] => withSystem(first === 'No' ? ['No', 'Yes'] : ['Yes', 'No'], ['Yes', 'No']);
 
-// Customer Response defaults: the lead Rating rule and the opportunity Sales Stages of each option.
+// Customer Response defaults: the lead Rating rule and the opportunity Sales Stages of each option. Leads and
+// Opportunities start from the same values, each in its own list (CUSTOMER_RESPONSE_CATEGORY_KEYS).
 const [QUAL, DEMO, QUOTE, NEGO, HOLD, PO, ADVANCE] = ['Qualification', 'Demo', 'Proposal/Price Quote', 'Negotiation', 'On Hold', 'PO', 'Advance Received'];
 const COLD = { rule: 'always', rating: 'Cold' } as const;
-/** `stages` null = every open stage (no `opportunityStages` key, so stages added later offer it too). */
-const response = (value: string, ratingRule: Record<string, unknown>, stages: string[] | null, extra: Record<string, unknown> = {}): DefaultOption => ({
+interface ResponseDefault {
+    value: string;
+    ratingRule: Record<string, unknown>;
+    /** null = every open stage (no `opportunityStages` key, so stages added later offer it too). */
+    stages: string[] | null;
+    noFollowUp?: boolean;
+}
+const response = (value: string, ratingRule: Record<string, unknown>, stages: string[] | null, extra: { noFollowUp?: boolean } = {}): ResponseDefault => ({
     value,
-    meta: { ratingRule, ...(stages ? { opportunityStages: stages } : {}), ...extra },
+    ratingRule,
+    stages,
+    ...extra,
 });
+const CUSTOMER_RESPONSE_DEFAULTS: ResponseDefault[] = [
+    response('Interested', { rule: 'followUpGap', hot: 7, warm: 30 }, [QUAL, DEMO, QUOTE, HOLD]),
+    response('Need More Information', { rule: 'followUpGap', hot: 3, warm: 15 }, [QUAL, DEMO, QUOTE, NEGO, HOLD, PO, ADVANCE]),
+    response('Requested Quotation', { rule: 'daysSinceResponse', hot: 10, warm: 30 }, [QUAL, DEMO, QUOTE, NEGO]),
+    response('Requested Demo', { rule: 'followUpGap', hot: 7, warm: 21 }, [QUAL, DEMO, QUOTE]),
+    response('Under Discussion', { rule: 'daysSinceResponse', hot: 7, warm: 21 }, [QUAL, DEMO, QUOTE, NEGO, HOLD, PO, ADVANCE]),
+    response('Call Back Later', { rule: 'followUpGap', hot: 3, warm: 30 }, null),
+    response('Not Interested', COLD, [QUAL, DEMO, QUOTE, NEGO, HOLD]),
+    response('Price Issue', { rule: 'followUpGap', hot: null, warm: 15 }, [QUOTE, NEGO, HOLD]),
+    response('Using Other Software', COLD, [QUAL, DEMO, QUOTE, NEGO, HOLD]),
+    response('No Requirement', COLD, [QUAL, DEMO, HOLD]),
+    response('Requirement in Future', { rule: 'followUpGap', hot: null, warm: 60 }, [QUAL, DEMO, QUOTE, HOLD]),
+    // Unanswered attempts share one counter on leads (lead.unansweredCalls): Hot for 2, Warm up to 4, Cold from the 5th.
+    response('No Response', { rule: 'unansweredCalls', hot: 2, warm: 4 }, null),
+    response('Wrong Number', COLD, [QUAL, HOLD]),
+    response('Not Reachable', { rule: 'unansweredCalls', hot: 2, warm: 4 }, null),
+    response('Do Not Contact', COLD, null, { noFollowUp: true }),
+];
 
 export const DEFAULT_CATEGORIES: DefaultCategory[] = [
     // ── Shared ──
@@ -252,35 +305,6 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
         ],
     },
     {
-        key: 'shared_customer_response',
-        label: 'Customer Response',
-        module: 'shared',
-        description:
-            'What the customer said on the last follow-up (Leads, Opportunities, Activities). On leads each option sets the Rating; on opportunities it lists the Sales Stages it fits (Response Rules). Activities only record it.',
-        // Option meta: `ratingRule` (leads, docs/lead-rating-rules.md 2.3), `opportunityStages` (opportunities; none =
-        // every open stage) and `noFollowUp` (opportunities: the next follow-up is cleared). See opportunity.followUp.ts.
-        // Activities offer every active option and read no meta: an activity's response sets no Rating, isn't checked
-        // against a Sales Stage and clears no follow-up.
-        options: [
-            response('Interested', { rule: 'followUpGap', hot: 7, warm: 30 }, [QUAL, DEMO, QUOTE, HOLD]),
-            response('Need More Information', { rule: 'followUpGap', hot: 3, warm: 15 }, [QUAL, DEMO, QUOTE, NEGO, HOLD, PO, ADVANCE]),
-            response('Requested Quotation', { rule: 'daysSinceResponse', hot: 10, warm: 30 }, [QUAL, DEMO, QUOTE, NEGO]),
-            response('Requested Demo', { rule: 'followUpGap', hot: 7, warm: 21 }, [QUAL, DEMO, QUOTE]),
-            response('Under Discussion', { rule: 'daysSinceResponse', hot: 7, warm: 21 }, [QUAL, DEMO, QUOTE, NEGO, HOLD, PO, ADVANCE]),
-            response('Call Back Later', { rule: 'followUpGap', hot: 3, warm: 30 }, null),
-            response('Not Interested', COLD, [QUAL, DEMO, QUOTE, NEGO, HOLD]),
-            response('Price Issue', { rule: 'followUpGap', hot: null, warm: 15 }, [QUOTE, NEGO, HOLD]),
-            response('Using Other Software', COLD, [QUAL, DEMO, QUOTE, NEGO, HOLD]),
-            response('No Requirement', COLD, [QUAL, DEMO, HOLD]),
-            response('Requirement in Future', { rule: 'followUpGap', hot: null, warm: 60 }, [QUAL, DEMO, QUOTE, HOLD]),
-            // Unanswered attempts share one counter on leads (lead.unansweredCalls): Hot for 2, Warm up to 4, Cold from the 5th.
-            response('No Response', { rule: 'unansweredCalls', hot: 2, warm: 4 }, null),
-            response('Wrong Number', COLD, [QUAL, HOLD]),
-            response('Not Reachable', { rule: 'unansweredCalls', hot: 2, warm: 4 }, null),
-            response('Do Not Contact', COLD, null, { noFollowUp: true }),
-        ],
-    },
-    {
         key: 'shared_registration_type',
         label: 'Registration Type',
         module: 'shared',
@@ -299,6 +323,14 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
     },
 
     // ── Leads ──
+    {
+        key: 'lead_customer_response',
+        label: 'Customer Response',
+        module: 'leads',
+        description: 'What the customer said on the last follow-up of a lead. Each option sets the Rating (Rating Rules). Separate from the Opportunities list.',
+        // Option meta: `ratingRule` (docs/lead-rating-rules.md 2.3).
+        options: CUSTOMER_RESPONSE_DEFAULTS.map((r) => ({ value: r.value, meta: { ratingRule: r.ratingRule } })),
+    },
     {
         key: 'lead_status',
         label: 'Status',
@@ -510,6 +542,18 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
 
     // ── Opportunities ──
     {
+        key: 'opportunity_customer_response',
+        label: 'Customer Response',
+        module: 'opportunities',
+        description: 'What the customer said on the last follow-up of an opportunity. Each option lists the Sales Stages it fits (Response Rules). Separate from the Leads list.',
+        // Option meta: `opportunityStages` (none = every open stage) and `noFollowUp` (the next follow-up is cleared).
+        // See opportunity.followUp.ts.
+        options: CUSTOMER_RESPONSE_DEFAULTS.map((r) => ({
+            value: r.value,
+            ...(r.stages || r.noFollowUp ? { meta: { ...(r.stages ? { opportunityStages: r.stages } : {}), ...(r.noFollowUp ? { noFollowUp: true } : {}) } } : {}),
+        })),
+    },
+    {
         key: 'opportunity_sales_stage',
         label: 'Sales Stage',
         module: 'opportunities',
@@ -661,6 +705,13 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
     { key: 'contract_type', label: 'Contract Type', module: 'contracts', options: ['No of Visit', 'Remote Support'] },
 
     // ── Activities ──
+    {
+        key: 'activity_customer_response',
+        label: 'Customer Response',
+        module: 'activities',
+        description: "What the customer said, recorded on an activity. Activities related to a lead or an opportunity offer that module's list instead.",
+        options: CUSTOMER_RESPONSE_DEFAULTS.map((r) => r.value),
+    },
     {
         key: 'activity_status',
         label: 'Activity Status',
@@ -827,8 +878,8 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         t('referredBy', 'Referred By', { type: 'lookup', lock: true }),
         t('partnerCompany', 'Partner Company', { type: 'lookup', lock: true }),
         sel('followupType', 'Followup Type', 'shared_followup_type'),
-        // What the customer said on the last follow-up; records a follow-up and sets the Rating (same list as opportunities).
-        sel('customerResponse', 'Customer Response', 'shared_customer_response'),
+        // What the customer said on the last follow-up; records a follow-up and sets the Rating (own list, not shared).
+        sel('customerResponse', 'Customer Response', CUSTOMER_RESPONSE_CATEGORY_KEYS.leads),
         // Locked and required: every open lead needs its next follow-up (date and time) to be rated.
         t('nextFollowupDate', 'Next Followup Date', { type: 'datetime', req: true }),
         t('assignedTo', 'Assigned to', { type: 'lookup', req: true }),
@@ -917,7 +968,8 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         sel('leadSource', 'Lead Source', 'shared_lead_source', { soft: true }),
         sel('salesStage', 'Sales Stage', 'opportunity_sales_stage', { req: true }),
         sel('followupType', 'Followup Type', 'shared_followup_type'),
-        sel('customerResponse', 'Customer Response', 'shared_customer_response'),
+        // Own list (Response Rules), not the Leads one: see CUSTOMER_RESPONSE_CATEGORY_KEYS.
+        sel('customerResponse', 'Customer Response', CUSTOMER_RESPONSE_CATEGORY_KEYS.opportunities),
         t('nextFollowupDate', 'Next Followup Date', { type: 'datetime', soft: true }),
         t('assignedTo', 'Assigned to', { type: 'lookup', req: true }),
         { key: 'productCategory', label: 'Product Category', type: 'multiselect', cat: 'shared_product_category', soft: true },
@@ -1089,8 +1141,8 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         t('attendees', 'Attendees', { type: 'lookup' }),
     ]),
     ...section('activities', 'overview', 'Outcome & Notes', [
-        // Same field, key, label and list as on leads and opportunities; recorded only (no Rating / Sales Stage rules).
-        sel('customerResponse', 'Customer Response', 'shared_customer_response'),
+        // Same key and label as on leads and opportunities, own list; recorded only (no Rating / Sales Stage rules).
+        sel('customerResponse', 'Customer Response', CUSTOMER_RESPONSE_CATEGORY_KEYS.activities),
         t('remarks', 'Remarks', { type: 'textarea' }),
     ]),
 

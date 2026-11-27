@@ -6,7 +6,9 @@ import type { CrmModuleKey, FieldType, FormConfigsPayload, FormFieldDefinitionDt
 import type { FieldSize } from '@/components/forms/fieldSizing';
 import {
     activeOptionValues,
+    activityResponseCategory,
     allModuleFieldsIncludingDeleted,
+    CUSTOMER_RESPONSE_CATEGORIES,
     findCategory,
     groupSections,
     moduleFields,
@@ -80,6 +82,24 @@ export function useDropdownOptionLabel(categoryKey: string): (value: string | nu
         const labels = optionLabelMap(findCategory(configs, categoryKey)) ?? {};
         return (value) => (value ? labels[value] ?? value : '');
     }, [configs, categoryKey]);
+}
+
+/**
+ * How an activity's Customer Response reads: from its related lead's / opportunity's list, else the Activities list
+ * (see `activityResponseCategory`). Falls back to the other lists, then to the stored value.
+ */
+export function useActivityResponseLabel(): (activity: { customerResponse?: string | null; relatedModule?: string | null }) => string {
+    const configs = useFormConfigs();
+    return useMemo(() => {
+        const maps = Object.fromEntries(
+            Object.values(CUSTOMER_RESPONSE_CATEGORIES).map((key) => [key, optionLabelMap(findCategory(configs, key)) ?? {}]),
+        ) as Record<string, Record<string, string>>;
+        return ({ customerResponse: value, relatedModule }) => {
+            if (!value) return '';
+            const own = maps[activityResponseCategory(relatedModule)]?.[value];
+            return own ?? Object.values(maps).map((m) => m[value]).find(Boolean) ?? value;
+        };
+    }, [configs]);
 }
 
 /** An option's `meta` (e.g. a terms template's `description`), archived options included. */

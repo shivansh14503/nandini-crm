@@ -25,7 +25,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useOwnCalendarSync } from '@/components/integrations/useCalendarConnections';
 import { useFormMode } from '@/context/FormModeContext';
 import { DynamicModuleCustomFields } from '@/components/forms/DynamicModuleCustomFields';
-import { CUSTOMER_RESPONSE_CATEGORY, CUSTOMER_RESPONSES } from '@/components/forms/FollowUpDecision';
+import { activityResponseCategory, CUSTOMER_RESPONSES } from '@/components/forms/FollowUpDecision';
 import { useDropdownOptionMeta, useFormConfigs, useModuleFormConfig } from '@/hooks/queries/useFormConfigs';
 import { isActivityOnlyFollowupType } from '@/utils/followupTypes';
 import { useMyPreferences } from '@/hooks/queries/useProfile';
@@ -350,6 +350,7 @@ export function ActivityFormFields({
     const formConfig = useModuleFormConfig('activities');
     const { getOptions } = formConfig;
     const followupType = useWatch({ control, name: 'followupType' }) ?? '';
+    const relatedModule = useWatch({ control, name: 'relatedModule' }) ?? '';
     const allDay = Boolean(useWatch({ control, name: 'allDay' }));
     const status = useWatch({ control, name: 'status' }) ?? PLANNED_STATUS;
     const organizationId = useWatch({ control, name: 'organizationId' }) ?? '';
@@ -530,6 +531,11 @@ export function ActivityFormFields({
     const typeOptions = getOptions(FOLLOWUP_TYPE_CATEGORY_KEY, ACTIVITY_TYPES).filter(
         (value) => !externallyOrganized || !isActivityOnlyFollowupType(value) || value === activity?.followupType,
     );
+    // Customer Response: the related lead's / opportunity's own list, else the Activities list. A saved value that list
+    // no longer offers stays pickable, so opening the form never blanks it.
+    const responseOptions = getOptions(activityResponseCategory(relatedModule), CUSTOMER_RESPONSES);
+    const savedResponse = activity?.customerResponse ?? '';
+    const customerResponseOptions = savedResponse && !responseOptions.includes(savedResponse) ? [...responseOptions, savedResponse] : responseOptions;
     const showSchedule = !isNote || ['startAt', 'endAt', 'allDay', 'reminder', 'location', 'videoMeeting', 'attendees'].some(shows);
     const showOutcome = shows('customerResponse') || shows('remarks');
     const divider = <Divider sx={{ my: compact ? 2.5 : 3.5, borderColor: 'var(--mui-palette-border-light)' }} />;
@@ -713,7 +719,7 @@ export function ActivityFormFields({
                             <RhfSelect<ActivityFormValues>
                                 name="customerResponse"
                                 label="Customer Response"
-                                options={getOptions(CUSTOMER_RESPONSE_CATEGORY, CUSTOMER_RESPONSES)}
+                                options={customerResponseOptions}
                                 placeholder="Select Customer Response"
                             />
                         )}
