@@ -15,6 +15,8 @@ import { setSaveFlash } from '@/utils/saveFlash';
 import { productFormSchema } from '@/validations';
 import type { ProductFormData } from '@/types/product.types';
 import { productService } from '@/services';
+import { useProductManufacturers } from '@/hooks/queries/useProducts';
+import { PRODUCT_CATEGORIES } from '@/types/lead.types';
 
 // Reusable Form Primitives
 import {
@@ -28,6 +30,7 @@ import {
     RhfSelect,
     RhfPercentageField,
     RhfAmountField,
+    RhfSuggestField,
     useRhfForm,
 } from '@/components/forms';
 import { FormConfigProvider } from '@/context/FormConfigContext';
@@ -35,26 +38,8 @@ import { DynamicModuleCustomFields } from '@/components/forms/DynamicModuleCusto
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 
 // ─── Option Lists ──────────────────────────────────────────────────────────────
-const PRODUCT_CATEGORIES = [
-    'Acronis',
-    'Biz Analyst',
-    'Connect 21',
-    'CredFlow',
-    'CRM',
-    'Data Warehouse',
-    'Tally AMC',
-    'Tally Customization',
-    'Tally On Cloud',
-    'Tally Service',
-    'Tally Software Service (TSS)',
-    'Tally Training',
-    'Tally Upgrade',
-    'TallyPrime',
-    'TallyPrime Server',
-    'Teramind',
-    'TVU',
-];
-
+// Fallbacks only: inside the FormConfigProvider every dropdown offers the admin's options. Product Category is the
+// shared list of leads and opportunities (shared_product_category), with the same fallback.
 const PRODUCT_TYPES = [
     'Product',
     'Service',
@@ -64,7 +49,6 @@ const PRODUCT_TYPES = [
     'Other',
 ];
 
-const TAX_TYPES = ['GST', 'IGST', 'None'];
 const TAX_RATES = ['0%', '5%', '12%', '18%', '28%'];
 const CONTRACT_CREATE_OPTIONS = ['Yes', 'No'];
 
@@ -72,10 +56,9 @@ const CONTRACT_CREATE_OPTIONS = ['Yes', 'No'];
 const DEFAULT_FORM: ProductFormData = {
     productName: '',
     hsnCode: '',
-    category: '',
+    productCategory: '',
     type: '',
     manufacturer: '',
-    taxType: 'GST',
     taxRate: '',
     discount: '',
     cost: '',
@@ -124,6 +107,12 @@ export default function ProductForm({
     const productName = watch('productName');
     const [recordCode, setRecordCode] = useState('');
     const showNumber = useShowRecordNumber();
+    // Only the editable form offers suggestions.
+    const { data: manufacturers, isLoading: manufacturersLoading } = useProductManufacturers(mode !== 'view');
+    const manufacturerSuggestions = React.useMemo(
+        () => (manufacturers ?? []).map((m) => ({ value: m.name, detail: `${m.products} ${m.products === 1 ? 'product' : 'products'}` })),
+        [manufacturers],
+    );
 
     const defaultBreadcrumbs: BreadcrumbItem[] = [
         { label: 'Inventory' },
@@ -217,11 +206,11 @@ export default function ProductForm({
                     }
                 >
                     {/* ════════════════════════════════════════════════
-                        Section 1: Basic Product Info
+                        Section 1: Product Information
                        ════════════════════════════════════════════════ */}
                     <SectionLabel
                         icon={<LocalOfferOutlinedIcon sx={{ fontSize: 18 }} />}
-                        label="Sale Information"
+                        label="Product Information"
                     />
 
                     <FormGrid columns={3} sx={{ mt: 1 }}>
@@ -232,9 +221,9 @@ export default function ProductForm({
                             placeholder="Enter product name"
                         />
                         <RhfSelect<ProductFormData>
-                            name="category"
-                            label="Category"
-                            placeholder="Select Category"
+                            name="productCategory"
+                            label="Product Category"
+                            placeholder="Select Product Category"
                             options={PRODUCT_CATEGORIES}
                         />
                         <RhfSelect<ProductFormData>
@@ -243,10 +232,13 @@ export default function ProductForm({
                             placeholder="Select Type"
                             options={PRODUCT_TYPES}
                         />
-                        <RhfTextField<ProductFormData>
+                        {/* Pick a manufacturer already in the catalog, or type a new one. */}
+                        <RhfSuggestField<ProductFormData>
                             name="manufacturer"
                             label="Manufacturer"
-                            placeholder="e.g. Dell Technologies"
+                            placeholder="Pick or type a manufacturer"
+                            suggestions={manufacturerSuggestions}
+                            loading={manufacturersLoading}
                             fieldSize="md"
                             maxLength={FIELD_MAX_LENGTH.personName}
                         />
@@ -292,12 +284,6 @@ export default function ProductForm({
                         />
 
                         {/* ── Tax ── */}
-                        <RhfSelect<ProductFormData>
-                            name="taxType"
-                            label="Tax Type"
-                            placeholder="Select Tax Type"
-                            options={TAX_TYPES}
-                        />
                         <RhfSelect<ProductFormData>
                             name="taxRate"
                             label="Tax Rate"

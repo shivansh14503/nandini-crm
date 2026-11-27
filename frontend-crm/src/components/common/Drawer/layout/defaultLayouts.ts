@@ -468,7 +468,7 @@ function productsLayout(): DrawerLayoutDocument {
         version: DRAWER_LAYOUT_VERSION,
         header: {
             titleField: 'productName',
-            subtitleFields: ['category', 'manufacturer'],
+            subtitleFields: ['productCategory', 'manufacturer'],
             avatar: { kind: 'icon', icon: 'box' },
             hotAvatar: false,
             badges: [
@@ -479,8 +479,8 @@ function productsLayout(): DrawerLayoutDocument {
         tabs: {
             overview: [
                 sec('s-identity', 'PRODUCT IDENTITY & CODE', 'subtle', 1, [f('b-name', 'productName', 'large', bare), f('b-code', 'productCode', 'code', { label: 'SKU Code' })]),
-                sec('s-sale', 'SALE INFORMATION & CLASSIFICATION', 'card', 2, [
-                    f('b-category', 'category', 'standard'),
+                sec('s-sale', 'PRODUCT INFORMATION & CLASSIFICATION', 'card', 2, [
+                    f('b-category', 'productCategory', 'standard'),
                     f('b-type', 'type', 'standard'),
                     f('b-hsn', 'hsnCode', 'standard', { label: 'HSN / SAC Code', copy: true }),
                     f('b-maker', 'manufacturer', 'standard'),
@@ -490,7 +490,6 @@ function productsLayout(): DrawerLayoutDocument {
                     f('b-msp', 'msp', 'large'),
                     f('b-cost', 'cost', 'standard'),
                     f('b-discount', 'discount', 'standard'),
-                    f('b-taxtype', 'taxType', 'standard'),
                     f('b-taxrate', 'taxRate', 'standard'),
                     f('b-contract', 'contractCreate', 'chip'),
                 ]),

@@ -8,7 +8,7 @@ export const typeOfPill = (tab: ProductFilterTab): string | null => (tab.startsW
 
 export type ProductSortField =
     | 'productName'
-    | 'category'
+    | 'productCategory'
     | 'manufacturer'
     | 'hsnCode'
     | 'mrp'

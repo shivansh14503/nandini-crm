@@ -10,12 +10,10 @@ import {
     optionalPercentString,
     optionalText,
     requiredText,
-    textWithDefault,
 } from '../../validators/common.js';
 
-// Option lists from frontend-crm/src/types/product.types.ts (category is open-ended there).
+// Option lists from frontend-crm/src/types/product.types.ts (Product Category is open-ended there).
 export const PRODUCT_TYPES = ['Product', 'Service', 'Bundle', 'Subscription', 'License', 'Other'] as const;
-export const TAX_TYPES = ['GST', 'IGST', 'None'] as const;
 export const TAX_RATES = ['0%', '5%', '12%', '18%', '28%'] as const;
 
 /** `ProductFormData` (frontend-crm/src/validations/product.schema.ts) plus numeric checks on the price strings. */
@@ -25,11 +23,11 @@ export const productInputSchema = z
             message: 'Product Name must be at least 2 characters.',
         }),
         hsnCode: optionalText('HSN Code', L.hsn),
-        category: optionalText('Category', L.option),
-        // Type / tax type / tax rate are admin-customizable (product_* dropdown categories).
+        // One option of the shared Product Category dropdown (shared_product_category), as on leads / opportunities.
+        productCategory: optionalText('Product Category', L.option),
+        // Type / tax rate are admin-customizable (product_* dropdown categories).
         type: optionalText('Type', 30),
         manufacturer: optionalText('Manufacturer', L.personName),
-        taxType: textWithDefault('Tax Type', 10, 'GST'),
         taxRate: optionalText('Tax Rate', 10),
         discount: optionalPercentString('Discount'),
         cost: optionalAmountString('Cost'),
@@ -49,9 +47,15 @@ export const productInputSchema = z
 
 export type ProductInput = z.infer<typeof productInputSchema>;
 
+/** `GET /api/products/manufacturers`: names containing `search` (all when empty), at most `limit`. */
+export const manufacturerQuerySchema = z.object({
+    search: z.string().trim().max(100).optional().catch(undefined),
+    limit: z.coerce.number().int().min(1).max(200).catch(50).default(50),
+});
+
 /** List filters on top of page / limit / search / sort. */
 export const productListQuerySchema = z.object({
-    category: csvQuery,
+    productCategory: csvQuery,
     type: csvQuery,
     isActive: booleanQuery,
     createdWithinDays: createdWithinDaysQuery,
@@ -64,7 +68,7 @@ export const PRODUCT_SORT_FIELDS = [
     'updatedAt',
     'productName',
     'productCode',
-    'category',
+    'productCategory',
     'type',
     'manufacturer',
     'mrp',

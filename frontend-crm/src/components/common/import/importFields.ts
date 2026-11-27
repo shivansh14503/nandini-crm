@@ -43,7 +43,7 @@ export const IMPORT_DEFAULTS: Record<ImportEntityType, Record<string, string>> =
         assignedTo: YOU,
     },
     contacts: { assignedTo: YOU },
-    products: { taxType: 'GST when a Tax Rate is given' },
+    products: {},
     leads: {
         leadSource: 'Other',
         status: 'New',

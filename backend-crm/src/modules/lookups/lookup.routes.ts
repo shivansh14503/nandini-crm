@@ -14,7 +14,7 @@ import { createRateLimiter } from '../../middlewares/rateLimiter.js';
  *   GET /users               ?includeInactive         → CrmUser[]
  *   GET /organizations       ?search&limit            → compact organizations
  *   GET /contacts            ?search&limit&organizationId
- *   GET /products            ?search&limit&category   (active products)
+ *   GET /products            ?search&limit&productCategory   (active products)
  *   GET /nature-of-calls                              → NatureOfCallItem[]
  *   GET /partner-companies                            → PartnerCompany[]
  *   GET /partner-contacts    ?partnerCompany          → PartnerCompanyContact[]

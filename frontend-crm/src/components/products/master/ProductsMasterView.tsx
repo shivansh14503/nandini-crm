@@ -115,7 +115,7 @@ export function ProductsMasterView() {
                 const q = searchQuery.toLowerCase().trim();
                 return (
                     p.productName.toLowerCase().includes(q) ||
-                    (p.category || '').toLowerCase().includes(q) ||
+                    (p.productCategory || '').toLowerCase().includes(q) ||
                     (p.manufacturer || '').toLowerCase().includes(q) ||
                     (p.hsnCode || '').toLowerCase().includes(q) ||
                     (showNumber('product') && p.productCode.toLowerCase().includes(q))
@@ -246,7 +246,7 @@ export function ProductsMasterView() {
                     setSearchQuery(q);
                     setPage(0);
                 },
-                searchPlaceholder: 'Search by name, category, HSN, manufacturer...',
+                searchPlaceholder: 'Search by name, product category, HSN, manufacturer...',
                 pageIds: paginatedProducts.map((r) => r.id),
                 allIds: sortedProducts.map((r) => r.id),
                 selectedIds,

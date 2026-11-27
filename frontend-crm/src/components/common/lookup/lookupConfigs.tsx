@@ -546,14 +546,14 @@ export function formatProductMrp(mrp: string | number | undefined): string {
 
 export const PRODUCT_LOOKUP_PRESET: LookupPreset<Product> = {
     title: 'Product Catalog',
-    subtitle: 'Search by category or product name. Click a row to add it to the line.',
+    subtitle: 'Search by product category or product name. Click a row to add it to the line.',
     searchPlaceholder: '',
     showSearchBox: false,
     rowsPerPage: 10,
     emptyMessage: 'No products found matching search criteria',
     columns: [
         { id: 'productName', label: 'Name', minWidth: 240, sortable: true, render: (p) => <PrimaryText>{p.productName}</PrimaryText> },
-        { id: 'category', label: 'Category', minWidth: 150, sortable: true },
+        { id: 'productCategory', label: 'Product Category', minWidth: 150, sortable: true },
         { id: 'hsnCode', label: 'HSN Code', minWidth: 100, sortable: true },
         { id: 'mrp', label: 'MRP', minWidth: 120, align: 'right', sortable: true, getValue: (p) => formatProductMrp(p.mrp) },
         {
@@ -569,12 +569,12 @@ export const PRODUCT_LOOKUP_PRESET: LookupPreset<Product> = {
     ],
     filterFields: [
         // Options are the categories of the loaded products; ProductLookupModal fills them in.
-        { key: 'category', label: 'Category', type: 'multiselect', width: 6, options: [] },
+        { key: 'productCategory', label: 'Product Category', type: 'multiselect', width: 6, options: [] },
         { key: 'productName', label: 'Product Name', type: 'text', width: 6, placeholder: 'Type product name...' },
     ],
     searchPredicate: (p, f) => {
-        const categories = splitMulti(f.category);
-        if (categories.length && !categories.includes(p.category)) return false;
+        const categories = splitMulti(f.productCategory);
+        if (categories.length && !categories.includes(p.productCategory)) return false;
         return containsText(p.productName, f.productName?.trim());
     },
 };

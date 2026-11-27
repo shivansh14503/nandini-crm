@@ -14,11 +14,20 @@ import { codeSearchPrefix } from '../shared/searchTerms.js';
 import { acquireLocks, assertDeletedRow, lockRecords, restoreData, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { loadProductUsage, usageOf, usedProductWhere } from './product.usage.js';
 import { toProductData, toProductDto, type ProductDto } from './product.mapper.js';
-import { PRODUCT_SORT_FIELDS, productInputSchema, productListQuerySchema, type ProductInput } from './product.validator.js';
+import { manufacturerQuerySchema, PRODUCT_SORT_FIELDS, productInputSchema, productListQuerySchema, type ProductInput } from './product.validator.js';
 
 const notFound = () => HttpError.notFound('Product not found');
 
-/** Product names are unique among live products; the name lock makes "check, then write" race-free. */
+/** One Manufacturer already in the catalog and how many live products carry it. */
+export interface ManufacturerSuggestionDto {
+    name: string;
+    products: number;
+}
+
+/**
+ * A new (or restored) product's name must not match a live product's; the name lock makes "check, then write" race-free.
+ * Editing a product doesn't run it, so renaming one to a name already in use is allowed (Jira CRM-108).
+ */
 async function assertUniqueName(tx: TransactionClient, productName: string, excludeId?: string): Promise<void> {
     await acquireLocks(tx, [`product:name:${productName.trim().toLowerCase()}`]);
     const duplicate = await tx.product.findFirst({
@@ -58,7 +67,7 @@ export const productService = {
         const filters = productListQuerySchema.parse(query ?? {});
 
         const where: Prisma.ProductWhereInput = { isDeleted: false };
-        if (filters.category?.length) where.category = { in: filters.category };
+        if (filters.productCategory?.length) where.productCategory = { in: filters.productCategory };
         if (filters.type?.length) where.type = { in: filters.type };
         if (filters.isActive !== undefined) where.isActive = filters.isActive;
         if (filters.createdWithinDays) where.createdAt = { gte: daysAgo(filters.createdWithinDays) };
@@ -71,7 +80,7 @@ export const productService = {
             else where.OR = [
                 { productName: { contains: page.search } },
                 { productCode: { contains: page.search } },
-                { category: { contains: page.search } },
+                { productCategory: { contains: page.search } },
                 { manufacturer: { contains: page.search } },
                 { hsnCode: { contains: page.search } },
             ];
@@ -83,6 +92,24 @@ export const productService = {
         ]);
         const usage = await loadProductUsage(rows.map((row) => row.id), user);
         return { data: rows.map((row) => ({ ...toProductDto(row), usage: usageOf(usage, row.id) })), total, page: page.page, limit: page.limit };
+    },
+
+    /**
+     * Manufacturers of live products (active or not) for the form's Manufacturer suggestions, A to Z. Names match
+     * ignoring case (the column's collation), so "dell" and "Dell" come back once.
+     */
+    async manufacturers(query: unknown): Promise<ManufacturerSuggestionDto[]> {
+        const { search, limit } = manufacturerQuerySchema.parse(query ?? {});
+        const groups = await prisma.product.groupBy({
+            by: ['manufacturer'],
+            where: { isDeleted: false, manufacturer: search ? { contains: search } : { not: null } },
+            _count: { _all: true },
+            orderBy: { manufacturer: 'asc' },
+            take: limit,
+        });
+        return groups
+            .map((g) => ({ name: (g.manufacturer ?? '').trim(), products: g._count._all }))
+            .filter((m) => m.name.length > 0);
     },
 
     async getById(id: string, user: AuthUser): Promise<ProductDto> {
@@ -116,7 +143,7 @@ export const productService = {
                 submittedKeys: new Set(Object.keys(patch)),
                 previousCustomFields: before.customFields,
             });
-            if (input.productName !== existing.productName) await assertUniqueName(tx, input.productName, id);
+            // Renaming isn't checked against other products' names (Jira CRM-108); only a new product's name is.
 
             const row = await tx.product.update({ where: { id }, data: { ...toProductData(input), updatedBy: actor.username } });
             const after = toProductDto(row);

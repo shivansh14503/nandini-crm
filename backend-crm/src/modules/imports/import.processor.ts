@@ -232,7 +232,7 @@ const rowBuilders: Record<ImportEntity, (v: Record<string, string>, user: AuthUs
     },
     products: (v, user, ctx) => {
         const { payload, customFields } = buildImportPayload(ctx.fieldConfig, { ...v, taxRate: normalizeTaxRate(v.taxRate) ?? '' });
-        const raw = { ...payload, taxType: orDefault(payload.taxType, payload.taxRate ? 'GST' : ''), customFields };
+        const raw = { ...payload, customFields };
         const input = productInputSchema.parse(raw);
         input.customFields = checkRow(ctx, raw, customFields);
         return (tx) => createProductRecord(tx, input, user);

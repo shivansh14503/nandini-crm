@@ -71,13 +71,13 @@ export function useProductColumns(openRecord: (record: Product) => void, product
                 ),
             },
             {
-                id: 'category',
-                label: 'CATEGORY',
+                id: 'productCategory',
+                label: 'PRODUCT CATEGORY',
                 sortable: true,
                 minWidth: 140,
                 render: (p) => (
                     <Typography sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-700)', fontWeight: 500 }}>
-                        {p.category || '-'}
+                        {p.productCategory || '-'}
                     </Typography>
                 ),
             },

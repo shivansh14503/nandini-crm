@@ -32,7 +32,7 @@ export const DEFAULT_FILTER_KEYS: Record<CrmModuleKey, string[]> = {
     quotations: ['quotationDate', 'validUntil', 'assignedTo', 'quoteStage', 'company', 'organizationName', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
     organizations: ['assignedTo', 'accountStatus', 'customerType', 'typeOfEntity', 'natureOfBusiness', 'leadSource', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
     contacts: ['assignedTo', 'organizationName', 'designation', 'department', 'anyNumber', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
-    products: ['category', 'type', 'usage', 'taxType', 'taxRate', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
+    products: ['productCategory', 'type', 'usage', 'taxRate', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
     tickets: ['dueDate', 'assignedTo', 'ticketStatus', 'ticketPriority', 'source', 'supportType', 'supportMode', 'organizationName', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
     contracts: ['status', 'assignedTo', 'contractTitle', 'contractPeriod', 'organizationName', 'startDate', 'endDate', 'renewalReminderDate', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
     activities: ['followupType', 'status', 'assignedTo', 'startAt', 'relatedTo', 'organizationName', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],

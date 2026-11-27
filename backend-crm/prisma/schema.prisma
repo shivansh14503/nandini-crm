@@ -560,10 +560,10 @@ model Product {
 
   productName        String   @db.NVarChar(200)
   hsnCode            String?  @db.NVarChar(8)
-  category           String?  @db.NVarChar(100)
+  /// One option of the shared Product Category dropdown (shared_product_category), as on leads / opportunities.
+  productCategory    String?  @db.NVarChar(100)
   type               String?  @db.NVarChar(30)
   manufacturer       String?  @db.NVarChar(100)
-  taxType            String?  @default("GST") @db.NVarChar(10)
   taxRate            String?  @db.NVarChar(10)
   // The API returns these as strings (ProductFormData); stored as decimals for reporting.
   discount           Decimal? @db.Decimal(5, 2)
@@ -589,7 +589,8 @@ model Product {
   quotationLineItems   QuotationLineItem[]
 
   @@index([productName])
-  @@index([category])
+  @@index([manufacturer])
+  @@index([productCategory])
   @@index([isDeleted, createdAt])
 }
 
