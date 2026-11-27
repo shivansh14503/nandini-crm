@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
     useForm,
     type DefaultValues,
@@ -126,6 +126,31 @@ export function useRhfForm<T extends FieldValues>({
         formRef.current = methods;
     }, [methods]);
     useDropdownDefaults(methods, module, { enabled: Boolean(dropdownDefaults?.enabled), keep: dropdownDefaults?.keep, personal: dropdownDefaults?.personal });
+
+    // A new-record form starts empty every time it is opened. With `cacheComponents`, Next.js keeps a visited page
+    // mounted but hidden (React `<Activity>`), so after saving a record and opening "New" again the form would still
+    // hold the last record's values. Layout effects re-run each time a hidden page is shown again (see
+    // useResetTab), so the form goes back to its starting values (with the admin's current dropdown defaults) then.
+    const shownBefore = useRef(false);
+    const freshValues = useRef<() => DefaultValues<T>>(() => initialValues);
+    useLayoutEffect(() => {
+        freshValues.current = () => {
+            if (!dropdownDefaults?.enabled) return initialValues;
+            const withDropdowns = module ? withDropdownDefaults(getFormConfigs(), module, defaultValues, dropdownDefaults.keep, dropdownDefaults.personal) : defaultValues;
+            return withDefaultAssignee(withDropdowns, assigneeField, user?.username);
+        };
+    });
+    const isNewRecord = Boolean(dropdownDefaults?.enabled);
+    useLayoutEffect(() => {
+        if (!isNewRecord) return;
+        if (!shownBefore.current) {
+            shownBefore.current = true;
+            return;
+        }
+        methods.reset(freshValues.current());
+        // Only on being shown again: the form's own value changes never reset it.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isNewRecord]);
 
     const [toast, setToast] = useState<FormToastState>(CLOSED_TOAST);
 

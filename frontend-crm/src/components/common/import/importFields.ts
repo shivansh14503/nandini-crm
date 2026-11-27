@@ -24,6 +24,12 @@ const NOT_IMPORTABLE_TYPES = new Set(['file']);
  */
 const NOT_IMPORTABLE_FIELDS: Partial<Record<CrmModuleKey, ReadonlySet<string>>> = { products: new Set(['status']) };
 
+/**
+ * Built-in dropdowns you can type a new value into (pick or type): a cell naming no option is kept as written, and
+ * saving the record adds it to the dropdown. Mirrors OPEN_DROPDOWN_FIELDS of backend-crm/src/modules/imports/importValues.ts.
+ */
+const OPEN_DROPDOWN_FIELDS: Partial<Record<CrmModuleKey, ReadonlySet<string>>> = { products: new Set(['manufacturer']) };
+
 /** The form module each import writes. */
 const ENTITY_MODULE: Record<ImportEntityType, CrmModuleKey> = {
     organizations: 'organizations',
@@ -210,6 +216,10 @@ export function normalizeImportCell(field: ImportFieldDef, cell: string): { valu
             const matched: string[] = [];
             for (const entry of entries) {
                 const option = matchImportOption(field.options, entry);
+                if (option === undefined && field.openOptions) {
+                    if (!matched.includes(entry)) matched.push(entry);
+                    continue;
+                }
                 if (option === undefined) {
                     return { value: cell, error: `"${entry}" is not an option of ${label}. ${allowedOptionsText(field.options.map((o) => o.label))}` };
                 }
@@ -262,12 +272,18 @@ export function normalizeImportCell(field: ImportFieldDef, cell: string): { valu
 }
 
 /** The line under a field on the mapping step: what to type, and what a blank cell becomes. */
-function hintFor(field: FormFieldDefinitionDto, options: { value: string; label: string }[] | undefined, fallback: string | undefined): string | undefined {
+function hintFor(
+    field: FormFieldDefinitionDto,
+    options: { value: string; label: string }[] | undefined,
+    fallback: string | undefined,
+    open = false,
+): string | undefined {
     const parts: string[] = [];
     const list = (items: string[]) => (items.length > 4 ? `${items.slice(0, 4).join(', ')} … (${items.length} options)` : items.join(', '));
     switch (field.fieldType) {
         case 'select':
-            if (options?.length) parts.push(`One of: ${list(options.map((o) => o.label))}`);
+            if (open) parts.push('Any name: a new one is added to the dropdown');
+            else if (options?.length) parts.push(`One of: ${list(options.map((o) => o.label))}`);
             break;
         case 'multiselect':
             if (options?.length) parts.push(`Comma-separated: ${list(options.map((o) => o.label))}`);
@@ -382,6 +398,7 @@ export function buildImportConfig(entity: ImportEntityType, configs: FormConfigs
               }))
             : undefined;
         const fallback = f.isSystem ? defaults[f.fieldKey] : undefined;
+        const open = f.isSystem && Boolean(OPEN_DROPDOWN_FIELDS[formModule]?.has(f.fieldKey));
         const label = labels.get(f.fieldKey) ?? f.label;
         const aliases = [
             ...(hint?.aliases ?? []),
@@ -396,7 +413,8 @@ export function buildImportConfig(entity: ImportEntityType, configs: FormConfigs
             sample: samplesFor(f, options, hint?.sample),
             fieldType: f.fieldType,
             options,
-            hint: hintFor(f, options, fallback),
+            ...(open ? { openOptions: true } : {}),
+            hint: hintFor(f, options, fallback, open),
             section: f.sectionLabel,
         };
     });

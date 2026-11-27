@@ -122,10 +122,14 @@ Order of global middleware (`src/app.ts`): `helmet` → `cors` (credentials, LAN
    up). Failure = exit 1.
 3. Start the optional DB keep-alive ping (`DB_KEEPALIVE_INTERVAL_MS`).
 4. Seed missing form-field / dropdown defaults (`seedFormConfigsSafely`), never overwriting admin edits.
-5. Seed built-in PDF templates (Classic, Modern, Compact).
-6. Resume bulk email checks a restart interrupted (`resumeEmailValidationRuns`).
-7. Start BullMQ workers if `RUN_WORKERS=true`.
-8. `listen(PORT)`.
+5. Load the Product Catalog sheet once (`loadProductCatalogSheetSafely`, `products/productCatalog.data.ts`, 55 products,
+   Jira CRM-15): products whose name no live product has are created as `system`, in one transaction; the
+   `ModuleSetting` row `system` / `productCatalogSheetLoaded` then stops later start-ups from loading it again (so
+   products deleted afterwards stay deleted). A failure is logged and retried on the next start-up.
+6. Seed built-in PDF templates (Classic, Modern, Compact).
+7. Resume bulk email checks a restart interrupted (`resumeEmailValidationRuns`).
+8. Start BullMQ workers if `RUN_WORKERS=true`.
+9. `listen(PORT)`.
 
 On `SIGINT`/`SIGTERM`: stop accepting connections → stop keep-alive → let workers finish in-flight jobs → close the
 SMTP transport → close queues, Chromium, Prisma and Redis in parallel → exit. A 10 s hard timeout guarantees the process ends.

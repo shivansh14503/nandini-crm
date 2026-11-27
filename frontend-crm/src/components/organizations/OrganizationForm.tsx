@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { isSuperAdminRole } from '@/utils/roleAccess';
 import { useResetTab } from '@/hooks/useResetTab';
 import { useRouter } from 'next/navigation';
@@ -291,6 +291,34 @@ export default function OrganizationForm({
     const isInactive = mode !== 'create' && persistedStatus === 'Inactive';
     const isLocked = isInactive && !isAdmin;
     const effectiveMode = isLocked ? 'view' : mode;
+
+    // A new organization starts empty every time the form is opened: Next.js keeps a visited page mounted but hidden
+    // (`cacheComponents`), so after saving one and opening "New" again it would still hold the last one's values.
+    // Layout effects re-run when a hidden page is shown again (see useRhfForm).
+    const shownBefore = useRef(false);
+    const freshStart = useRef<() => OrganizationFormData>(() => startValues);
+    useLayoutEffect(() => {
+        freshStart.current = () =>
+            withDefaultAssignee(
+                withDropdownDefaults(getFormConfigs(), 'organizations', { ...DEFAULT_FORM, ...initialData }, initialData),
+                'assignedTo',
+                user?.username,
+            );
+    });
+    useLayoutEffect(() => {
+        if (mode !== 'create') return;
+        if (!shownBefore.current) {
+            shownBefore.current = true;
+            return;
+        }
+        const fresh = freshStart.current();
+        baselineRef.current = fresh;
+        setForm(fresh);
+        methods.reset(fresh);
+        setIsDirty(false);
+        // Only on being shown again.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [mode]);
 
     // "Discard & Leave" (CommonFormLayout's unsaved-changes guard) resets the local mirror of the form too.
     const handleGuardDiscard = () => {

@@ -12,7 +12,7 @@ import {
 } from '../../validators/common.js';
 
 // Option lists from frontend-crm/src/types/product.types.ts (Product Category is open-ended there).
-export const PRODUCT_TYPES = ['Product', 'Service', 'Bundle', 'Subscription', 'License', 'Other'] as const;
+export const PRODUCT_TYPES = ['Product', 'Software', 'Service', 'Bundle', 'Subscription', 'License', 'Other'] as const;
 export const TAX_RATES = ['0%', '5%', '12%', '18%', '28%'] as const;
 
 /** The fixed `product_status` options. Only Admins change a product's Status; only Active products go on new line items. */
@@ -37,6 +37,7 @@ export const productInputSchema = z
         productCategory: optionalText('Product Category', L.option),
         // Type / tax rate are admin-customizable (product_* dropdown categories).
         type: optionalText('Type', 30),
+        // An option of the Manufacturer dropdown (product_manufacturer) or a new name, which saving adds to it.
         manufacturer: optionalText('Manufacturer', L.personName),
         taxRate: optionalText('Tax Rate', 10),
         discount: optionalPercentString('Discount'),
