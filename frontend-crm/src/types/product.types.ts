@@ -5,6 +5,7 @@ export type ProductCategory = string;
 
 export type ProductType =
     | 'Product'
+    | 'Software'
     | 'Service'
     | 'Bundle'
     | 'Subscription'

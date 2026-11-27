@@ -41,6 +41,7 @@ import notificationRouter from './modules/notifications/notification.routes.js';
 import { dropUnreadCountsOnRedisReady } from './modules/notifications/notification.producer.js';
 import { drawerLayoutRouter, drawerPieceRouter } from './modules/drawer-layouts/drawerLayout.routes.js';
 import { seedFormConfigsSafely } from './modules/form-configs/formConfig.seed.js';
+import { loadProductCatalogSheetSafely } from './modules/products/productCatalog.load.js';
 import { pdfAssetRouter, pdfSavedItemRouter, pdfTemplateRouter } from './modules/pdf/pdf.routes.js';
 import recordFileRouter from './modules/files/recordFile.routes.js';
 import profileRouter from './modules/profile/profile.routes.js';
@@ -181,6 +182,8 @@ async function start(): Promise<Server> {
     startDatabaseKeepAlive();
     // Missing dropdown / form-field defaults are inserted without overwriting admin customizations.
     await seedFormConfigsSafely();
+    // The Product Catalog sheet, once (after the dropdowns its products use).
+    await loadProductCatalogSheetSafely();
     // Built-in PDF templates (Classic / Modern / Compact); admin-created templates are never touched.
     await seedPdfTemplatesSafely();
     // Bulk email checks a restart interrupted (Settings › Email Validation) carry on.

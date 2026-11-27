@@ -19,6 +19,8 @@ export interface ImportFieldDef {
     fieldType?: string;
     /** Active dropdown options of a select / multi-select field (value stored, label shown). */
     options?: { value: string; label: string }[];
+    /** A pick-or-type dropdown (the product's Manufacturer): a cell naming no option is kept as typed and added to the dropdown. */
+    openOptions?: boolean;
     /** One line under the field on the mapping step: the expected format, or what a blank cell becomes. */
     hint?: string;
     /** Form section the field sits in (groups the mapping step). */

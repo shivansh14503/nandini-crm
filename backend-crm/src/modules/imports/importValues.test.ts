@@ -136,6 +136,20 @@ describe('buildImportPayload', () => {
         );
     });
 
+    it("keeps a new manufacturer as typed: the product's Manufacturer is a pick-or-type dropdown", () => {
+        const manufacturers = new Map([['tally solutions private limited', 'Tally Solutions Private Limited']]);
+        const cfg: ModuleFieldConfig = {
+            module: 'products',
+            fields: [field({ fieldKey: 'manufacturer', module: 'products', label: 'Manufacturer', fieldType: 'select', dropdownCategoryId: 'cat-mfr' })],
+            activeOptions: new Map([['cat-mfr', new Set(manufacturers.values())]]),
+            optionLookup: new Map([['cat-mfr', manufacturers]]),
+        };
+        assert.equal(buildImportPayload(cfg, { manufacturer: 'TALLY SOLUTIONS PRIVATE LIMITED' }).payload.manufacturer, 'Tally Solutions Private Limited');
+        assert.equal(buildImportPayload(cfg, { manufacturer: 'Zoho Corporation' }).payload.manufacturer, 'Zoho Corporation');
+        // Other modules' dropdowns stay closed.
+        assert.throws(() => buildImportPayload({ ...cfg, module: 'leads' }, { manufacturer: 'Zoho Corporation' }), HttpError);
+    });
+
     it('matches options with any case and spacing, and percentage options from bare or fractional numbers', () => {
         const rates = new Map([['0%', '0%'], ['5%', '5%'], ['18%', '18%'], ['28%', '28%']]);
         assert.equal(matchImportOption(rates, '0.18'), '18%');

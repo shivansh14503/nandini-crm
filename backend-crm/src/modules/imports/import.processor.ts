@@ -25,6 +25,7 @@ import { buildImportPayload, splitDateTime } from './importValues.js';
 import { opportunityInputSchema } from '../opportunities/opportunity.validator.js';
 import { createPartnerCompanyRecord, invalidatePartnerCaches } from '../partner-companies/partnerCompany.service.js';
 import { partnerCompanyImportSchema } from '../partner-companies/partnerCompany.validator.js';
+import { afterManufacturersAdded } from '../products/product.manufacturer.js';
 import { createProductRecord } from '../products/product.service.js';
 import { productInputSchema } from '../products/product.validator.js';
 import { prefetchActiveUsernames, prefetchOrganizationsByName, type PrefetchedLookups } from '../shared/prefetch.js';
@@ -350,6 +351,11 @@ const rowBuilders: Record<ImportEntity, (v: Record<string, string>, user: AuthUs
 /** Entities whose caches reach beyond the shared lookup / search / dashboard keys. */
 const cacheInvalidators: Partial<Record<ImportEntity, () => Promise<void>>> = {
     'partner-companies': invalidatePartnerCaches,
+    // Imported products add their new manufacturers to the Manufacturer dropdown (createProductRecord).
+    products: async () => {
+        await cacheService.invalidateEntityCaches('products');
+        await afterManufacturersAdded(true);
+    },
 };
 
 /** Human-readable reasons for a failed row. */

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import { FormProvider } from 'react-hook-form';
 import { Divider } from '@mui/material';
 import InventoryOutlinedIcon from '@mui/icons-material/InventoryOutlined';
@@ -10,12 +11,14 @@ import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 
 import { type BreadcrumbItem } from '../common/AppBreadcrumbs';
 import { type FormTabDefinition } from '../common/Drawer';
-import { ROUTES } from '@/config/constants';
+import { ROUTES } from '@/config/constants';
+
 import { setSaveFlash } from '@/utils/saveFlash';
 import { productFormSchema } from '@/validations';
 import { ACTIVE_PRODUCT_STATUS, type ProductFormData } from '@/types/product.types';
 import { productService } from '@/services';
 import { useProductManufacturers } from '@/hooks/queries/useProducts';
+import { FORM_CONFIGS_QUERY_KEY, useDropdownOptions } from '@/hooks/queries/useFormConfigs';
 import { PRODUCT_CATEGORIES } from '@/types/lead.types';
 
 // Reusable Form Primitives
@@ -43,6 +46,7 @@ import { ProductStatusSection, type SavedProductStatus } from './ProductStatusSe
 // shared list of leads and opportunities (shared_product_category), with the same fallback.
 const PRODUCT_TYPES = [
     'Product',
+    'Software',
     'Service',
     'Bundle',
     'Subscription',
@@ -51,6 +55,9 @@ const PRODUCT_TYPES = [
 ];
 
 const TAX_RATES = ['0%', '5%', '12%', '18%', '28%'];
+/** The Manufacturer dropdown (Form Builder › Dropdowns): a new manufacturer typed here is added to it on save. */
+const MANUFACTURER_CATEGORY = 'product_manufacturer';
+const NO_MANUFACTURERS: readonly string[] = [];
 const CONTRACT_CREATE_OPTIONS = ['Yes', 'No'];
 
 // ─── Default Form State ────────────────────────────────────────────────────────
@@ -96,6 +103,7 @@ export default function ProductForm({
     breadcrumbItems,
 }: ProductFormProps) {
     const router = useRouter();
+    const queryClient = useQueryClient();
 
     const { methods, toast, showToast, closeToast, createSubmitHandler, stepwise } =
         useRhfForm<ProductFormData>({
@@ -112,12 +120,20 @@ export default function ProductForm({
     // The saved Status (with Inactive Since and who set it), shown by the Status section.
     const [savedStatus, setSavedStatus] = useState<SavedProductStatus | null>(null);
     const showNumber = useShowRecordNumber();
-    // Only the editable form offers suggestions.
+    // Manufacturer: the options of the Manufacturer dropdown, with how many products carry each (only the editable
+    // form asks for the counts). Manufacturers on products from before the dropdown are offered too.
+    const manufacturerOptions = useDropdownOptions(MANUFACTURER_CATEGORY, NO_MANUFACTURERS, 'products');
     const { data: manufacturers, isLoading: manufacturersLoading } = useProductManufacturers(mode !== 'view');
-    const manufacturerSuggestions = React.useMemo(
-        () => (manufacturers ?? []).map((m) => ({ value: m.name, detail: `${m.products} ${m.products === 1 ? 'product' : 'products'}` })),
-        [manufacturers],
-    );
+    const manufacturerSuggestions = React.useMemo(() => {
+        const counts = new Map((manufacturers ?? []).map((m) => [m.name.toLowerCase(), m.products]));
+        const names = [...manufacturerOptions];
+        const seen = new Set(names.map((n) => n.toLowerCase()));
+        for (const m of manufacturers ?? []) if (!seen.has(m.name.toLowerCase())) names.push(m.name);
+        return names.map((value) => {
+            const count = counts.get(value.toLowerCase());
+            return { value, detail: count ? `${count} ${count === 1 ? 'product' : 'products'}` : undefined };
+        });
+    }, [manufacturerOptions, manufacturers]);
 
     const defaultBreadcrumbs: BreadcrumbItem[] = [
         { label: 'Inventory' },
@@ -168,6 +184,8 @@ export default function ProductForm({
                 message = 'Product updated successfully!';
             }
             reset(values);
+            // A new manufacturer was added to the Manufacturer dropdown: offer it on the next product right away.
+            if (values.manufacturer?.trim()) void queryClient.invalidateQueries({ queryKey: FORM_CONFIGS_QUERY_KEY });
             if (message) setSaveFlash({ listPath: ROUTES.PRODUCTS, message, severity: 'success', recordId: saved?.id ?? productId });
             router.push(ROUTES.PRODUCTS);
         } catch (err: unknown) {
@@ -238,13 +256,13 @@ export default function ProductForm({
                             placeholder="Select Type"
                             options={PRODUCT_TYPES}
                         />
-                        {/* Pick a manufacturer already in the catalog, or type a new one. */}
+                        {/* Pick a manufacturer of the dropdown, or type a new one (saving adds it to the dropdown). */}
                         <RhfSuggestField<ProductFormData>
                             name="manufacturer"
                             label="Manufacturer"
                             placeholder="Pick or type a manufacturer"
                             suggestions={manufacturerSuggestions}
-                            loading={manufacturersLoading}
+                            loading={manufacturersLoading && manufacturerSuggestions.length === 0}
                             fieldSize="md"
                             maxLength={FIELD_MAX_LENGTH.personName}
                         />
