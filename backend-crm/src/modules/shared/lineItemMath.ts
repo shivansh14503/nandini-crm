@@ -6,7 +6,8 @@
  *
  * Per line:
  *   Gross Amount   = Quantity × Rate
- *   Discount       = a percentage of the Gross Amount (the line stores the % and the amount it comes to)
+ *   Discount       = a percentage of the Gross Amount, or a flat amount off the line (`discountType`), never more
+ *                    than the Gross Amount (the line stores what was entered and the amount it comes to)
  *   Taxable Amount = Gross Amount − Discount
  *   GST            = Taxable Amount × the line's GST rate (not shown per line; summed into the totals)
  * Totals (whole rupees, as before):
@@ -17,11 +18,21 @@
 /** Fallback options of the Product Catalog's Tax Rate dropdown (`product_tax_rate`), which line items use as GST. */
 export const LINE_ITEM_TAX_RATES = ['0%', '5%', '12%', '18%', '28%'] as const;
 
+/** How a line's Discount is entered: a percentage of the Gross Amount, or an amount off the line. */
+export const LINE_ITEM_DISCOUNT_TYPES = ['percentage', 'amount'] as const;
+export type LineItemDiscountType = (typeof LINE_ITEM_DISCOUNT_TYPES)[number];
+export const DEFAULT_DISCOUNT_TYPE: LineItemDiscountType = 'percentage';
+
+/** A stored or sent discount type; anything unknown (missing, older lines) reads as a percentage. */
+export const toDiscountType = (value: unknown): LineItemDiscountType => (value === 'amount' ? 'amount' : 'percentage');
+
 export interface LineItemMathInput {
     quantity: number;
     rate: number;
-    /** Percentage of the Gross Amount (0–100). */
+    /** Percentage of the Gross Amount (0–100), or an amount off the line, by `discountType`. */
     discount: number;
+    /** `percentage` when missing. */
+    discountType?: string | null;
     /** `18%` (a Tax Rate option of the Product Catalog). */
     taxRate: string;
 }
@@ -69,10 +80,13 @@ export function normalizeTaxRate(taxRate: string | null | undefined): string {
 /** A discount as a percentage of the Gross Amount, kept between 0 and 100. */
 export const clampDiscount = (discount: number): number => Math.min(100, Math.max(0, finite(discount)));
 
-/** Gross Amount, Discount (amount) and Taxable Amount of one line. */
-export function lineItemAmounts(item: Pick<LineItemMathInput, 'quantity' | 'rate' | 'discount'>): LineItemAmounts {
+/** Gross Amount, Discount (amount) and Taxable Amount of one line. An amount discount stops at the Gross Amount. */
+export function lineItemAmounts(item: Pick<LineItemMathInput, 'quantity' | 'rate' | 'discount' | 'discountType'>): LineItemAmounts {
     const grossAmount = roundMoney(finite(item.quantity) * finite(item.rate));
-    const discountAmount = roundMoney((grossAmount * clampDiscount(item.discount)) / 100);
+    const discountAmount =
+        toDiscountType(item.discountType) === 'amount'
+            ? roundMoney(Math.min(grossAmount, Math.max(0, finite(item.discount))))
+            : roundMoney((grossAmount * clampDiscount(item.discount)) / 100);
     return { grossAmount, discountAmount, taxableAmount: roundMoney(grossAmount - discountAmount) };
 }
 

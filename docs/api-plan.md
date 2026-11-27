@@ -112,14 +112,14 @@ user in. Retired: the must-change-password gate, the `mcp` claim and `403 PASSWO
 | `/contacts` | CRUD | – | `organizationId`, `assignedTo`, `isPrimaryContact` |
 
 **Line items** (opportunities and quotations, Jira CRM-111; `modules/shared/lineItems.ts`). Each line is
-`{ id?, productId?, productName, quantity, rate, discount?, taxRate, description?, note? }`; responses add the computed
-`grossAmount` (quantity × rate), `discountAmount` (gross × discount %) and `taxableAmount` (gross − discount amount).
+`{ id?, productId?, productName, quantity, rate, discount?, discountType?, taxRate, description?, note? }`; responses add the computed
+`grossAmount` (quantity × rate), `discountAmount` (gross × discount %, or the amount) and `taxableAmount` (gross − discount amount).
 `productName` (Product), `quantity` (≥ 1), `rate` (> 0) and `taxRate` (GST, such as `18%`, an option of the
-`product_tax_rate` dropdown) are required, `discount` is a percentage 0–100 (default 0); errors are `400` on
+`product_tax_rate` dropdown) are required, `discount` (default 0) is a percentage 0–100 when `discountType` is `percentage` (the default) or an amount off the line, at most quantity × rate ("Discount cannot exceed the Gross Amount."), when it is `amount`; errors are `400` on
 `lineItems.<n>.<field>`. A line with nothing entered is dropped. A product newly put on a line sets its `rate` from the
 catalog MRP (when above 0) and its `taxRate` from the product's Tax Rate (when set); lines that already held the
 product keep their saved values. Lines in the format before CRM-111 are still accepted: `amount` is read as `rate`, a
-`discountType: 'direct'` (per unit) discount becomes the percentage it was, `GST 18%` / `--None--` become `18%` / `0%`,
+`discountType: 'direct'` (per unit) discount becomes an `amount` discount of per unit × quantity, `GST 18%` / `--None--` become `18%` / `0%`,
 and derived values (`salePrice`, `taxAmount`, `total`, the three amounts above) are ignored. Totals: `totalAmount`
 (Gross Amount), `totalDiscount`, `subtotal` (Taxable Amount), `totalTax` (GST), `grandTotal` = max(0, subtotal +
 totalTax − `lumpSumDiscount`), whole rupees; a quotation `PATCH` that sends totals disagreeing with its lines is `400`.

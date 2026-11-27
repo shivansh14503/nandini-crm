@@ -6,18 +6,18 @@ import { HttpError } from '../../utils/httpError.js';
 import { decimalToNumber } from '../../utils/mappers.js';
 import { optionalText, requiredText } from '../../validators/common.js';
 import { isActiveProductStatus } from '../products/product.validator.js';
-import { isBlankLineItem, lineItemAmounts, lineItemTotals, normalizeTaxRate, roundMoney, type LineItemAmounts, type LineItemTotals } from './lineItemMath.js';
+import { DEFAULT_DISCOUNT_TYPE, isBlankLineItem, LINE_ITEM_DISCOUNT_TYPES, lineItemAmounts, lineItemTotals, normalizeTaxRate, roundMoney, toDiscountType, type LineItemAmounts, type LineItemDiscountType, type LineItemTotals } from './lineItemMath.js';
 
-export { isBlankLineItem, lineItemAmounts, lineItemTotals, normalizeTaxRate, parseTaxRate, LINE_ITEM_TAX_RATES } from './lineItemMath.js';
-export type { LineItemAmounts, LineItemTotals } from './lineItemMath.js';
+export { isBlankLineItem, lineItemAmounts, lineItemTotals, normalizeTaxRate, parseTaxRate, toDiscountType, DEFAULT_DISCOUNT_TYPE, LINE_ITEM_DISCOUNT_TYPES, LINE_ITEM_TAX_RATES } from './lineItemMath.js';
+export type { LineItemAmounts, LineItemDiscountType, LineItemTotals } from './lineItemMath.js';
 
 /**
  * Line items shared by opportunities and quotations (Jira CRM-111): one shape, one set of labels and one calculation
  * (lineItemMath.ts, mirrored by the frontend's CrmLineItemsSection), so client and server agree to the paisa.
  *
  * Fields: Product, Quantity, Rate (the product's MRP; typed only for products without one), Gross Amount
- * (Quantity × Rate), Discount (a percentage), Taxable Amount (Gross − Discount), GST (the product's Tax Rate) and the
- * optional Description and Note. Only Discount, Description and Note may be left empty. A line with nothing entered
+ * (Quantity × Rate), Discount (a percentage or an amount off the line, by `discountType`), Taxable Amount
+ * (Gross − Discount), GST (the product's Tax Rate) and the optional Description and Note. Only Discount, Description and Note may be left empty. A line with nothing entered
  * is dropped (the form always shows one empty line). Quotations and opportunities both need at least one line.
  */
 
@@ -35,21 +35,22 @@ const isRecord = (value: unknown): value is Record<string, unknown> => typeof va
 
 /**
  * Accepts lines in the format before CRM-111 too (imports, older clients, demo data): `amount` is the Rate, a
- * `direct` (per unit) discount becomes the percentage of the Rate it was, and `GST 18%` / `--None--` become `18%` /
- * `0%`. Derived values sent by the client are ignored.
+ * `direct` (per unit) discount becomes the amount it came to on the line (`amount` type), and `GST 18%` / `--None--`
+ * become `18%` / `0%`. A missing `discountType` is a percentage. Derived values sent by the client are ignored.
  */
 export function normalizeLineItemInput(value: unknown): unknown {
     if (!isRecord(value)) return value;
-    const { amount, discountType, salePrice: _salePrice, taxAmount: _taxAmount, total: _total, grossAmount: _gross, discountAmount: _discountAmount, taxableAmount: _taxable, ...rest } = value;
+    const { amount, salePrice: _salePrice, taxAmount: _taxAmount, total: _total, grossAmount: _gross, discountAmount: _discountAmount, taxableAmount: _taxable, ...rest } = value;
     const rate = rest.rate ?? amount;
     let discount = rest.discount;
+    let discountType = rest.discountType;
     if (discountType === 'direct') {
-        const perUnit = Number(discount) || 0;
-        const unitRate = Number(rate) || 0;
-        discount = unitRate > 0 ? Math.min(100, roundMoney((perUnit / unitRate) * 100)) : 0;
+        discount = roundMoney((Number(discount) || 0) * (Number(rest.quantity) || 1));
+        discountType = 'amount';
     }
     return {
         ...rest,
+        discountType: discountType === undefined || discountType === null || discountType === '' ? DEFAULT_DISCOUNT_TYPE : discountType,
         rate: rate === '' || rate === null ? undefined : rate,
         discount: discount === '' || discount === null || discount === undefined ? 0 : discount,
         taxRate: typeof rest.taxRate === 'string' ? normalizeTaxRate(rest.taxRate) : rest.taxRate,
@@ -65,7 +66,8 @@ export const lineItemInputSchema = z.preprocess(
         quantity: number('Quantity', 1e6).refine((value) => value >= 1, { message: 'Quantity must be at least 1.' }),
         // Missing → 0 → "Rate is required." (a product without an MRP needs a typed Rate).
         rate: z.preprocess((value) => (value === undefined ? 0 : value), number('Rate').refine((value) => value > 0, { message: 'Rate is required.' })),
-        discount: number('Discount').refine((value) => value <= 100, { message: 'Discount cannot exceed 100%.' }).default(0),
+        discount: number('Discount').default(0),
+        discountType: z.enum(LINE_ITEM_DISCOUNT_TYPES, { error: 'Discount type must be percentage or amount.' }).default(DEFAULT_DISCOUNT_TYPE),
         taxRate: z
             .string({ error: 'GST is required.' })
             .trim()
@@ -75,6 +77,12 @@ export const lineItemInputSchema = z.preprocess(
         description: optionalText('Description', L.longText),
         note: optionalText('Note', L.longText),
         // grossAmount / discountAmount / taxableAmount are derived; client values are ignored.
+    }).superRefine((item, ctx) => {
+        if (item.discountType === 'percentage' && item.discount > 100) {
+            ctx.addIssue({ code: 'custom', path: ['discount'], message: 'Discount cannot exceed 100%.' });
+        } else if (item.discountType === 'amount' && item.discount > roundMoney(item.quantity * item.rate)) {
+            ctx.addIssue({ code: 'custom', path: ['discount'], message: 'Discount cannot exceed the Gross Amount.' });
+        }
     }),
 );
 
@@ -192,6 +200,7 @@ export function toLineItemData(item: ComputedLineItem, index: number, knownProdu
         rate: item.rate,
         grossAmount: item.grossAmount,
         discount: item.discount,
+        discountType: item.discountType,
         discountAmount: item.discountAmount,
         taxRate: item.taxRate,
         taxableAmount: item.taxableAmount,
@@ -210,6 +219,7 @@ export interface LineItemDto {
     rate: number;
     grossAmount: number;
     discount: number;
+    discountType: LineItemDiscountType;
     discountAmount: number;
     taxRate: string;
     taxableAmount: number;
@@ -228,6 +238,7 @@ export function toLineItemDtos(rows: readonly (OpportunityLineItem | QuotationLi
             rate: decimalToNumber(row.rate),
             grossAmount: decimalToNumber(row.grossAmount),
             discount: decimalToNumber(row.discount),
+            discountType: toDiscountType(row.discountType),
             discountAmount: decimalToNumber(row.discountAmount),
             taxRate: row.taxRate,
             taxableAmount: decimalToNumber(row.taxableAmount),

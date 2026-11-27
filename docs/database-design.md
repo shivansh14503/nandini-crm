@@ -313,15 +313,17 @@ recomputed server-side), `customDataJson`, audit/soft-delete. An opportunity has
 
 `OpportunityLineItem` (owned, cascades from `Opportunity`; Jira CRM-111): `productId` → `Product` (nullable),
 `productName` (snapshot, label Product), `quantity` (≥ 1), `rate` (DECIMAL(18,2), the product's MRP, or typed for a
-product without one), `grossAmount` (= quantity × rate), `discount` (a percentage, 0–100), `discountAmount` (= gross ×
-discount %), `taxRate` (GST, a `product_tax_rate` option such as `18%`; the product's Tax Rate when it has one),
+product without one), `grossAmount` (= quantity × rate), `discount` (as entered: a percentage 0–100, or an amount off
+the line up to the gross amount), `discountType` (NVARCHAR(20), `percentage` (default) or `amount`; migration
+`20261222090000_line_item_discount_type`, existing lines `percentage`), `discountAmount` (= gross × discount %, or the
+amount), `taxRate` (GST, a `product_tax_rate` option such as `18%`; the product's Tax Rate when it has one),
 `taxableAmount` (= gross − discount amount), `description`, `note`, `sortOrder`. The three amounts are DECIMAL(18,2)
 (default 0) and always computed by the API (`modules/shared/lineItemMath.ts`, mirrored by the frontend's
 `lib/line-items`). Only `discount`, `description` and `note` may be empty. Totals: Gross Amount = Σ gross, Discount = Σ
 discount amount, Taxable Amount = Σ taxable, GST = Σ taxable × rate, Grand Total = max(0, taxable + GST − lump sum
 discount), all rounded to whole rupees. Migration `20261221090000_line_items` renamed `amount` → `rate`, turned
 per-unit (`direct`) discounts into percentages, normalized `GST 18%` / `--None--` to `18%` / `0%`, filled the new
-amounts and dropped `discountType`, `salePrice`, `taxAmount` and `total`.
+amounts and dropped the old `discountType` (`percentage` / `direct`), `salePrice`, `taxAmount` and `total`.
 
 Indexes: `organizationId`, `contactId`, `salesStage`, `assignedTo`, `nextFollowupDate`, scoped-list composites;
 line items on `opportunityId` and (`productId`, `opportunityId`) (migration `20261218090000_product_usage_index`, which
