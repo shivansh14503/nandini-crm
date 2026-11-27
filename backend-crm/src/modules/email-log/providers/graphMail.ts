@@ -17,7 +17,8 @@ import type { FetchImpl, ListOptions, MailAdapter, MailAddress, MailCtx, MailMes
  *       limit keeps the nextLink as the cursor and continues next time.
  *       410 / syncStateNotFound → that folder starts over (bounded by the same filter).
  *   GET /users/{mailbox}/messages/{id}?$select=internetMessageHeaders   lazily, only for messages that matched a CRM
- *       address, to apply the automation rule (List-Unsubscribe / Auto-Submitted / Precedence).
+ *       address, to apply the automation rule (List-Unsubscribe / Auto-Submitted / Precedence). A 404 here (the message
+ *       was hard-deleted since the delta read) is skipped by the engine, not a mailbox error.
  * Prefer: IdType="ImmutableId" (ids survive moves between folders), odata.maxpagesize=50. `@removed` entries are ignored
  * (a logged email stays logged). Links (cursor, next page) are only followed when they point at the Graph API itself.
  */
@@ -76,7 +77,9 @@ const recipients = (list: GraphMessage['toRecipients']): MailAddress[] =>
 
 /** A Graph message as a MailMessage (`automated` unknown until its headers are read). Pure. */
 export function graphToMessage(raw: GraphMessage, folder: FolderKey): MailMessage {
-    const when = Date.parse(raw.sentDateTime ?? raw.receivedDateTime ?? '');
+    // Received mail: the server's receivedDateTime (sentDateTime follows the sender's Date header, which the sender
+    // controls); Sent Items: sentDateTime. The engine also caps every time at now + 5 minutes.
+    const when = Date.parse((folder === 'sent' ? (raw.sentDateTime ?? raw.receivedDateTime) : (raw.receivedDateTime ?? raw.sentDateTime)) ?? '');
     const link = raw.webLink && raw.webLink.length <= WEB_LINK_MAX && /^https:\/\//i.test(raw.webLink) ? raw.webLink : null;
     return {
         providerMessageId: raw.id,

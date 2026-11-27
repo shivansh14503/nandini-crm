@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { beforeEach, describe, it } from 'node:test';
 import { ProviderAuthError, ProviderNotFoundError } from '../calendar-sync/providers/http.js';
 import { EMAIL_LOGGING_DEFAULTS, type EmailLoggingSettings } from './emailLog.settings.js';
-import { cursorOf, emailLogJobId, errorBackoffMs, ingestMailbox, mailIssueNotifications, resetMailPausesForTests, type IngestDeps } from './emailLog.ingest.js';
-import type { EmailLogStore, MailboxRow, NewCopy, NewEmail, NewLink, RunUpdate } from './emailLog.store.js';
+import { cappedSentAt, cursorOf, emailLogJobId, errorBackoffMs, ingestMailbox, mailIssueNotifications, resetMailPausesForTests, type IngestDeps } from './emailLog.ingest.js';
+import { isSameEmail, type EmailLogStore, type MailboxRow, type NewCopy, type NewEmail, type NewLink, type RunUpdate } from './emailLog.store.js';
 import { message } from './testing/mailMessage.js';
 import { createFakeMailAdapter, fakeMail } from './providers/fakeMail.js';
 import type { MailProviderKey } from './providers/types.js';
@@ -45,6 +45,8 @@ const blankMailbox = (username: string): Memory['mailboxes'] extends Map<string,
     nextRunAt: null,
     leaseId: null,
     leaseUntil: null,
+    loggingSince: null,
+    purgedAt: null,
     loggedCount: 0,
 });
 
@@ -52,6 +54,10 @@ const memoryStore: EmailLogStore = {
     async loadTarget(username) {
         const user = mem.users.get(username);
         return { userActive: Boolean(user?.active), connection: user?.connection ?? null, mailbox: mem.mailboxes.get(username) ?? null };
+    },
+    async runState(username) {
+        const row = mem.mailboxes.get(username);
+        return row ? { mode: row.mode, loggingSince: row.loggingSince, purgedAt: row.purgedAt } : null;
     },
     async claimLease(username, leaseId, now, until) {
         const row = mem.mailboxes.get(username) ?? blankMailbox(username);
@@ -77,6 +83,11 @@ const memoryStore: EmailLogStore = {
     },
     async upsertEmail(email) {
         const existing = email.messageIdHash ? mem.emails.find((e) => e.messageIdHash === email.messageIdHash) : undefined;
+        if (existing && !mem.raceNext && !isSameEmail(existing, email)) {
+            const row = { ...email, messageIdHash: null, id: `e${mem.emails.length + 1}` };
+            mem.emails.push(row);
+            return { id: row.id, created: true };
+        }
         if (existing && !mem.raceNext) return { id: existing.id, created: false };
         if (mem.raceNext) {
             // Another employee's run inserted it between our read and our insert: the store reads the winner back.
@@ -101,6 +112,14 @@ const memoryStore: EmailLogStore = {
     },
     async anyMailboxOk(provider) {
         return [...mem.mailboxes.values()].some((m) => m.provider === provider && m.lastSuccessAt);
+    },
+    async removeCopies(username, ids) {
+        const gone = mem.copies.filter((c) => c.username === username && ids.includes(c.providerMessageId));
+        mem.copies = mem.copies.filter((c) => !gone.includes(c));
+        const orphaned = new Set(mem.emails.filter((e) => !mem.copies.some((c) => c.emailId === e.id)).map((e) => e.id));
+        mem.emails = mem.emails.filter((e) => !orphaned.has(e.id));
+        mem.links = mem.links.filter((l) => !orphaned.has(l.emailId));
+        return gone.length;
     },
 };
 
@@ -245,6 +264,125 @@ describe('email logging ingestion', () => {
         assert.equal(rest.complete, true);
     });
 
+    it('switching off and on again never logs the off period (cursor cleared or not)', async () => {
+        const at = (h: string) => new Date(`2026-12-01T${h}:00Z`);
+        const later = at('08:00');
+        fakeMail.add(`asha@${DOMAIN}`, message({ providerMessageId: 'before', internetMessageId: '<before@x>', sentAt: at('04:00') }));
+        assert.equal((await ingestMailbox('asha', deps())).logged, 1);
+        // Off at 05:00 (a run that was working kept the cursor); mail at 06:00; on again at 07:00; mail at 07:30.
+        fakeMail.add(`asha@${DOMAIN}`, message({ providerMessageId: 'during', internetMessageId: '<during@x>', sentAt: at('06:00') }));
+        fakeMail.add(`asha@${DOMAIN}`, message({ providerMessageId: 'after', internetMessageId: '<after@x>', sentAt: at('07:30') }));
+        settings = { ...settings, enabledAt: at('07:00').toISOString() };
+        const kept = await ingestMailbox('asha', deps({ now: () => later }));
+        assert.equal(kept.logged, 1);
+        assert.equal(kept.skipped.before_logging, 1);
+        assert.deepEqual(mem.copies.map((c) => c.providerMessageId), ['before', 'after']);
+        // The usual path: switching off cleared the cursor, so the first run after "on" is a bounded sync from the start.
+        mem.mailboxes.get('asha')!.cursorJson = null;
+        mem.mailboxes.get('asha')!.loggingSince = at('07:45');
+        fakeMail.add(`asha@${DOMAIN}`, message({ providerMessageId: 'late', internetMessageId: '<late@x>', sentAt: at('07:50') }));
+        const fresh = await ingestMailbox('asha', deps({ now: () => later }));
+        assert.equal(fresh.logged, 1);
+        assert.deepEqual(mem.copies.map((c) => c.providerMessageId), ['before', 'after', 'late']);
+    });
+
+    it('a person switched off while the provider answers: nothing stored, cursor dropped', async () => {
+        fakeMail.add(`asha@${DOMAIN}`, message({ providerMessageId: 's1' }));
+        mem.mailboxes.set('asha', { ...blankMailbox('asha'), cursorJson: JSON.stringify({ kind: 'fake', position: 0 }), provider: 'fake', accountEmail: `asha@${DOMAIN}` });
+        const store: EmailLogStore = { ...memoryStore, runState: async () => ({ mode: 'off', loggingSince: null, purgedAt: null }) };
+        const run = await ingestMailbox('asha', deps({ store }));
+        assert.equal(run.status, 'stopped');
+        assert.equal(mem.emails.length, 0);
+        assert.equal(mem.mailboxes.get('asha')!.cursorJson, null);
+        assert.equal(mem.mailboxes.get('asha')!.leaseId, null);
+    });
+
+    it('a purge during the run: the run removes what it stored and its final write is dropped', async () => {
+        fakeMail.add(`asha@${DOMAIN}`, message({ providerMessageId: 'p1' }), message({ providerMessageId: 'p2', internetMessageId: '<p2@x>' }));
+        let reads = 0;
+        const store: EmailLogStore = {
+            ...memoryStore,
+            async runState(username) {
+                reads += 1;
+                if (reads < 2) return memoryStore.runState(username);
+                // The admin's purge: takes the lease, stamps purgedAt, clears the cursor (beginPurge).
+                const row = mem.mailboxes.get(username)!;
+                mem.mailboxes.set(username, { ...row, purgedAt: NOW, cursorJson: null, leaseId: 'purge-x', loggedCount: 0 });
+                return { mode: row.mode, loggingSince: row.loggingSince, purgedAt: NOW };
+            },
+        };
+        const run = await ingestMailbox('asha', deps({ store }));
+        assert.equal(run.status, 'stopped');
+        assert.equal(mem.copies.length, 0);
+        assert.equal(mem.emails.length, 0);
+        assert.equal(mem.links.length, 0);
+        const box = mem.mailboxes.get('asha')!;
+        assert.equal(box.cursorJson, null);
+        assert.equal(box.leaseId, 'purge-x');
+        // After the purge only mail from after it is logged (the bounded resync starts at purgedAt).
+        mem.mailboxes.set('asha', { ...box, leaseId: null, leaseUntil: null });
+        fakeMail.add(`asha@${DOMAIN}`, message({ providerMessageId: 'p3', internetMessageId: '<p3@x>', sentAt: new Date(NOW.getTime() + 60_000) }));
+        const next = await ingestMailbox('asha', deps({ now: () => new Date(NOW.getTime() + 2 * 60_000) }));
+        assert.equal(next.logged, 1);
+        assert.deepEqual(mem.copies.map((c) => c.providerMessageId), ['p3']);
+    });
+
+    it('a Bcc / list copy is kept but not addressed; the sender’s copy is', async () => {
+        const mail = message({ providerMessageId: 'b1', from: { email: `asha@${DOMAIN}` }, to: [{ email: 'ravi@customer.in' }], sentByMailbox: true });
+        fakeMail.add(`asha@${DOMAIN}`, mail);
+        fakeMail.add(`vikram@${DOMAIN}`, { ...mail, providerMessageId: 'b2', sentByMailbox: false });
+        await ingestMailbox('asha', deps());
+        await ingestMailbox('vikram', deps());
+        assert.equal(mem.emails.length, 1);
+        assert.deepEqual(mem.copies.map((c) => [c.username, c.addressed]), [['asha', true], ['vikram', false]]);
+    });
+
+    it('a reused Message-ID is not merged: another sender, or a sent time days apart', async () => {
+        fakeMail.add(`asha@${DOMAIN}`, message({ providerMessageId: 'd1' }));
+        await ingestMailbox('asha', deps());
+        fakeMail.add(
+            `vikram@${DOMAIN}`,
+            message({ providerMessageId: 'd2', from: { email: 'lead@prospect.in' }, to: [{ email: `vikram@${DOMAIN}` }] }),
+            message({ providerMessageId: 'd3', sentAt: new Date('2026-11-26T05:00:00Z'), cc: [{ email: 'lead@prospect.in' }] }),
+        );
+        const run = await ingestMailbox('vikram', deps());
+        assert.equal(run.logged, 2);
+        assert.equal(mem.emails.length, 3);
+        assert.equal(mem.emails[2].messageIdHash, null);
+        // Asha's email keeps only its own records.
+        assert.deepEqual(mem.links.filter((l) => l.emailId === 'e1').map((l) => l.module), ['contacts', 'opportunities']);
+    });
+
+    it('a future-dated message is stored as sent now (+ 5 min at most)', async () => {
+        fakeMail.add(`asha@${DOMAIN}`, message({ providerMessageId: 'f1', sentAt: new Date('2036-01-01T00:00:00Z') }));
+        await ingestMailbox('asha', deps());
+        assert.equal(mem.emails[0].sentAt.getTime(), NOW.getTime() + 5 * 60_000);
+        assert.equal(mem.links[0].sentAt.getTime(), NOW.getTime() + 5 * 60_000);
+        assert.equal(cappedSentAt(new Date('2026-11-30T00:00:00Z'), NOW).toISOString(), '2026-11-30T00:00:00.000Z');
+        assert.equal(cappedSentAt(new Date(NaN), NOW).getTime(), NOW.getTime());
+    });
+
+    it('a message deleted before its headers are read is skipped, the run goes on', async () => {
+        const adapter = createFakeMailAdapter();
+        const deleting = {
+            ...adapter,
+            automatedOf: async (ctx: Parameters<typeof adapter.automatedOf>[0], id: string) => {
+                if (id === 'gone') throw new ProviderNotFoundError({ provider: 'fake', operation: 'mail-headers', status: 404, code: 'ErrorItemNotFound' });
+                return adapter.automatedOf(ctx, id);
+            },
+        };
+        fakeMail.add(
+            `asha@${DOMAIN}`,
+            message({ providerMessageId: 'gone', internetMessageId: '<gone@x>', automated: null, from: { email: 'news@vendor.com' }, to: [{ email: 'ravi@customer.in' }] }),
+            message({ providerMessageId: 'kept' }),
+        );
+        const run = await ingestMailbox('asha', deps({ adapter: () => deleting }));
+        assert.equal(run.status, 'done');
+        assert.equal(run.skipped.deleted, 1);
+        assert.equal(run.logged, 1);
+        assert.equal(mem.mailboxes.get('asha')!.status, 'ok');
+    });
+
     it('does nothing while off: company, server, person, inactive, not synced, leased', async () => {
         fakeMail.add(`asha@${DOMAIN}`, message());
         settings = { ...settings, enabled: false };
@@ -328,10 +466,15 @@ describe('email logging helpers', () => {
     it('backoff grows to a day; job ids carry no username and use hyphens', () => {
         assert.deepEqual([1, 2, 3, 4, 9].map(errorBackoffMs), [15 * 60_000, 60 * 60_000, 6 * 60 * 60_000, 24 * 60 * 60_000, 24 * 60 * 60_000]);
         const id = emailLogJobId('Asha.K', NOW, 15);
-        assert.match(id, /^email-log-[0-9a-f]{12}-\d+$/);
+        assert.match(id, /^email-log-[0-9a-f]{12}-\d+-0$/);
         assert.ok(!id.toLowerCase().includes('asha'));
         assert.equal(emailLogJobId('asha.k', NOW, 15), id);
         assert.match(emailLogJobId('asha.k', NOW, 15, true), /-m\d+$/);
+        // A continuation (or retry) in the same poll bucket gets a new id once the mailbox has run again.
+        const ran = emailLogJobId('asha.k', new Date(NOW.getTime() + 5 * 60_000), 15, false, NOW);
+        assert.notEqual(ran, id);
+        assert.match(ran, /^email-log-[0-9a-f]{12}-\d+-[0-9a-z]+$/);
+        assert.equal(emailLogJobId('asha.k', new Date(NOW.getTime() + 6 * 60_000), 15, false, NOW), ran);
     });
 
     it('admin notifications are deduped per provider, code and business day', () => {

@@ -50,6 +50,7 @@ CREATE TABLE [dbo].[LoggedEmailCopy] (
     [providerThreadId] NVARCHAR(200),
     [webLink] NVARCHAR(1000),
     [direction] NVARCHAR(3) NOT NULL,
+    [addressed] BIT NOT NULL CONSTRAINT [LoggedEmailCopy_addressed_df] DEFAULT 0,
     [createdAt] DATETIME2 NOT NULL CONSTRAINT [LoggedEmailCopy_createdAt_df] DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT [LoggedEmailCopy_pkey] PRIMARY KEY CLUSTERED ([id]),
     CONSTRAINT [LoggedEmailCopy_username_providerMessageId_key] UNIQUE NONCLUSTERED ([username],[providerMessageId])
@@ -87,6 +88,7 @@ CREATE TABLE [dbo].[LoggedEmailMailbox] (
     [lastSuccessAt] DATETIME2,
     [nextRunAt] DATETIME2,
     [loggedCount] INT NOT NULL CONSTRAINT [LoggedEmailMailbox_loggedCount_df] DEFAULT 0,
+    [loggingSince] DATETIME2,
     [leaseId] NVARCHAR(50),
     [leaseUntil] DATETIME2,
     [purgedAt] DATETIME2,

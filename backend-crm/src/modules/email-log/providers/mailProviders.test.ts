@@ -6,7 +6,7 @@ import { fakeFetch, route } from '../../calendar-sync/testing/fakeFetch.js';
 import { GRAPH_API } from '../../integrations/integration.constants.js';
 import { classifyMailError, mailAdminMessage } from '../emailLog.errors.js';
 import { createGmailAdapter, gmailFullSyncQuery, GMAIL_API } from './gmail.js';
-import { createGraphMailAdapter, graphMailDeltaUrl } from './graphMail.js';
+import { createGraphMailAdapter, graphMailDeltaUrl, graphToMessage } from './graphMail.js';
 
 /**
  * Mail adapters on replayed fetch (answers hand-written from the documented Gmail API v1 / Graph v1.0 shapes), and the
@@ -182,6 +182,13 @@ describe('Graph mail adapter', () => {
         ]);
         assert.equal(await createGraphMailAdapter(fetchImpl).automatedOf(ctx, 'm1'), true);
         assert.match(calls[0].url, /internetMessageHeaders/);
+    });
+
+    it('received mail is dated by the server (receivedDateTime), sent mail by sentDateTime', () => {
+        const raw = { id: 'g1', sentDateTime: '2036-01-01T00:00:00Z', receivedDateTime: '2026-11-30T10:00:00Z' };
+        assert.equal(graphToMessage(raw, 'inbox').sentAt.toISOString(), '2026-11-30T10:00:00.000Z');
+        assert.equal(graphToMessage(raw, 'sent').sentAt.toISOString(), '2036-01-01T00:00:00.000Z');
+        assert.equal(graphToMessage({ id: 'g2', sentDateTime: '2026-11-29T10:00:00Z' }, 'inbox').sentAt.toISOString(), '2026-11-29T10:00:00.000Z');
     });
 
     it('the first-page URL selects headers only', () => {

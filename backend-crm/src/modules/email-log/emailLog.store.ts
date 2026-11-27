@@ -25,6 +25,15 @@ export interface MailboxRow {
     nextRunAt: Date | null;
     leaseId: string | null;
     leaseUntil: Date | null;
+    loggingSince: Date | null;
+    purgedAt: Date | null;
+}
+
+/** What a run re-reads while it works: the person's switch and the last purge (an admin may act mid-run). */
+export interface MailboxRunState {
+    mode: string | null;
+    loggingSince: Date | null;
+    purgedAt: Date | null;
 }
 
 /** Who a run is for: the person's live calendar connection decides the provider and mailbox (design note EL1). */
@@ -59,6 +68,8 @@ export interface NewCopy {
     providerThreadId: string | null;
     webLink: string | null;
     direction: EmailDirection;
+    /** The mailbox address is the sender or in To / Cc (false = Bcc / list: not shown as a participant to others). */
+    addressed: boolean;
 }
 
 export interface NewLink {
@@ -88,6 +99,8 @@ export interface RunUpdate {
 
 export interface EmailLogStore {
     loadTarget(username: string): Promise<MailTarget>;
+    /** The person's switch and last purge, read again during a run (null = no row). */
+    runState(username: string): Promise<MailboxRunState | null>;
     /** Takes the mailbox's lease (creating its row on first use); false when another run holds it. */
     claimLease(username: string, leaseId: string, now: Date, until: Date): Promise<boolean>;
     /** Writes the run's result and frees the lease (only while this run still holds it). */
@@ -103,7 +116,18 @@ export interface EmailLogStore {
     addLink(link: NewLink): Promise<boolean>;
     /** A mailbox of this provider has logged successfully before. */
     anyMailboxOk(provider: string): Promise<boolean>;
+    /** Deletes these copies of one mailbox and every email left without a copy (a run overtaken by a purge). */
+    removeCopies(username: string, providerMessageIds: readonly string[]): Promise<number>;
 }
+
+/**
+ * Two mailboxes' copies are the same email only when the sent times agree within this window (the Message-ID header
+ * is sender-controlled: a reused id with a different date is stored as its own email, without a hash).
+ */
+export const SAME_EMAIL_WINDOW_MS = 48 * 60 * 60_000;
+
+/** Whether a row found by Message-ID hash is the same email as `email` (sent times within the window). Pure. */
+export const isSameEmail = (row: { sentAt: Date }, email: Pick<NewEmail, 'sentAt'>): boolean => Math.abs(row.sentAt.getTime() - email.sentAt.getTime()) <= SAME_EMAIL_WINDOW_MS;
 
 const chunks = <T>(items: readonly T[], size: number): T[][] => {
     const out: T[][] = [];
@@ -126,6 +150,8 @@ const MAILBOX_SELECT = {
     nextRunAt: true,
     leaseId: true,
     leaseUntil: true,
+    loggingSince: true,
+    purgedAt: true,
 } as const;
 
 export const prismaEmailLogStore: EmailLogStore = {
@@ -136,6 +162,10 @@ export const prismaEmailLogStore: EmailLogStore = {
             prisma.loggedEmailMailbox.findUnique({ where: { username }, select: MAILBOX_SELECT }),
         ]);
         return { userActive: Boolean(user?.isActive && !user.isGroupUser), connection, mailbox };
+    },
+
+    async runState(username) {
+        return prisma.loggedEmailMailbox.findUnique({ where: { username }, select: { mode: true, loggingSince: true, purgedAt: true } });
     },
 
     async claimLease(username, leaseId, now, until) {
@@ -201,19 +231,19 @@ export const prismaEmailLogStore: EmailLogStore = {
     },
 
     async upsertEmail(email) {
-        if (email.messageIdHash) {
-            const found = await prisma.loggedEmail.findFirst({ where: { messageIdHash: email.messageIdHash }, select: { id: true } });
-            if (found) return { id: found.id, created: false };
-        }
+        const create = async (data: NewEmail) => ({ id: (await prisma.loggedEmail.create({ data, select: { id: true } })).id, created: true });
+        if (!email.messageIdHash) return create(email);
+        const byHash = () => prisma.loggedEmail.findFirst({ where: { messageIdHash: email.messageIdHash }, select: { id: true, sentAt: true } });
+        const found = await byHash();
+        if (found) return isSameEmail(found, email) ? { id: found.id, created: false } : create({ ...email, messageIdHash: null });
         try {
-            const row = await prisma.loggedEmail.create({ data: email, select: { id: true } });
-            return { id: row.id, created: true };
+            return await create(email);
         } catch (err) {
             // UX_LoggedEmail_messageIdHash: another employee's run logged it a moment ago. Outside any transaction (D45).
-            if (!email.messageIdHash || !isUniqueViolation(err)) throw err;
-            const winner = await prisma.loggedEmail.findFirst({ where: { messageIdHash: email.messageIdHash }, select: { id: true } });
+            if (!isUniqueViolation(err)) throw err;
+            const winner = await byHash();
             if (!winner) throw err;
-            return { id: winner.id, created: false };
+            return isSameEmail(winner, email) ? { id: winner.id, created: false } : create({ ...email, messageIdHash: null });
         }
     },
 
@@ -239,5 +269,16 @@ export const prismaEmailLogStore: EmailLogStore = {
 
     async anyMailboxOk(provider) {
         return (await prisma.loggedEmailMailbox.count({ where: { provider, lastSuccessAt: { not: null } } })) > 0;
+    },
+
+    async removeCopies(username, providerMessageIds) {
+        let removed = 0;
+        for (const chunk of chunks([...new Set(providerMessageIds)], ADDRESS_LOOKUP_CHUNK)) {
+            const copies = await prisma.loggedEmailCopy.findMany({ where: { username, providerMessageId: { in: chunk } }, select: { id: true, emailId: true } });
+            if (copies.length === 0) continue;
+            removed += (await prisma.loggedEmailCopy.deleteMany({ where: { id: { in: copies.map((c) => c.id) } } })).count;
+            await prisma.loggedEmail.deleteMany({ where: { id: { in: [...new Set(copies.map((c) => c.emailId))] }, copies: { none: {} } } });
+        }
+        return removed;
     },
 };

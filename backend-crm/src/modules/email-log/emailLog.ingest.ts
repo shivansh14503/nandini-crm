@@ -2,8 +2,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { ENV } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
 import { prisma } from '../../config/prisma.js';
-import { calendarSyncQueue, tryEnqueue } from '../../jobs/queues.js';
-import { ProviderError } from '../calendar-sync/providers/http.js';
+import { calendarSyncQueue, isQueueAvailable, tryEnqueue } from '../../jobs/queues.js';
+import { ProviderError, ProviderNotFoundError } from '../calendar-sync/providers/http.js';
 import { isFakeProviderEnabled, loadProviderAccess } from '../calendar-sync/providers/registry.js';
 import { tokenSource } from '../calendar-sync/tokenSource.js';
 import { ADMIN_INTEGRATIONS_ENTITY_MODULE } from '../calendar-sync/connection.constants.js';
@@ -33,13 +33,14 @@ import {
     cleanSubject,
     directionOf,
     externalAddresses,
+    isAddressed,
     messageIdHash,
     planMessage,
     preFilter,
     type LinkPlan,
     type SkipReason,
 } from './emailLog.match.js';
-import { EMAIL_LOGGING_SETTING_KEY, effectiveMode, readEmailLoggingSettings, type EmailLoggingSettings } from './emailLog.settings.js';
+import { EMAIL_LOGGING_SETTING_KEY, effectiveMode, loggingStartOf, readEmailLoggingSettings, type EmailLoggingSettings } from './emailLog.settings.js';
 import { prismaEmailLogStore, type EmailLogStore, type MailboxRow, type RunUpdate } from './emailLog.store.js';
 import { getMailAdapter, isMailProvider } from './providers/registry.js';
 import type { MailAdapter, MailCtx, MailCursor, MailMessage, MailProviderKey } from './providers/types.js';
@@ -58,6 +59,14 @@ import type { MailAdapter, MailCtx, MailCursor, MailMessage, MailProviderKey } f
  *     mailboxes holding the same message race on UX_LoggedEmail_messageIdHash; the store resolves it (D45).
  *   - The cursor is saved only after the run's messages are stored, so a crash re-reads (idempotent: copies are unique
  *     per mailbox message).
+ *   - Nothing from before the person's logging start is logged (`loggingStartOf`: the company switch, the person's
+ *     switch or the company default turning on, and the last purge). Switching off clears the cursor, so switching on
+ *     again starts from a fresh baseline instead of catching up on the off period.
+ *   - An admin may switch the person off or purge while a run works: the run reads the switch again before it stores
+ *     anything, and after storing checks whether a purge happened since it started; if so it removes what it stored
+ *     (the purge also takes the lease, so this run's final write is dropped).
+ *   - Sent times are capped at now + 5 minutes (a sender's clock or a forged Date header can't pin an email to the top
+ *     of a record or keep it past the retention).
  *   - Failures are classified (emailLog.errors.ts) and kept on the mailbox row; nothing here touches calendar state.
  */
 
@@ -66,7 +75,14 @@ export interface EmailLogContext {
     companyDomains: string[];
 }
 
-export type IngestStatus = 'done' | 'off' | 'not_ready' | 'busy' | 'paused' | 'error' | 'transient';
+/** `stopped` = the person was switched off or purged while the run worked (nothing of the run is kept). */
+export type IngestStatus = 'done' | 'off' | 'not_ready' | 'busy' | 'paused' | 'error' | 'transient' | 'stopped';
+
+/** Why a listed message was not logged (the matcher's reasons plus the engine's own). */
+export type IngestSkip = SkipReason | 'duplicate' | 'before_logging' | 'deleted';
+
+/** A message dated further ahead than this is treated as sent now. */
+export const FUTURE_SKEW_MS = 5 * 60_000;
 
 export interface IngestResult {
     status: IngestStatus;
@@ -74,7 +90,7 @@ export interface IngestResult {
     logged: number;
     /** Copies added to emails another mailbox logged first. */
     copies: number;
-    skipped: Partial<Record<SkipReason | 'duplicate', number>>;
+    skipped: Partial<Record<IngestSkip, number>>;
     complete?: boolean;
     failure?: MailFailure;
 }
@@ -186,16 +202,18 @@ const isUnauthorized = (err: unknown) => err instanceof ProviderError && err.sta
 /**
  * Stores one message's plan: the email (once per Message-ID), this mailbox's copy and the record links. Returns
  * 'logged' (new email), 'copy' (email logged by another mailbox), or 'duplicate' (this mailbox had it already).
+ * `sentAt` is the message's time already capped at now + skew.
  */
 async function storeMessage(
     store: EmailLogStore,
     msg: MailMessage,
+    sentAt: Date,
     links: readonly LinkPlan[],
     ctx: { username: string; provider: MailProviderKey; mailbox: string; adapter: MailAdapter; context: EmailLogContext },
 ): Promise<'logged' | 'copy' | 'duplicate'> {
     const providerMessageId = msg.providerMessageId.slice(0, PROVIDER_MESSAGE_ID_MAX);
     const addLinks = async (emailId: string) => {
-        for (const link of links) await store.addLink({ emailId, module: link.module, recordId: link.recordId, matchedEmail: link.matchedEmail.slice(0, 120), sentAt: msg.sentAt });
+        for (const link of links) await store.addLink({ emailId, module: link.module, recordId: link.recordId, matchedEmail: link.matchedEmail.slice(0, 120), sentAt });
     };
     const existing = await store.findCopy(ctx.username, providerMessageId);
     if (existing) {
@@ -205,16 +223,17 @@ async function storeMessage(
     }
     const to = boundRecipients(msg.to);
     const cc = boundRecipients(msg.cc);
+    const fromEmail = msg.from?.email ?? '';
     const email = await store.upsertEmail({
-        messageIdHash: messageIdHash(msg.internetMessageId),
+        messageIdHash: messageIdHash(msg.internetMessageId, fromEmail),
         threadId: msg.providerThreadId?.slice(0, THREAD_ID_MAX) ?? null,
         subject: cleanSubject(msg.subject),
-        fromEmail: msg.from?.email ?? '',
+        fromEmail,
         fromName: msg.from?.name ?? null,
         toJson: to.json,
         ccJson: cc.json,
         moreRecipients: to.more + cc.more,
-        sentAt: msg.sentAt,
+        sentAt,
         direction: directionOf(msg.from, ctx.context.companyDomains),
         snippet: ctx.context.settings.storeSnippets ? cleanSnippet(msg.snippet) : null,
         hasAttachments: msg.hasAttachments,
@@ -222,6 +241,7 @@ async function storeMessage(
         ownerUsername: ctx.username,
     });
     const link = ctx.adapter.webLinkOf(ctx.mailbox, msg);
+    const sentByMailbox = msg.sentByMailbox || fromEmail === ctx.mailbox;
     const added = await store.addCopy({
         emailId: email.id,
         username: ctx.username,
@@ -229,7 +249,9 @@ async function storeMessage(
         providerMessageId,
         providerThreadId: msg.providerThreadId?.slice(0, THREAD_ID_MAX) ?? null,
         webLink: link && link.length <= WEB_LINK_MAX ? link : null,
-        direction: msg.sentByMailbox || (msg.from?.email ?? '') === ctx.mailbox ? 'out' : 'in',
+        direction: sentByMailbox ? 'out' : 'in',
+        // Bcc / distribution list: the copy stays (this employee's own view and link) but isn't shown to others.
+        addressed: sentByMailbox || isAddressed(msg, ctx.mailbox),
     });
     await addLinks(email.id);
     if (!added) return 'duplicate';
@@ -245,6 +267,24 @@ async function withMailToken<T>(deps: IngestDeps, provider: MailProviderKey, mai
         deps.invalidateToken(provider, mailbox);
         return fn({ accessToken: await deps.token(provider, mailbox), mailbox });
     }
+}
+
+/** Whether the person is still being logged and not purged since `runStart` (read again mid-run). */
+async function stillLogging(deps: IngestDeps, username: string, runStart: Date): Promise<boolean> {
+    const [context, state] = await Promise.all([deps.loadContext(), deps.store.runState(username)]);
+    if (!deps.serverEnabled() || !context.settings.enabled) return false;
+    if (effectiveMode(state?.mode, context.settings) !== 'on') return false;
+    return !purgedSince(state?.purgedAt ?? null, runStart);
+}
+
+const purgedSince = (purgedAt: Date | null, runStart: Date) => Boolean(purgedAt && purgedAt.getTime() >= runStart.getTime());
+
+/** The message's time for storage and the logging-start check: capped at now + FUTURE_SKEW_MS. Pure. */
+export function cappedSentAt(sentAt: Date, now: Date): Date {
+    const t = sentAt.getTime();
+    if (!Number.isFinite(t)) return now;
+    const cap = now.getTime() + FUTURE_SKEW_MS;
+    return t > cap ? new Date(cap) : sentAt;
 }
 
 /** One mailbox run (see the file header). Never throws for provider failures; database errors propagate (job retry). */
@@ -269,37 +309,68 @@ export async function ingestMailbox(username: string, deps: IngestDeps = default
     let update: RunUpdate | null = null;
     try {
         const cursor = cursorOf(mailboxRow, provider, mailbox);
-        const since = new Date(now.getTime() - FULL_SYNC_DAYS * 24 * 60 * 60_000);
+        // Nothing from before the logging start; a first sync / resync never reads further back than FULL_SYNC_DAYS.
+        const start = loggingStartOf(mailboxRow, context.settings);
+        const bound = now.getTime() - FULL_SYNC_DAYS * 24 * 60 * 60_000;
+        const since = new Date(Math.max(bound, start?.getTime() ?? bound));
         const page = await withMailToken(deps, provider, mailbox, (ctx) => adapter.listNew(ctx, cursor, { since, limit: MESSAGES_PER_RUN }));
 
-        const count = (key: SkipReason | 'duplicate') => {
+        const count = (key: IngestSkip) => {
             result.skipped[key] = (result.skipped[key] ?? 0) + 1;
         };
-        const candidates: MailMessage[] = [];
+        const candidates: { msg: MailMessage; sentAt: Date }[] = [];
         for (const msg of page.messages) {
-            const skip = preFilter(msg, context.companyDomains);
+            const sentAt = cappedSentAt(msg.sentAt, now);
+            const skip = preFilter(msg, context.companyDomains) ?? (start && sentAt.getTime() < start.getTime() ? 'before_logging' : null);
             if (skip) count(skip);
-            else candidates.push(msg);
+            else candidates.push({ msg, sentAt });
         }
-        const addresses = candidates.length ? await deps.store.lookupAddresses(candidates.flatMap((m) => externalAddresses(m, context.companyDomains))) : new Map();
+        // An admin may have switched the person off (or purged) while the provider answered: store nothing then, and
+        // drop the cursor so switching on again starts from a fresh baseline.
+        if (candidates.length > 0 && !(await stillLogging(deps, username, now))) {
+            update = { lastRunAt: deps.now(), cursorJson: null };
+            return { ...result, status: 'stopped' };
+        }
+        const addresses = candidates.length ? await deps.store.lookupAddresses(candidates.flatMap(({ msg }) => externalAddresses(msg, context.companyDomains))) : new Map();
         const contactIds = [...addresses.values()].flatMap((m) => m.contacts);
         const opportunities = contactIds.length ? await deps.store.opportunitiesOfContacts(contactIds) : new Map<string, string[]>();
         const storeCtx = { username, provider, mailbox, adapter, context };
+        const stored: string[] = [];
 
-        for (const msg of candidates) {
+        for (const { msg, sentAt } of candidates) {
             let plan = planMessage(msg, context.companyDomains, addresses, opportunities);
             if (plan.action === 'log' && plan.needsAutomationCheck) {
-                const automated = await withMailToken(deps, provider, mailbox, (ctx) => adapter.automatedOf(ctx, msg.providerMessageId));
+                let automated: boolean;
+                try {
+                    automated = await withMailToken(deps, provider, mailbox, (ctx) => adapter.automatedOf(ctx, msg.providerMessageId));
+                } catch (err) {
+                    // Hard-deleted between the listing and the header read: skip it, the run goes on.
+                    if (!(err instanceof ProviderNotFoundError)) throw err;
+                    count('deleted');
+                    continue;
+                }
                 plan = planMessage({ ...msg, automated }, context.companyDomains, addresses, opportunities);
             }
             if (plan.action === 'skip') {
                 count(plan.reason);
                 continue;
             }
-            const outcome = await storeMessage(deps.store, msg, plan.links, storeCtx);
+            const outcome = await storeMessage(deps.store, msg, sentAt, plan.links, storeCtx);
             if (outcome === 'logged') result.logged += 1;
             else if (outcome === 'copy') result.copies += 1;
             else count('duplicate');
+            if (outcome !== 'duplicate') stored.push(msg.providerMessageId.slice(0, PROVIDER_MESSAGE_ID_MAX));
+        }
+
+        // A purge that ran while this run stored: remove what this run added (the purge took the lease, so the final
+        // write below is dropped as well and the purge's cleared cursor stays).
+        if (stored.length > 0) {
+            const state = await deps.store.runState(username);
+            if (purgedSince(state?.purgedAt ?? null, now)) {
+                await deps.store.removeCopies(username, stored);
+                logger.info({ username, removed: stored.length }, 'Email logging run overtaken by a purge');
+                return { ...result, status: 'stopped', logged: 0, copies: 0 };
+            }
         }
 
         const done = deps.now();
@@ -368,7 +439,13 @@ export async function ingestMailbox(username: string, deps: IngestDeps = default
  * Mailboxes due a run, longest-waiting first: people with a live calendar connection (`ok`) whose effective switch is
  * on, not leased, with `nextRunAt` passed (or never run). Three small reads.
  */
-export async function dueMailboxes(now: Date, settings: EmailLoggingSettings, limit: number = MAILBOXES_PER_TICK): Promise<string[]> {
+export interface DueMailbox {
+    username: string;
+    /** The last run's time (part of the job id: a continuation or retry in the same poll bucket gets a new id). */
+    lastRunAt: Date | null;
+}
+
+export async function dueMailboxes(now: Date, settings: EmailLoggingSettings, limit: number = MAILBOXES_PER_TICK): Promise<DueMailbox[]> {
     const connections = await prisma.calendarConnection.findMany({ where: { status: 'ok' }, select: { username: true, provider: true } });
     const candidates = connections.filter((c) => isMailProvider(c.provider));
     if (candidates.length === 0) return [];
@@ -389,16 +466,43 @@ export async function dueMailboxes(now: Date, settings: EmailLoggingSettings, li
         .filter(({ row }) => !row || ((!row.nextRunAt || row.nextRunAt <= now) && (!row.leaseUntil || row.leaseUntil < now)))
         .sort((a, b) => (a.row?.lastRunAt?.getTime() ?? 0) - (b.row?.lastRunAt?.getTime() ?? 0))
         .slice(0, limit)
-        .map(({ username }) => username);
+        .map(({ username, row }) => ({ username, lastRunAt: row?.lastRunAt ?? null }));
 }
 
 const userTag = (username: string) => createHash('sha256').update(username.toLowerCase()).digest('hex').slice(0, 12);
 
-/** Job id of a mailbox run: one per mailbox and poll bucket (an admin's run gets its own minute). Pure. */
-export function emailLogJobId(username: string, now: Date, pollMinutes: number, manual = false): string {
+/**
+ * Job id of a mailbox run: one per mailbox, poll bucket and last run (so two ticks of one bucket queue it once, but a
+ * run that stopped at its limit, or a retry, is queued again at the next tick); an admin's run gets its own minute.
+ * Pure.
+ */
+export function emailLogJobId(username: string, now: Date, pollMinutes: number, manual = false, lastRunAt: Date | null = null): string {
     const minute = Math.floor(now.getTime() / 60_000);
-    return manual ? `email-log-${userTag(username)}-m${minute}` : `email-log-${userTag(username)}-${Math.floor(minute / Math.max(1, pollMinutes))}`;
+    if (manual) return `email-log-${userTag(username)}-m${minute}`;
+    return `email-log-${userTag(username)}-${Math.floor(minute / Math.max(1, pollMinutes))}-${(lastRunAt?.getTime() ?? 0).toString(36)}`;
 }
+
+/** A job with this id is still kept by the queue (waiting, running or done within the hour). False when unsure. */
+async function jobExists(jobId: string): Promise<boolean> {
+    if (!isQueueAvailable()) return false;
+    let timer: NodeJS.Timeout | undefined;
+    try {
+        const job = await Promise.race([
+            calendarSyncQueue().getJob(jobId),
+            new Promise<undefined>((resolve) => {
+                timer = setTimeout(() => resolve(undefined), 2_000);
+            }),
+        ]);
+        return Boolean(job);
+    } catch {
+        return false;
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+/** BullMQ priority of the poll's email-log jobs: behind activity pushes and calendar pulls (which have none). */
+export const EMAIL_LOG_JOB_PRIORITY = 10;
 
 export interface EmailLogJobData {
     username: string;
@@ -406,15 +510,18 @@ export interface EmailLogJobData {
 
 /**
  * The calendar poll tick's step (inside CALENDAR_SYNC_HOURS only; the caller checks): one `email-log` job per due
- * mailbox, at most 25. Returns how many were queued. Nothing when the switch is off.
+ * mailbox, at most 25, at a low priority so activity pushes and calendar pulls go first. Returns how many were newly
+ * queued (a job still waiting from an earlier tick isn't counted again). Nothing when the switch is off.
  */
 export async function enqueueEmailLogRuns(now: Date = new Date(), deps: Pick<IngestDeps, 'loadContext' | 'serverEnabled' | 'pollMinutes'> = defaultIngestDeps()): Promise<number> {
     if (!deps.serverEnabled()) return 0;
     const { settings } = await deps.loadContext();
     if (!settings.enabled) return 0;
     let queued = 0;
-    for (const username of await dueMailboxes(now, settings)) {
-        const id = await tryEnqueue(calendarSyncQueue, EMAIL_LOG_JOB, { username } satisfies EmailLogJobData, { jobId: emailLogJobId(username, now, deps.pollMinutes()), attempts: 2 });
+    for (const { username, lastRunAt } of await dueMailboxes(now, settings)) {
+        const jobId = emailLogJobId(username, now, deps.pollMinutes(), false, lastRunAt);
+        if (await jobExists(jobId)) continue;
+        const id = await tryEnqueue(calendarSyncQueue, EMAIL_LOG_JOB, { username } satisfies EmailLogJobData, { jobId, attempts: 2, priority: EMAIL_LOG_JOB_PRIORITY });
         if (id !== null) queued += 1;
     }
     return queued;
@@ -425,9 +532,9 @@ export async function runEmailLogInline(now: Date = new Date(), deps: IngestDeps
     if (!deps.serverEnabled()) return 0;
     const { settings } = await deps.loadContext();
     if (!settings.enabled) return 0;
-    const [username] = await dueMailboxes(now, settings, 1);
-    if (!username) return 0;
-    const run = await ingestMailbox(username, deps);
+    const [due] = await dueMailboxes(now, settings, 1);
+    if (!due) return 0;
+    const run = await ingestMailbox(due.username, deps);
     return run.logged + run.copies;
 }
 

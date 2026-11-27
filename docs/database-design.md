@@ -1,7 +1,7 @@
 # Nandini CRM — Database Design
 
 > **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (94 migrations,
-> latest `20261216100000_email_logging`, Calendar Phase 4 email logging, as of 2026-11-26; before it `20261215100000_activity_conference`, Calendar Phase 3 P3-1 video meetings; before that `20261215090000_calendar_watch_channels`, Calendar Phase 2 P2-7 webhooks; before that `20261128120000_booking_links`, Calendar Phase 4 booking links; before that `20261128100000_activity_calendar_sync`, Calendar Phase 2 P2-3b, whose columns P2-3c (first-sync backfill) and P2-5 (calendar → CRM pull) use without a migration of their own; P2-6 busy times needed no migration: it reads `Activity` through the existing `[isDeleted, startAt]` index and stores nothing). Update it in the same change as any schema migration.
+> latest `20261216100000_email_logging`, Calendar Phase 4 email logging, as of 2026-11-27 with its review fixes; before it `20261215100000_activity_conference`, Calendar Phase 3 P3-1 video meetings; before that `20261215090000_calendar_watch_channels`, Calendar Phase 2 P2-7 webhooks; before that `20261128120000_booking_links`, Calendar Phase 4 booking links; before that `20261128100000_activity_calendar_sync`, Calendar Phase 2 P2-3b, whose columns P2-3c (first-sync backfill) and P2-5 (calendar → CRM pull) use without a migration of their own; P2-6 busy times needed no migration: it reads `Activity` through the existing `[isDeleted, startAt]` index and stores nothing). Update it in the same change as any schema migration.
 > Related: [System design](system-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
 ---
@@ -909,11 +909,13 @@ also on the activity as an attendee and in its remarks).
 
 ### 4.33 `LoggedEmail`, `LoggedEmailCopy`, `LoggedEmailLink`, `LoggedEmailMailbox` (email logging, Calendar Phase 4)
 
-Migration `20261216100000_email_logging` (as of 2026-11-26; new tables only, no existing data changes; hand-written,
+Migration `20261216100000_email_logging` (as of 2026-11-27, with the review fixes; new tables only, no existing data changes; hand-written,
 identical to `prisma migrate diff` for these tables plus the filtered index below). Module
 `backend-crm/src/modules/email-log`; see [system design §5.5](system-design.md). Named `LoggedEmail*` because `EmailLog`
 is the outgoing-mail delivery log (§4.26). Company settings live in `ModuleSetting (activities, emailLogging)`
-`{ enabled, defaultForPeople, visibility, retentionMonths, storeSnippets }` (no row = off, off, restricted, 24, true).
+`{ enabled, defaultForPeople, visibility, retentionMonths, storeSnippets, enabledAt, defaultOnAt }` (no row = off, off,
+restricted, 24, true, null, null; the two ISO stamps are written by the server when the switch / the default for people
+turns on and bound the logging start).
 No FKs to users or records (usernames and record ids, as everywhere); FKs inside the group cascade from `LoggedEmail`.
 
 `LoggedEmail`: one email, stored **once per RFC Message-ID** whichever employees' mailboxes hold it. Not audited.
@@ -921,15 +923,15 @@ No FKs to users or records (usernames and record ids, as everywhere); FKs inside
 | Column | Type | Notes |
 | --- | --- | --- |
 | `id` | NVARCHAR(50) PK | uuid |
-| `messageIdHash` | NVARCHAR(64) NULL | sha256 hex of the trimmed Message-ID; **filtered UNIQUE** `UX_LoggedEmail_messageIdHash` `WHERE messageIdHash IS NOT NULL` (hand-written; decides concurrent inserts, D45). NULL when the mail has no Message-ID |
+| `messageIdHash` | NVARCHAR(64) NULL | sha256 hex of the trimmed Message-ID + `\n` + the lower-cased sender (the header is sender-controlled, so a reused id from another sender is another email); **filtered UNIQUE** `UX_LoggedEmail_messageIdHash` `WHERE messageIdHash IS NOT NULL` (hand-written; decides concurrent inserts, D45). NULL when the mail has no Message-ID, or when a row with the same hash has a sent time more than 48 h apart (stored as its own email, not merged) |
 | `threadId` | NVARCHAR(200) NULL | Provider thread / conversation id of the first copy |
 | `subject` | NVARCHAR(300) | `(no subject)` when empty; one line |
 | `fromEmail` / `fromName` | NVARCHAR(254) / NVARCHAR(200) NULL | |
 | `toJson` / `ccJson` | NVARCHAR(4000) | JSON `[{ email, name? }]`, ≤ 25 addresses kept across both, never Bcc |
 | `moreRecipients` | INT, default 0 | Addresses not kept |
-| `sentAt` | DATETIME2 | |
+| `sentAt` | DATETIME2 | Received time for received mail (Gmail `internalDate`, Graph `receivedDateTime`), sent time for the employee's sent mail; capped at ingestion time + 5 min (a forged future Date header can't escape retention) |
 | `direction` | NVARCHAR(3) | `in` / `out` (sender on a company domain) |
-| `snippet` | NVARCHAR(500) NULL | Plain text only (entities decoded, tags / control characters stripped); NULL with "Keep a short snippet" off |
+| `snippet` | NVARCHAR(500) NULL | Plain text only (entities decoded, tags / control characters stripped); NULL with "Keep a short snippet" off (turning it off clears the stored ones in bounded batches, and the API never returns one while it is off) |
 | `hasAttachments` | BIT | Flag only; attachments are never stored |
 | `provider` | NVARCHAR(30) | `google` / `microsoft` / `fake` of the first copy |
 | `ownerUsername` | NVARCHAR(50) | Mailbox of the first copy |
@@ -939,7 +941,9 @@ Indexes `(sentAt)` (retention), `(ownerUsername)`.
 
 `LoggedEmailCopy`: one mailbox that holds the email. `id`, `emailId` (FK → `LoggedEmail`, CASCADE), `username`,
 `provider`, `providerMessageId` (NVARCHAR(300)), `providerThreadId` (NVARCHAR(200) NULL), `webLink` (NVARCHAR(1000) NULL,
-Graph's link; Gmail's is built from the id), `direction`, `createdAt`. **UNIQUE** `(username, providerMessageId)` (a
+Graph's link; Gmail's is built from the id), `direction`, `addressed` (BIT, default 0: the mailbox's address is the
+sender or in To / Cc, or it is the sender's copy; 0 = received as Bcc or through a list, so it is listed as a participant
+only to that employee), `createdAt`. **UNIQUE** `(username, providerMessageId)` (a
 re-run never doubles a copy); index `(emailId)`. Visibility `restricted` reads "the caller holds a copy" from here.
 
 `LoggedEmailLink`: one CRM record the email shows on. `id`, `emailId` (FK → `LoggedEmail`, CASCADE), `module`
@@ -953,7 +957,9 @@ newest first.
 mailbox read); `cursorJson` (NVARCHAR(MAX): Gmail `{ historyId }`, Graph `{ inbox, sent }` delta links, fake
 `{ position }`); `status` (default `idle`; `ok` / `error`), `errorLevel` (`user` / `app`), `lastErrorCode`
 (NVARCHAR(50)), `lastErrorMessage` (NVARCHAR(300), admin text), `lastErrorAt`, `consecutiveFailures`; `lastRunAt`,
-`lastSuccessAt`, `nextRunAt`; `loggedCount`; `leaseId` / `leaseUntil` (one run per mailbox); `purgedAt` / `purgedBy`;
+`lastSuccessAt`, `nextRunAt`; `loggedCount`; `loggingSince` (DATETIME2 NULL: when the person's effective switch last
+turned on; mail from before max(`loggingSince`, `purgedAt`, the company `enabledAt`, and `defaultOnAt` for people on the
+default) is never logged); `leaseId` / `leaseUntil` (one run per mailbox; a purge takes it too); `purgedAt` / `purgedBy`;
 `createdAt`, `updatedAt`. Index `(status, nextRunAt)`. Audited: `LoggedEmailMailbox` CREATE / UPDATE (the mode) and PURGE
 (module `admin-integrations`). A new table rather than a `CalendarSyncUser` column, so it doesn't touch the calendar
 choice rows.
@@ -1018,8 +1024,8 @@ choice rows.
 | Calendar webhook channel (P2-7) | No transaction: the provider's watch call, then INSERT `CalendarWatchChannel` (`active`, or `failed` when refused); an insert that fails after the provider created the channel stops it there. Renewal UPDATEs `expiresAt` (Graph) or inserts the new row before marking the old `stopped` (Google). A stopped connection row marks its channels `stopped` after the enrolment transaction commits, then stops them at the provider |
 | People calendar choice | Upsert / delete `CalendarSyncUser` → `AuditLog` → reconcile the person after commit |
 | Email logged (Calendar Phase 4) | No transaction (D45): claim the mailbox lease (UPDATE … WHERE lease free, or INSERT) → per message: INSERT `LoggedEmail` (a `P2002` on `UX_LoggedEmail_messageIdHash` reads the winner) → INSERT `LoggedEmailCopy` / `LoggedEmailLink` (a `P2002` = already there) → cursor, health and lease release in one UPDATE |
-| Email logging switch / purge (Admin) | Mode: transaction upsert `LoggedEmailMailbox` + `AuditLog` CREATE / UPDATE. Purge: bounded deletes of the person's copies and of emails left without a copy (outside a transaction), then upsert `purgedAt` + `AuditLog` PURGE |
-| Email retention (00:25 nightly) | Bounded deletes (≤ 20 × 500) of `LoggedEmail` older than the retention months, then of emails without a copy for 24 h (≤ 4 × 500); copies and links cascade |
+| Email logging switch / purge (Admin) | Mode: transaction upsert `LoggedEmailMailbox` (`loggingSince` when it turns on, `cursorJson = NULL` when it turns off) + `AuditLog` CREATE / UPDATE. Settings: the form-config write, then (switch / default off) one `UPDATE … SET cursorJson = NULL`, (snippets off) bounded `UPDATE … SET snippet = NULL` batches. Purge: one upsert taking the lease + `purgedAt` + `cursorJson = NULL`, bounded deletes of the person's copies and of emails left without a copy (outside a transaction), lease release, then `AuditLog` PURGE. A run overtaken by the purge deletes its own copies (same bounded delete) |
+| Email retention (00:25 nightly) | Bounded deletes (≤ 20 × 500) of `LoggedEmail` older than the retention months, then of emails without a copy for 24 h (≤ 4 × 500), then, while snippets are off, `snippet = NULL` (≤ 20 × 500); copies and links cascade |
 
 ## 7. Migrations and seeding
 

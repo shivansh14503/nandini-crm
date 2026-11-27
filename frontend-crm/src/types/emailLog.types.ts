@@ -40,6 +40,9 @@ export interface EmailLoggingSettings {
     visibility: EmailVisibility;
     retentionMonths: RetentionMonths;
     storeSnippets: boolean;
+    /** Server-stamped (read-only, never sent back): when the switch / the default for people last turned on (ISO). */
+    enabledAt?: string | null;
+    defaultOnAt?: string | null;
 }
 
 export interface EmailAddress {
@@ -60,6 +63,7 @@ export interface LoggedEmail {
     snippet: string | null;
     hasAttachments: boolean;
     provider: string;
+    /** Employees whose mailboxes hold it as sender / To / Cc (a Bcc or list copy is listed only to its own employee). */
     participants: { username: string; name: string }[];
     openLink: { provider: string; url: string } | null;
 }

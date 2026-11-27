@@ -121,7 +121,7 @@ export function PersonEmailLoggingSection({ username, onToast }: { username: str
                     {confirmPurge ? (
                         <Alert severity="warning" sx={{ fontSize: '0.78rem', alignItems: 'flex-start' }}>
                             Delete all {data.copies} emails logged from this person&apos;s mailbox? Emails another enrolled employee also took part in stay on the records.
-                            This can&apos;t be undone.
+                            Mail from before now is never logged again for this person. This can&apos;t be undone.
                             <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1 }}>
                                 <Button variant="contained" sx={dangerButtonSx} onClick={() => void doPurge()} disabled={busy}>
                                     {purge.isPending ? 'Deleting…' : 'Delete logged emails'}

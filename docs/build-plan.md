@@ -571,7 +571,13 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         Contact / Lead / Opportunity drawers (newest first, "Open in Gmail / Outlook" for the employee's own copy).
         Nightly bounded retention; audit of switches and purges. Missing scopes show as a provider problem and pause
         mail runs, never calendar sync. Not run against a real SQL Server, Google or Microsoft (fake provider and
-        recorded-shape `fakeFetch` tests only). Owner steps: add `gmail.readonly` to the DWD entry, grant `Mail.Read`
+        recorded-shape `fakeFetch` tests only). Review fixes (2026-11-27): mail from before the logging start (switch,
+        person or default turned on, last purge) is never logged and switching off clears cursors; a purge takes the
+        mailbox lease and a run it overtakes removes its rows; Bcc / list copies never show as participants to others;
+        dedupe keyed on Message-ID + sender and a 48 h sent-time check; times capped at now + 5 min (Graph received
+        mail by `receivedDateTime`); snippets cleared and hidden when switched off; continuation runs get their own
+        job id, poll jobs run at a low priority; a Graph message deleted before its header read is skipped; service
+        tests for the record list. Owner steps: add `gmail.readonly` to the DWD entry, grant `Mail.Read`
         (scoped with RBAC for Applications), tell employees. Later: an Emails tab on the full record pages, an
         explicit "Log this email" from the record, Graph `$filter` on delta checked against a real tenant.
 

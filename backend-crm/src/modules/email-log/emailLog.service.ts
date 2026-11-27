@@ -13,6 +13,7 @@ import {
     MAILBOX_AUDIT_ENTITY,
     MICROSOFT_MAIL_PERMISSION,
     MAIL_ERROR_MESSAGES,
+    RETENTION_MAX_BATCHES,
     type EmailLogModule,
     type EmailVisibility,
     type MailErrorCode,
@@ -20,8 +21,8 @@ import {
     type NotLoggedReason,
 } from './emailLog.constants.js';
 import { loadEmailLogContext, mailProviderUsable, MAIL_PROVIDER_LABELS, requestEmailLogRun, type EmailLogContext, type IngestResult } from './emailLog.ingest.js';
-import { purgeMailboxCopies } from './emailLog.maintenance.js';
-import { EMAIL_LOGGING_SETTING_KEY, effectiveMode, emailLoggingSettingsPatchSchema, emailLoggingSettingsSchema, type EmailLoggingSettings } from './emailLog.settings.js';
+import { beginPurge, clearSnippets, endPurge, purgeMailboxCopies } from './emailLog.maintenance.js';
+import { EMAIL_LOGGING_SETTING_KEY, effectiveMode, emailLoggingSettingsPatchSchema, emailLoggingSettingsSchema, stampSettings, type EmailLoggingSettings } from './emailLog.settings.js';
 import { prismaEmailLogStore, type MailTarget } from './emailLog.store.js';
 import { personModeBodySchema, recordEmailsQuerySchema } from './emailLog.validator.js';
 import { getMailAdapter, isMailProvider } from './providers/registry.js';
@@ -61,7 +62,10 @@ export interface LoggedEmailDto {
     snippet: string | null;
     hasAttachments: boolean;
     provider: string;
-    /** Employees whose mailboxes hold it. */
+    /**
+     * Employees whose mailboxes hold it and who are the sender or in To / Cc. A copy received as Bcc or through a list
+     * is listed only to its own employee (never reveals a Bcc to other viewers).
+     */
     participants: { username: string; name: string }[];
     /** "Open in Gmail / Outlook": only the caller's own copy. */
     openLink: { provider: string; url: string } | null;
@@ -168,13 +172,15 @@ export const emailLogService = {
                             snippet: true,
                             hasAttachments: true,
                             provider: true,
-                            copies: { select: { username: true, provider: true, providerMessageId: true, webLink: true }, take: 20 },
+                            copies: { select: { username: true, provider: true, providerMessageId: true, webLink: true, addressed: true }, take: 20 },
                         },
                     },
                 },
             }),
         ]);
-        const names = await namesOf(links.flatMap((l) => l.email.copies.map((c) => c.username)));
+        // Bcc / list copies are shown only to their own employee.
+        const shown = (c: { username: string; addressed: boolean }) => c.addressed || sameUser(c.username, user.username);
+        const names = await namesOf(links.flatMap((l) => l.email.copies.filter(shown).map((c) => c.username)));
         const ownMailbox = await prisma.loggedEmailMailbox.findUnique({ where: { username: user.username }, select: { accountEmail: true } });
         const items = links.map(({ email }): LoggedEmailDto => {
             const own = email.copies.find((c) => sameUser(c.username, user.username));
@@ -188,10 +194,11 @@ export const emailLogService = {
                 moreRecipients: email.moreRecipients,
                 sentAt: email.sentAt.toISOString(),
                 direction: email.direction === 'out' ? 'out' : 'in',
-                snippet: email.snippet,
+                // Snippets switched off: none is shown, even one kept from before (the nightly clears them).
+                snippet: settings.storeSnippets ? email.snippet : null,
                 hasAttachments: email.hasAttachments,
                 provider: email.provider,
-                participants: email.copies.map((c) => ({ username: c.username, name: names.get(c.username.toLowerCase()) ?? c.username })),
+                participants: email.copies.filter(shown).map((c) => ({ username: c.username, name: names.get(c.username.toLowerCase()) ?? c.username })),
                 openLink: own && url ? { provider: own.provider, url } : null,
             };
         });
@@ -222,10 +229,23 @@ export const emailLogService = {
         return (await loadEmailLogContext()).settings;
     },
 
+    /**
+     * PUT /api/admin/email-logging/settings. Stamps when the switch / the default for people turns on (nothing from
+     * before is logged); turning either off clears the affected cursors (switching on again starts from a fresh
+     * baseline, not from where the off period began); turning snippets off clears the stored ones (bounded here, the
+     * nightly finishes a large backlog). Each step is its own short statement, outside a transaction.
+     */
     async saveSettings(patch: unknown, admin: AuthUser): Promise<EmailLoggingSettings> {
         const changes = emailLoggingSettingsPatchSchema.parse(patch);
-        const merged = emailLoggingSettingsSchema.parse({ ...(await loadEmailLogContext()).settings, ...changes });
+        const before = (await loadEmailLogContext()).settings;
+        const merged = stampSettings(before, emailLoggingSettingsSchema.parse({ ...before, ...changes }), new Date());
         await formConfigService.updateModuleSetting('activities', EMAIL_LOGGING_SETTING_KEY, { value: merged }, admin);
+        if (before.enabled && !merged.enabled) {
+            await prisma.loggedEmailMailbox.updateMany({ where: { cursorJson: { not: null } }, data: { cursorJson: null } });
+        } else if (before.defaultForPeople === 'on' && merged.defaultForPeople !== 'on') {
+            await prisma.loggedEmailMailbox.updateMany({ where: { mode: null, cursorJson: { not: null } }, data: { cursorJson: null } });
+        }
+        if (before.storeSnippets && !merged.storeSnippets) await clearSnippets(RETENTION_MAX_BATCHES);
         return merged;
     },
 
@@ -298,18 +318,31 @@ export const emailLogService = {
         };
     },
 
-    /** PUT /api/admin/email-logging/people/:username { mode } (audited LoggedEmailMailbox CREATE / UPDATE). */
+    /**
+     * PUT /api/admin/email-logging/people/:username { mode } (audited LoggedEmailMailbox CREATE / UPDATE). When the
+     * person's effective switch turns on, `loggingSince` = now (nothing from before is logged) and the mailbox is due at
+     * once; when it turns off, the cursor is cleared (switching on later starts from a fresh baseline).
+     */
     async setPersonMode(username: string, body: unknown, admin: AuthUser) {
         const { mode } = personModeBodySchema.parse(body);
         const user = await prisma.user.findUnique({ where: { username }, select: { username: true } });
         if (!user) throw HttpError.notFound(`User '${username}' not found.`);
         const owner = user.username;
+        const { settings } = await loadEmailLogContext();
         await runInTransaction(async (tx) => {
             const before = await tx.loggedEmailMailbox.findUnique({ where: { username: owner }, select: { mode: true } });
             const from = before?.mode ?? null;
             if (from === mode) return;
             const now = new Date();
-            const data = { mode, modeUpdatedBy: admin.username, modeUpdatedAt: now, ...(mode === 'on' && from !== 'on' ? { nextRunAt: null } : {}) };
+            const wasOn = effectiveMode(from, settings) === 'on';
+            const isOn = effectiveMode(mode, settings) === 'on';
+            const data = {
+                mode,
+                modeUpdatedBy: admin.username,
+                modeUpdatedAt: now,
+                ...(isOn && !wasOn ? { loggingSince: now, nextRunAt: null } : {}),
+                ...(!isOn && wasOn ? { cursorJson: null } : {}),
+            };
             await tx.loggedEmailMailbox.upsert({ where: { username: owner }, create: { username: owner, ...data }, update: data });
             await auditService.record(tx, {
                 entityType: MAILBOX_AUDIT_ENTITY,
@@ -332,17 +365,22 @@ export const emailLogService = {
     },
 
     /**
-     * DELETE /api/admin/email-logging/people/:username/emails: deletes this person's copies and every email left
-     * without one (bounded batches, outside a transaction), then audits `LoggedEmailMailbox PURGE`.
+     * DELETE /api/admin/email-logging/people/:username/emails: takes the person's mailbox lease and stamps `purgedAt`
+     * (clearing the cursor), deletes this person's copies and every email left without one (bounded batches, outside a
+     * transaction), frees the lease, then audits `LoggedEmailMailbox PURGE`. A run that was working removes what it
+     * stored; mail from before the purge is never logged again for this person.
      */
     async purgePerson(username: string, admin: AuthUser): Promise<{ copies: number; emails: number }> {
         const user = await prisma.user.findUnique({ where: { username }, select: { username: true } });
         const owner = user?.username ?? username;
-        const result = await purgeMailboxCopies(owner);
+        const leaseId = await beginPurge(owner, admin.username, new Date());
+        let result: { copies: number; emails: number };
+        try {
+            result = await purgeMailboxCopies(owner);
+        } finally {
+            await endPurge(owner, leaseId);
+        }
         await runInTransaction(async (tx) => {
-            const now = new Date();
-            const data = { purgedAt: now, purgedBy: admin.username, loggedCount: 0 };
-            await tx.loggedEmailMailbox.upsert({ where: { username: owner }, create: { username: owner, ...data }, update: data });
             await auditService.record(tx, {
                 entityType: MAILBOX_AUDIT_ENTITY,
                 entityId: owner,

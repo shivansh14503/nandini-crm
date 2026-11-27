@@ -9,6 +9,7 @@ import {
     directionOf,
     externalAddresses,
     hasPrivateMarker,
+    isAddressed,
     isAutomatedHeaders,
     messageIdHash,
     normalizeEmail,
@@ -17,7 +18,7 @@ import {
     preFilter,
 } from './emailLog.match.js';
 import { seesAllRecordEmails } from './emailLog.service.js';
-import { effectiveMode, emailLoggingSettingsPatchSchema, readEmailLoggingSettings } from './emailLog.settings.js';
+import { EMAIL_LOGGING_DEFAULTS, effectiveMode, emailLoggingSettingsPatchSchema, emailLoggingSettingsSchema, loggingStartOf, readEmailLoggingSettings, stampSettings } from './emailLog.settings.js';
 import { message } from './testing/mailMessage.js';
 
 const DOMAINS = ['nandiniinfosys.com'];
@@ -104,11 +105,19 @@ describe('email logging: stored values', () => {
         assert.equal(fitted.kept.length + fitted.more, 25);
     });
 
-    it('Message-ID hashes are stable and null without an id', () => {
-        assert.equal(messageIdHash(' <a@b> '), messageIdHash('<a@b>'));
-        assert.equal(messageIdHash('<a@b>')?.length, 64);
-        assert.equal(messageIdHash(''), null);
-        assert.equal(messageIdHash(null), null);
+    it('Message-ID hashes are stable, include the sender and are null without an id', () => {
+        assert.equal(messageIdHash(' <a@b> ', 'Ravi@Customer.in'), messageIdHash('<a@b>', 'ravi@customer.in'));
+        assert.equal(messageIdHash('<a@b>', 'ravi@customer.in')?.length, 64);
+        assert.notEqual(messageIdHash('<a@b>', 'ravi@customer.in'), messageIdHash('<a@b>', 'other@customer.in'));
+        assert.equal(messageIdHash('', 'ravi@customer.in'), null);
+        assert.equal(messageIdHash(null, 'ravi@customer.in'), null);
+    });
+
+    it('a mailbox is addressed only as sender, To or Cc (not Bcc / a list)', () => {
+        const msg = message({ from: { email: 'ravi@customer.in' }, to: [{ email: 'asha@nandiniinfosys.com' }], cc: [{ email: 'team@nandiniinfosys.com' }] });
+        assert.equal(isAddressed(msg, 'Asha@nandiniinfosys.com'), true);
+        assert.equal(isAddressed(msg, 'team@nandiniinfosys.com'), true);
+        assert.equal(isAddressed(msg, 'vikram@nandiniinfosys.com'), false);
     });
 });
 
@@ -154,17 +163,46 @@ describe('email logging: plan', () => {
 
 describe('email logging: settings and visibility', () => {
     it('reads defaults field by field', () => {
-        assert.deepEqual(readEmailLoggingSettings(null), { enabled: false, defaultForPeople: 'off', visibility: 'restricted', retentionMonths: 24, storeSnippets: true });
-        assert.deepEqual(readEmailLoggingSettings({ enabled: true, retentionMonths: 5, visibility: 'record' }), {
+        assert.deepEqual(readEmailLoggingSettings(null), { enabled: false, defaultForPeople: 'off', visibility: 'restricted', retentionMonths: 24, storeSnippets: true, enabledAt: null, defaultOnAt: null });
+        assert.deepEqual(readEmailLoggingSettings({ enabled: true, retentionMonths: 5, visibility: 'record', enabledAt: 'yesterday' }), {
             enabled: true,
             defaultForPeople: 'off',
             visibility: 'record',
             retentionMonths: 24,
             storeSnippets: true,
+            enabledAt: null,
+            defaultOnAt: null,
         });
+        // The stamps are server-side only: a PUT body can't set them.
+        assert.equal(emailLoggingSettingsPatchSchema.safeParse({ enabledAt: '2026-12-01T00:00:00.000Z' }).success, false);
+        assert.equal(emailLoggingSettingsSchema.safeParse({ ...EMAIL_LOGGING_DEFAULTS, enabledAt: '2026-12-01T00:00:00.000Z' }).success, true);
         assert.equal(emailLoggingSettingsPatchSchema.safeParse({}).success, false);
         assert.equal(emailLoggingSettingsPatchSchema.safeParse({ retentionMonths: 12 }).success, true);
         assert.equal(emailLoggingSettingsPatchSchema.safeParse({ retentionMonths: 13 }).success, false);
+    });
+
+    it('stamps when the switch and the default for people turn on, keeps them otherwise', () => {
+        const t1 = new Date('2026-12-01T05:00:00Z');
+        const t2 = new Date('2026-12-02T05:00:00Z');
+        const on = stampSettings(EMAIL_LOGGING_DEFAULTS, { ...EMAIL_LOGGING_DEFAULTS, enabled: true, defaultForPeople: 'on' }, t1);
+        assert.equal(on.enabledAt, t1.toISOString());
+        assert.equal(on.defaultOnAt, t1.toISOString());
+        const unchanged = stampSettings(on, { ...on, retentionMonths: 12 }, t2);
+        assert.equal(unchanged.enabledAt, t1.toISOString());
+        const off = stampSettings(on, { ...on, enabled: false }, t2);
+        const again = stampSettings(off, { ...off, enabled: true }, t2);
+        assert.equal(again.enabledAt, t2.toISOString());
+        assert.equal(again.defaultOnAt, t1.toISOString());
+    });
+
+    it('logging start: the latest of the company switch, the person’s switch (or the default) and the last purge', () => {
+        const at = (d: string) => new Date(`2026-12-0${d}T00:00:00Z`);
+        const settings = { enabledAt: at('1').toISOString(), defaultOnAt: at('3').toISOString() };
+        assert.equal(loggingStartOf(null, { enabledAt: null, defaultOnAt: null }), null);
+        assert.deepEqual(loggingStartOf(null, settings), at('3'));
+        assert.deepEqual(loggingStartOf({ mode: 'on', loggingSince: at('2'), purgedAt: null }, settings), at('2'));
+        assert.deepEqual(loggingStartOf({ mode: null, loggingSince: at('2'), purgedAt: null }, settings), at('3'));
+        assert.deepEqual(loggingStartOf({ mode: 'on', loggingSince: at('2'), purgedAt: at('4') }, settings), at('4'));
     });
 
     it('effective mode: own switch, else the company default', () => {

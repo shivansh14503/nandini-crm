@@ -2156,6 +2156,9 @@ model LoggedEmailCopy {
   webLink           String?  @db.NVarChar(1000)
   /// For this employee: out = they sent it (Sent folder / sender), in = they received it.
   direction         String   @db.NVarChar(3)
+  /// The mailbox's own address is the sender or in To / Cc (or it is the sender's copy). False = the employee got it as
+  /// Bcc or through a list: listed as a participant only to that employee, never to other viewers.
+  addressed         Boolean  @default(false)
   createdAt         DateTime @default(now())
 
   email LoggedEmail @relation(fields: [emailId], references: [id], onDelete: Cascade, onUpdate: NoAction)
@@ -2212,9 +2215,14 @@ model LoggedEmailMailbox {
   nextRunAt           DateTime?
   /// Emails this mailbox added (new logged emails or copies) since the row was created or last purged.
   loggedCount         Int       @default(0)
-  /// Per-mailbox mutex of the ingestion runs.
+  /// When the person's own switch last turned logging on (effective mode off → on). Mail sent / received before
+  /// max(this, purgedAt, the company enabledAt / defaultOnAt) is never logged, so turning logging off and on again
+  /// can't catch up on the off period.
+  loggingSince        DateTime?
+  /// Per-mailbox mutex of the ingestion runs (an admin purge takes it too).
   leaseId             String?   @db.NVarChar(50)
   leaseUntil          DateTime?
+  /// Last admin purge: mail from before it is never logged again; a run that started before it drops what it stored.
   purgedAt            DateTime?
   purgedBy            String?   @db.NVarChar(50)
   createdAt           DateTime  @default(now())

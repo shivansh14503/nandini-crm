@@ -175,9 +175,13 @@ export function EmailLoggingSettingsCard({ onDirtyChange, onToast }: { onDirtyCh
                                     />
                                     <Typography sx={switchLabelSx}>Keep a short plain-text snippet</Typography>
                                 </Box>
+                                {saved?.storeSnippets && !value.storeSnippets && (
+                                    <Typography sx={hintSx}>Saving also deletes the snippets already kept; they stop showing at once.</Typography>
+                                )}
                                 <Typography sx={hintSx}>
-                                    New mail is checked about every {data.pollMinutes} minutes inside the calendar sync hours. Turning logging off stops new logging and
-                                    hides the Emails tabs; logged emails stay until they age out or are deleted per person (People › calendar).
+                                    New mail is checked about every {data.pollMinutes} minutes inside the calendar sync hours. Only mail from the moment logging is
+                                    switched on is logged: switching it off and on again never catches up on the time it was off. Turning logging off stops new
+                                    logging and hides the Emails tabs; logged emails stay until they age out or are deleted per person (People › calendar).
                                 </Typography>
                             </Box>
 

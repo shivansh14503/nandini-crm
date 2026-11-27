@@ -179,11 +179,21 @@ export function boundRecipients(list: readonly MailAddress[]): { json: string; k
     return { json, kept, more: list.length - kept.length };
 }
 
-/** sha256 (hex) of the Message-ID header as sent (trimmed); null when there is none. */
-export function messageIdHash(messageId: string | null | undefined): string | null {
+/**
+ * sha256 (hex) of the Message-ID header as sent (trimmed) plus the lower-cased sender address; null when there is no
+ * Message-ID. The sender is part of the key because the Message-ID header is sender-controlled: a customer reusing the
+ * id of an email they received can't attach their message to a colleague's logged email (the store also checks the
+ * sent time, emailLog.store.ts isSameEmail).
+ */
+export function messageIdHash(messageId: string | null | undefined, fromEmail: string | null | undefined): string | null {
     const id = (messageId ?? '').trim();
     if (!id || id.length > 2000) return null;
-    return createHash('sha256').update(id).digest('hex');
+    return createHash('sha256').update(`${id}\n${(fromEmail ?? '').trim().toLowerCase()}`).digest('hex');
+}
+
+/** The mailbox's own address is the sender or in To / Cc (else it got the message as Bcc or through a list). Pure. */
+export function isAddressed(msg: Pick<MailMessage, 'from' | 'to' | 'cc'>, mailbox: string): boolean {
+    return participantsOf(msg).includes(mailbox.trim().toLowerCase());
 }
 
 // ── Matching ──────────────────────────────────────────────────────────────────────────────────────────────────
