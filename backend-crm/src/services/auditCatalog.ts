@@ -14,6 +14,12 @@ export type AuditEntityType =
     | 'Ticket'
     | 'Contract'
     | 'Activity'
+    /**
+     * A recurring activity series (Calendar Phase 4, activities/activity.series.ts): CREATE (rule, first activity, a
+     * split's `splitFrom`), UPDATE (diff + `scope` + occurrence counts), DELETE. Its occurrences keep their own Activity
+     * entries (created occurrences write a small `{ subject, seriesId, originalStartAt }`).
+     */
+    | 'ActivitySeries'
     /** A file uploaded to a record field (an opportunity's Upload Doc); `changes.module` is its module. */
     | 'RecordFile'
     | 'PartnerCompany'
@@ -132,6 +138,7 @@ const MODULE_BY_ENTITY: Record<AuditEntityType, string> = {
     Ticket: 'tickets',
     Contract: 'contracts',
     Activity: 'activities',
+    ActivitySeries: 'activities',
     RecordFile: 'files',
     PartnerCompany: 'partner-companies',
     Referral: 'referrals',
@@ -327,6 +334,7 @@ export function labelFromChanges(entityType: AuditEntityType, entityId: string, 
         case 'Contract':
             return pick('contractTitle', 'organizationName');
         case 'Activity':
+        case 'ActivitySeries':
             return pick('subject');
         case 'Product':
             return pick('productName');

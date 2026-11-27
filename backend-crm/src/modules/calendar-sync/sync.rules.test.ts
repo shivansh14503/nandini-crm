@@ -118,6 +118,10 @@ describe('push notifications (§4.7)', () => {
         const held = invitesHeldNotification({ activityId: 'a1', owner: 'palak', actor: 'asha', subject: 'Demo', guests: 2, newCopy: false }, 'Asha Rao', now);
         assert.equal(held.title, 'Asha Rao added 2 guests to Demo');
         assert.equal(held.dedupeKey, 'calendar_invites_held:a1:2026-11-26:palak');
+        // Calendar Phase 4: the occurrences of a recurring series share one notice a day.
+        const series = invitesHeldNotification({ activityId: 'a2', seriesId: 's1', owner: 'palak', actor: 'asha', subject: 'Demo', guests: 1, newCopy: true }, 'Asha Rao', now);
+        assert.equal(series.title, 'Asha Rao added a repeating meeting with 1 guest to your calendar');
+        assert.equal(series.dedupeKey, 'calendar_invites_held:series:s1:2026-11-26:palak');
     });
 
     it('integration_secret_expiring: one per admin and ISO week, opens Admin › API Integrations', () => {

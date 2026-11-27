@@ -1,7 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { activityService } from '@/services/activity.service';
 import type { PaginationParams } from '@/types/api.types';
-import type { ActivityMeta, ActivityRelatedModule, BusyTimes, BusyTimesParams, CalendarFeed, CalendarFeedParams, VideoOptions } from '@/types/activity.types';
+import type { ActivityMeta, ActivityRelatedModule, BusyTimes, BusyTimesParams, CalendarFeed, CalendarFeedParams, SeriesScope, VideoOptions } from '@/types/activity.types';
 import { createEntityHooks } from './createEntityHooks';
 import { queryKeys } from './queryKeys';
 
@@ -20,6 +20,15 @@ export function useBulkDeleteActivitiesWithResult() {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: (ids: string[]) => activityService.bulkDelete(ids),
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.activities.all }),
+    });
+}
+
+/** Delete of an occurrence of a recurring activity with its scope (this / following / all; Calendar Phase 4). */
+export function useDeleteActivityScoped() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ id, scope }: { id: string; scope: SeriesScope }) => activityService.deleteScoped(id, scope),
         onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.activities.all }),
     });
 }

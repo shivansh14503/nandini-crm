@@ -206,6 +206,11 @@ export interface ActivityConferenceState {
     canRetry: boolean;
     /** A Teams link exists: it can't be removed or changed. */
     locked: boolean;
+    /**
+     * Requested, but this occurrence of a recurring activity isn't in its owner's calendar yet (it goes there about two
+     * weeks before it starts, Calendar Phase 4): the link is created then. Missing from older servers.
+     */
+    waitingForCalendar?: boolean;
 }
 
 /** One Video meeting choice for the form (GET /api/activities/video-options). */
@@ -255,7 +260,55 @@ export interface Activity extends ActivityFormData {
     lockedFields?: string[];
     /** Sent with every activity the API returns: its copy in the owner's calendar, or null (not synced). */
     calendar?: ActivityCalendarState | null;
+    /** The recurring series this occurrence belongs to (Calendar Phase 4), '' for a single activity. */
+    seriesId?: string;
+    /** Its series (rule, summary, position), null for a single activity. */
+    series?: ActivitySeries | null;
 }
+
+// ─── Recurring activities (Calendar Phase 4) ────────────────────────────────
+
+export type RepeatFrequency = 'daily' | 'weekly' | 'monthly';
+export type RepeatEnds = 'never' | 'on' | 'after';
+
+/** A repeat rule as the API takes and returns it (`repeat` on create / update; backend activity.recurrence.ts). */
+export interface RepeatRule {
+    frequency: RepeatFrequency;
+    /** Every N days / weeks / months (1–99). */
+    interval: number;
+    /** Weekly: ISO weekdays (1 = Monday … 7 = Sunday). */
+    weekdays?: number[];
+    /** Monthly: on a day of the month or on the nth weekday. */
+    monthlyMode?: 'day' | 'weekday';
+    monthDay?: number;
+    /** 1–4, or -1 for the last. */
+    setPos?: number;
+    setWeekday?: number;
+    ends: RepeatEnds;
+    /** ends 'on': last day (YYYY-MM-DD, inclusive). */
+    untilDay?: string;
+    /** ends 'after': number of occurrences. */
+    count?: number;
+}
+
+/** `Activity.series`. */
+export interface ActivitySeries {
+    id: string;
+    rule: RepeatRule;
+    /** "Every week on Mon, Wed until 31 Mar 2027". */
+    summary: string;
+    /** Position of this occurrence (1 = first), null when unknown. */
+    index: number | null;
+    /** Number of occurrences of a counted series, else null. */
+    total: number | null;
+    /** Changed on its own: series edits leave it. */
+    exception: boolean;
+    /** No more occurrences are created. */
+    ended: boolean;
+}
+
+/** Which occurrences an edit or delete of a recurring activity applies to (`?scope=`). */
+export type SeriesScope = 'this' | 'following' | 'all';
 
 /** `Activity.origin` values. */
 export type ActivityOrigin = 'crm' | 'followup' | 'calendar' | 'booking' | (string & {});
@@ -320,6 +373,8 @@ export interface CalendarItem {
      * otherwise. The calendar shows an error dot on `error`.
      */
     syncState?: CalendarLinkState | null;
+    /** The recurring series of an activity item (Calendar Phase 4): the calendar shows a repeat icon. */
+    seriesId?: string | null;
 }
 
 /** POST /api/activities/bulk-delete. `skipped`: live activities left alone, with why (lead / opportunity follow-ups). */

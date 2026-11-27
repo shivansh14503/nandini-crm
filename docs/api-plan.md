@@ -9,8 +9,9 @@
 > Profile Phase 2: `/api/admin/users` (Admin › Users) with the must-change-password claim; Profile Phase 3:
 > `/api/me/preferences` (My Profile › Notifications); Profile Phase 5: `/api/company-formats` (Admin › Company formats), with PR5b's audit field values in the company formats; P2-6: `GET /api/activities/busy`, colleagues' busy times; Calendar Phase 4: booking links, `/api/booking-links` and the public
 > `/api/public/booking`; P2-5: calendar changes come back (`POST /api/calendar-connections/sync`, admin
-> `POST /api/admin/integrations/people/:username/calendar/sync`, own calendar `syncHours`); P2-7: calendar webhooks `/api/webhooks/*` and the admin webhook status fields, as of 2026-11-26; Calendar Phase 4
-> email logging: `/api/email-logs` and `/api/admin/email-logging`, as of 2026-11-26)
+> `POST /api/admin/integrations/people/:username/calendar/sync`, own calendar `syncHours`); P2-7: calendar webhooks `/api/webhooks/*` and the admin webhook status fields; Calendar Phase 3 P3-1: video meetings, `videoMeeting` on activity writes, `GET /api/activities/video-options`, `POST /api/activities/:id/conference/retry`; Calendar Phase 4: recurring activities, `repeat` on activity writes, `?scope=this|following|all`,
+> `ActivityView.series`, `CalendarItem.seriesId`; Calendar Phase 4
+> email logging: `/api/email-logs` and `/api/admin/email-logging`, as of 2026-11-27)
 > plus the planned ones.
 > When you add, change or remove a route, update this file in the same change (the route files'
 > header comments are the per-module source of truth; keep them in step too).
@@ -162,7 +163,9 @@ Once ready, the event description gets "Join with Google Meet: <url>" / "Join Mi
 more quiet push (also for external guests). A wait always ends: `failed` codes `conference_failed` (Google failed it),
 `not_created` (the calendar refused or ignored the request: Meet off for the organisation answers 400, and the event is
 then sent without the video part; Teams without a licence), `join_url_rejected`, `conference_timeout` (5 reads, the
-worker's last attempt, or still `requested` an hour after the last save at the nightly run), `no_event` (the event is
+worker's last attempt, or still `requested` an hour after the last save at the nightly run; a recurring occurrence
+keeps waiting until it has a calendar copy and has been inside Calendar Phase 4's 14-day window for a day, or until
+the day before it starts), `no_event` (the event is
 gone), `event_refused` (the push failed for good), `provider_unavailable` (the owner's calendar can't make it).
 `canRetry` is true for a failed link on a live Planned activity the viewer may edit, except `provider_unavailable`.
 Video meeting can't be made Required in the Form Builder (`400` on `isRequired: true`), and saves never require it.
@@ -174,6 +177,67 @@ one is refused (`409 FOLLOW_UP_ACTIVITY_LOCKED`), and `bulk-delete` skips it. Sw
 Calendar sync settings › "Follow-ups create activities" (`followUpActivities`, default on); off = no follow-up
 activity is written (existing ones stay), the nightly backfill re-aligns every record once it is back on.
 
+**Recurring activities** (as of 2026-11-26, Calendar Phase 4, `activity.series.ts`, `activity.recurrence.ts`). A
+series is one `ActivitySeries` row (rule + the fields every occurrence copies) and **one ordinary activity per
+occurrence** (Phase 1 R12: rows, never an RRULE master), created through today + 90 days and extended nightly.
+- `repeat` (on `POST /` and `PUT /:id`): `{ frequency: daily|weekly|monthly, interval: 1–99 (default 1), weekdays?:
+  ISO 1–7[] (weekly; default the first day's weekday), monthlyMode?: day|weekday (monthly; default day), monthDay?:
+  1–31 (default the first day's; months without it are skipped), setPos?: 1–4|-1 (last), setWeekday?: 1–7, ends:
+  never|on|after (default never), untilDay?: YYYY-MM-DD (inclusive, at most 5 years after the first day), count?: 1–366 }`
+  or `null` (does not repeat). Fields the frequency doesn't use are dropped. The first activity is always occurrence 1.
+  `400 VALIDATION_ERROR` on `repeat.*`; Notes can't repeat (`400` on `repeat`), lead / opportunity follow-up activities
+  can't (`409 FOLLOW_UP_ACTIVITY_LOCKED`), imported / booked activities can't (`400`).
+- Every activity view carries `seriesId` (`''` for a single activity, read only, in the audited DTO) and `series`
+  (outside the audited record): `null`, or `{ id, rule (as above, normalised), summary ("Every week on Mon, Wed until
+  31 Mar 2027"), index (position, 1 = first), total (count series, else null), exception (changed on its own), ended
+  (no more occurrences are added) }`. Calendar items of occurrences carry `seriesId` (repeat icon).
+- `?scope=this|following|all` on `PUT /:id` and `DELETE /:id` (default `this`; anything else `400`). Series fields =
+  type, subject, owner, related record, organization, contact, location, reminder, remarks, attendees, custom fields,
+  the Video meeting choice (P3-1: only the choice; each occurrence asks for its own link when pushed), time of day,
+  length and the rule; status (except Cancelled), customer response and completion stay per occurrence.
+  `this`: the ordinary update / delete; an occurrence changed on its own (anything but status / customer response)
+  becomes an exception that series edits leave alone; a deleted occurrence is never re-created. Changing `repeat` with
+  `this` → `400 SERIES_SCOPE_REQUIRED` (sending the same rule back passes). `following`: the series is split: the old
+  one ends the day before this occurrence, or before the day it moves to when that is earlier (`untilDay`); a new
+  series starts at this occurrence with the new values; later occurrences move to it and are rewritten. A count series
+  keeps its remaining count (the total minus the old series' occurrences before the cut) unless `repeat` is sent with
+  another count (a `repeat` whose count equals the series' total, as the form sends it back, still counts what is
+  left). Moved to another day without `repeat`, a rule tied to the old day follows (weekly on that one weekday, monthly
+  on that day or nth weekday). The occurrence keeps its own slot and stays an exception (the new series starts at the
+  rule's first day from the cut, so its old day doesn't come back as an extra event) when the rule keeps its days and
+  it was moved alone before and this save doesn't move it, or it moves earlier onto a day the rule doesn't have (as of
+  2026-11-26, review round 2). Moved rows that aren't rewritten (exceptions, completed, deleted) are renumbered
+  against the new series. `all`: the series takes **only what this save changed** on the occurrence (time of day and
+  length only when start, end or all-day changed; other fields one by one, custom fields per key), so an exception's
+  own time, place or guests stay with it (it stays an exception), and its future occurrences are rewritten; moving the
+  occurrence to another day → `400` on `startAt` (change `repeat`, or use `following`); an occurrence moved alone
+  keeps its own slot (it stays an exception). Rewrite =
+  future (not started) Planned non-exception occurrences are paired with the rule's days and updated; those off the
+  rule are deleted and detached, so a day the rule drops comes back when the rule returns to it; free days are created;
+  one whose new time has already passed today is left as it is; past, Completed, Cancelled and exception occurrences
+  are never touched. The Video meeting rules apply to every rewritten occurrence: a ready Teams link on one of them
+  makes a `following` / `all` edit that removes or changes it answer `409 VIDEO_MEETING_LOCKED` (nothing is saved), and a
+  new choice the owner's calendar can't make answers `409 VIDEO_PROVIDER_NOT_CONNECTED` (also on a series create);
+  the same choice keeps each occurrence's own link (as of 2026-11-26). When the edited occurrence takes a slot another event of the series holds: a deleted or
+  rewritable one gives it up, any other answers `400` on `startAt`. `status: Cancelled` with `following` / `all`
+  cancels those occurrences (exceptions too) and ends the series and its rule (`untilDay`, so a later `all` edit never
+  revives it); `repeat: null` with `following` / `all` ends it after this occurrence (later / future ones not started
+  yet are deleted; occurrences already over today stay). `PUT` with `repeat` on a single activity makes it occurrence 1
+  of a new series. `DELETE` `following`: the series ends the day before, its non-completed occurrences from here are
+  deleted; `all`: the series is deleted with its non-completed occurrences from now (and this one); past ones stay.
+  `following` / `all` (edit and delete) also need the right to change the series (its owner, its creator or a global
+  role): owning one occurrence reassigned alone isn't enough (`403`). `409 SERIES_ENDED` when the series was deleted
+  (only `this` works). `bulk-delete` stays per occurrence (`this`); the list's row Delete asks the scope like the
+  drawer. A calendar change to one occurrence (P2-5 pull, push-time merge) makes it an exception, like a `this` edit.
+- Calendar sync: each occurrence is pushed as a single event; an occurrence more than 14 days ahead gets no calendar
+  copy (and sends no invitation) until it comes within 14 days; the "invitations held" notice comes once a day per
+  series, not per occurrence ([system design §5.4](system-design.md#54-calendar-sync-crm-calendar-sync)). Until then
+  a requested video link shows `conference.waitingForCalendar: true` (requested, an occurrence, no calendar copy yet;
+  screens show a note instead of "Creating…" and don't poll; as of 2026-11-26).
+- Audit: `ActivitySeries` CREATE / UPDATE / DELETE (rule summary, scope, occurrence counts, `splitFrom` /
+  `splitInto`); occurrences the series creates write a small `Activity CREATE` (`{ subject, seriesId,
+  originalStartAt }`), updates their usual diff, deletes their usual `DELETE`.
+
 | Method | Path | Description |
 | --- | --- | --- |
 | GET | `/meta` | `{ timeZone, now, relatedModules: [{ key, label }], durationMinutes: { <Followup Type>: minutes }, fallbackDurationMinutes, reminders: [{ value, minutes }], statuses, maxDurationDays }` for the form and calendar |
@@ -184,9 +248,9 @@ activity is written (existing ones stay), the nightly backfill re-aligns every r
 | GET | `/link-targets?module&search&limit` | Records of one module (`leads`, `opportunities`, `contacts`, `organizations`, `quotations`, `tickets`, `contracts`) the caller can access, for the Related To picker: `[{ module, id, code, label, organizationName, organizationId?, contact, contactId?, assignedTo }]`, newest first; `label` is what a save stores as `relatedTo` (at most 200 characters: a nameless opportunity's product list is cut with `…`); `search` matches the record number (by prefix) or name; `limit` default 20, max 50 |
 | GET | `/` | Paginated list (§1.2). Filters: `followupType`, `status`, `excludeStatus` (csv), `assignedTo`, `mine` (owned by the caller), `attending` (invited), `relatedModule` + `relatedId` (a record's Activities tab), `organizationId` / `contactId` (with `rollup=true`: also activities related to that organization, or related to / attended by that contact), `from` + `to` (both or neither; activities overlapping the window plus notes written in it), `overdue` (Planned and already ended), `createdWithinDays`. Search: subject, related record (label or number), organization, contact, location. Sort: `startAt`, `endAt`, `createdAt`, `updatedAt`, `subject`, `followupType`, `status`, `assignedTo`, `relatedTo`, `organizationName` |
 | GET | `/:id` | The activity plus `viewer: { canEdit, myResponse }` (the caller's reply when invited, else null) and `lockedFields` (above). Times are UTC instants (`startAt`, `endAt`, `''` on notes); all-day ones also carry `startDay` / `endDay` (inclusive) and `timeZone`; `attendees: [{ kind, username?, contactId?, email?, name, responseStatus, respondedAt? }]` (blank keys left out) |
-| POST | `/` | 201. Required: `followupType` (an option of `shared_followup_type`; `Task` / `Note` in any case), `subject`, `assignedTo` (an active user). **Timed:** `startAt` (required unless Note) / `endAt` as ISO instants with a zone; an omitted `endAt` defaults to the type's duration (`/meta`). **All-day:** `allDay: true` with `startDay` / `endDay` (`YYYY-MM-DD`, inclusive, business timezone; `endDay` defaults to `startDay`); the instants are ignored and stored as midnight → midnight after the last day. `endAt` can't be before `startAt` (`400` "End cannot be before Start.") or more than 31 days after it. A **Planned** activity can't start in the past (5 minutes' grace; all-day: before today) unless the start is unchanged; Completed / Cancelled ones can (log a past call). `relatedModule` + `relatedId` link one record the caller can access (`403` "You can't link an activity to a record you don't have access to."; `relatedTo` alone is refused: "Pick the record this activity is related to."); `organizationId` / `contactId` (or names, linked like contracts) default to the related record's. `attendees`: up to 50 of `{ kind: 'user', username }` (active users; the owner is dropped), `{ kind: 'contact', contactId, email? }` (live contacts), `{ kind: 'email', email, name? }`; `responseStatus` is honoured for contacts / emails (the owner records their replies). `reminder`: an `activity_reminder` label. **Note:** `remarks` required, no schedule / reminder / location / attendees, saved as Completed. **Task:** no attendees or location. `customerResponse`: an option of the list the Activities field is linked to (today `shared_customer_response`, as on leads and opportunities), stored as text; it sets no lead Rating, isn't checked against an opportunity's Sales Stage and clears no follow-up. Custom fields as on other modules |
-| PUT / PATCH | `/:id` | Partial update merged onto the stored activity (owner, creator or global role). Sending `startDay` / `endDay` / `allDay` switches between timed and all-day; picking another related record re-derives organization / contact unless they're sent too; clearing it (`relatedModule` / `relatedId` null or `''`) keeps them. Attendees are synced by identity (only the changes are written; replies of attendees who stay are kept). Setting Completed fills `completedAt` / `completedBy`; leaving it clears them. A change of times, type, subject, location, owner, status or the attendee set bumps `revision`; `remindAt` is recomputed on every write, and a changed `remindAt` arms the reminder again |
-| DELETE | `/:id` | Soft delete (owner, creator or global role); the reminder is cleared. A follow-up activity: `409 FOLLOW_UP_ACTIVITY_LOCKED` ("Next follow-up of LD-0012: change it on the lead" / "Follow-up history of LD-0012: kept with the lead") |
+| POST | `/` | 201. Optional `repeat` makes it the first occurrence of a recurring series (above). Required: `followupType` (an option of `shared_followup_type`; `Task` / `Note` in any case), `subject`, `assignedTo` (an active user). **Timed:** `startAt` (required unless Note) / `endAt` as ISO instants with a zone; an omitted `endAt` defaults to the type's duration (`/meta`). **All-day:** `allDay: true` with `startDay` / `endDay` (`YYYY-MM-DD`, inclusive, business timezone; `endDay` defaults to `startDay`); the instants are ignored and stored as midnight → midnight after the last day. `endAt` can't be before `startAt` (`400` "End cannot be before Start.") or more than 31 days after it. A **Planned** activity can't start in the past (5 minutes' grace; all-day: before today) unless the start is unchanged; Completed / Cancelled ones can (log a past call). `relatedModule` + `relatedId` link one record the caller can access (`403` "You can't link an activity to a record you don't have access to."; `relatedTo` alone is refused: "Pick the record this activity is related to."); `organizationId` / `contactId` (or names, linked like contracts) default to the related record's. `attendees`: up to 50 of `{ kind: 'user', username }` (active users; the owner is dropped), `{ kind: 'contact', contactId, email? }` (live contacts), `{ kind: 'email', email, name? }`; `responseStatus` is honoured for contacts / emails (the owner records their replies). `reminder`: an `activity_reminder` label. **Note:** `remarks` required, no schedule / reminder / location / attendees, saved as Completed. **Task:** no attendees or location. `customerResponse`: an option of the list the Activities field is linked to (today `shared_customer_response`, as on leads and opportunities), stored as text; it sets no lead Rating, isn't checked against an opportunity's Sales Stage and clears no follow-up. Custom fields as on other modules |
+| PUT / PATCH | `/:id?scope=` | Recurring activities: `scope` and `repeat` (above). Partial update merged onto the stored activity (owner, creator or global role). Sending `startDay` / `endDay` / `allDay` switches between timed and all-day; picking another related record re-derives organization / contact unless they're sent too; clearing it (`relatedModule` / `relatedId` null or `''`) keeps them. Attendees are synced by identity (only the changes are written; replies of attendees who stay are kept). Setting Completed fills `completedAt` / `completedBy`; leaving it clears them. A change of times, type, subject, location, owner, status or the attendee set bumps `revision`; `remindAt` is recomputed on every write, and a changed `remindAt` arms the reminder again |
+| DELETE | `/:id?scope=` | Recurring activities: `scope` (above). Soft delete (owner, creator or global role); the reminder is cleared. A follow-up activity: `409 FOLLOW_UP_ACTIVITY_LOCKED` ("Next follow-up of LD-0012: change it on the lead" / "Follow-up history of LD-0012: kept with the lead") |
 | POST | `/bulk-delete` | `{ ids }` → `{ deleted, ids, notFound, skipped? }` (each id needs edit rights). `skipped: [{ id, reason }]` lists locked activities left alone (follow-up activities), present only when something was skipped |
 | GET | `/video-options?owner` | Video meeting choices for `owner` (username; default the caller): `{ owner, calendarProvider: google\|microsoft\|fake\|null, options: [{ value: meet\|teams\|zoom, label, available, reason? }] }` (Meet with a live Google calendar, Teams with Microsoft 365, Zoom never yet; `reason` on the unavailable ones). P3-1, as of 2026-11-26 |
 | POST | `/:id/conference/retry` | Asks the calendar again for a video link that **failed** (owner, creator or global role) → the activity view (`conference.state = requested`, a new request number). `409 NOTHING_TO_RETRY` unless the link failed on a live Planned activity (and not `provider_unavailable`, which Retry can't fix); `409 VIDEO_PROVIDER_NOT_CONNECTED` when the owner's calendar can no longer make it. P3-1, as of 2026-11-26 |

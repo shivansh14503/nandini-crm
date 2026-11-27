@@ -41,6 +41,8 @@ import {
     type ActivityCalendarState,
     type ActivityLinkTarget,
     type ActivityRelatedModule,
+    type RepeatRule,
+    type SeriesScope,
 } from '@/types/activity.types';
 import type { ExtendedOrganization } from '@/types/organization.types';
 import type { Contact } from '@/types/contact.types';
@@ -228,11 +230,21 @@ export function useActivityForm({ mode, activityId, prefill }: UseActivityFormOp
         // eslint-disable-next-line react-hooks/exhaustive-deps -- load once per record; the zone comes with it
     }, [activityId, reset]);
 
-    /** Creates or updates the activity from the form's values. */
+    /**
+     * Creates or updates the activity from the form's values. Recurring activities (Calendar Phase 4): `repeat` is sent
+     * when given (a rule, or null = stops repeating) and `scope` applies the edit to this / following / all occurrences.
+     */
     const save = useCallback(
-        async (values: ActivityFormValues): Promise<Activity> => {
+        async (values: ActivityFormValues, recurrence?: { repeat?: RepeatRule | null; scope?: SeriesScope }): Promise<Activity> => {
             const payload = formValuesToPayload(values, activity?.timeZone || clock.timeZone);
-            const saved = mode === 'create' || !activityId ? await activityService.create(payload) : await activityService.update(activityId, payload);
+            const withRepeat = recurrence && recurrence.repeat !== undefined ? { ...payload, repeat: recurrence.repeat } : payload;
+            const scoped = Boolean(recurrence && (recurrence.scope || recurrence.repeat !== undefined));
+            const saved =
+                mode === 'create' || !activityId
+                    ? await activityService.create(withRepeat as Partial<typeof payload>)
+                    : scoped
+                      ? await activityService.updateScoped(activityId, withRepeat, recurrence?.scope ?? 'this')
+                      : await activityService.update(activityId, payload);
             reset(values);
             return saved;
         },
@@ -278,6 +290,8 @@ export interface ActivityFormFieldsProps {
     calendar?: ActivityCalendarState | null;
     /** The loaded activity's saved owner (the calendar copy belongs to them). */
     savedOwner?: string;
+    /** The Repeat control (Calendar Phase 4, ActivityRepeatField), shown in the Schedule section; omitted = none. */
+    repeatSlot?: React.ReactNode;
 }
 
 const lcName = (value: string | null | undefined) => (value ?? '').trim().toLowerCase();
@@ -316,7 +330,19 @@ export function attendeesInvitationHint(args: {
  * seeded section, each control named after its field key. Fields a Followup Type doesn't use
  * (`ACTIVITY_NOT_APPLICABLE`) aren't rendered. Render inside the form's FormProvider.
  */
-export function ActivityFormFields({ clock, durationOf, compact = false, onOpenRelated, lockedFields, lockReason, activityId, activity, calendar, savedOwner }: ActivityFormFieldsProps) {
+export function ActivityFormFields({
+    clock,
+    durationOf,
+    compact = false,
+    onOpenRelated,
+    lockedFields,
+    lockReason,
+    activityId,
+    activity,
+    calendar,
+    savedOwner,
+    repeatSlot,
+}: ActivityFormFieldsProps) {
     const { control, getValues, setValue, watch, getFieldState, trigger } = useFormContext<ActivityFormValues>();
     const formConfig = useModuleFormConfig('activities');
     const { getOptions } = formConfig;
@@ -636,6 +662,7 @@ export function ActivityFormFields({ clock, durationOf, compact = false, onOpenR
                                 joinUrl={activity?.conferenceJoinUrl || null}
                             />
                         )}
+                        {repeatSlot && !isNote && <FormGridItem span="full">{repeatSlot}</FormGridItem>}
                         {shows('attendees') && (
                             <FormGridItem span="full">
                                 <RhfAttendeesField name="attendees" label="Attendees" organizationId={organizationId} hint={attendeesHint} />

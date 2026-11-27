@@ -52,16 +52,21 @@ export function syncErrorNotification(input: { activityId: string; owner: string
  */
 export function invitesHeldNotification(notice: HeldNotice, actorName: string, now: Date): NotificationInput {
     const guests = plural(notice.guests, 'guest', 'guests');
-    const title = notice.newCopy ? `${actorName} added a meeting with ${guests} to your calendar` : `${actorName} added ${guests} to ${notice.subject}`;
+    // Calendar Phase 4: the occurrences of a recurring series share one notice a day (each is its own private copy).
+    const repeating = Boolean(notice.seriesId);
+    const title = notice.newCopy
+        ? `${actorName} added a ${repeating ? 'repeating ' : ''}meeting with ${guests} to your calendar`
+        : `${actorName} added ${guests} to ${notice.subject}`;
+    const sendNote = repeating ? 'Invitations go out for each event when you send them.' : 'Invitations go out when you send them.';
     return {
         username: notice.owner,
         kind: 'calendar_invites_held',
         title,
-        body: notice.newCopy ? `${notice.subject}. Invitations go out when you send them.` : "They haven't been invited yet. Invitations go out when you send them.",
+        body: notice.newCopy ? `${notice.subject}. ${sendNote}` : `They haven't been invited yet. ${sendNote}`,
         entityModule: 'activities',
         entityId: notice.activityId,
         actor: notice.actor,
-        dedupeKey: `calendar_invites_held:${notice.activityId}:${businessDateOf(now)}:${lc(notice.owner)}`,
+        dedupeKey: `calendar_invites_held:${repeating ? `series:${notice.seriesId}` : notice.activityId}:${businessDateOf(now)}:${lc(notice.owner)}`,
     };
 }
 
