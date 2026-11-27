@@ -93,7 +93,6 @@ const OVERVIEW_FIELD_KEYS = [
 const LINE_ITEMS_FIELD_KEYS = [
     'lineItems',
     'currency',
-    'groupName',
     'lumpSumDiscount',
     'totalAmount',
     'totalDiscount',
@@ -160,7 +159,7 @@ const EMPTY_DEFAULTS: QuotationFormData = {
 
     // Tab 2: Line Items
     currency: 'Indian Rupee: ₹',
-    groupName: 'Software Licenses & Add-ons',
+    // The editor always shows one empty line (a quotation needs at least one filled line).
     lineItems: [],
     lumpSumDiscount: 0,
     totalAmount: 0,
@@ -222,6 +221,20 @@ function withAdminQuoteDefaults(values: QuotationFormData, keep?: Partial<Quotat
         next.paymentTermsDescription = describe('quote_payment_terms', next.paymentTerms, PAYMENT_TERMS_DESCRIPTIONS);
     }
     return next;
+}
+
+/** The first message in a (possibly nested) error tree, e.g. a line item's `lineItems.0.rate`. */
+function getFirstErrorText(errors: unknown): string | null {
+    if (!errors || typeof errors !== 'object') return null;
+    if ('message' in errors && typeof (errors as { message?: unknown }).message === 'string' && (errors as { message: string }).message) {
+        return (errors as { message: string }).message;
+    }
+    for (const [key, value] of Object.entries(errors as Record<string, unknown>)) {
+        if (key === 'ref' || key === 'types') continue; // RHF's DOM ref and per-rule messages
+        const found = getFirstErrorText(value);
+        if (found) return found;
+    }
+    return null;
 }
 
 export function CreateQuoteForm({
@@ -383,19 +396,6 @@ export function CreateQuoteForm({
           ];
 
     // Helper to find first error message from FieldErrors
-    const getFirstErrorText = (errors: FieldErrors<QuotationFormData>): string | null => {
-        for (const key of Object.keys(errors)) {
-            const err = (errors as Record<string, unknown>)[key];
-            if (err && typeof err === 'object' && 'message' in err && typeof err.message === 'string') {
-                return err.message;
-            }
-            if (Array.isArray(err) && err[0]?.message) {
-                return String(err[0].message);
-            }
-        }
-        return null;
-    };
-
     // On invalid submit: auto-switch activeTab to the first tab containing an error & surface in toast
     const onInvalidSubmit = useCallback(
         (errors: FieldErrors<QuotationFormData>) => {

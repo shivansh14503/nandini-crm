@@ -12,26 +12,13 @@ import {
     zodEmailOptional,
     zodGstOptional,
     zodAmount,
-    quantitySchema,
     configurableOption,
     customFieldsSchema,
 } from './common';
+import { lineItemListSchema } from './lineItem.schema';
 
-export const quotationLineItemSchema = z.object({
-    id: z.string(),
-    productId: optionalString,
-    productName: requiredString('Product Name'),
-    quantity: quantitySchema,
-    amount: zodAmount,
-    discount: zodAmount.default(0),
-    discountType: z.enum(['percentage', 'direct']).default('percentage'),
-    salePrice: zodAmount.default(0),
-    taxRate: z.string().default('GST 18%'),
-    taxAmount: zodAmount.default(0),
-    total: zodAmount.default(0),
-    description: optionalText('Line item description', L.longText),
-    note: optionalText('Line item note', L.longText),
-});
+/** Same line items as opportunities (Jira CRM-111): see lineItem.schema.ts. A quotation needs at least one. */
+export const quotationLineItemsSchema = lineItemListSchema({ required: true });
 
 export const quotationFormSchema = z.object({
     // ── Tab 1: Overview ───────────────────────────────────────────
@@ -56,10 +43,7 @@ export const quotationFormSchema = z.object({
 
     // ── Tab 2: Line Items ─────────────────────────────────────────
     currency: optionalString.default('Indian Rupee: ₹'),
-    groupName: optionalText('Group Name', L.shortText).default('Software Licenses & Add-ons'),
-    lineItems: z
-        .array(quotationLineItemSchema)
-        .min(1, { message: 'At least one line item is required to create a quotation.' }),
+    lineItems: quotationLineItemsSchema,
     lumpSumDiscount: zodAmount.default(0),
     totalAmount: zodAmount.default(0),
     totalDiscount: zodAmount.default(0),
@@ -95,7 +79,8 @@ export const quotationFormSchema = z.object({
     opportunityCode: optionalString,
     status: optionalString,
     quoteDate: optionalString,
-    quotationSubject: optionalText('Quotation Subject', L.title),    notes: optionalText('Internal Notes', L.longText),
+    quotationSubject: optionalText('Quotation Subject', L.title),
+    notes: optionalText('Internal Notes', L.longText),
     termsAndConditions: optionalText('Terms and Conditions', L.longText),
 
     /** Admin-defined custom field values (validated against the form configuration by useRhfForm). */

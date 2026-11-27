@@ -8,7 +8,7 @@ import { generateEntityCode } from '../../utils/codeGenerator.js';
 import { HttpError } from '../../utils/httpError.js';
 import { daysAgo, fromDateOnly } from '../../utils/mappers.js';
 import { parsePagination } from '../../utils/pagination.js';
-import { calculateLineItems, lineItemsInclude, linkedProductIds, resolveProductIds, toLineItemData } from '../shared/lineItems.js';
+import { calculateLineItems, lineItemsInclude, linkedProductIds, prepareLineItems, toLineItemData, type PreparedLineItems } from '../shared/lineItems.js';
 import { asPayload, checkModulePayload, loadModuleFieldConfig, throwFieldIssues, validateModulePayload } from '../form-configs/customFieldValidator.js';
 import { assertAssigneeValid, assertRecordAccess, buildAccessScopeWhere } from '../shared/accessControl.js';
 import { findOrganizationByName, type PrefetchedLookups } from '../shared/prefetch.js';
@@ -116,11 +116,18 @@ async function resolveLinks(
     return { organization, contact };
 }
 
-async function replaceLineItems(tx: TransactionClient, opportunityId: string, input: OpportunityInput, computed: ReturnType<typeof calculateLineItems>): Promise<void> {
-    const saved = await tx.opportunityLineItem.findMany({ where: { opportunityId }, select: { productId: true } });
+/**
+ * The opportunity's lines checked against the Product Catalog (Inactive products, catalog Rate / GST for newly added
+ * products). Lines already saved on the opportunity keep the values they were saved with.
+ */
+async function prepareOpportunityLines(tx: TransactionClient, opportunityId: string | null, input: OpportunityInput): Promise<PreparedLineItems> {
+    const saved = opportunityId ? await tx.opportunityLineItem.findMany({ where: { opportunityId }, select: { productId: true } }) : [];
+    return prepareLineItems(tx, input.lineItems, linkedProductIds(saved));
+}
+
+async function replaceLineItems(tx: TransactionClient, opportunityId: string, computed: ReturnType<typeof calculateLineItems>, knownProducts: Set<string>): Promise<void> {
     await tx.opportunityLineItem.deleteMany({ where: { opportunityId } });
     if (computed.items.length === 0) return;
-    const knownProducts = await resolveProductIds(tx, input.lineItems, linkedProductIds(saved));
     await tx.opportunityLineItem.createMany({
         data: computed.items.map((item, index) => ({ ...toLineItemData(item, index, knownProducts), opportunityId })),
     });
@@ -172,12 +179,14 @@ export async function createOpportunityRecord(
     // Referred By must be an active referral (imports and Convert Lead name one; the form picks one).
     Object.assign(input, await resolveReferredBy(tx, input, referredByFrom));
     await assertRecordFile(tx, 'opportunities', input.documentFile, 'documentFile');
+    const lines = await prepareOpportunityLines(tx, null, input);
+    input.lineItems = lines.items;
     const computed = calculateLineItems(input.lineItems, input.lumpSumDiscount);
 
     const row = await tx.opportunity.create({
         data: { ...toOpportunityData({ ...input, assignedTo }, links, computed.totals), opportunityCode, createdBy: user.username },
     });
-    await replaceLineItems(tx, row.id, input, computed);
+    await replaceLineItems(tx, row.id, computed, lines.knownProductIds);
     await syncOpportunityDocument(tx, row.id, input, user);
 
     const dto = toOpportunityDto(await tx.opportunity.findUniqueOrThrow({ where: { id: row.id }, include }));
@@ -344,12 +353,14 @@ export const opportunityService = {
             // A Referred By the opportunity already has (a legacy typed name, or a referral since made Inactive) stays.
             Object.assign(input, await resolveReferredBy(tx, input, existing));
             const assignedTo = (await assertAssigneeValid(tx, input.assignedTo, { previous: existing.assignedTo })) ?? existing.assignedTo;
+            const lines = 'lineItems' in patch ? await prepareOpportunityLines(tx, id, input) : null;
+            if (lines) input.lineItems = lines.items;
             const computed = calculateLineItems(input.lineItems, input.lumpSumDiscount);
             await tx.opportunity.update({
                 where: { id },
                 data: { ...toOpportunityData({ ...input, assignedTo }, links, computed.totals), updatedBy: user.username },
             });
-            if ('lineItems' in patch) await replaceLineItems(tx, id, input, computed);
+            if (lines) await replaceLineItems(tx, id, computed, lines.knownProductIds);
             await syncOpportunityDocument(tx, id, input, user);
 
             const saved = await tx.opportunity.findUniqueOrThrow({ where: { id }, include });

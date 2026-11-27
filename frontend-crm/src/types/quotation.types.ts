@@ -1,3 +1,5 @@
+import type { LineItem } from './lineItem.types';
+
 export type QuotationStatus = 'Draft' | 'Sent' | 'Accepted' | 'Rejected';
 
 export type QuoteStage =
@@ -83,21 +85,8 @@ export const QUOTE_PREPARED_FOR_OPTIONS: string[] = [
     'Management',
 ];
 
-export interface QuotationLineItem {
-    id: string;
-    productId: string;
-    productName: string;
-    quantity: number;
-    amount: number; // Unit / List price
-    discount: number;
-    discountType: 'percentage' | 'direct';
-    salePrice: number;
-    taxRate: string; // e.g. 'GST 18%', 'GST 12%', etc.
-    taxAmount: number;
-    total: number;
-    description?: string;
-    note?: string;
-}
+/** Line items are the same on opportunities and quotations (Jira CRM-111). */
+export type QuotationLineItem = LineItem;
 
 export interface QuotationFormData {
     /** Admin-defined custom field values, keyed by FormFieldDefinition.fieldKey. */
@@ -122,8 +111,8 @@ export interface QuotationFormData {
     preparedFor: string;
 
     // ── Tab 2: Line Items ─────────────────────────────────────────
+    /** The quotation's currency (`Indian Rupee: ₹`); opportunities have none. */
     currency: string;
-    groupName?: string;
     lineItems: QuotationLineItem[];
     lumpSumDiscount: number;
     totalAmount: number;
@@ -160,7 +149,8 @@ export interface QuotationFormData {
     opportunityCode?: string;
     status?: QuotationStatus | QuoteStage;
     quoteDate?: string;
-    quotationSubject?: string;    notes?: string;
+    quotationSubject?: string;
+    notes?: string;
     termsAndConditions?: string;
 }
 

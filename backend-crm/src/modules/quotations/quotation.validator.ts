@@ -17,7 +17,7 @@ import {
     requiredText,
     textWithDefault,
 } from '../../validators/common.js';
-import { lineItemListSchema } from '../shared/lineItems.js';
+import { requiredLineItemListSchema } from '../shared/lineItems.js';
 
 /** QUOTE_STAGES / QUOTATION_STATUSES from frontend-crm/src/types/quotation.types.ts. */
 export const QUOTE_STAGES = ['Draft', 'Negotiation', 'Delivered', 'On Hold', 'Confirmed', 'Closed Accepted', 'Closed Lost', 'Closed Dead'] as const;
@@ -63,9 +63,9 @@ export const quotationInputSchema = z.preprocess(
             preparedFor: requiredText('Prepared For', L.organizationName),
 
             // Line items
+            // The quotation's currency (Jira CRM-111: set per quotation, not on the opportunity).
             currency: optionalText('Currency', 30),
-            groupName: optionalText('Group Name', L.shortText),
-            lineItems: lineItemListSchema.min(1, { message: 'At least one line item is required to create a quotation.' }),
+            lineItems: requiredLineItemListSchema,
             lumpSumDiscount: z.coerce.number({ error: 'Lump Sum Discount must be a number.' }).min(0, { message: 'Lump Sum Discount cannot be negative.' }).default(0),
 
             // Customer & address

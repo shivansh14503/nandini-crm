@@ -663,23 +663,20 @@ model Opportunity {
   invoiceDate   DateTime? @db.Date
 
   /// Yes / No (fixed options). Commission Amount is required when Yes and cleared when No.
-  commission       String?   @db.NVarChar(50)
-  commissionAmount Decimal?  @db.Decimal(18, 2)
+  commission       String?  @db.NVarChar(50)
+  commissionAmount Decimal? @db.Decimal(18, 2)
   /// Self / Other, set when Commission is Yes (Self up to 1,000, Other above by default); NULL otherwise.
-  commissionType   String?   @db.NVarChar(50)
+  commissionType   String?  @db.NVarChar(50)
   /// Bank details of the commission's payee, kept only while Commission Type is Other (same fields as Organization).
-  accountName      String?   @db.NVarChar(200)
-  accountNo        String?   @db.NVarChar(18)
-  bankName         String?   @db.NVarChar(100)
-  ifscCode         String?   @db.NVarChar(11)
-  panNumber        String?   @db.NVarChar(10)
+  accountName      String?  @db.NVarChar(200)
+  accountNo        String?  @db.NVarChar(18)
+  bankName         String?  @db.NVarChar(100)
+  ifscCode         String?  @db.NVarChar(11)
+  panNumber        String?  @db.NVarChar(10)
   /// Yes while the opportunity has a document (its Document row); required at Sales Stage PO.
-  addDocument      String?   @default("No") @db.NVarChar(3)
+  addDocument      String?  @default("No") @db.NVarChar(3)
 
   // Line-item totals (verified server-side)
-  /// No DB default: Prisma writes SQL Server string defaults without the N prefix (â‚¹ â†’ ?). The API always sets it.
-  currency        String  @db.NVarChar(30)
-  groupName       String? @db.NVarChar(80)
   lumpSumDiscount Decimal @default(0) @db.Decimal(18, 2)
   totalAmount     Decimal @default(0) @db.Decimal(18, 2)
   totalDiscount   Decimal @default(0) @db.Decimal(18, 2)
@@ -719,21 +716,25 @@ model Opportunity {
 }
 
 model OpportunityLineItem {
-  id            String  @id @default(uuid()) @db.NVarChar(50)
-  opportunityId String  @db.NVarChar(50)
-  productId     String? @db.NVarChar(50)
-  productName   String  @db.NVarChar(200)
-  quantity      Decimal @db.Decimal(18, 2)
-  amount        Decimal @db.Decimal(18, 2)
-  discount      Decimal @default(0) @db.Decimal(18, 2)
-  discountType  String  @default("percentage") @db.NVarChar(10)
-  salePrice     Decimal @default(0) @db.Decimal(18, 2)
-  taxRate       String  @db.NVarChar(20)
-  taxAmount     Decimal @default(0) @db.Decimal(18, 2)
-  total         Decimal @default(0) @db.Decimal(18, 2)
-  description   String? @db.NVarChar(2000)
-  note          String? @db.NVarChar(2000)
-  sortOrder     Int     @default(0)
+  id             String  @id @default(uuid()) @db.NVarChar(50)
+  opportunityId  String  @db.NVarChar(50)
+  productId      String? @db.NVarChar(50)
+  productName    String  @db.NVarChar(200)
+  quantity       Decimal @db.Decimal(18, 2)
+  /// Line items (Jira CRM-111, shared/lineItemMath.ts): Rate is the product's MRP, typed only for products without one.
+  rate           Decimal @db.Decimal(18, 2)
+  /// Quantity × Rate.
+  grossAmount    Decimal @default(0) @db.Decimal(18, 2)
+  /// Percentage of the Gross Amount (0–100), and the amount it comes to.
+  discount       Decimal @default(0) @db.Decimal(18, 2)
+  discountAmount Decimal @default(0) @db.Decimal(18, 2)
+  /// GST: an option of the Product Catalog's Tax Rate dropdown (`18%`), taken from the product when it has one.
+  taxRate        String  @db.NVarChar(20)
+  /// Gross Amount − Discount. GST on it is summed into the record's totals only.
+  taxableAmount  Decimal @default(0) @db.Decimal(18, 2)
+  description    String? @db.NVarChar(2000)
+  note           String? @db.NVarChar(2000)
+  sortOrder      Int     @default(0)
 
   opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   product     Product?    @relation(fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -769,7 +770,6 @@ model Quotation {
   // Line-item totals (verified server-side)
   /// No DB default: Prisma writes SQL Server string defaults without the N prefix (â‚¹ â†’ ?). The API always sets it.
   currency        String  @db.NVarChar(30)
-  groupName       String? @db.NVarChar(80)
   lumpSumDiscount Decimal @default(0) @db.Decimal(18, 2)
   totalAmount     Decimal @default(0) @db.Decimal(18, 2)
   totalDiscount   Decimal @default(0) @db.Decimal(18, 2)
@@ -841,21 +841,25 @@ model Quotation {
 }
 
 model QuotationLineItem {
-  id           String  @id @default(uuid()) @db.NVarChar(50)
-  quotationId  String  @db.NVarChar(50)
-  productId    String? @db.NVarChar(50)
-  productName  String  @db.NVarChar(200)
-  quantity     Decimal @db.Decimal(18, 2)
-  amount       Decimal @db.Decimal(18, 2)
-  discount     Decimal @default(0) @db.Decimal(18, 2)
-  discountType String  @default("percentage") @db.NVarChar(10)
-  salePrice    Decimal @default(0) @db.Decimal(18, 2)
-  taxRate      String  @db.NVarChar(20)
-  taxAmount    Decimal @default(0) @db.Decimal(18, 2)
-  total        Decimal @default(0) @db.Decimal(18, 2)
-  description  String? @db.NVarChar(2000)
-  note         String? @db.NVarChar(2000)
-  sortOrder    Int     @default(0)
+  id             String  @id @default(uuid()) @db.NVarChar(50)
+  quotationId    String  @db.NVarChar(50)
+  productId      String? @db.NVarChar(50)
+  productName    String  @db.NVarChar(200)
+  quantity       Decimal @db.Decimal(18, 2)
+  /// Line items (Jira CRM-111, shared/lineItemMath.ts): Rate is the product's MRP, typed only for products without one.
+  rate           Decimal @db.Decimal(18, 2)
+  /// Quantity × Rate.
+  grossAmount    Decimal @default(0) @db.Decimal(18, 2)
+  /// Percentage of the Gross Amount (0–100), and the amount it comes to.
+  discount       Decimal @default(0) @db.Decimal(18, 2)
+  discountAmount Decimal @default(0) @db.Decimal(18, 2)
+  /// GST: an option of the Product Catalog's Tax Rate dropdown (`18%`), taken from the product when it has one.
+  taxRate        String  @db.NVarChar(20)
+  /// Gross Amount − Discount. GST on it is summed into the record's totals only.
+  taxableAmount  Decimal @default(0) @db.Decimal(18, 2)
+  description    String? @db.NVarChar(2000)
+  note           String? @db.NVarChar(2000)
+  sortOrder      Int     @default(0)
 
   quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   product   Product?  @relation(fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)

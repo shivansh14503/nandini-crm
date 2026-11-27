@@ -2,6 +2,7 @@ import type { Opportunity } from '../types/opportunity.types';
 import type { ExtendedOrganization } from '../types/organization.types';
 import type { Contact } from '../types/contact.types';
 import type { Quotation, QuotationFormData, QuotationLineItem } from '../types/quotation.types';
+import { DEFAULT_CURRENCY, toLineItem, totalsOf } from '../lib/line-items';
 import { TERMS_TEMPLATE_DESCRIPTIONS, PAYMENT_TERMS_DESCRIPTIONS } from '../types/quotation.types';
 import { createCrudService } from './base.service';
 import { DEFAULT_COUNTRY_CODE, normalizeLegacyStateName } from '../data/addressMaster';
@@ -67,22 +68,9 @@ export function buildQuotationDefaultsFromOpportunity(
     const today = new Date().toISOString().split('T')[0];
     const validityDate = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
 
-    // An opportunity without products starts a quote with no lines (as a new quotation does), never a sample line.
-    const mappedLineItems: QuotationLineItem[] = (opportunity.lineItems ?? []).map((item) => ({
-        id: item.id || `line-${Date.now()}`,
-        productId: item.productId || '',
-        productName: item.productName || '',
-        quantity: item.quantity || 1,
-        amount: item.amount || 0,
-        discount: item.discount || 0,
-        discountType: item.discountType || 'percentage',
-        salePrice: item.salePrice || item.amount || 0,
-        taxRate: item.taxRate || 'GST 18%',
-        taxAmount: item.taxAmount || 0,
-        total: item.total || 0,
-        description: item.description || '',
-        note: item.note || '',
-    }));
+    // The opportunity's lines, as they are (same fields on both); none starts the quote on one empty line.
+    const mappedLineItems: QuotationLineItem[] = (opportunity.lineItems ?? []).map((item) => toLineItem({ ...item }));
+
 
     const quoteTitle = opportunity.opportunityName || opportunity.organizationName || 'B-Softwares';
 
@@ -106,15 +94,12 @@ export function buildQuotationDefaultsFromOpportunity(
         preparedFor: 'Customer',
 
         // Tab 2: Line Items
-        currency: opportunity.currency || 'Indian Rupee: ₹',
-        groupName: opportunity.groupName || 'Software Licenses & Add-ons',
+        // Opportunities have no currency (₹); the quotation's can be changed on its Line Items tab.
+        currency: DEFAULT_CURRENCY,
         lineItems: mappedLineItems,
         lumpSumDiscount: opportunity.lumpSumDiscount || 0,
-        totalAmount: opportunity.totalAmount || 0,
-        totalDiscount: opportunity.totalDiscount || 0,
-        subtotal: opportunity.subtotal || 0,
-        totalTax: opportunity.totalTax || 0,
-        grandTotal: opportunity.grandTotal || 0,
+        // Recomputed from the lines, exactly as the API checks them.
+        ...totalsOf(mappedLineItems, opportunity.lumpSumDiscount || 0),
 
         // Tab 3: Address Information
         organizationName: opportunity.organizationName,

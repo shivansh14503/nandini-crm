@@ -40,6 +40,7 @@ import { FormConfigProvider } from '@/context/FormConfigContext';
 import { DynamicModuleCustomFields } from '@/components/forms/DynamicModuleCustomFields';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import { ProductStatusSection, type SavedProductStatus } from './ProductStatusSection';
+import { LINE_ITEM_TAX_RATE_CATEGORY, LINE_ITEM_TAX_RATES } from '@/lib/line-items';
 
 // ─── Option Lists ──────────────────────────────────────────────────────────────
 // Fallbacks only: inside the FormConfigProvider every dropdown offers the admin's options. Product Category is the
@@ -54,7 +55,6 @@ const PRODUCT_TYPES = [
     'Other',
 ];
 
-const TAX_RATES = ['0%', '5%', '12%', '18%', '28%'];
 /** The Manufacturer dropdown (Form Builder › Dropdowns): a new manufacturer typed here is added to it on save. */
 const MANUFACTURER_CATEGORY = 'product_manufacturer';
 const NO_MANUFACTURERS: readonly string[] = [];
@@ -123,6 +123,8 @@ export default function ProductForm({
     // Manufacturer: the options of the Manufacturer dropdown, with how many products carry each (only the editable
     // form asks for the counts). Manufacturers on products from before the dropdown are offered too.
     const manufacturerOptions = useDropdownOptions(MANUFACTURER_CATEGORY, NO_MANUFACTURERS, 'products');
+    // The Tax Rate dropdown: the same options line items offer as GST (Jira CRM-111).
+    const taxRateOptions = useDropdownOptions(LINE_ITEM_TAX_RATE_CATEGORY, LINE_ITEM_TAX_RATES, 'products');
     const { data: manufacturers, isLoading: manufacturersLoading } = useProductManufacturers(mode !== 'view');
     const manufacturerSuggestions = React.useMemo(() => {
         const counts = new Map((manufacturers ?? []).map((m) => [m.name.toLowerCase(), m.products]));
@@ -312,7 +314,7 @@ export default function ProductForm({
                             name="taxRate"
                             label="Tax Rate"
                             placeholder="Select Tax Rate"
-                            options={TAX_RATES}
+                            options={taxRateOptions}
                         />
                         <RhfPercentageField<ProductFormData>
                             name="discount"

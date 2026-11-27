@@ -82,18 +82,20 @@ export interface PdfLineItem {
     note: string;
     quantity: number;
     quantityFormatted: string;
-    amount: number;
-    amountFormatted: string;
+    rate: number;
+    rateFormatted: string;
+    grossAmount: number;
+    grossAmountFormatted: string;
+    /** Percentage of the Gross Amount. */
     discount: number;
-    discountType: string;
+    discountAmount: number;
+    /** `10%` (or `-` when none). */
     discountFormatted: string;
-    salePrice: number;
-    salePriceFormatted: string;
+    discountAmountFormatted: string;
+    /** GST: `18%`. */
     taxRate: string;
-    taxAmount: number;
-    taxAmountFormatted: string;
-    total: number;
-    totalFormatted: string;
+    taxableAmount: number;
+    taxableAmountFormatted: string;
 }
 
 export interface PdfContext {

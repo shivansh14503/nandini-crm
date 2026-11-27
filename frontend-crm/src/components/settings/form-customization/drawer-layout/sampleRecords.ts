@@ -1,4 +1,5 @@
 import type { DrawerLayoutModule } from '@/lib/drawer-layout';
+import { DEFAULT_CURRENCY, toLineItem, totalsOf } from '@/lib/line-items';
 
 /**
  * Made-up records the Drawer Layout builder previews with until the admin picks a real one: every built-in field
@@ -121,11 +122,13 @@ const SAMPLE_ORGANIZATION: Record<string, unknown> = {
     customFields: {},
 };
 
+// Same line item shape and math as the forms (Jira CRM-111).
 const LINE_ITEMS = [
-    { id: 'li1', productName: 'TallyPrime Gold (Multi-user)', description: 'Perpetual licence with 1 year TSS', quantity: 2, amount: 64800, discount: 10, discountType: 'percentage', taxRate: '18%', taxAmount: 20995, total: 137635 },
-    { id: 'li2', productName: 'Tally On Cloud', description: '10 users, yearly plan', quantity: 1, amount: 48000, discount: 0, discountType: 'percentage', taxRate: '18%', taxAmount: 8640, total: 56640 },
+    toLineItem({ id: 'li1', productName: 'TallyPrime Gold (Multi-user)', description: 'Perpetual licence with 1 year TSS', quantity: 2, rate: 64800, discount: 10, taxRate: '18%' }),
+    toLineItem({ id: 'li2', productName: 'Tally On Cloud', description: '10 users, yearly plan', quantity: 1, rate: 48000, discount: 0, taxRate: '18%' }),
 ];
-const TOTALS = { currency: 'Indian Rupee: ₹', groupName: 'Software Licences & Add-ons', lineItems: LINE_ITEMS, totalAmount: 177600, totalDiscount: 12960, lumpSumDiscount: 2000, subtotal: 162640, totalTax: 29635, grandTotal: 190275 };
+const LUMP_SUM_DISCOUNT = 2000;
+const TOTALS = { lineItems: LINE_ITEMS, lumpSumDiscount: LUMP_SUM_DISCOUNT, ...totalsOf(LINE_ITEMS, LUMP_SUM_DISCOUNT) };
 
 const SAMPLE_OPPORTUNITY: Record<string, unknown> = {
     id: '__sample',
@@ -193,6 +196,7 @@ const SAMPLE_QUOTATION: Record<string, unknown> = {
     contactEmail: 'rohan.sharma@sunrisedairy.in',
     ...address('billing', 'Plot 14, MIDC Industrial Area\nBhosari', 'Pune', 'Maharashtra', '411026'),
     ...address('shipping', 'Warehouse 3, Chakan Road', 'Chakan', 'Maharashtra', '410501'),
+    currency: DEFAULT_CURRENCY,
     ...TOTALS,
     customFields: {},
 };

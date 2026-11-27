@@ -109,7 +109,62 @@ const blockBase = { id, style: styleSchema, hideIfEmpty: z.boolean().optional() 
 
 const detailRowSchema = z.object({ id, path: fieldPath, label: shortText(80), hideIfEmpty: z.boolean() });
 
-export const LINE_ITEM_COLUMN_KEYS = ['srNo', 'productName', 'description', 'note', 'quantity', 'amount', 'discount', 'salePrice', 'taxRate', 'taxAmount', 'total'] as const;
+export const LINE_ITEM_COLUMN_KEYS = ['srNo', 'productName', 'description', 'note', 'quantity', 'rate', 'grossAmount', 'discount', 'taxRate', 'taxableAmount'] as const;
+
+const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/**
+ * Line items changed in Jira CRM-111: Unit Price (`amount`) became Rate, Total (`total`) became Taxable Amount, Gross
+ * Amount was added, and Sale Price / Tax Amount were removed. A template saved before keeps its layout: the renamed
+ * columns move to their new keys (a label still at the old default takes the new one), the removed ones go, and a
+ * hidden Gross Amount column is added after Rate.
+ */
+const RENAMED_LINE_ITEM_COLUMNS: Record<string, { key: string; from: string; to: string }> = {
+    amount: { key: 'rate', from: 'Unit Price', to: 'Rate' },
+    total: { key: 'taxableAmount', from: 'Total', to: 'Taxable Amount' },
+};
+const REMOVED_LINE_ITEM_COLUMNS = new Set(['salePrice', 'taxAmount']);
+/** Default labels that changed with CRM-111, on columns whose key stayed. */
+const RELABELLED_LINE_ITEM_COLUMNS: Record<string, { from: string; to: string }> = { taxRate: { from: 'Tax', to: 'GST' } };
+
+export function upgradeLineItemColumns(value: unknown): unknown {
+    if (!Array.isArray(value)) return value;
+    const legacy = value.some((col) => isObject(col) && typeof col.key === 'string' && (col.key in RENAMED_LINE_ITEM_COLUMNS || REMOVED_LINE_ITEM_COLUMNS.has(col.key)));
+    if (!legacy) return value;
+    const columns: unknown[] = [];
+    for (const col of value) {
+        if (!isObject(col) || typeof col.key !== 'string') {
+            columns.push(col);
+            continue;
+        }
+        if (REMOVED_LINE_ITEM_COLUMNS.has(col.key)) continue;
+        const renamed = RENAMED_LINE_ITEM_COLUMNS[col.key];
+        const relabelled = RELABELLED_LINE_ITEM_COLUMNS[col.key];
+        const change = renamed ?? relabelled;
+        const label = change && col.label === change.from ? change.to : col.label;
+        columns.push({ ...col, key: renamed?.key ?? col.key, label });
+        if (renamed?.key === 'rate' && !value.some((c) => isObject(c) && c.key === 'grossAmount')) {
+            columns.push({ key: 'grossAmount', label: 'Gross Amount', visible: false, align: 'right', widthPct: 12 });
+        }
+    }
+    return columns;
+}
+
+/** Totals default labels that changed with CRM-111 (a label an admin changed stays). */
+const RELABELLED_TOTAL_ROWS: Record<string, { from: string; to: string }> = {
+    subtotal: { from: 'Subtotal', to: 'Taxable Amount' },
+    totalTax: { from: 'Tax', to: 'GST' },
+    lumpSumDiscount: { from: 'Lump-sum Discount', to: 'Lump Sum Discount' },
+};
+
+export function upgradeTotalRows(value: unknown): unknown {
+    if (!Array.isArray(value)) return value;
+    return value.map((row) => {
+        if (!isObject(row) || typeof row.key !== 'string') return row;
+        const change = RELABELLED_TOTAL_ROWS[row.key];
+        return change && row.label === change.from ? { ...row, label: change.to } : row;
+    });
+}
 const lineItemColumnSchema = z.object({
     key: z.string().regex(/^\w{1,40}$/),
     label: shortText(60),
@@ -177,7 +232,7 @@ const lineItemsBlock = z.object({
     ...blockBase,
     type: z.literal('lineItems'),
     props: z.object({
-        columns: z.array(lineItemColumnSchema).max(20),
+        columns: z.preprocess(upgradeLineItemColumns, z.array(lineItemColumnSchema).max(20)),
         descriptionUnderName: z.boolean(),
         headerBackground: colorSchema,
         headerColor: colorSchema,
@@ -193,7 +248,7 @@ const totalsBlock = z.object({
     ...blockBase,
     type: z.literal('totals'),
     props: z.object({
-        rows: z.array(totalRowSchema).max(10),
+        rows: z.preprocess(upgradeTotalRows, z.array(totalRowSchema).max(10)),
         highlightGrandTotal: z.boolean(),
         /** Grand-total highlight colours; omitted = accent background / white text. */
         grandTotalBackground: colorSchema.optional(),

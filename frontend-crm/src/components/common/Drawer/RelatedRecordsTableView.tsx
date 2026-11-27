@@ -63,6 +63,7 @@ import { glassSurfaceSx, GLASS_SHADOW, GLASS_RADIUS, FLOAT_INSET, NAVBAR_HEIGHT 
 import { moduleKeyFrom, moduleTableTintVars } from '@/theme/moduleColors';
 import { isShownField } from '@/utils/recordNumbers';
 import { fmtMoney } from '@/utils/formats';
+import { LINE_ITEM_LABELS } from '@/lib/line-items';
 
 export interface RelatedRecordsTableViewProps {
     open: boolean;
@@ -321,8 +322,15 @@ function getColumnsForModule(moduleKey: string): DataTableColumn<RelatedRow>[] {
         // CRM modules (leads, contacts, …) use their list page's columns; these are the quote / deal line-item extras.
         case 'products':
             return [
-                { id: 'quantity', label: 'Quantity', minWidth: 100, sortable: true, render: (r) => String(r.quantity ?? '-') },
-                { id: 'total', label: 'Amount', minWidth: 130, sortable: true, render: (r) => (r.total !== undefined ? formatCurrency(r.total) : formatCurrency(r.mrp)) },
+                // Line item fields, with the labels of the Line Items tab (Jira CRM-111).
+                { id: 'quantity', label: LINE_ITEM_LABELS.quantity, minWidth: 100, sortable: true, render: (r) => String(r.quantity ?? '-') },
+                {
+                    id: 'taxableAmount',
+                    label: LINE_ITEM_LABELS.taxableAmount,
+                    minWidth: 140,
+                    sortable: true,
+                    render: (r) => (r.taxableAmount !== undefined ? formatCurrency(r.taxableAmount) : formatCurrency(r.mrp)),
+                },
             ];
 
         case 'partner_company':
@@ -404,7 +412,7 @@ export function RelatedRecordsTableView({
         const own = getColumnsForModule(moduleKey);
         if (listPageColumns) {
             // Products here are quote / deal line items: keep their quantity and amount next to the catalogue columns.
-            const lineItemColumns = moduleKey === 'products' ? own.filter((c) => c.id === 'quantity' || c.id === 'total') : [];
+            const lineItemColumns = moduleKey === 'products' ? own.filter((c) => c.id === 'quantity' || c.id === 'taxableAmount') : [];
             return [...listPageColumns, ...lineItemColumns];
         }
         return (

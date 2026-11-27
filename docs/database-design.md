@@ -306,13 +306,22 @@ billing (`tallySerialNo` — 9 digits starting with 7, checked by the API, `invo
 while `Other` (`accountName`, `accountNo`, `bankName`, `ifscCode`, `panNumber`: the Organization columns' sizes and
 rules; all five required by the API while `Other`), documentation (`addDocument` fixed `Yes` / `No`, must be `Yes` at Sales Stage `PO`; while `Yes` the opportunity
 has a `Document` row (§4.24) with Document No, Document Date and the file, which the API returns on the
-opportunity as `documentNo`, `documentDate`, `documentFile`; `No` deletes it), totals (`currency`, `groupName`,
-`lumpSumDiscount`, `totalAmount`, `totalDiscount`, `subtotal`, `totalTax`, `grandTotal` — recomputed and verified
-server-side), `customDataJson`, audit/soft-delete.
+opportunity as `documentNo`, `documentDate`, `documentFile`; `No` deletes it), totals (`lumpSumDiscount`,
+`totalAmount` (Gross Amount), `totalDiscount`, `subtotal` (Taxable Amount), `totalTax` (GST), `grandTotal` —
+recomputed server-side), `customDataJson`, audit/soft-delete. An opportunity has no currency (its amounts are in ₹):
+`currency` and `groupName` were dropped by `20261221090000_line_items` (Jira CRM-111).
 
-`OpportunityLineItem` (owned, cascades from `Opportunity`): `productId` → `Product` (nullable), `productName`
-(snapshot), `quantity`, `amount`, `discount`, `discountType` (`percentage`/`amount`), `salePrice`, `taxRate`,
-`taxAmount`, `total`, `description`, `note`, `sortOrder`.
+`OpportunityLineItem` (owned, cascades from `Opportunity`; Jira CRM-111): `productId` → `Product` (nullable),
+`productName` (snapshot, label Product), `quantity` (≥ 1), `rate` (DECIMAL(18,2), the product's MRP, or typed for a
+product without one), `grossAmount` (= quantity × rate), `discount` (a percentage, 0–100), `discountAmount` (= gross ×
+discount %), `taxRate` (GST, a `product_tax_rate` option such as `18%`; the product's Tax Rate when it has one),
+`taxableAmount` (= gross − discount amount), `description`, `note`, `sortOrder`. The three amounts are DECIMAL(18,2)
+(default 0) and always computed by the API (`modules/shared/lineItemMath.ts`, mirrored by the frontend's
+`lib/line-items`). Only `discount`, `description` and `note` may be empty. Totals: Gross Amount = Σ gross, Discount = Σ
+discount amount, Taxable Amount = Σ taxable, GST = Σ taxable × rate, Grand Total = max(0, taxable + GST − lump sum
+discount), all rounded to whole rupees. Migration `20261221090000_line_items` renamed `amount` → `rate`, turned
+per-unit (`direct`) discounts into percentages, normalized `GST 18%` / `--None--` to `18%` / `0%`, filled the new
+amounts and dropped `discountType`, `salePrice`, `taxAmount` and `total`.
 
 Indexes: `organizationId`, `contactId`, `salesStage`, `assignedTo`, `nextFollowupDate`, scoped-list composites;
 line items on `opportunityId` and (`productId`, `opportunityId`) (migration `20261218090000_product_usage_index`, which
@@ -323,12 +332,14 @@ replaced the single-column `productId` index: product usage counts read distinct
 `Quotation`: `quotationCode` (UNIQUE), `quotationTitle`, `quoteStage` (default `Draft`), `quotationDate`,
 `validUntil`, `validationPeriod`, `remarks`, terms (`termsAndCondition`, `termsAndConditionDescription`),
 payment terms, `assignedTo`, `opportunity` + `opportunityId` → `Opportunity`, `company`, `otherRef`,
-`preparedFor`, totals (same set as Opportunity), customer snapshot (`organizationName`/`Id`, `contact`/`Id`,
+`preparedFor`, `currency` (the quotation's currency label, e.g. `US Dollar: $`; default `Indian Rupee: ₹`), totals
+(same set as Opportunity), customer snapshot (`organizationName`/`Id`, `contact`/`Id`,
 `contactNumber`, `contactEmail`, `mailingName`, `gstNumber`), billing address (required) and shipping address (with city
 FKs), legacy alias columns (`status`, `quotationSubject`, `notes`, `termsAndConditions`), `customDataJson`,
 audit/soft-delete.
 
-`QuotationLineItem`: same shape as `OpportunityLineItem`, cascades from `Quotation`.
+`QuotationLineItem`: same shape and rules as `OpportunityLineItem`, cascades from `Quotation`; a quotation needs at
+least one line. `groupName` was dropped by `20261221090000_line_items`.
 
 Indexes: `opportunityId`, `organizationId`, `contactId`, `quoteStage`, `assignedTo`, city ids, scoped-list composites.
 

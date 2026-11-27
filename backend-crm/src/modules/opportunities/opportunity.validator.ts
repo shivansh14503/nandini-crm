@@ -159,8 +159,7 @@ export const opportunityInputSchema = z.object({
     documentDate: optionalDate('Document Date'),
     documentFile: documentFileRef.default(null),
 
-    currency: optionalText('Currency', 30),
-    groupName: optionalText('Group Name', L.shortText),
+    // Line items (no currency: it is set per quotation, Jira CRM-111).
     lineItems: lineItemListSchema.default([]),
     lumpSumDiscount: z.coerce.number({ error: 'Lump Sum Discount must be a number.' }).min(0, { message: 'Lump Sum Discount cannot be negative.' }).default(0),
 

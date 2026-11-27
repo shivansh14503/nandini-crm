@@ -190,7 +190,7 @@ export const blockSchema = z.discriminatedUnion('type', [
     z.object({ id, type: z.literal('customFields') }),
     /** The record's products and services, one card each (opportunities, quotations). */
     z.object({ id, type: z.literal('lineItems'), emptyText: text(LIMITS.emptyText) }),
-    /** Gross, discounts, subtotal, tax and grand total of the line items (opportunities, quotations). */
+    /** Gross amount, discounts, taxable amount, GST and grand total of the line items (opportunities, quotations). */
     z.object({ id, type: z.literal('totals') }),
 ]);
 export type DrawerBlock = z.infer<typeof blockSchema>;
