@@ -11,7 +11,6 @@ import AssignmentIndOutlinedIcon from '@mui/icons-material/AssignmentIndOutlined
 import GroupAddOutlinedIcon from '@mui/icons-material/GroupAddOutlined';
 import AutorenewOutlinedIcon from '@mui/icons-material/AutorenewOutlined';
 import DoneAllIcon from '@mui/icons-material/DoneAll';
-import MailOutlineOutlinedIcon from '@mui/icons-material/MailOutlineOutlined';
 import EventBusyOutlinedIcon from '@mui/icons-material/EventBusyOutlined';
 import SyncProblemOutlinedIcon from '@mui/icons-material/SyncProblemOutlined';
 import ForwardToInboxOutlinedIcon from '@mui/icons-material/ForwardToInboxOutlined';
@@ -30,12 +29,31 @@ import { getModuleColor } from '@/theme/moduleColors';
 import type { CrmNotification } from '@/types/notification.types';
 import { addDays, instantToZonedWallClock, zonedDayOf } from '@/utils/zonedTime';
 import { formatBusinessInstant, formatDayLabel, formatWallTime, timeZoneAbbr, useBusinessClock } from '@/components/activities/activityTime';
-import { MorningSummaryPreviewDialog } from './MorningSummaryPreviewDialog';
 import { useDisplayFormats } from '@/utils/formats';
 import { useDropdown } from './useDropdown';
 
 /** Gap kept between the popover and the screen edges on phones (16px each side). */
 const EDGE_GAP = 16;
+
+/** Which notifications the popover lists. The last choice is remembered per browser; Unread is the default. */
+type NotificationView = 'unread' | 'all';
+const VIEW_STORAGE_KEY = 'crm.notifications.view';
+
+function readSavedView(): NotificationView {
+    try {
+        return window.localStorage.getItem(VIEW_STORAGE_KEY) === 'all' ? 'all' : 'unread';
+    } catch {
+        return 'unread';
+    }
+}
+
+function saveView(view: NotificationView) {
+    try {
+        window.localStorage.setItem(VIEW_STORAGE_KEY, view);
+    } catch {
+        // Private windows / blocked storage: the choice just isn't remembered.
+    }
+}
 
 const KIND_ICONS: Record<string, SvgIconComponent> = {
     activity_reminder: AlarmOutlinedIcon,
@@ -194,22 +212,85 @@ function NotificationRow({ row, now, timeZone, onOpen }: { row: CrmNotification;
     );
 }
 
+/** Unread | All switch: pill tabs on the header band (active = paper + strong border, inactive hover = soft brand). */
+function ViewSwitch({ view, unreadCount, onChange }: { view: NotificationView; unreadCount: number; onChange: (view: NotificationView) => void }) {
+    const options: { value: NotificationView; label: string }[] = [
+        { value: 'unread', label: unreadCount > 0 ? `Unread (${unreadCount > 99 ? '99+' : unreadCount})` : 'Unread' },
+        { value: 'all', label: 'All' },
+    ];
+    return (
+        <Box
+            role="tablist"
+            aria-label="Show notifications"
+            sx={{
+                display: 'inline-flex',
+                gap: 0.5,
+                p: 0.4,
+                borderRadius: '10px',
+                border: '1px solid var(--mui-palette-border-main)',
+                backgroundColor: 'var(--mui-palette-background-hover)',
+                maxWidth: '100%',
+            }}
+        >
+            {options.map((option) => {
+                const active = option.value === view;
+                return (
+                    <ButtonBase
+                        key={option.value}
+                        role="tab"
+                        aria-selected={active}
+                        onClick={() => onChange(option.value)}
+                        sx={{
+                            minHeight: 32,
+                            minWidth: 64,
+                            px: 1.5,
+                            borderRadius: '8px',
+                            fontSize: '0.76rem',
+                            fontWeight: active ? 700 : 600,
+                            whiteSpace: 'nowrap',
+                            border: active ? '1px solid var(--mui-palette-border-strong)' : '1px solid transparent',
+                            backgroundColor: active ? 'var(--mui-palette-background-paper)' : 'transparent',
+                            color: active ? 'var(--crm-text-blue-900)' : 'var(--mui-palette-text-secondary)',
+                            transition: 'all 0.15s ease',
+                            '&:hover': active
+                                ? {}
+                                : { backgroundColor: 'var(--mui-palette-primary-soft)', color: 'var(--crm-text-blue-700)' },
+                            '&.Mui-focusVisible': { boxShadow: '0 0 0 3px rgb(var(--crm-accent-rgb) / 0.22)' },
+                        }}
+                    >
+                        {option.label}
+                    </ButtonBase>
+                );
+            })}
+        </Box>
+    );
+}
+
 interface NotificationPanelProps {
     unreadCount: number;
     onOpen: (row: CrmNotification) => void;
-    onPreview: () => void;
     onSettings: () => void;
 }
 
 /** The popover's content: mounted only while it is open, so the list (and the business clock) load on opening. */
-function NotificationPanel({ unreadCount, onOpen, onPreview, onSettings }: NotificationPanelProps) {
-    const list = useNotifications();
+function NotificationPanel({ unreadCount, onOpen, onSettings }: NotificationPanelProps) {
+    const [view, setView] = useState<NotificationView>(readSavedView);
+    const unreadOnly = view === 'unread';
+    const list = useNotifications({ unreadOnly });
     const markAll = useMarkAllNotificationsRead();
     const clock = useBusinessClock();
     // Row times follow the company formats (activityTime helpers): re-render when they change.
     useDisplayFormats();
     const now = clock.now();
-    const rows = list.data?.pages.flatMap((page) => page.data) ?? [];
+    const loaded = list.data?.pages.flatMap((page) => page.data) ?? [];
+    // In Unread, rows read here (a click, Mark all as read) leave the list at once.
+    const rows = unreadOnly ? loaded.filter((row) => !row.readAt) : loaded;
+    const showOlder = list.hasNextPage && !(unreadOnly && unreadCount === 0);
+
+    const changeView = (next: NotificationView) => {
+        setView(next);
+        saveView(next);
+    };
 
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
@@ -242,6 +323,9 @@ function NotificationPanel({ unreadCount, onOpen, onPreview, onSettings }: Notif
                 >
                     Mark all as read
                 </Button>
+            </Box>
+            <Box sx={{ px: 2, py: 1, borderBottom: '1px solid var(--mui-palette-border-main)', backgroundColor: 'var(--mui-palette-background-subtle)' }}>
+                <ViewSwitch view={view} unreadCount={unreadCount} onChange={changeView} />
             </Box>
 
             {/* List */}
@@ -283,10 +367,19 @@ function NotificationPanel({ unreadCount, onOpen, onPreview, onSettings }: Notif
                         >
                             <NotificationsNoneOutlinedIcon sx={{ fontSize: 22 }} />
                         </Box>
-                        <Typography sx={{ fontSize: '0.86rem', fontWeight: 700, color: 'var(--crm-slate-900)' }}>You&apos;re all caught up</Typography>
-                        <Typography sx={{ fontSize: '0.76rem', color: 'var(--mui-palette-text-secondary)', maxWidth: 260 }}>
-                            Activity reminders, invitations, assignments and contract renewals show up here.
+                        <Typography sx={{ fontSize: '0.86rem', fontWeight: 700, color: 'var(--crm-slate-900)' }}>
+                            {unreadOnly ? <>You&apos;re all caught up</> : 'No notifications yet'}
                         </Typography>
+                        <Typography sx={{ fontSize: '0.76rem', color: 'var(--mui-palette-text-secondary)', maxWidth: 260 }}>
+                            {unreadOnly
+                                ? 'You have no unread notifications.'
+                                : 'Activity reminders, invitations, assignments and contract renewals show up here.'}
+                        </Typography>
+                        {unreadOnly && (
+                            <Button onClick={() => changeView('all')} sx={{ ...textButtonSx, mt: 0.5 }}>
+                                Show all notifications
+                            </Button>
+                        )}
                     </Box>
                 ) : (
                     <Box component="ul" aria-label="Notifications" sx={{ listStyle: 'none', m: 0, p: 0 }}>
@@ -295,7 +388,7 @@ function NotificationPanel({ unreadCount, onOpen, onPreview, onSettings }: Notif
                         ))}
                     </Box>
                 )}
-                {list.hasNextPage && (
+                {showOlder && (
                     <Box sx={{ display: 'flex', justifyContent: 'center', py: 0.5, borderTop: '1px solid var(--mui-palette-border-light)' }}>
                         <Button onClick={() => list.fetchNextPage()} disabled={list.isFetchingNextPage} sx={textButtonSx}>
                             {list.isFetchingNextPage ? 'Loading…' : 'Show older'}
@@ -310,15 +403,10 @@ function NotificationPanel({ unreadCount, onOpen, onPreview, onSettings }: Notif
                     px: 1,
                     py: 0.5,
                     display: 'flex',
-                    justifyContent: 'space-between',
-                    flexWrap: 'wrap',
-                    gap: 0.5,
+                    justifyContent: 'flex-end',
                     borderTop: '1px solid var(--mui-palette-border-main)',
                 }}
             >
-                <Button onClick={onPreview} startIcon={<MailOutlineOutlinedIcon sx={{ fontSize: '17px !important' }} />} sx={textButtonSx}>
-                    Preview morning email
-                </Button>
                 <Button onClick={onSettings} startIcon={<SettingsOutlinedIcon sx={{ fontSize: '17px !important' }} />} sx={textButtonSx}>
                     Notification settings
                 </Button>
@@ -331,7 +419,8 @@ function NotificationPanel({ unreadCount, onOpen, onPreview, onSettings }: Notif
  * Navbar bell: the signed-in user's notifications (activity reminders, assignments, invitations, contract renewals).
  * The badge polls the unread count every minute while the tab is visible; the list loads when the popover opens.
  * A row marks itself read and opens its record (activities in the calendar's drawer, contracts on their page).
- * The footer opens the morning summary email preview and My Profile › Notifications (which kinds to get).
+ * An Unread | All switch (remembered per browser, Unread by default) picks the list; the footer opens
+ * My Profile › Notifications (which kinds to get, and the morning summary email preview).
  */
 export function NotificationBell() {
     const router = useRouter();
@@ -339,7 +428,6 @@ export function NotificationBell() {
     const { open, close, menuId, setAnchorEl, anchorEl, hoverProps, triggerProps, handleClickAway } = useDropdown();
     const unread = useUnreadNotificationCount({ enabled: Boolean(user) });
     const markRead = useMarkNotificationRead();
-    const [previewOpen, setPreviewOpen] = useState(false);
     const count = unread.data ?? 0;
 
     const openRow = (row: CrmNotification) => {
@@ -347,11 +435,6 @@ export function NotificationBell() {
         if (!row.href) return;
         close();
         router.push(row.href);
-    };
-
-    const openPreview = () => {
-        close();
-        setPreviewOpen(true);
     };
 
     const openSettings = () => {
@@ -443,7 +526,7 @@ export function NotificationBell() {
                             >
                                 <ClickAwayListener onClickAway={handleClickAway}>
                                     <Box>
-                                        <NotificationPanel unreadCount={count} onOpen={openRow} onPreview={openPreview} onSettings={openSettings} />
+                                        <NotificationPanel unreadCount={count} onOpen={openRow} onSettings={openSettings} />
                                     </Box>
                                 </ClickAwayListener>
                             </Paper>
@@ -451,9 +534,6 @@ export function NotificationBell() {
                     )}
                 </Popper>
             </Box>
-
-            {/* Outside the hover box: React passes pointer enter / leave through portals, which would reopen the popover. */}
-            <MorningSummaryPreviewDialog open={previewOpen} onClose={() => setPreviewOpen(false)} />
         </>
     );
 }

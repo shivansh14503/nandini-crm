@@ -1441,18 +1441,23 @@ frontend-crm/src/
   (activities olive, contracts their own colour), title, body, time relative to now in the business timezone (exact
   time on hover), unread dot and tinted background. A click marks the row read (optimistic) and opens `href`
   (activities `/calendar?activity=<id>`, which opens the activity drawer even when the calendar is already open;
-  contracts `/contracts/<id>`). Header "Mark all as read"; empty state "You're all caught up". Badge: unread count on
+  contracts `/contracts/<id>`). Header "Mark all as read"; below it an **Unread | All** switch (pill tabs, Unread shows
+  its count). Unread is the default and the last choice is remembered per browser (`localStorage`
+  `crm.notifications.view`); Unread asks the API with `unreadOnly=true` and drops rows read in the popover at once
+  (a click, Mark all as read). Empty states: Unread "You're all caught up" with a "Show all notifications" button,
+  All "No notifications yet" (as of 2026-11-27). Badge: unread count on
   the brand fill, capped at "99+". Phones: the popover is `calc(100vw − 32px)` wide with the list scrolling inside
   (`70vh` at most); rows and buttons are at least 40 px tall.
 - **Cross-tab:** read / read-all call `notifyCrmUpdate('/api/notifications')`; `QueryProvider` invalidates only the
   `notifications` keys (no audit log refresh: these writes aren't audited), in this tab and every other open tab.
-- **Morning email preview:** the popover footer's "Preview morning email" opens `MorningSummaryPreviewDialog`, which
+- **Morning email preview:** My Profile › Notifications' morning summary card (`MorningSummaryCard`) opens
+  `MorningSummaryPreviewDialog` (the bell popover's footer link was removed on 2026-11-27), which
   fetches `GET /api/notifications/morning-summary/preview` on every opening and renders the email's HTML in a
   sandboxed `<iframe srcDoc sandbox="">` (no scripts, links inert), full screen on phones, with notes when mail is
   off, the user has no address or nothing is due, and when they won't get it (`notSentReason`: turned off, out of
   office, on leave). Admin roles also get "Send me a test"
   (`POST …/morning-summary/test`); the API's message shows in a toast.
-- **Notification settings:** a second footer link, "Notification settings", closes the popover and opens My Profile ›
+- **Notification settings:** the popover footer's only link, "Notification settings", closes the popover and opens My Profile ›
   Notifications (`/profile?tab=notifications`), where each bell kind can be turned off (Profile Phase 3).
 
 ### 8.5 Admin › API Integrations (P2-1)
