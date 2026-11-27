@@ -19,6 +19,9 @@ import { corporateEmailListSchema } from '../shared/entityEmails.js';
 export const REFERRAL_STATUSES = ['Active', 'Inactive'] as const;
 export type ReferralStatus = (typeof REFERRAL_STATUSES)[number];
 export const ACTIVE_REFERRAL_STATUS: ReferralStatus = 'Active';
+/** Whether a stored status is Active (ignoring case and spaces, as the default SQL Server collation compares). */
+export const isActiveReferralStatus = (status: string | null | undefined): boolean =>
+    (status ?? '').trim().toLowerCase() === ACTIVE_REFERRAL_STATUS.toLowerCase();
 
 /**
  * `ReferralFormData` rules from frontend-crm/src/validations/referral.schema.ts: the Contact form's rules

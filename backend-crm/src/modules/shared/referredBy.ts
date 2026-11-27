@@ -1,6 +1,6 @@
 import type { TransactionClient } from '../../config/prisma.js';
 import { HttpError } from '../../utils/httpError.js';
-import { ACTIVE_REFERRAL_STATUS } from '../referrals/referral.validator.js';
+import { ACTIVE_REFERRAL_STATUS, isActiveReferralStatus } from '../referrals/referral.validator.js';
 
 /**
  * Referred By of a lead or opportunity (shown, and required, for Lead Source CA / Reference; see leadSource.ts) is a
@@ -45,7 +45,7 @@ export function decideReferredBy(
     if (id) {
         const keeping = trimmed(previous?.referredById) === id;
         const referral = found.byId;
-        if (referral && !referral.isDeleted && (keeping || referral.status === ACTIVE_REFERRAL_STATUS)) {
+        if (referral && !referral.isDeleted && (keeping || isActiveReferralStatus(referral.status))) {
             return { referredBy: referral.name, referredById: referral.id };
         }
         // The referral it already had went away: the record keeps the name it showed.
@@ -57,7 +57,7 @@ export function decideReferredBy(
     if (previous && trimmed(previous.referredBy).toLowerCase() === name.toLowerCase()) {
         return { referredBy: trimmed(previous.referredBy), referredById: trimmed(previous.referredById) || null };
     }
-    const matches = (found.byName ?? []).filter((r) => !r.isDeleted && r.status === ACTIVE_REFERRAL_STATUS);
+    const matches = (found.byName ?? []).filter((r) => !r.isDeleted && isActiveReferralStatus(r.status));
     if (matches.length === 1) return { referredBy: matches[0].name, referredById: matches[0].id };
     if (matches.length > 1) return { error: `Several active referrals are named "${name}". Pick one from the Referrals list.` };
     return { error: NOT_A_REFERRAL };
