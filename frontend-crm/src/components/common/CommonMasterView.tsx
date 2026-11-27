@@ -21,6 +21,7 @@ import {
     isCrmModuleKey,
     TablePageScrollContext,
 } from './DataTable';
+import { DEFAULT_PAGE_SIZE_OPTIONS, useAutoPageSize } from './DataTable/useAutoPageSize';
 import type { CrmModuleKey } from '@/types/formConfig.types';
 import { ActiveFilterChips, TableFilterModal, type FilterSortOption, type TableFilterController } from './TableFilter';
 import { useSearchScope } from '../search/SearchScope';
@@ -29,9 +30,6 @@ import { useScorecardColumns } from './scorecard/scorecardDisplay';
 import { useCloseOnOutsideClick } from './Drawer/useCloseOnOutsideClick';
 import { onImportFinished } from '@/services/importTracker';
 import type { ImportEntityType } from './import/types';
-
-/** Page sizes the pagination bar offers when the view doesn't set its own (DataTablePagination's default). */
-const DEFAULT_PAGE_SIZE_OPTIONS = [10, 25, 50];
 
 export interface MasterViewHeaderActionsContext {
     /** Opens the shared column visibility popover anchored to the given element. */
@@ -155,7 +153,8 @@ export interface CommonMasterViewProps<T = unknown, TFilter extends string = str
     pagination?: DataTablePaginationProps | React.ReactNode;
     /**
      * The module this list imports into (the shared import wizard). When an import of it ends with new rows, the
-     * list jumps to its largest page size and the first page, so the freshly imported rows are in view.
+     * list jumps to its largest page size and the first page, so the freshly imported rows are in view. (This jump
+     * is not saved as the user's page size; until they pick one, the size follows the record count.)
      */
     importEntity?: ImportEntityType;
     /**
@@ -465,9 +464,11 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
         });
     }, [importEntity]);
 
-    const resolvedPagination = isPaginationConfig(pagination) ? (
-        <DataTablePagination {...pagination} />
-    ) : (
+    // Rows per page grows with the record count until the user picks a size (kept per list).
+    const autoPagination = useAutoPageSize(tableId, paginationConfig, loading);
+    const resolvedPagination = autoPagination ? (
+        <DataTablePagination {...autoPagination} />
+    ) : isPaginationConfig(pagination) ? null : (
         pagination
     );
 
