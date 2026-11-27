@@ -179,9 +179,42 @@ export async function ensureFormConfigsSeeded(): Promise<void> {
         changed++;
     }
 
+    changed += await removeRetiredFields();
+
     // Always: a migration run before this start-up may have changed the configuration behind the cache's back.
     await cacheService.invalidatePattern(`${CACHE_KEYS.lookups('form-configs')}*`);
     if (changed > 0) logger.info({ changed }, 'Form & dropdown configuration defaults seeded');
+}
+
+/**
+ * Field labels that must not appear on any form (Jira CRM-108: "Zz Rename Check", a field left over from trying a
+ * rename in Form Builder). Matched ignoring case and outer spaces, in every module, on every start-up, so the field
+ * goes even before (or without) migration 20261220090000_product_catalog_dropdowns, which also clears its values.
+ */
+export const RETIRED_FIELD_LABELS: readonly string[] = ['Zz Rename Check'];
+
+/**
+ * Removes fields labelled with a retired label: a custom field is deleted; a built-in field (relabelled by the rename
+ * test) gets its default label back. Returns how many rows changed.
+ */
+async function removeRetiredFields(): Promise<number> {
+    const retired = new Set(RETIRED_FIELD_LABELS.map((l) => l.trim().toLowerCase()));
+    const rows = await prisma.formFieldDefinition.findMany({ select: { id: true, module: true, fieldKey: true, label: true, isSystem: true } });
+    const hits = rows.filter((r) => retired.has(r.label.trim().toLowerCase()));
+    let changed = 0;
+    for (const row of hits) {
+        if (!row.isSystem) {
+            await prisma.formFieldDefinition.delete({ where: { id: row.id } });
+            changed++;
+            continue;
+        }
+        const def = DEFAULT_FIELDS.find((f) => f.module === row.module && f.fieldKey === row.fieldKey);
+        if (!def) continue;
+        await prisma.formFieldDefinition.update({ where: { id: row.id }, data: { label: def.label } });
+        changed++;
+    }
+    if (changed > 0) logger.info({ changed, fields: hits.map((h) => `${h.module}:${h.fieldKey}`) }, 'Retired form fields removed');
+    return changed;
 }
 
 /** Key of the default field listed just before `fieldKey` in the same module, tab and section, if any. */

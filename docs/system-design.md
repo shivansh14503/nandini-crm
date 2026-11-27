@@ -122,6 +122,8 @@ Order of global middleware (`src/app.ts`): `helmet` → `cors` (credentials, LAN
    up). Failure = exit 1.
 3. Start the optional DB keep-alive ping (`DB_KEEPALIVE_INTERVAL_MS`).
 4. Seed missing form-field / dropdown defaults (`seedFormConfigsSafely`), never overwriting admin edits.
+   It also removes retired fields (`RETIRED_FIELD_LABELS`, e.g. "Zz Rename Check", CRM-108) in every module: a custom
+   field with that label is deleted, a built-in one gets its default label back.
 5. Load the Product Catalog sheet once (`loadProductCatalogSheetSafely`, `products/productCatalog.data.ts`, 55 products,
    Jira CRM-15): products whose name no live product has are created as `system`, in one transaction; the
    `ModuleSetting` row `system` / `productCatalogSheetLoaded` then stops later start-ups from loading it again (so
