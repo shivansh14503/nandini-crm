@@ -162,6 +162,8 @@ export function useContactColumns(openRecord: (record: Contact) => void, { enabl
                 id: 'location',
                 label: 'LOCATION',
                 sortable: false,
+                // The organization's billing City, State.
+                filter: { kind: 'text', getValue: locationOf },
                 minWidth: 150,
                 render: (c) => <Typography sx={plainCellSx}>{locationOf(c) || '-'}</Typography>,
             },

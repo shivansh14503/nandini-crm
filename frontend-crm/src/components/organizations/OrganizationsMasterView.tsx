@@ -51,9 +51,16 @@ export function OrganizationsMasterView() {
     const [currentPage, setCurrentPage] = useState<number>(1);
     const [sortField, setSortField] = useState<SortField>('createdAt');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+    // Detail View Side Drawer
+    // Tracked by id so the drawer always shows the cached copy and closes if the organization is deleted.
+    const [drawerOrgId, setDrawerOrgId] = useState<string | null>(null);
+    // ── Declarative Column Definitions ────────────────────────────────────────
+    const openDrawerRecord = useCallback((record: ExtendedOrganization) => setDrawerOrgId(record.id), []);
+    const columns = useOrganizationColumns(openDrawerRecord);
     const tableFilter = useTableFilter<ExtendedOrganization>({
         module: 'organizations',
         rows: allOrganizations,
+        columns,
         onSortChange: (s) => {
             setSortField(s.field as SortField);
             setSortOrder(s.order);
@@ -63,9 +70,6 @@ export function OrganizationsMasterView() {
     /** Records left by the Filter dialog: tabs, counts, search and bulk actions work on these. */
     const organizations = tableFilter.filteredRows;
 
-    // Detail View Side Drawer
-    // Tracked by id so the drawer always shows the cached copy and closes if the organization is deleted.
-    const [drawerOrgId, setDrawerOrgId] = useState<string | null>(null);
     const selectedDrawerOrg = useMemo(
         () => (drawerOrgId ? organizations.find((o) => o.id === drawerOrgId) ?? null : null),
         [organizations, drawerOrgId]
@@ -279,9 +283,6 @@ export function OrganizationsMasterView() {
         [organizations]
     );
 
-    // ── Declarative Column Definitions ────────────────────────────────────────
-    const openDrawerRecord = useCallback((record: ExtendedOrganization) => setDrawerOrgId(record.id), []);
-    const columns = useOrganizationColumns(openDrawerRecord);
 
     const headerActions = (
         <MasterHeaderActions

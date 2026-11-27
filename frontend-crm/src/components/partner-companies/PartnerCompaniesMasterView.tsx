@@ -95,9 +95,112 @@ export function PartnerCompaniesMasterView() {
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [sortField, setSortField] = useState<string>('partnerName');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+    // Tracked by id so the drawer always shows the cached copy and closes if the record is deleted.
+    const [drawerId, setDrawerId] = useState<string | null>(null);
+
+    // ── Columns ──────────────────────────────────────────────────────────────
+    const columns: DataTableColumn<ExtendedPartnerCompany>[] = useMemo(
+        () => [
+            {
+                id: 'partnerName',
+                label: 'COMPANY NAME',
+                sortable: true,
+                locked: true,
+                minWidth: 220,
+                render: (p) => (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <HandshakeOutlinedIcon sx={{ fontSize: 16, color: 'var(--crm-text-blue-600)' }} />
+                        <RecordLink
+                            href={ROUTES.PARTNER_COMPANY_DETAIL(p.id)}
+                            onOpen={() => setDrawerId(p.id)}
+                            sx={{ fontWeight: 700, color: 'var(--crm-blue-700)', fontSize: '0.82rem', cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
+                        >
+                            {p.partnerName}
+                        </RecordLink>
+                    </Box>
+                ),
+            },
+            {
+                id: 'natureOfPartner',
+                label: 'NATURE OF PARTNER',
+                sortable: true,
+                minWidth: 170,
+                render: (p) =>
+                    p.natureOfPartner ? (
+                        <Chip
+                            label={p.natureOfPartner}
+                            size="small"
+                            sx={{ height: 22, fontSize: '0.7rem', fontWeight: 700, backgroundColor: 'var(--mui-palette-primary-soft)', color: 'var(--crm-text-blue-700)', border: '1px solid var(--mui-palette-primary-softBorder)' }}
+                        />
+                    ) : (
+                        <Typography sx={cellTextSx}>-</Typography>
+                    ),
+            },
+            {
+                id: 'officePhone',
+                label: 'PHONE',
+                sortable: true,
+                minWidth: 150,
+                // A tel: link of its own.
+                interactive: true,
+                render: (p) =>
+                    p.officePhone ? (
+                        <Box
+                            component="a"
+                            href={telHref(p.officePhone)}
+                            onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                            sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.6, ...cellTextSx, textDecoration: 'none', '&:hover': { color: 'var(--crm-blue-700)' } }}
+                        >
+                            <PhoneOutlinedIcon sx={{ fontSize: 14, color: 'var(--mui-palette-text-muted)' }} />
+                            {p.officePhone}
+                        </Box>
+                    ) : (
+                        <Typography sx={cellTextSx}>-</Typography>
+                    ),
+            },
+            {
+                id: 'email',
+                fieldKey: 'emailAddress',
+                label: 'EMAIL ADDRESS',
+                sortable: true,
+                minWidth: 200,
+                render: (p) => (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
+                        <EmailOutlinedIcon sx={{ fontSize: 14, color: 'var(--mui-palette-text-muted)' }} />
+                        <Typography sx={cellTextSx}>{primaryEmail(p) || '-'}</Typography>
+                    </Box>
+                ),
+            },
+            // The Billing City (older records: their City); filtered as the form's Billing City.
+            { id: 'city', fieldKey: 'billingCity', label: 'CITY', sortable: true, minWidth: 120, render: (p) => <Typography sx={cellTextSx}>{cityOf(p) || '-'}</Typography> },
+            {
+                id: 'billingCountry',
+                label: 'BILLING COUNTRY',
+                sortable: true,
+                minWidth: 130,
+                render: (p) => <Typography sx={cellTextSx}>{countryOf(p) || '-'}</Typography>,
+            },
+            {
+                id: 'assignedTo',
+                label: 'ASSIGNED TO',
+                sortable: true,
+                minWidth: 140,
+                render: (p) => <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)' }}>{assigneeOf(p) || '-'}</Typography>,
+            },
+            {
+                id: 'createdAt',
+                label: 'DATE CREATED',
+                sortable: true,
+                minWidth: 150,
+                render: (p) => <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)' }}>{p.createdAt ? formatDateTime(p.createdAt) : '-'}</Typography>,
+            },
+        ],
+        []
+    );
     const tableFilter = useTableFilter<ExtendedPartnerCompany>({
         module: 'partner-companies',
         rows: allPartners,
+        columns,
         onSortChange: (s) => {
             setSortField(s.field);
             setSortOrder(s.order);
@@ -106,8 +209,6 @@ export function PartnerCompaniesMasterView() {
     });
     /** Records left by the Filter dialog: tabs, counts, search and bulk actions work on these. */
     const partners = tableFilter.filteredRows;
-    // Tracked by id so the drawer always shows the cached copy and closes if the record is deleted.
-    const [drawerId, setDrawerId] = useState<string | null>(null);
     const [importOpen, setImportOpen] = useState(false);
     const drawerRecord = useMemo(() => (drawerId ? partners.find((p) => p.id === drawerId) ?? null : null), [partners, drawerId]);
     const [toast, setToast] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' | 'warning' }>({
@@ -208,103 +309,6 @@ export function PartnerCompaniesMasterView() {
         setToast({ open: true, message: `Exported ${rows.length} partner compan${rows.length === 1 ? 'y' : 'ies'}.`, severity: 'success' });
     };
 
-    // ── Columns ──────────────────────────────────────────────────────────────
-    const columns: DataTableColumn<ExtendedPartnerCompany>[] = useMemo(
-        () => [
-            {
-                id: 'partnerName',
-                label: 'COMPANY NAME',
-                sortable: true,
-                locked: true,
-                minWidth: 220,
-                render: (p) => (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <HandshakeOutlinedIcon sx={{ fontSize: 16, color: 'var(--crm-text-blue-600)' }} />
-                        <RecordLink
-                            href={ROUTES.PARTNER_COMPANY_DETAIL(p.id)}
-                            onOpen={() => setDrawerId(p.id)}
-                            sx={{ fontWeight: 700, color: 'var(--crm-blue-700)', fontSize: '0.82rem', cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
-                        >
-                            {p.partnerName}
-                        </RecordLink>
-                    </Box>
-                ),
-            },
-            {
-                id: 'natureOfPartner',
-                label: 'NATURE OF PARTNER',
-                sortable: true,
-                minWidth: 170,
-                render: (p) =>
-                    p.natureOfPartner ? (
-                        <Chip
-                            label={p.natureOfPartner}
-                            size="small"
-                            sx={{ height: 22, fontSize: '0.7rem', fontWeight: 700, backgroundColor: 'var(--mui-palette-primary-soft)', color: 'var(--crm-text-blue-700)', border: '1px solid var(--mui-palette-primary-softBorder)' }}
-                        />
-                    ) : (
-                        <Typography sx={cellTextSx}>-</Typography>
-                    ),
-            },
-            {
-                id: 'officePhone',
-                label: 'PHONE',
-                sortable: true,
-                minWidth: 150,
-                // A tel: link of its own.
-                interactive: true,
-                render: (p) =>
-                    p.officePhone ? (
-                        <Box
-                            component="a"
-                            href={telHref(p.officePhone)}
-                            onClick={(e: React.MouseEvent) => e.stopPropagation()}
-                            sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.6, ...cellTextSx, textDecoration: 'none', '&:hover': { color: 'var(--crm-blue-700)' } }}
-                        >
-                            <PhoneOutlinedIcon sx={{ fontSize: 14, color: 'var(--mui-palette-text-muted)' }} />
-                            {p.officePhone}
-                        </Box>
-                    ) : (
-                        <Typography sx={cellTextSx}>-</Typography>
-                    ),
-            },
-            {
-                id: 'email',
-                label: 'EMAIL ADDRESS',
-                sortable: true,
-                minWidth: 200,
-                render: (p) => (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
-                        <EmailOutlinedIcon sx={{ fontSize: 14, color: 'var(--mui-palette-text-muted)' }} />
-                        <Typography sx={cellTextSx}>{primaryEmail(p) || '-'}</Typography>
-                    </Box>
-                ),
-            },
-            { id: 'city', label: 'CITY', sortable: true, minWidth: 120, render: (p) => <Typography sx={cellTextSx}>{cityOf(p) || '-'}</Typography> },
-            {
-                id: 'billingCountry',
-                label: 'BILLING COUNTRY',
-                sortable: true,
-                minWidth: 130,
-                render: (p) => <Typography sx={cellTextSx}>{countryOf(p) || '-'}</Typography>,
-            },
-            {
-                id: 'assignedTo',
-                label: 'ASSIGNED TO',
-                sortable: true,
-                minWidth: 140,
-                render: (p) => <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)' }}>{assigneeOf(p) || '-'}</Typography>,
-            },
-            {
-                id: 'createdAt',
-                label: 'DATE CREATED',
-                sortable: true,
-                minWidth: 150,
-                render: (p) => <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)' }}>{p.createdAt ? formatDateTime(p.createdAt) : '-'}</Typography>,
-            },
-        ],
-        []
-    );
 
     const closeDrawer = useCallback(() => setDrawerId(null), []);
 

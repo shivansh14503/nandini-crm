@@ -76,6 +76,7 @@ export function isConditionComplete(field: FilterFieldDef | undefined, c: Filter
         case 'text':
             return c.op === 'contains' && Boolean(c.value?.trim());
         case 'days':
+        case 'number':
             return Boolean(c.value?.trim()) && Number.isFinite(Number(c.value)) && ['gte', 'lte', 'equals'].includes(c.op);
         case 'boolean':
             return c.op === 'is' && (c.value === 'yes' || c.value === 'no');
@@ -110,6 +111,14 @@ function asStrings(value: unknown): string[] {
 
 const digits = (s: string) => s.replace(/\D/g, '');
 
+/** A number, or a numeric string ("12,500.00", "18%"); undefined when empty or not a number. */
+function toNumber(raw: unknown): number | undefined {
+    if (typeof raw === 'number') return Number.isFinite(raw) ? raw : undefined;
+    if (typeof raw !== 'string' || !raw.trim()) return undefined;
+    const n = Number(raw.replace(/[,%\s]/g, ''));
+    return Number.isFinite(n) ? n : undefined;
+}
+
 function matchesCondition(field: FilterFieldDef, c: FilterCondition, row: unknown): boolean {
     const raw = field.getValue(row);
     switch (field.kind) {
@@ -124,10 +133,12 @@ function matchesCondition(field: FilterFieldDef, c: FilterCondition, row: unknow
             if (field.digitsOnly && digits(q)) return values.some((v) => digits(v).includes(digits(q)));
             return values.some((v) => v.toLowerCase().includes(q));
         }
-        case 'days': {
-            if (typeof raw !== 'number') return false;
+        case 'days':
+        case 'number': {
+            const value = toNumber(raw);
+            if (value === undefined) return false;
             const n = Number(c.value);
-            return c.op === 'gte' ? raw >= n : c.op === 'lte' ? raw <= n : raw === n;
+            return c.op === 'gte' ? value >= n : c.op === 'lte' ? value <= n : value === n;
         }
         case 'boolean': {
             const truthy = raw === true || raw === 'true' || raw === 'Yes' || raw === 1;
@@ -172,7 +183,8 @@ export function describeCondition(field: FilterFieldDef, c: FilterCondition): st
         }
         case 'text':
             return `${field.label} ${field.exactMatch ? 'is' : 'contains'} "${c.value}"`;
-        case 'days': {
+        case 'days':
+        case 'number': {
             const label = DAYS_OPERATORS.find((o) => o.op === c.op)?.label.toLowerCase() ?? '';
             return `${field.label}: ${label} ${c.value}`;
         }

@@ -300,6 +300,7 @@ export function useActivityColumns(openRecord: (record: Activity) => void): Data
                 id: 'calendar',
                 label: 'CALENDAR',
                 sortable: false,
+                filter: { kind: 'text', placeholder: 'e.g. Sending, Error...', getValue: (a) => calendarCell(a.calendar)?.label ?? '' },
                 minWidth: 130,
                 defaultHidden: true,
                 render: (a) => {

@@ -14,7 +14,7 @@ import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined
 import { RecordLink } from '../common/RecordLink';
 import { documentNumberColumn, type DataTableColumn } from '../common/DataTable';
 import { ROUTES } from '@/config/constants';
-import type { Lead } from '@/types/lead.types';
+import { LEAD_RATINGS, type Lead } from '@/types/lead.types';
 import { useDropdownOptionLabel } from '@/hooks/queries';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import { formatDateTime } from '@/utils/date';
@@ -90,6 +90,7 @@ export function useLeadColumns(openRecord: (record: Lead) => void): DataTableCol
                 id: 'rating',
                 label: 'RATING',
                 sortable: true,
+                filter: { kind: 'options', options: LEAD_RATINGS.map((r) => ({ value: r, label: r })) },
                 minWidth: 100,
                 render: (l) =>
                     l.rating ? (

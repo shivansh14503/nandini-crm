@@ -56,9 +56,15 @@ export function LeadsMasterView() {
     // Newest leads first by default.
     const [sortField, setSortField] = useState<string>('createdAt');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+    // Tracked by id so the drawer always shows the cached copy and closes if the lead is deleted.
+    const [drawerLeadId, setDrawerLeadId] = useState<string | null>(null);
+    // ── Declarative Column Definitions ────────────────────────────────────────
+    const openDrawerRecord = useCallback((record: Lead) => setDrawerLeadId(record.id), []);
+    const columns = useLeadColumns(openDrawerRecord);
     const tableFilter = useTableFilter<Lead>({
         module: 'leads',
         rows: leads,
+        columns,
         onSortChange: (s) => {
             setSortField(s.field);
             setSortOrder(s.order);
@@ -67,8 +73,6 @@ export function LeadsMasterView() {
     });
     /** Leads left by the Filter dialog: the tabs, search and counts work on these. */
     const baseLeads = tableFilter.filteredRows;
-    // Tracked by id so the drawer always shows the cached copy and closes if the lead is deleted.
-    const [drawerLeadId, setDrawerLeadId] = useState<string | null>(null);
     const selectedDrawerLead = useMemo(
         () => (drawerLeadId ? leads.find((l) => l.id === drawerLeadId) ?? null : null),
         [leads, drawerLeadId]
@@ -250,10 +254,6 @@ export function LeadsMasterView() {
             setToast({ open: true, message: 'Failed to delete leads.', severity: 'error' });
         }
     };
-
-    // ── Declarative Column Definitions ────────────────────────────────────────
-    const openDrawerRecord = useCallback((record: Lead) => setDrawerLeadId(record.id), []);
-    const columns = useLeadColumns(openDrawerRecord);
 
     // Row clicks only open the drawer; its eye button leads on to the detail page with the related modules.
     const closeDrawer = useCallback(() => setDrawerLeadId(null), []);

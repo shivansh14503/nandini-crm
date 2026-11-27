@@ -46,9 +46,13 @@ export function ReferralsMasterView() {
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [sortField, setSortField] = useState<string>('createdAt');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+    const [drawerId, setDrawerId] = useState<string | null>(null);
+    const openDrawerRecord = useCallback((record: Referral) => setDrawerId(record.id), []);
+    const columns = useReferralColumns(openDrawerRecord);
     const tableFilter = useTableFilter<Referral>({
         module: 'referrals',
         rows: allReferrals,
+        columns,
         onSortChange: (s) => {
             setSortField(s.field);
             setSortOrder(s.order);
@@ -57,7 +61,6 @@ export function ReferralsMasterView() {
     });
     /** Records left by the Filter dialog: tabs, counts, search and bulk actions work on these. */
     const referrals = tableFilter.filteredRows;
-    const [drawerId, setDrawerId] = useState<string | null>(null);
     const selectedDrawerReferral = useMemo(() => (drawerId ? referrals.find((r) => r.id === drawerId) ?? null : null), [referrals, drawerId]);
     const [toast, setToast] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' | 'warning' }>({
         open: false,
@@ -148,8 +151,6 @@ export function ReferralsMasterView() {
         }
     };
 
-    const openDrawerRecord = useCallback((record: Referral) => setDrawerId(record.id), []);
-    const columns = useReferralColumns(openDrawerRecord);
     const closeDrawer = useCallback(() => setDrawerId(null), []);
 
     return (

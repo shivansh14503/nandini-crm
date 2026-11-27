@@ -8,6 +8,7 @@ import { activeConditionCount, applyCriteria, cleanCriteria } from './applyFilte
 import { useTableFilterFields, type ModuleFilterFields } from './filterFields';
 import type { FilterCriteria, FilterSort, TableFilterLists, TableFilterScope } from './types';
 import { useSearchScope } from '../../search/SearchScope';
+import type { DataTableColumn } from '../DataTable/types';
 
 const EMPTY_LISTS: TableFilterLists = { recent: [], saved: [] };
 const listKey = (module: TableFilterScope) => ['table-filters', module] as const;
@@ -37,6 +38,8 @@ export interface UseTableFilterOptions<T> {
     module: CrmModuleKey;
     /** Every loaded record of the list (before tabs, search and pagination). */
     rows: T[];
+    /** The list's columns: those that aren't form fields become filters through their `filter` spec. */
+    columns?: DataTableColumn<T>[];
     /** Called when a filter with an "Order by" is applied (hide Order by when omitted). */
     onSortChange?: (sort: FilterSort) => void;
     /** Called whenever the applied filter changes, e.g. to go back to the first page. */
@@ -78,7 +81,7 @@ export interface TableFilterController<T = unknown> {
  * Filtering runs here over the loaded rows; pass `filteredRows` on to the tab, search, sort and pagination logic.
  */
 export function useTableFilter<T>(options: UseTableFilterOptions<T>): TableFilterController<T> {
-    const fields = useTableFilterFields(options.module);
+    const fields = useTableFilterFields(options.module, options.columns);
     return useFilterController({ ...options, title: moduleNavLabel(options.module), fields });
 }
 
