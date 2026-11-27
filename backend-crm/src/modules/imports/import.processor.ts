@@ -22,7 +22,7 @@ import { activityOnlyTypeIssues } from '../shared/followupTypes.js';
 import { applyFollowUpPlan, assertDocumentation, assertPayeeBank, clearedKeys, createOpportunityRecord } from '../opportunities/opportunity.service.js';
 import { loadResponseRules, planOpportunityFollowUp, type ResponseRules } from '../opportunities/opportunity.followUp.js';
 import { buildImportPayload, splitDateTime } from './importValues.js';
-import { opportunityInputSchema } from '../opportunities/opportunity.validator.js';
+import { opportunityInputSchema, opportunityNotApplicableKeys } from '../opportunities/opportunity.validator.js';
 import { createPartnerCompanyRecord, invalidatePartnerCaches } from '../partner-companies/partnerCompany.service.js';
 import { partnerCompanyImportSchema } from '../partner-companies/partnerCompany.validator.js';
 import { afterManufacturersAdded } from '../products/product.manufacturer.js';
@@ -200,8 +200,9 @@ function checkRow(
     raw: Record<string, unknown>,
     customFields: Record<string, unknown>,
     notRequired?: ReadonlySet<string>,
+    notApplicableKeys?: ReadonlySet<string>,
 ): Record<string, unknown> {
-    return checkModulePayload(ctx.fieldConfig, raw, customFields, { allowPastDates: true, notRequired });
+    return checkModulePayload(ctx.fieldConfig, raw, customFields, { allowPastDates: true, notRequired, notApplicableKeys });
 }
 
 /**
@@ -299,7 +300,7 @@ const rowBuilders: Record<ImportEntity, (v: Record<string, string>, user: AuthUs
         if (!ctx.responseRules) throw new Error('Opportunity import context has no Response rules.');
         const plan = planOpportunityFollowUp(input, Boolean(input.customerResponse?.trim()), ctx.responseRules, '');
         applyFollowUpPlan(input, plan);
-        input.customFields = checkRow(ctx, { ...raw, ...plan }, customFields, clearedKeys(plan, input.salesStage));
+        input.customFields = checkRow(ctx, { ...raw, ...plan }, customFields, clearedKeys(plan, input.salesStage), opportunityNotApplicableKeys(input));
         const context = ctx.followUp;
         if (!context) throw new Error('Opportunity import context has no follow-up context.');
         return async (tx): Promise<FollowUpRows> => {

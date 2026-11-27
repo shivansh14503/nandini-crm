@@ -150,6 +150,19 @@ export function commissionIssues(
     }));
 }
 
+/** The Documentation fields shown (and kept) only while Add Document is Yes. */
+export const DOCUMENT_DETAIL_FIELDS = ['documentNo', 'documentDate', 'documentFile'] as const;
+/** The Commission fields shown (and kept) only while Commission is Yes. */
+export const COMMISSION_DETAIL_FIELDS = ['commissionAmount', 'commissionType', ...PAYEE_BANK_FIELDS.map((f) => f.key)] as const;
+
+/**
+ * Fields the form hides for these values: never "required" from the Form Builder, so a Document No an admin made
+ * required is asked for only while Add Document is Yes. Mirrors opportunityNotApplicableKeys (opportunity.validator.ts).
+ */
+export function opportunityNotApplicableFields(values: { addDocument?: string; commission?: string }): string[] {
+    return [...(values.addDocument === 'Yes' ? [] : DOCUMENT_DETAIL_FIELDS), ...(values.commission === 'Yes' ? [] : COMMISSION_DETAIL_FIELDS)];
+}
+
 /** Add Document must be Yes at Sales Stage PO, and needs a file (Upload Doc) whenever it is Yes. */
 export function documentationIssues(values: { salesStage?: string; addDocument?: string; documentFile?: unknown }): ConfigValidationIssue[] {
     if (values.salesStage === PO_SALES_STAGE && values.addDocument !== 'Yes') {

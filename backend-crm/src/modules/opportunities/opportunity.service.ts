@@ -41,6 +41,7 @@ import {
 } from '../activities/activity.followUp.js';
 import {
     documentationIssues,
+    opportunityNotApplicableKeys,
     payeeBankIssues,
     PAYEE_BANK_FIELDS,
     OPPORTUNITY_SORT_FIELDS,
@@ -277,6 +278,7 @@ export const opportunityService = {
         applyFollowUpPlan(input, plan);
         input.customFields = await validateModulePayload('opportunities', { ...asPayload(body), ...plan }, input.customFields, {
             notRequired: clearedKeys(plan, input.salesStage),
+            notApplicableKeys: opportunityNotApplicableKeys(input),
         });
         assertNotInPast(opportunityPastChecks(input));
         // Task and Note are Followup Types of Activities only.
@@ -331,6 +333,7 @@ export const opportunityService = {
             input.customFields = checkModulePayload(fieldConfig, { ...merged, ...plan }, input.customFields, {
                 submittedKeys: new Set(Object.keys(patch)),
                 notRequired: clearedKeys(plan, input.salesStage),
+                notApplicableKeys: opportunityNotApplicableKeys(input),
                 previousCustomFields: before.customFields,
             });
             assertNotInPast(opportunityPastChecks(input, before));

@@ -1053,7 +1053,7 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
     // Last section of the Basic tab. Add Document must be Yes at Sales Stage PO (the form and the API enforce it).
     ...section('opportunities', 'basic', 'Documentation', [
         sel('addDocument', 'Add Document', 'opportunity_add_document', { lock: true }),
-        // Shown while Add Document is Yes.
+        // Shown while Add Document is Yes. Required here means required while it is Yes (opportunityNotApplicableKeys).
         t('documentNo', 'Document No'),
         t('documentDate', 'Document Date', { type: 'date' }),
         // Required while Add Document is Yes (the form and the API enforce it).

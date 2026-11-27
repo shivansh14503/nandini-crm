@@ -1,5 +1,6 @@
 import { sectionKeyFromLabel, type ConvertSectionDef, type FormConfigsPayload, type FormFieldDefinitionDto } from '@/types/formConfig.types';
 import { CONVERT_FIELD_NAMES, NOT_CHECKED_FOR_REQUIRED, type ConvertLeadFormValues, type ConvertModule } from '@/validations/convertLead.schema';
+import { opportunityNotApplicableFields } from '@/validations/opportunity.schema';
 import { groupSections, isEmptyValue, moduleFields, type ConfigValidationIssue } from './formConfig';
 
 /**
@@ -196,8 +197,17 @@ export function convertRequiredIssues(configs: FormConfigsPayload | null | undef
         if (record === 'contacts' && values.existingContactId) continue;
         if (record === 'organizations' && values.existingOrganizationId) continue;
         if (record === 'opportunities' && !values.createOpportunity) continue;
+        // The opportunity's document / commission details apply only once Add Document / Commission is Yes.
+        const notApplicable = new Set(
+            record === 'opportunities'
+                ? opportunityNotApplicableFields({
+                      addDocument: readPath(values, convertFieldName(record, { fieldKey: 'addDocument', isSystem: true })) as string | undefined,
+                      commission: readPath(values, convertFieldName(record, { fieldKey: 'commission', isSystem: true })) as string | undefined,
+                  })
+                : [],
+        );
         for (const field of convertShownFields(configs, record)) {
-            if (!field.isRequired || (field.isSystem && NOT_CHECKED_FOR_REQUIRED.has(field.fieldKey))) continue;
+            if (!field.isRequired || (field.isSystem && (NOT_CHECKED_FOR_REQUIRED.has(field.fieldKey) || notApplicable.has(field.fieldKey)))) continue;
             const name = convertFieldName(record, field);
             const value = readPath(values, name);
             if (field.fieldType === 'checkbox') {
