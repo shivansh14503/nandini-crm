@@ -271,6 +271,7 @@ export function OpportunitiesMasterView() {
 
     return (
         <CommonMasterView<Opportunity, OpportunityFilterTab>
+            importEntity="opportunities"
             loading={listLoading}
             summary={<ModuleScorecardSummary state={scorecard} loading={listLoading} />}
             filterConfig={{
@@ -370,9 +371,6 @@ export function OpportunitiesMasterView() {
                 open={importOpen}
                 entity="opportunities"
                 onClose={() => setImportOpen(false)}
-                onImported={(count) => {
-                    setToast({ open: true, message: `Successfully imported ${count} opportunit${count === 1 ? 'y' : 'ies'}!`, severity: 'success' });
-                }}
             />
         </CommonMasterView>
     );

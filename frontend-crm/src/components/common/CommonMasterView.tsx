@@ -27,6 +27,11 @@ import { useSearchScope } from '../search/SearchScope';
 import { moduleKeyFrom, moduleTableTintVars } from '@/theme/moduleColors';
 import { useScorecardColumns } from './scorecard/scorecardDisplay';
 import { useCloseOnOutsideClick } from './Drawer/useCloseOnOutsideClick';
+import { onImportFinished } from '@/services/importTracker';
+import type { ImportEntityType } from './import/types';
+
+/** Page sizes the pagination bar offers when the view doesn't set its own (DataTablePagination's default). */
+const DEFAULT_PAGE_SIZE_OPTIONS = [10, 25, 50];
 
 export interface MasterViewHeaderActionsContext {
     /** Opens the shared column visibility popover anchored to the given element. */
@@ -149,6 +154,11 @@ export interface CommonMasterViewProps<T = unknown, TFilter extends string = str
      */
     pagination?: DataTablePaginationProps | React.ReactNode;
     /**
+     * The module this list imports into (the shared import wizard). When an import of it ends with new rows, the
+     * list jumps to its largest page size and the first page, so the freshly imported rows are in view.
+     */
+    importEntity?: ImportEntityType;
+    /**
      * Left-side related modules sidebar component (rendered alongside the detail drawer).
      */
     relatedSidebar?: React.ReactNode;
@@ -269,6 +279,7 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
     loading,
     table,
     pagination,
+    importEntity,
     relatedSidebar,
     relatedRecordsTable,
     drawer,
@@ -436,6 +447,23 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
                 loading={loading}
             />
         ) : null);
+
+    // After an import of this module: show as many rows as the list allows, from the first page (newest first).
+    const paginationConfig = isPaginationConfig(pagination) ? pagination : null;
+    const paginationRef = React.useRef(paginationConfig);
+    React.useEffect(() => {
+        paginationRef.current = paginationConfig;
+    });
+    React.useEffect(() => {
+        if (!importEntity) return;
+        return onImportFinished((item) => {
+            const current = paginationRef.current;
+            if (item.entity !== importEntity || item.created === 0 || !current) return;
+            const largest = Math.max(...(current.pageSizeOptions ?? DEFAULT_PAGE_SIZE_OPTIONS));
+            if (current.rowsPerPage < largest) current.onRowsPerPageChange(largest);
+            else current.onPageChange(0);
+        });
+    }, [importEntity]);
 
     const resolvedPagination = isPaginationConfig(pagination) ? (
         <DataTablePagination {...pagination} />

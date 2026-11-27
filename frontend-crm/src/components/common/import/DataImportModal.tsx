@@ -28,8 +28,11 @@ export interface DataImportModalProps {
     open: boolean;
     entity: ImportEntityType;
     onClose: () => void;
-    /** Called once the import has finished, with the number of created records. */
-    onImported: (count: number) => void;
+    /**
+     * Called once the import has finished while the wizard is open, with the number of created records. The app-wide
+     * import snackbar (`BackgroundImports`) already announces every finished import.
+     */
+    onImported?: (count: number) => void;
 }
 
 const STEPS = ['Upload File', 'Map Columns', 'Preview & Import', 'Results'];
@@ -89,7 +92,7 @@ function DataImportWizard({ open, entity, onClose, onImported }: DataImportModal
         if (!tracked || !finished || reported.current) return;
         if (tracked.phase !== 'completed' && tracked.phase !== 'cancelled') return;
         reported.current = true;
-        if (tracked.created > 0) onImported(tracked.created);
+        if (tracked.created > 0) onImported?.(tracked.created);
     }, [tracked, finished, onImported]);
 
     const mappedRows = useMemo(

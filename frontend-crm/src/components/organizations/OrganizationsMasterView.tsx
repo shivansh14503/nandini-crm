@@ -314,6 +314,7 @@ export function OrganizationsMasterView() {
 
     return (
         <CommonMasterView<ExtendedOrganization, FilterTab>
+            importEntity="organizations"
             loading={listLoading}
             summary={<ModuleScorecardSummary state={scorecard} loading={listLoading} />}
             filterConfig={{
@@ -426,9 +427,6 @@ export function OrganizationsMasterView() {
                 open={importOpen}
                 entity="organizations"
                 onClose={() => setImportOpen(false)}
-                onImported={(count) => {
-                    setToast({ open: true, message: `Successfully imported ${count} organization${count === 1 ? '' : 's'}!`, severity: 'success' });
-                }}
             />
         </CommonMasterView>
     );

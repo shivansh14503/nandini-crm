@@ -222,6 +222,7 @@ export function TicketsMasterView() {
 
     return (
         <CommonMasterView<Ticket, TicketFilterTab>
+            importEntity="tickets"
             loading={listLoading}
             summary={<ModuleScorecardSummary state={scorecard} loading={listLoading} />}
             filterConfig={{
@@ -318,9 +319,6 @@ export function TicketsMasterView() {
                 open={importOpen}
                 entity="tickets"
                 onClose={() => setImportOpen(false)}
-                onImported={(count) => {
-                    setToast({ open: true, message: `Successfully imported ${count} ticket${count === 1 ? '' : 's'}!`, severity: 'success' });
-                }}
             />
         </CommonMasterView>
     );

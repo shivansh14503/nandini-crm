@@ -314,6 +314,7 @@ export function PartnerCompaniesMasterView() {
 
     return (
         <CommonMasterView<ExtendedPartnerCompany, PartnerCompanyFilterTab>
+            importEntity="partner-companies"
             loading={listLoading}
             summary={<ModuleScorecardSummary state={scorecard} loading={listLoading} />}
             breadcrumbItems={[{ label: 'All' }, { label: 'Partner Companies' }]}
@@ -409,9 +410,6 @@ export function PartnerCompaniesMasterView() {
                 open={importOpen}
                 entity="partner-companies"
                 onClose={() => setImportOpen(false)}
-                onImported={(count) => {
-                    setToast({ open: true, message: `Successfully imported ${count} partner compan${count === 1 ? 'y' : 'ies'}!`, severity: 'success' });
-                }}
             />
         </CommonMasterView>
     );

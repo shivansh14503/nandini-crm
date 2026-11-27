@@ -220,6 +220,7 @@ export function ProductsMasterView() {
 
     return (
         <CommonMasterView<Product, ProductFilterTab>
+            importEntity="products"
             loading={listLoading}
             summary={<ModuleScorecardSummary state={scorecard} loading={listLoading} />}
             filterConfig={{
@@ -316,9 +317,6 @@ export function ProductsMasterView() {
                 open={importOpen}
                 entity="products"
                 onClose={() => setImportOpen(false)}
-                onImported={(count) => {
-                    setToast({ open: true, message: `Successfully imported ${count} product${count === 1 ? '' : 's'}!`, severity: 'success' });
-                }}
             />
         </CommonMasterView>
     );

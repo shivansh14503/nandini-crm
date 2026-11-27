@@ -1,9 +1,10 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Box, Button, IconButton, Paper, Typography } from '@mui/material';
 import { CloseRounded } from '@mui/icons-material';
-import { importTracker, isImportFinished, useTrackedImports } from '@/services/importTracker';
+import { importTracker, isImportFinished, onImportFinished, useTrackedImports, type TrackedImport } from '@/services/importTracker';
+import { AppToast } from '../AppToast';
 import { ImportProgressPanel } from './ImportProgressPanel';
 
 const cancelBtnSx = {
@@ -27,14 +28,61 @@ const closeBtnSx = {
     '&:hover': { color: 'var(--crm-text-blue-700)', backgroundColor: 'var(--mui-palette-primary-soft)' },
 } as const;
 
+type ImportToast = { key: string; message: string; severity: 'success' | 'warning' | 'error' | 'info' };
+
+const singular = (plural: string, n: number) => (n === 1 ? plural.replace(/ies$/, 'y').replace(/s$/, '') : plural).toLowerCase();
+
+/** The snackbar text for a finished import. */
+function toastFor(item: TrackedImport): ImportToast {
+    const notImported = item.failedCount + item.skipped.length;
+    const created = `${item.created} ${singular(item.plural, item.created)}`;
+    if (item.phase === 'completed') {
+        return notImported
+            ? { key: item.importId, severity: item.created ? 'warning' : 'error', message: `Import finished: ${created} imported, ${notImported} not imported.` }
+            : { key: item.importId, severity: 'success', message: `Import complete: ${created} imported.` };
+    }
+    if (item.phase === 'cancelled') {
+        return { key: item.importId, severity: 'info', message: item.created ? `Import cancelled: ${created} imported before it stopped.` : 'Import cancelled.' };
+    }
+    return { key: item.importId, severity: item.phase === 'failed' ? 'error' : 'warning', message: item.error ?? `Import of ${item.plural.toLowerCase()} stopped.` };
+}
+
 /**
  * Imports that kept running after their wizard closed ("Run in background"): a card in the bottom corner with live
  * progress, Cancel, and the final summary (with the error-rows download). Mounted once in the root layout.
  */
 export function BackgroundImports() {
     const items = useTrackedImports().filter((item) => item.background);
-    if (items.length === 0) return null;
+    // Every finished import (wizard open or not) is announced by a snackbar.
+    const [toast, setToast] = useState<ImportToast | null>(null);
+    const [toastOpen, setToastOpen] = useState(false);
+    useEffect(
+        () =>
+            onImportFinished((item) => {
+                setToast(toastFor(item));
+                setToastOpen(true);
+            }),
+        []
+    );
 
+    return (
+        <>
+            {toast && (
+                <AppToast
+                    key={toast.key}
+                    open={toastOpen}
+                    message={toast.message}
+                    severity={toast.severity}
+                    autoHideDuration={6000}
+                    onClose={() => setToastOpen(false)}
+                />
+            )}
+            {items.length > 0 && <BackgroundImportCards items={items} />}
+        </>
+    );
+}
+
+function BackgroundImportCards({ items }: { items: TrackedImport[] }) {
     return (
         <Box
             sx={{
