@@ -70,11 +70,36 @@ export interface ImportResult {
     importId: string;
     entity: ImportEntity;
     total: number;
+    /** Rows the import got through (equals `total` unless it was cancelled). */
+    processed: number;
     created: number;
     failed: ImportRowFailure[];
+    /** True when the owner cancelled it part-way; rows written before that stay. */
+    cancelled: boolean;
 }
 
-const PROGRESS_EVERY_ROWS = 20;
+/** Live progress of a running import (BullMQ job progress), read by GET /api/import/jobs/:importId. */
+export interface ImportProgress {
+    processed: number;
+    total: number;
+    created: number;
+    failed: number;
+    /** 0–100: processed / total. */
+    percent: number;
+}
+
+export interface ImportHooks {
+    /** Called after each row (throttled) and after the last one. */
+    onProgress?: (progress: ImportProgress) => Promise<void> | void;
+    /** Checked before each row; true stops the import there (rows already written stay). */
+    shouldCancel?: () => Promise<boolean> | boolean;
+}
+
+/** Redis key the cancel endpoint sets for a running import; the worker checks it between rows. */
+export const importCancelKey = (importId: string) => `import:cancel:${importId}`;
+
+/** Progress is pushed at most this often (plus the first and last row), so a fast import doesn't flood Redis. */
+const PROGRESS_MIN_INTERVAL_MS = 250;
 /** Lead fields the template doesn't offer but the record requires; documented defaults, applied only when blank. */
 const LEAD_IMPORT_DEFAULTS = { leadSource: 'Other', remarks: 'Imported via bulk import', followupType: 'Call' } as const;
 
@@ -353,21 +378,38 @@ function describeError(err: unknown): string[] {
  * Every audit entry it writes (one CREATE per row, then the IMPORT summary) is tagged source IMPORT with the import
  * id as its request id, plus the upload request's IP / browser / screen.
  */
-export function processImport(data: ImportJobData, onProgress?: (percent: number) => Promise<void> | void): Promise<ImportResult> {
+export function processImport(data: ImportJobData, hooks: ImportHooks = {}): Promise<ImportResult> {
     return runWithAuditOrigin(
         { ...data.origin, source: 'IMPORT', requestId: data.importId, actorId: data.user.id, actorRole: data.user.role },
-        () => importRows(data, onProgress),
+        () => importRows(data, hooks),
     );
 }
 
-async function importRows(data: ImportJobData, onProgress?: (percent: number) => Promise<void> | void): Promise<ImportResult> {
+async function importRows(data: ImportJobData, { onProgress, shouldCancel }: ImportHooks): Promise<ImportResult> {
     const build = rowBuilders[data.entity];
     const failed: ImportRowFailure[] = [];
+    const total = data.rows.length;
     let created = 0;
+    let processed = 0;
+    let cancelled = false;
+    let lastReport = 0;
+    const report = async (force: boolean) => {
+        if (!onProgress) return;
+        const now = Date.now();
+        if (!force && now - lastReport < PROGRESS_MIN_INTERVAL_MS) return;
+        lastReport = now;
+        await onProgress({ processed, total, created, failed: failed.length, percent: total ? Math.floor((processed / total) * 100) : 100 });
+    };
     const ctx = await loadImportContext(data);
     const followUpRows: ActivityCommitRow[] = [];
+    // The context is loaded: tell the client the rows are starting (0 of N), not still queued.
+    await report(true);
 
-    for (const [index, row] of data.rows.entries()) {
+    for (const row of data.rows) {
+        if (shouldCancel && (await shouldCancel())) {
+            cancelled = true;
+            break;
+        }
         try {
             const write = build(row.values, data.user, ctx);
             // D45: a unique-index refusal (a follow-up activity race) runs the row's transaction once more.
@@ -377,22 +419,22 @@ async function importRows(data: ImportJobData, onProgress?: (percent: number) =>
         } catch (err) {
             failed.push({ rowNumber: row.rowNumber, errors: describeError(err) });
         }
-        if (onProgress && ((index + 1) % PROGRESS_EVERY_ROWS === 0 || index === data.rows.length - 1)) {
-            await onProgress(Math.round(((index + 1) / data.rows.length) * 100));
-        }
+        processed++;
+        await report(processed === total);
     }
+    if (cancelled) await report(true);
 
     if (created > 0) await (cacheInvalidators[data.entity]?.() ?? cacheService.invalidateEntityCaches(data.entity));
     // Reminders of the imported records' follow-up activities (notify: false, so nobody is told about each row).
     await afterFollowUpCommit(followUpRows, data.user);
-    const result: ImportResult = { importId: data.importId, entity: data.entity, total: data.rows.length, created, failed };
+    const result: ImportResult = { importId: data.importId, entity: data.entity, total, processed, created, failed, cancelled };
     await auditService.enqueue({
         entityType: 'Import',
         entityId: data.importId,
         action: 'IMPORT',
         changedBy: data.user.username,
-        changes: { entity: data.entity, fileName: data.fileName, total: result.total, created, failed: failed.length },
+        changes: { entity: data.entity, fileName: data.fileName, total, processed, created, failed: failed.length, ...(cancelled ? { cancelled } : {}) },
     });
-    logger.info({ importId: data.importId, entity: data.entity, total: result.total, created, failed: failed.length }, 'Import finished');
+    logger.info({ importId: data.importId, entity: data.entity, total, processed, created, failed: failed.length, cancelled }, 'Import finished');
     return result;
 }

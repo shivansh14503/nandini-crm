@@ -644,7 +644,7 @@ flowchart LR
 
 | Queue | Producer | Worker concurrency | Attempts | Job retention | Notes |
 | --- | --- | --- | --- | --- | --- |
-| `crm-import` | `POST /api/import/:entity` (job id = import id) | 1 | **1** (a retry would duplicate rows already created) | done 1 day / 500 jobs; failed 7 days | Reports progress every 20 rows; result `{ total, created, failed[] }` |
+| `crm-import` | `POST /api/import/:entity` (job id = import id) | 1 | **1** (a retry would duplicate rows already created) | done 1 day / 500 jobs; failed 7 days | Reports `{ processed, total, created, failed, percent }` after each row (throttled to 250 ms); checks `import:cancel:<id>` before each row; result `{ total, processed, created, failed[], cancelled }` |
 | `crm-audit` | `auditService.enqueue` (login, login failed, logout, access denied, PDF generated, import summary); each job carries the request's audit origin | 5 | 5, exponential backoff from 1 s | done 1 h / 1000 jobs; failed 7 days | Data-change audits do **not** go through the queue (see below) |
 | `crm-audit-export` | `POST /api/admin/audit-logs/exports` over 5,000 entries (job id = export id) | 1 | 1 | done 1 day / 200 jobs; failed 7 days | Streams the matching entries newest first, 1,000 per query, to a CSV or a streaming Excel writer (`utils/xlsxWriter.ts`: constant memory; peak heap ~120 MB on a 169 k-entry export) under `AUDIT_EXPORT_DIR`; writes the `EXPORT` entry with the requesting admin's origin; files deleted after 24 h by the nightly ledger job |
 | `crm-audit-ledger` | Job scheduler `audit-ledger-digest`, cron `15 0 * * *` in `BUSINESS_TIMEZONE`; `POST /api/admin/audit-logs/integrity/verify` (job id `ledger-verify`) | 1 | 1 | removed when done | Nightly: saves a ledger digest outside the database (`AUDIT_DIGEST_DIR` + `AuditDigest`) and tidies old exports. Verify: `sys.sp_verify_database_ledger` against every digest file on a separate SQL connection with a long timeout (`AUDIT_VERIFY_TIMEOUT_MS`, default 30 min; ~100 s per million entries) and writes a `LEDGER_VERIFY` entry |
@@ -657,7 +657,10 @@ flowchart LR
 rows client-side, then posts up to 5,000 mapped rows. The worker validates each row with the same Zod schema and
 form-config rules as the API, prefetches active usernames and organization names in bulk, and creates each row in
 its own transaction through the same `create<Entity>Record` function the API uses (so codes, links and audit rows are
-identical). The browser polls `GET /api/import/jobs/:importId` until the job completes.
+identical). The browser polls `GET /api/import/jobs/:importId` every second until the job ends. Polling lives in an app-wide
+tracker (`frontend-crm/src/services/importTracker.ts`), not in the wizard, so closing the wizard mid-import moves it
+to a background card (`BackgroundImports`, kept across reloads in sessionStorage) and the module's lists still refresh
+(`notifyCrmUpdate`) when it finishes.
 
 **Audit write paths** (`services/audit.service.ts`):
 

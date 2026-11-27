@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import {
     Alert,
     Box,
@@ -11,13 +10,13 @@ import {
     DialogActions,
     DialogContent,
     DialogTitle,
-    LinearProgress,
     Step,
     StepLabel,
     Stepper,
-    Typography,
 } from '@mui/material';
-import { importService, notifyCrmUpdate, type ImportResult } from '@/services';
+import { importService } from '@/services';
+import { importTracker, isImportFinished, useTrackedImport, type ImportSourceFile } from '@/services/importTracker';
+import { ImportProgressPanel } from './ImportProgressPanel';
 import { FileUploadDropzone } from './FileUploadDropzone';
 import { ColumnMappingStep } from './ColumnMappingStep';
 import { ImportPreviewStep } from './ImportPreviewStep';
@@ -34,8 +33,6 @@ export interface DataImportModalProps {
 }
 
 const STEPS = ['Upload File', 'Map Columns', 'Preview & Import', 'Results'];
-const JOB_POLL_MS = 1000;
-const TERMINAL_STATES = new Set(['completed', 'failed']);
 
 const primaryBtnSx = {
     background: 'linear-gradient(135deg, var(--crm-fill-blue-700) 0%, var(--crm-fill-blue-600) 100%)',
@@ -51,6 +48,16 @@ const primaryBtnSx = {
 
 const textBtnSx = { textTransform: 'none', fontWeight: 600, color: 'var(--crm-slate-600)' } as const;
 
+const cancelImportBtnSx = {
+    ...textBtnSx,
+    border: '1px solid transparent',
+    '&:hover': {
+        color: 'var(--mui-palette-error-main)',
+        backgroundColor: 'var(--mui-palette-error-soft)',
+        borderColor: 'var(--mui-palette-error-softBorder)',
+    },
+} as const;
+
 /** Mounts a fresh wizard each time it opens so no state carries over between imports. */
 export function DataImportModal(props: DataImportModalProps) {
     return props.open ? <DataImportWizard {...props} /> : null;
@@ -64,30 +71,26 @@ function DataImportWizard({ open, entity, onClose, onImported }: DataImportModal
     const [parsing, setParsing] = useState(false);
     const [starting, setStarting] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    /** Set once the backend accepted the rows: a queued job to poll, or the result it already returned. */
-    const [queued, setQueued] = useState<{ importId: string; total: number } | null>(null);
-    const [inlineResult, setInlineResult] = useState<ImportResult | null>(null);
+    /** Set once the backend accepted the rows; the app-wide import tracker polls it from there. */
+    const [importId, setImportId] = useState<string | null>(null);
+    const tracked = useTrackedImport(importId);
+    const finished = tracked ? isImportFinished(tracked) : false;
+    const running = Boolean(tracked) && !finished;
 
-    // Polls the BullMQ job until it completes or fails.
-    const job = useQuery({
-        queryKey: ['importJob', queued?.importId],
-        queryFn: () => importService.job(queued!.importId),
-        enabled: Boolean(queued),
-        refetchInterval: (query) => (TERMINAL_STATES.has(query.state.data?.state ?? '') ? false : JOB_POLL_MS),
-        staleTime: 0,
-    });
-    const result = inlineResult ?? (job.data?.state === 'completed' ? (job.data.result ?? null) : null);
-    const jobFailed = job.data?.state === 'failed' ? job.data.failedReason || 'The import job failed.' : null;
-    const running = Boolean(queued) && !result && !jobFailed && !job.isError;
+    // Closing the wizard (Close, "Run in background", Esc, a click outside) hands a running import to the background
+    // card; the tracker keeps polling and refreshes the list when it ends.
+    useEffect(() => () => {
+        if (importId) importTracker.release(importId);
+    }, [importId]);
 
-    // Refresh lists and tell the caller exactly once, when the result arrives.
+    // Tell the page exactly once, when the result arrives while the wizard is open (the tracker refreshes the list).
     const reported = useRef(false);
     useEffect(() => {
-        if (!result || reported.current) return;
+        if (!tracked || !finished || reported.current) return;
+        if (tracked.phase !== 'completed' && tracked.phase !== 'cancelled') return;
         reported.current = true;
-        if (result.created > 0) notifyCrmUpdate(`/api/${entity}`);
-        onImported(result.created);
-    }, [result, entity, onImported]);
+        if (tracked.created > 0) onImported(tracked.created);
+    }, [tracked, finished, onImported]);
 
     const mappedRows = useMemo(
         () => (parsed ? mapAndValidateRows(entity, parsed, mapping) : []),
@@ -119,8 +122,14 @@ function DataImportWizard({ open, entity, onClose, onImported }: DataImportModal
         try {
             const rows = validRows.map(({ rowNumber, values }) => ({ rowNumber, values }));
             const started = await importService.start(entity, rows, parsed?.fileName);
-            if (started.status === 'completed') setInlineResult(started.result);
-            else setQueued({ importId: started.importId, total: started.total });
+            const skipped = mappedRows.filter((r) => r.errors.length > 0).map(({ rowNumber, errors }) => ({ rowNumber, errors }));
+            const source: ImportSourceFile | undefined = parsed
+                ? { fileName: parsed.fileName, headers: parsed.headers, rowsByNumber: new Map(parsed.rows.map((row, idx) => [idx + 2, row])) }
+                : undefined;
+            const init = { importId: started.importId, entity, plural: config.plural, skipped, source };
+            if (started.status === 'completed') importTracker.trackCompleted(init, started.result);
+            else importTracker.track({ ...init, total: started.total });
+            setImportId(started.importId);
             setStep(3);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Import failed. Please try again.');
@@ -179,22 +188,18 @@ function DataImportWizard({ open, entity, onClose, onImported }: DataImportModal
                     </Box>
                 )}
 
-                {step === 3 && (
-                    <ImportResultsStep
-                        plural={config.plural}
-                        total={queued?.total ?? result?.total ?? validRows.length}
-                        progress={result ? 100 : (job.data?.progress ?? 0)}
-                        state={result ? 'completed' : (job.data?.state ?? 'waiting')}
-                        result={result}
-                        error={jobFailed ?? (job.isError ? 'Lost track of the import. It may still finish; refresh the list in a moment.' : null)}
-                    />
-                )}
+                {step === 3 && tracked && <ImportProgressPanel item={tracked} />}
             </DialogContent>
             <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid var(--mui-palette-border-main)' }}>
                 <Button onClick={onClose} disabled={starting} sx={textBtnSx}>
                     {step === 3 ? (running ? 'Run in background' : 'Close') : 'Cancel'}
                 </Button>
                 <Box sx={{ flex: 1 }} />
+                {step === 3 && running && tracked && (
+                    <Button onClick={() => void importTracker.cancel(tracked.importId)} disabled={tracked.cancelling} sx={cancelImportBtnSx}>
+                        {tracked.cancelling ? 'Cancelling…' : 'Cancel import'}
+                    </Button>
+                )}
                 {step > 0 && step < 3 && (
                     <Button onClick={() => setStep(step - 1)} disabled={starting} sx={textBtnSx}>
                         Back
@@ -223,54 +228,5 @@ function DataImportWizard({ open, entity, onClose, onImported }: DataImportModal
                 )}
             </DialogActions>
         </Dialog>
-    );
-}
-
-const STATE_LABELS: Record<string, string> = {
-    waiting: 'Queued, waiting for a worker…',
-    delayed: 'Queued, waiting for a worker…',
-    active: 'Importing…',
-};
-
-function ImportResultsStep({ plural, total, progress, state, result, error }: {
-    plural: string;
-    total: number;
-    progress: number;
-    state: string;
-    result: ImportResult | null;
-    error: string | null;
-}) {
-    if (error) return <Alert severity="error" sx={{ fontSize: '0.8rem' }}>{error}</Alert>;
-    if (!result) {
-        return (
-            <Box sx={{ py: 3 }}>
-                <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--crm-slate-900)', mb: 1 }}>
-                    {STATE_LABELS[state] ?? 'Importing…'} ({total} rows)
-                </Typography>
-                <LinearProgress variant={progress > 0 ? 'determinate' : 'indeterminate'} value={progress} sx={{ height: 8, borderRadius: 4 }} />
-                <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)', mt: 1 }}>
-                    You can close this window; the import keeps running on the server.
-                </Typography>
-            </Box>
-        );
-    }
-    const failedCount = result.failed.length;
-    return (
-        <Box>
-            <Alert severity={failedCount === 0 ? 'success' : result.created > 0 ? 'warning' : 'error'} sx={{ fontSize: '0.8rem', mb: 2 }}>
-                Imported {result.created} of {result.total} {plural.toLowerCase()}
-                {failedCount > 0 ? `; ${failedCount} row${failedCount === 1 ? '' : 's'} could not be imported.` : '.'}
-            </Alert>
-            {failedCount > 0 && (
-                <Box sx={{ maxHeight: 280, overflowY: 'auto', border: '1px solid var(--mui-palette-border-main)', borderRadius: '8px' }}>
-                    {result.failed.map((row) => (
-                        <Box key={row.rowNumber} sx={{ px: 1.5, py: 1, borderBottom: '1px solid var(--mui-palette-border-light)', display: 'flex', gap: 1.5 }}>
-                            <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--crm-slate-700)', minWidth: 56 }}>Row {row.rowNumber}</Typography>
-                            <Typography sx={{ fontSize: '0.75rem', color: 'var(--crm-red-700)' }}>{row.errors.join(' · ')}</Typography>
-                        </Box>
-                    ))}
-                </Box>
-            )}
-        </Box>
     );
 }

@@ -8,6 +8,7 @@ import { CrmDataBootstrap } from "@/components/common/CrmDataBootstrap";
 import { SessionExpiredDialog } from "@/components/auth/SessionExpiredDialog";
 import { EnterTogglesCheckboxes } from "@/components/common/EnterTogglesCheckboxes";
 import { DateInputGuard } from "@/components/common/DateInputGuard";
+import { BackgroundImports } from "@/components/common/import/BackgroundImports";
 import { APP_CONFIG } from "@/config/constants";
 import InitColorSchemeScript from "@mui/material/InitColorSchemeScript";
 import { COLOR_SCHEME_DEFAULT_MODE, COLOR_SCHEME_STORAGE_KEY } from "@/theme/colorScheme";
@@ -50,6 +51,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               {/* A session that ends while unsaved edits are on screen: sign in again without leaving the page. */}
               <SessionExpiredDialog />
               {children}
+              {/* Imports left running after their wizard closed: live progress, then the list refreshes. */}
+              <BackgroundImports />
             </AuthProvider>
           </QueryProvider>
         </ThemeRegistry>

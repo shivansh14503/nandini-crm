@@ -26,4 +26,10 @@ export const importController = {
     async status(req: Request, res: Response): Promise<void> {
         sendSuccess(res, await importService.status(String(req.params.importId), requireUser(req)));
     },
+
+    /** POST /api/import/jobs/:importId/cancel */
+    async cancel(req: Request, res: Response): Promise<void> {
+        const status = await importService.cancel(String(req.params.importId), requireUser(req));
+        sendSuccess(res, status, status.state === 'cancelled' ? 'Import cancelled' : 'Cancelling import');
+    },
 };

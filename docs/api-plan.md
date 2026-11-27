@@ -478,7 +478,8 @@ document schema is `backend-crm/src/modules/drawer-layouts/document/schema.ts` (
 | Method | Path | Description |
 | --- | --- | --- |
 | POST | `/import/:entity` | `entity` ∈ organizations, contacts, products, leads, opportunities, tickets, partner-companies. Body `{ rows: [{ rowNumber, values }], fileName? }`, 1–5,000 rows, cells ≤ 5,000 chars. **202** `{ status: 'queued', importId, total }` or, without Redis and ≤ 500 rows, **200** `{ status: 'completed', importId, result }` |
-| GET | `/import/jobs/:importId` | Owner only: `{ state, progress, total, result?: { created, failed: [{ rowNumber, errors }] }, failedReason? }` |
+| GET | `/import/jobs/:importId` | Owner only: `{ state, progress (0–100), total, processed, created, failedCount, cancelRequested, result?: { total, processed, created, failed: [{ rowNumber, errors }], cancelled }, failedReason? }`. Live counts update after every row (at most every 250 ms). `state` is `cancelled` for a queued import removed by Cancel |
+| POST | `/import/jobs/:importId/cancel` | Owner only. Queued: removes the job (`state: 'cancelled'`). Running: sets `import:cancel:<id>` in Redis (6 h TTL) and the worker stops before its next row; rows already imported stay and the job completes with `result.cancelled: true`. Finished: returns the status unchanged |
 
 ### 2.7 Administration 🔐
 
