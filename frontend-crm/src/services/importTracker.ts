@@ -61,6 +61,7 @@ const AUTO_DISMISS_MS = 10_000;
 
 let imports: TrackedImport[] = [];
 const listeners = new Set<() => void>();
+const finishedListeners = new Set<(item: TrackedImport) => void>();
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
 const pollErrors = new Map<string, number>();
 
@@ -136,6 +137,7 @@ function finish(importId: string, changes: Partial<TrackedImport>) {
     if (!item) return;
     // "Lost" may still have written rows, so it refreshes too.
     if (item.created > 0 || item.phase === 'lost') refreshLists(item);
+    finishedListeners.forEach((listener) => listener(item));
     if (item.background && item.phase === 'completed' && item.failedCount === 0 && item.skipped.length === 0) {
         setTimeout(() => dismissImport(importId), AUTO_DISMISS_MS);
     }
@@ -275,3 +277,12 @@ export function useTrackedImport(importId: string | null): TrackedImport | null 
 }
 
 export const isImportFinished = (item: TrackedImport) => isDone(item.phase);
+
+/**
+ * Calls `listener` once each time an import ends (completed, cancelled, failed or lost), whether its wizard is still
+ * open or it finished in the background. Returns the unsubscribe function.
+ */
+export function onImportFinished(listener: (item: TrackedImport) => void): () => void {
+    finishedListeners.add(listener);
+    return () => finishedListeners.delete(listener);
+}

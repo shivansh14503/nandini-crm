@@ -660,7 +660,8 @@ its own transaction through the same `create<Entity>Record` function the API use
 identical). The browser polls `GET /api/import/jobs/:importId` every second until the job ends. Polling lives in an app-wide
 tracker (`frontend-crm/src/services/importTracker.ts`), not in the wizard, so closing the wizard mid-import moves it
 to a background card (`BackgroundImports`, kept across reloads in sessionStorage) and the module's lists still refresh
-(`notifyCrmUpdate`) when it finishes.
+(`notifyCrmUpdate`) when it finishes. Every finished import raises a snackbar, and the module's list
+(`CommonMasterView` with `importEntity`) switches to its largest page size on the first page so the new rows are in view.
 
 **Audit write paths** (`services/audit.service.ts`):
 

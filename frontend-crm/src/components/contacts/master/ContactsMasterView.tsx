@@ -227,6 +227,7 @@ export function ContactsMasterView() {
 
     return (
         <CommonMasterView<Contact, ContactFilterTab>
+            importEntity="contacts"
             loading={listLoading}
             summary={<ModuleScorecardSummary state={scorecard} loading={listLoading} />}
             filterConfig={{
@@ -324,9 +325,6 @@ export function ContactsMasterView() {
                 open={importOpen}
                 entity="contacts"
                 onClose={() => setImportOpen(false)}
-                onImported={(count) => {
-                    setToast({ open: true, message: `Successfully imported ${count} contact${count === 1 ? '' : 's'}!`, severity: 'success' });
-                }}
             />
         </CommonMasterView>
     );

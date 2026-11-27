@@ -260,6 +260,7 @@ export function LeadsMasterView() {
 
     return (
         <CommonMasterView<Lead, LeadFilterTab>
+            importEntity="leads"
             breadcrumbItems={[
                 { label: 'Sales' },
                 { label: 'Leads' },
@@ -382,9 +383,6 @@ export function LeadsMasterView() {
                 open={importOpen}
                 entity="leads"
                 onClose={() => setImportOpen(false)}
-                onImported={(count) => {
-                    setToast({ open: true, message: `Successfully imported ${count} lead${count === 1 ? '' : 's'}!`, severity: 'success' });
-                }}
             />
         </CommonMasterView>
     );
