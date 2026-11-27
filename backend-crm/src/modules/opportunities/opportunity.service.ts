@@ -233,7 +233,7 @@ export const opportunityService = {
         const page = parsePagination(query, OPPORTUNITY_SORT_FIELDS);
         const filters = opportunityListQuerySchema.parse(query ?? {});
 
-        const where: Prisma.OpportunityWhereInput = { isDeleted: false, AND: [buildAccessScopeWhere(user, 'assignedTo')] };
+        const where: Prisma.OpportunityWhereInput = { isDeleted: false, AND: [buildAccessScopeWhere(user, 'assignedTo', 'opportunities', 'view')] };
         const stageFilter: Prisma.StringFilter = {};
         if (filters.salesStage?.length) stageFilter.in = filters.salesStage;
         if (filters.excludeSalesStage?.length) stageFilter.notIn = filters.excludeSalesStage;
@@ -272,7 +272,7 @@ export const opportunityService = {
     async getById(id: string, user: AuthUser): Promise<OpportunityDto> {
         const row = await prisma.opportunity.findFirst({ where: { id, isDeleted: false }, include });
         if (!row) throw notFound();
-        assertRecordAccess(user, row);
+        assertRecordAccess(user, row, 'opportunities', 'view');
         return toOpportunityDto(row);
     },
 
@@ -310,7 +310,7 @@ export const opportunityService = {
             await lockRecords(tx, 'opportunity', [id]);
             const existing = await tx.opportunity.findFirst({ where: { id, isDeleted: false }, include });
             if (!existing) throw notFound();
-            assertRecordAccess(user, existing);
+            assertRecordAccess(user, existing, 'opportunities', 'edit');
 
             const before = toOpportunityDto(existing);
             const merged: Record<string, unknown> = { ...before, ...patch };
@@ -391,7 +391,7 @@ export const opportunityService = {
             await lockRecords(tx, 'opportunity', [id]);
             const existing = await tx.opportunity.findFirst({ where: { id, isDeleted: false }, select: OWNER_SELECT });
             if (!existing) throw notFound();
-            assertRecordAccess(user, existing);
+            assertRecordAccess(user, existing, 'opportunities', 'delete');
             await tx.opportunity.update({ where: { id }, data: softDeleteData(user) });
             await auditService.record(tx, { entityType: 'Opportunity', entityId: id, action: 'DELETE', changedBy: user.username });
             // A deleted opportunity's open follow-up activity is cancelled (a restore re-creates one).
@@ -426,7 +426,7 @@ export const opportunityService = {
         const { result, rows } = await runInTransaction(async (tx) => {
             await lockRecords(tx, 'opportunity', ids);
             const live = await tx.opportunity.findMany({ where: { id: { in: ids }, isDeleted: false }, select: { id: true, ...OWNER_SELECT } });
-            for (const row of live) assertRecordAccess(user, row);
+            for (const row of live) assertRecordAccess(user, row, 'opportunities', 'delete');
             const liveIds = live.map((row) => row.id);
             if (liveIds.length > 0) {
                 await tx.opportunity.updateMany({ where: { id: { in: liveIds } }, data: softDeleteData(user) });

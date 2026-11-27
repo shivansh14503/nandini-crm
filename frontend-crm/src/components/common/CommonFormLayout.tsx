@@ -17,6 +17,8 @@ import { fieldFormName, type ConfigValidationIssue } from '@/utils/formConfig';
 import { useFormDraftGuard } from '@/hooks/useFormDraftGuard';
 import { UnsavedChangesModal } from './UnsavedChangesModal';
 import { FormSectionsSkeleton } from './skeletons';
+import { usePermissions } from '@/hooks/usePermissions';
+import { moduleKeyFrom } from '@/theme/moduleColors';
 
 /** Tab id used when a form without tabs gets admin-created tabs: it stands for the form's own fields. */
 const FORM_FIELDS_TAB_ID = '__form_fields__';
@@ -213,6 +215,8 @@ export function CommonFormLayout({
     // own tabs. Selecting one shows its fields (DynamicModuleCustomFields); the form's own panels stay mounted but
     // hidden, so their local state survives. Works for every form, whether or not it passes onTabChange.
     const configCtx = useFormConfigContext();
+    const { canRecord } = usePermissions();
+    const viewModule = moduleKeyFrom(configCtx?.module);
     /** Selected custom tab, remembered with the form's own tab at that moment. */
     const [customSelection, setCustomSelection] = useState<{ key: string; basis: string | undefined } | null>(null);
     // Pages stay mounted but hidden after you leave (cacheComponents): open on the form's own tab each time it's shown.
@@ -371,6 +375,8 @@ export function CommonFormLayout({
             <CommonRecordDetailView
                 actions={headerExtra}
                 {...recordView}
+                // Admin › Roles: no Edit for a record the role can't edit (Own: only the user's own or created records).
+                editHref={viewModule && !canRecord(viewModule, 'edit', recordView.audit) ? undefined : recordView.editHref}
                 breadcrumbItems={breadcrumbItems}
                 tabs={effectiveTabs.length > 0 ? effectiveTabs : tabs}
                 activeTab={effectiveActiveTab}

@@ -17,6 +17,7 @@ import { EntityDetailDrawer } from '@/components/common/Drawer';
 import { useLayoutDrawerProps } from '@/components/common/Drawer/layout';
 import { AppToast } from '@/components/common/AppToast';
 import { LEAD_FORM_TABS } from './LeadForm';
+import { usePermissions } from '@/hooks/usePermissions';
 
 export interface LeadDetailDrawerProps {
     lead: Lead | null;
@@ -36,6 +37,7 @@ export function LeadDetailDrawer({
     onShowToast,
 }: LeadDetailDrawerProps) {
     const router = useRouter();
+    const permissions = usePermissions();
 
     const { data: freshLead } = useLead(open && lead?.id ? lead.id : undefined);
 
@@ -91,6 +93,8 @@ export function LeadDetailDrawer({
 
     const hasOrg = Boolean(l.organizationName && l.organizationName.trim().length > 0);
     const isConverted = l.status === 'Converted';
+    // Admin › Roles: converting edits the lead and creates an opportunity.
+    const canConvert = permissions.canRecord('leads', 'edit', l) && permissions.can('opportunities', 'create');
 
     return (
         <>
@@ -121,7 +125,7 @@ export function LeadDetailDrawer({
                 onClick: handleEdit,
                 icon: <EditOutlinedIcon sx={{ fontSize: 16 }} />,
             }}
-            secondaryAction={{
+            secondaryAction={!isConverted && !canConvert ? undefined : {
                 label: isConverted ? 'Lead Converted' : 'Convert Lead',
                 icon: isConverted ? (
                     <CheckCircleOutlinedIcon sx={{ fontSize: 16, color: 'var(--crm-logo-green-text)' }} />

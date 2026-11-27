@@ -66,7 +66,7 @@ describe('cached reads', () => {
         await lookupService.cities({ country: 'IN', state: 'IN-DL' });
         await formConfigService.getAllConfigs();
         await formConfigService.getAllConfigs(true);
-        await searchService.search({ q: 'Acme' });
+        await searchService.searchAll({ q: 'Acme' });
         await lookupService.users({});
         await lookupService.users({ includeInactive: 'true' });
 
@@ -103,7 +103,7 @@ describe('cached reads', () => {
 
     it('gives search, the slowest read, a placeholder that outlives it and keeps its 30 s value TTL', async () => {
         const reads = watchReads(() => ({ results: {} }));
-        await searchService.search({ q: 'Acme', totals: 'true', ids: 'true' });
+        await searchService.searchAll({ q: 'Acme', totals: 'true', ids: 'true' });
         assert.equal(reads.length, 1);
         assert.equal(reads[0].ttl, 30);
         assert.equal(reads[0].placeholderTtlSeconds, 180);

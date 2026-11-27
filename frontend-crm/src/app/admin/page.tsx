@@ -123,11 +123,13 @@ const ADMIN_MODULES: AdminModule[] = [
     },
     {
         key: 'roles',
-        title: 'Roles & Admin Hierarchy',
-        description: 'Define Super Admin, Admin and team roles, and control which administrators can change which modules.',
+        title: 'Roles',
+        description:
+            'Create roles and set what each may view, create, edit, delete, export and import in every module, for all records or only their own, and who opens the admin panel.',
         icon: <AccountTreeOutlinedIcon />,
-        badge: BADGES.superAdmin,
-        highlights: ['Role hierarchy', 'Module permissions'],
+        href: ROUTES.ADMIN_ROLES,
+        badge: BADGES.available,
+        highlights: ['Module permissions', 'All or own records', 'Admin panel access'],
     },
     {
         key: 'users',

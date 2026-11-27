@@ -145,7 +145,7 @@ export const leadService = {
         const page = parsePagination(query, LEAD_SORT_FIELDS);
         const filters = leadListQuerySchema.parse(query ?? {});
 
-        const where: Prisma.LeadWhereInput = { isDeleted: false, AND: [buildAccessScopeWhere(user, 'assignedTo')] };
+        const where: Prisma.LeadWhereInput = { isDeleted: false, AND: [buildAccessScopeWhere(user, 'assignedTo', 'leads', 'view')] };
         const statusFilter: Prisma.StringFilter = {};
         if (filters.status?.length) statusFilter.in = filters.status;
         if (filters.excludeStatus?.length) statusFilter.notIn = filters.excludeStatus;
@@ -182,7 +182,7 @@ export const leadService = {
 
     async getById(id: string, user: AuthUser): Promise<LeadDto> {
         const row = await loadLead(prisma, id);
-        assertRecordAccess(user, row);
+        assertRecordAccess(user, row, 'leads', 'view');
         return toLeadDto(row);
     },
 
@@ -231,7 +231,7 @@ export const leadService = {
         const { after: updated, rows } = await retryOnceOnUniqueViolation(() => runInTransaction(async (tx) => {
             await lockRecords(tx, 'lead', [id]);
             const existing = await loadLead(tx, id);
-            assertRecordAccess(user, existing);
+            assertRecordAccess(user, existing, 'leads', 'edit');
             const before = toLeadDto(existing);
             const merged: Record<string, unknown> = { ...before, ...patch };
             // Retyping Referred By without picking a referral means "find it by name", not "keep the old link".
@@ -307,7 +307,7 @@ export const leadService = {
             await lockRecords(tx, 'lead', [id]);
             const existing = await tx.lead.findFirst({ where: { id, isDeleted: false }, select: OWNER_SELECT });
             if (!existing) throw leadNotFound();
-            assertRecordAccess(user, existing);
+            assertRecordAccess(user, existing, 'leads', 'delete');
             await tx.lead.update({ where: { id }, data: softDeleteData(user) });
             await auditService.record(tx, { entityType: 'Lead', entityId: id, action: 'DELETE', changedBy: user.username });
             // A deleted lead's open follow-up activity is cancelled (a restore re-creates one).
@@ -344,7 +344,7 @@ export const leadService = {
         const { result, rows } = await runInTransaction(async (tx) => {
             await lockRecords(tx, 'lead', ids);
             const live = await tx.lead.findMany({ where: { id: { in: ids }, isDeleted: false }, select: { id: true, ...OWNER_SELECT } });
-            for (const row of live) assertRecordAccess(user, row);
+            for (const row of live) assertRecordAccess(user, row, 'leads', 'delete');
             const liveIds = live.map((row) => row.id);
             if (liveIds.length > 0) {
                 await tx.lead.updateMany({ where: { id: { in: liveIds } }, data: softDeleteData(user) });

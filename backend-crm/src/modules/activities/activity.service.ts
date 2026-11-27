@@ -78,9 +78,9 @@ function assertCanView(user: AuthUser, row: ActivityAccessRow): void {
 }
 
 /** 403 for anyone but the owner, the creator or a global role (an invitee may only reply). */
-export function assertCanEdit(user: AuthUser, row: ActivityAccessRow): void {
+export function assertCanEdit(user: AuthUser, row: ActivityAccessRow, action: 'edit' | 'delete' = 'edit'): void {
     assertCanView(user, row);
-    if (!canEditActivity(user, row)) throw HttpError.forbidden(EDIT_FORBIDDEN_MESSAGE);
+    if (!canEditActivity(user, row, action)) throw HttpError.forbidden(EDIT_FORBIDDEN_MESSAGE);
 }
 
 /**
@@ -834,7 +834,7 @@ export const activityService = {
             await lockRecords(tx, 'activity', [id]);
             const existing = await tx.activity.findFirst({ where: { id, isDeleted: false }, include: WITH_ATTENDEES });
             if (!existing) throw notFound();
-            assertCanEdit(user, existing);
+            assertCanEdit(user, existing, 'delete');
             assertDeletable(existing);
             return softDeleteActivityRow(tx, existing, user);
         });
@@ -879,7 +879,7 @@ export const activityService = {
         const { result, rows } = await runInTransaction(async (tx) => {
             await lockRecords(tx, 'activity', ids);
             const live = await tx.activity.findMany({ where: { id: { in: ids }, isDeleted: false }, include: WITH_ATTENDEES });
-            for (const row of live) assertCanEdit(user, row);
+            for (const row of live) assertCanEdit(user, row, 'delete');
             const skipped: { id: string; reason: string }[] = [];
             const deletable: ActivityRow[] = [];
             for (const row of live) {

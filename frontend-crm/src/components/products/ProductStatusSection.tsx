@@ -10,7 +10,7 @@ import { CommonActionModal } from '@/components/common/CommonActionModal';
 import { useAuth } from '@/context/AuthContext';
 import { useFormMode } from '@/context/FormModeContext';
 import { findCrmUser } from '@/services/masterData.store';
-import { isAdminAccessRole } from '@/utils/roleAccess';
+import { isAdminUser } from '@/utils/adminRoles';
 import { fmtInstant } from '@/utils/formats';
 import {
     ACTIVE_PRODUCT_STATUS,
@@ -43,7 +43,7 @@ export const inactivatedByName = (username: string | undefined): string => (user
 export function ProductStatusSection({ saved }: { saved: SavedProductStatus | null }) {
     const { mode } = useFormMode();
     const { user } = useAuth();
-    const isAdmin = isAdminAccessRole(user?.role);
+    const isAdmin = isAdminUser(user);
     const { control, setValue } = useFormContext<ProductFormData>();
     const status = useWatch({ control, name: 'status' }) ?? ACTIVE_PRODUCT_STATUS;
     const reason = useWatch({ control, name: 'inactivityReason' }) ?? '';

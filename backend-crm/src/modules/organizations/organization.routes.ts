@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticate } from '../../middlewares/authMiddleware.js';
+import { authenticate, requirePermission } from '../../middlewares/authMiddleware.js';
 import { validateRequest } from '../../middlewares/validateRequest.js';
 import { registerCrudRoutes } from '../shared/crud.js';
 import { organizationController } from './organization.controller.js';
@@ -22,7 +22,7 @@ router.use(authenticate);
 
 // Registered before the CRUD routes so `/check-unique` isn't captured by `GET /:id` and `/bulk-status` by `PATCH /:id`.
 router.get('/check-unique', organizationController.checkUnique);
-router.patch('/bulk-status', validateRequest({ body: bulkStatusSchema }), organizationController.updateStatusBulk);
-registerCrudRoutes(router, organizationController);
+router.patch('/bulk-status', requirePermission('organizations', 'edit'), validateRequest({ body: bulkStatusSchema }), organizationController.updateStatusBulk);
+registerCrudRoutes(router, organizationController, 'organizations');
 
 export default router;

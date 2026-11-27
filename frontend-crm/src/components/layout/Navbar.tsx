@@ -36,6 +36,9 @@ import { useAuth } from '../../context/AuthContext';
 import { GlobalSearch } from './GlobalSearch';
 import { ThemeModeToggle } from './ThemeModeToggle';
 import { APP_CONFIG, ROUTES } from '@/config/constants';
+import { usePermissions } from '@/hooks/usePermissions';
+import { isAdminUser } from '@/utils/adminRoles';
+import type { PermissionModule } from '@/utils/permissions';
 import { ModuleDot, navGroupsFor, type NavGroup, type NavLinkItem } from './navItems';
 import { MobileNavDrawer } from './MobileNavDrawer';
 import { NotificationBell } from './NotificationBell';
@@ -296,7 +299,7 @@ function UserMenu({
     onLogout,
     compact = false,
 }: {
-    user: Pick<User, 'username' | 'role' | 'fullName' | 'photoUrl'>;
+    user: Pick<User, 'username' | 'role' | 'fullName' | 'photoUrl' | 'access'>;
     onLogout: () => void;
     compact?: boolean;
 }) {
@@ -431,6 +434,7 @@ function UserMenu({
                                                 Booking links
                                             </MenuItem>
                                         )}
+                                        {isAdminUser(user) && (
                                         <MenuItem
                                             id="admin-panel-btn"
                                             component={Link}
@@ -449,6 +453,7 @@ function UserMenu({
                                             <AdminPanelSettingsOutlinedIcon fontSize="small" />
                                             Admin Panel
                                         </MenuItem>
+                                        )}
                                         <Divider sx={{ my: 0.5 }} />
                                         <MenuItem
                                             id="signout-btn"
@@ -480,20 +485,24 @@ function UserMenu({
 }
 
 /* ─── Create button with dropdown ──────────────────────── */
-const CREATE_ITEMS = [
-    { label: 'Lead', href: '/leads/new' },
-    { label: 'Organization', href: '/organizations/new' },
-    { label: 'Contact', href: '/contacts/new' },
-    { label: 'Opportunity', href: '/opportunities/new' },
-    { label: 'Ticket', href: ROUTES.TICKET_NEW },
-    { label: 'Contract', href: ROUTES.CONTRACT_NEW },
-    { label: 'Partner Company', href: ROUTES.PARTNER_COMPANY_NEW },
-    { label: 'Referral', href: ROUTES.REFERRAL_NEW },
-    { label: 'Activity', href: ROUTES.ACTIVITY_NEW },
+/** Quick Create entries; each shows only when the role may create in its module (Admin › Roles). */
+const CREATE_ITEMS: readonly { label: string; href: string; module: PermissionModule }[] = [
+    { label: 'Lead', href: '/leads/new', module: 'leads' },
+    { label: 'Organization', href: '/organizations/new', module: 'organizations' },
+    { label: 'Contact', href: '/contacts/new', module: 'contacts' },
+    { label: 'Opportunity', href: '/opportunities/new', module: 'opportunities' },
+    { label: 'Ticket', href: ROUTES.TICKET_NEW, module: 'tickets' },
+    { label: 'Contract', href: ROUTES.CONTRACT_NEW, module: 'contracts' },
+    { label: 'Partner Company', href: ROUTES.PARTNER_COMPANY_NEW, module: 'partnerCompanies' },
+    { label: 'Referral', href: ROUTES.REFERRAL_NEW, module: 'referrals' },
+    { label: 'Activity', href: ROUTES.ACTIVITY_NEW, module: 'activities' },
 ];
 
 function CreateButton({ compact = false }: { compact?: boolean }) {
     const { open, close, menuId, setAnchorEl, anchorEl, hoverProps, triggerProps, handleClickAway } = useDropdown();
+    const { can } = usePermissions();
+    const createItems = CREATE_ITEMS.filter((item) => can(item.module, 'create'));
+    if (createItems.length === 0) return null;
 
     return (
         <Box {...hoverProps} sx={{ position: 'relative' }}>
@@ -569,7 +578,7 @@ function CreateButton({ compact = false }: { compact?: boolean }) {
                                         </Typography>
                                     </Box>
                                     <MenuList dense sx={{ py: 0.5 }}>
-                                        {CREATE_ITEMS.map((item, i) => (
+                                        {createItems.map((item, i) => (
                                             <MenuItem
                                                 key={i}
                                                 component={Link}
@@ -612,7 +621,7 @@ export function Navbar() {
     const router = useRouter();
     const { user, logout } = useAuth();
     // Admin-only items (Integrations) are left out for everyone else.
-    const navGroups = navGroupsFor(user?.role);
+    const navGroups = navGroupsFor(user);
     // A docked detail drawer: end the bar 12px short of it and switch the right-side controls to icons.
     const panelWidth = useRightPanelWidth();
     const docked = panelWidth > 0;

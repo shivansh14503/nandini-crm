@@ -1,6 +1,6 @@
 # Nandini CRM — System Design
 
-> **Status:** living document. Describes the system as built (code as of 2026-11-27; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Referrals module; Documents module; Activities data model and API, Calendar Phase 1 PR1; Activities screens and Calendar, PR2; notifications, reminders and mail workers, navbar bell and the morning summary email, PR3, with its review fixes; guarded cache reads for lookups, form configs and search, with its review fixes; Calendar Phase 2 P2-1, Admin › API Integrations foundation: encrypted provider credentials, connection tests, calendar sync settings, company emails, with its review fixes; My Profile (Profile Phase 1): profile, photo, change password, signed-in sessions; Admin › Users (Profile Phase 2, 2026-11-26): user management, sessions revoked on deactivation / role change; emailed set-password links for new users and admin-sent resets, replacing temporary passwords (2026-11-27); Calendar Phase 2 P2-2, employees connect / disconnect Google or Microsoft 365 calendars (replaced by P2-2b); Calendar Phase 2 P2-2b, admin-managed calendar connections: a Google service account with domain-wide delegation and a Microsoft Entra app with application permissions, automatic enrolment of everyone with a company email, in-memory tokens only, admin problem notifications; My Profile › Notifications (Profile Phase 3): bell kinds a user can turn off, the morning summary opt-out, a personal default reminder and out-of-office dates; Calendar Phase 2 P2-3a: one activity write path (system writes, write hook, lock seam, shared post-commit step), no behaviour change; Admin › Company formats (Profile Phase 5, PR5a): one company-wide date / time / number display setting, a shared formatter core, legacy styles kept until an admin saves; PR5b: the remaining ad-hoc format sites and the audit log's Before / After values follow it too; Calendar Phase 2 P2-4: lead / opportunity follow-ups create activities, locked follow-up fields, the nightly follow-up backfill; Calendar Phase 2 P2-3b: the CRM → calendar push engine (outbox, `crm-calendar-sync` queue and worker, Google / Graph event writes for enrolled people); Calendar Phase 2 P2-6: colleagues' busy times when picking a time, `GET /api/activities/busy`; Calendar Phase 2 P2-3c: the first-sync backfill, Send invitations / Retry / Add again and the sync status in the activity drawer; Calendar Phase 4: booking links, public scheduling pages `/book/<slug>` on free/busy; Calendar Phase 2 P2-5: calendar → CRM pull (Google sync tokens, Graph delta), office-hours polling, Sync now; Calendar Phase 2 P2-7: calendar webhooks (Google push channels, Graph subscriptions, `/api/webhooks/*`), the slower safety-net poll and the HTTPS go-live checklist; Calendar Phase 3 P3-1: Google Meet and Microsoft Teams links on activities from the owner's company calendar; Calendar Phase 4: recurring activities, CRM-authored series stored as one row per occurrence over a rolling 90-day horizon; Calendar Phase 2 P2-8: customer meetings imported from the calendar, two colleagues on one meeting, outside-organizer locks (the video meeting included; the organizer's join link shown read only), replies both ways (`rsvp` job), nightly auto-complete; Calendar Phase 4: email logging from Gmail / Outlook on contacts, leads and opportunities (§5.5, §8.10), with its review fixes (2026-11-27: no catch-up after switching off and on, purge vs running runs, Bcc never shown, sender-bound dedupe, capped times, snippets cleared when off, job ids / priority); booking links' default video meeting and on-demand pulls never absorbed by a finished job; as of 2026-11-27).
+> **Status:** living document. Describes the system as built (code as of 2026-11-27; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Referrals module; Documents module; Activities data model and API, Calendar Phase 1 PR1; Activities screens and Calendar, PR2; notifications, reminders and mail workers, navbar bell and the morning summary email, PR3, with its review fixes; guarded cache reads for lookups, form configs and search, with its review fixes; Calendar Phase 2 P2-1, Admin › API Integrations foundation: encrypted provider credentials, connection tests, calendar sync settings, company emails, with its review fixes; My Profile (Profile Phase 1): profile, photo, change password, signed-in sessions; Admin › Users (Profile Phase 2, 2026-11-26): user management, sessions revoked on deactivation / role change; Admin › Roles (2026-11-27): roles with per-module View / Create / Edit / Delete / Export / Import at All, Own or None and an admin panel switch, enforced on every module route and record; emailed set-password links for new users and admin-sent resets, replacing temporary passwords (2026-11-27); Calendar Phase 2 P2-2, employees connect / disconnect Google or Microsoft 365 calendars (replaced by P2-2b); Calendar Phase 2 P2-2b, admin-managed calendar connections: a Google service account with domain-wide delegation and a Microsoft Entra app with application permissions, automatic enrolment of everyone with a company email, in-memory tokens only, admin problem notifications; My Profile › Notifications (Profile Phase 3): bell kinds a user can turn off, the morning summary opt-out, a personal default reminder and out-of-office dates; Calendar Phase 2 P2-3a: one activity write path (system writes, write hook, lock seam, shared post-commit step), no behaviour change; Admin › Company formats (Profile Phase 5, PR5a): one company-wide date / time / number display setting, a shared formatter core, legacy styles kept until an admin saves; PR5b: the remaining ad-hoc format sites and the audit log's Before / After values follow it too; Calendar Phase 2 P2-4: lead / opportunity follow-ups create activities, locked follow-up fields, the nightly follow-up backfill; Calendar Phase 2 P2-3b: the CRM → calendar push engine (outbox, `crm-calendar-sync` queue and worker, Google / Graph event writes for enrolled people); Calendar Phase 2 P2-6: colleagues' busy times when picking a time, `GET /api/activities/busy`; Calendar Phase 2 P2-3c: the first-sync backfill, Send invitations / Retry / Add again and the sync status in the activity drawer; Calendar Phase 4: booking links, public scheduling pages `/book/<slug>` on free/busy; Calendar Phase 2 P2-5: calendar → CRM pull (Google sync tokens, Graph delta), office-hours polling, Sync now; Calendar Phase 2 P2-7: calendar webhooks (Google push channels, Graph subscriptions, `/api/webhooks/*`), the slower safety-net poll and the HTTPS go-live checklist; Calendar Phase 3 P3-1: Google Meet and Microsoft Teams links on activities from the owner's company calendar; Calendar Phase 4: recurring activities, CRM-authored series stored as one row per occurrence over a rolling 90-day horizon; Calendar Phase 2 P2-8: customer meetings imported from the calendar, two colleagues on one meeting, outside-organizer locks (the video meeting included; the organizer's join link shown read only), replies both ways (`rsvp` job), nightly auto-complete; Calendar Phase 4: email logging from Gmail / Outlook on contacts, leads and opportunities (§5.5, §8.10), with its review fixes (2026-11-27: no catch-up after switching off and on, purge vs running runs, Bcc never shown, sender-bound dedupe, capped times, snippets cleared when off, job ids / priority); booking links' default video meeting and on-demand pulls never absorbed by a finished job; as of 2026-11-27).
 > Update it in the same change that alters architecture, infrastructure, Redis usage, queues or security.
 > Related: [Database design](database-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
@@ -122,6 +122,8 @@ Order of global middleware (`src/app.ts`): `helmet` → `cors` (credentials, LAN
    up). Failure = exit 1.
 3. Start the optional DB keep-alive ping (`DB_KEEPALIVE_INTERVAL_MS`).
 4. Seed missing form-field / dropdown defaults (`seedFormConfigsSafely`), never overwriting admin edits.
+   It also removes retired fields (`RETIRED_FIELD_LABELS`, e.g. "Zz Rename Check", CRM-108) in every module: a custom
+   field with that label is deleted, a built-in one gets its default label back.
 5. Load the Product Catalog sheet once (`loadProductCatalogSheetSafely`, `products/productCatalog.data.ts`, 55 products,
    Jira CRM-15): products whose name no live product has are created as `system`, in one transaction; the
    `ModuleSetting` row `system` / `productCatalogSheetLoaded` then stops later start-ups from loading it again (so
@@ -252,10 +254,9 @@ SQL Server is the only source of truth; Redis only ever holds derived or disposa
     current password until it is used. Sessions still carrying the retired `mcp` claim are refused by `verifyToken`.
   - *Page*: `app/set-password` (public, `noindex`, `Referrer-Policy: no-referrer`) reads the token once and drops it
     from the address bar (`history.replaceState`).
-- **Admin › Users** (`/api/admin/users`, admin roles): deactivating a user and changing their
+- **Admin › Users** (`/api/admin/users`, roles with the admin panel): deactivating a user and changing their
   role delete every `session:{userId}:*` key after the commit (`sessionService.revokeAll`), so a tracked session ends
-  on its next request (`authenticate` finds the key gone → 401). The token carries the role, which is why a role
-  change signs the user out (the acting admin's own sessions are left alone; their new role applies at next sign-in).
+  on its next request (`authenticate` finds the key gone → 401). A role change still signs the user out (the acting admin's own sessions are left alone; their new role applies at next sign-in).
   Login already refuses an inactive user (403 `ACCOUNT_INACTIVE`). **Gap:** an *untracked* token (Redis was down at its
   sign-in), or any token while Redis is down, isn't checked against the database, so a deactivated or demoted user
   keeps that session until its JWT expires (8 h by default). Nothing records a revocation that failed: if Redis can't
@@ -274,22 +275,52 @@ SQL Server is the only source of truth; Redis only ever holds derived or disposa
   Redis down the list is empty (`tracked: false`) and nothing can be revoked (both sign-out routes answer
   `503 SESSIONS_UNAVAILABLE`).
 
-**Authorization** (`modules/shared/accessControl.ts`)
+**Authorization** (Admin › Roles; `modules/roles`, `modules/shared/accessControl.ts`)
 
-| Level | Rule |
+A user's role is the name in `Users.role`; what it allows is the matching row of the `Roles` table
+([database design §4.1c](database-design.md)), matched by `normalizeRole` (case, spacing and dash style ignored):
+
+- **Admin panel** (`Roles.adminPanel`): `requireAdmin` guards every admin feature (form customisation, document
+  series, cities, PDF template management, API Integrations, Users, Roles, audit log, holidays, settings) and
+  `isAdminUser` the admin-only actions inside other screens (product status, PDF templates, the audit trail of
+  config records). It replaced the hard-coded `Admin` / `Administrator` / `Super Admin` list.
+- **Module permissions** (`Roles.permissionsJson`, `roles/permissions.ts`): for each of 12 modules (leads, contacts,
+  organizations, opportunities, quotations, contracts, tickets, referrals, activities, documents, products, partner
+  companies) the levels of View, Create, Edit, Delete, Export and Import: **All** (every record), **Own** (records the
+  user is assigned to, `assignedTo`, or created, `createdBy`) or **None**. Create, Export and Import are Yes / No;
+  products and partner companies have no owner, so All or None. Edit / Delete never exceed View, and View None
+  allows nothing (the module leaves the menu and its list shows a notice).
+- **Super Admin** (`isSystem`): always full access and the admin panel; it can't be edited or deleted, and only a
+  Super Admin can add, edit, deactivate, activate or reset the password of a Super Admin user, give / take the role,
+  or move users to it (`403 SUPER_ADMIN_ONLY`).
+
+| Where | Rule |
 | --- | --- |
-| Admin features | `requireRole('Admin', 'Administrator', 'Super Admin')` — form customisation, document series, cities, PDF template management, API Integrations (`/api/admin/integrations`), Users (`/api/admin/users`) |
-| Global data roles | Super Admin, Admin, Director – Operations, Regional Sales Head, Sales Manager, System Administrator, Accounts Manager see **all** records |
-| Everyone else | Row-level scope: only records where they are the owner (`assignedTo`) **or** the creator (`createdBy`). Lists add this as a Prisma `where`; single-record reads/writes call `assertRecordAccess` (403) |
-| Activities (`modules/activities/activity.access.ts`) | The same rule **plus attendees**: a colleague invited to an activity (`ActivityAttendee.username`) can see it (lists, calendar, record, its audit trail) and reply to it (`POST /api/activities/:id/response`), but only the owner, the creator or a global role can change or delete it. Linking an activity to a record (Related To, and the `link-targets` picker) needs access to that record under its own module's rule (403 otherwise); an unchanged link is kept even if the editor can't see the record. The calendar's lead / opportunity follow-ups and contract renewals follow their modules' rules. Activities are not in global search |
-| Referrals (`modules/referrals`) | Lists and records are **not** row-scoped (everyone picks Referred By from them); changes and deletes need the owner, the creator or a global role (`assertRecordAccess`) |
+| Routes | `requirePermission(module, action)`: 403 unless the role allows the action at some level. `registerCrudRoutes(router, controller, module)` maps GET → view, POST → create, PUT / PATCH → edit, DELETE / bulk-delete → delete; custom routes name their action (lead convert: leads edit + opportunities create; imports: import + create) |
+| Lists | `buildAccessScopeWhere(user, 'assignedTo', module, 'view')`: nothing at All, owner or creator at Own, a filter nobody matches at None (`#no-access#`, which no username can be) |
+| Records | `assertRecordAccess(user, row, module, action)` (403) on reads, edits and deletes; `canAccessRecord` / `hasGlobalAccess` for checks that don't throw |
+| Activities (`modules/activities/activity.access.ts`) | The same rule **plus attendees**: a colleague invited to an activity (`ActivityAttendee.username`) can see it (lists, calendar, record, its audit trail) and reply to it (`POST /api/activities/:id/response`), but changing or deleting needs the role's Activities Edit / Delete. Linking an activity to a record (Related To, and the `link-targets` picker) needs access to that record under its own module's rule (403 otherwise); an unchanged link is kept even if the editor can't see the record. The calendar's lead / opportunity follow-ups and contract renewals follow their modules' rules. Activities are not in global search |
+| Global search | Results are cached unscoped as before; the categories the role can't view are emptied per request (`hideUnviewable`) |
+| Referrals | Follow the role like every module. Roles seeded from the old names keep Referrals View **All** (they were never scoped; the Referred By pickers read the lookups anyway) |
+| Export | Partner Companies' CSV export is built in the browser; the button shows only with the Export permission |
 
-Role names are compared case-insensitively and with any dash style. Roles are plain names on `Users.role` (no
-permissions table): Admin › Users picks from the roles in use or a new one, and shows which give the admin panel and
-which see every record (`modules/user-admin/roles.ts`, mirrored and contract-tested by `frontend-crm/src/utils/roleAccess.ts`).
-"Administrator" opens the admin panel but is not a global data role. "Super Admin" is the developer role: it opens the
-admin panel **and** sees every record, and only a Super Admin can add, edit, deactivate, activate or reset the password
-of a Super Admin user, or give / take the Super Admin role (`403 SUPER_ADMIN_ONLY`, `userAdmin.rules.ts` `superAdminOnly`).
+**Role registry** (`roles/roleRegistry.ts`): an in-process snapshot of every role and of each user's current role,
+refreshed every 15 s (`ensureFresh` in `authenticate`) and at once after a role or user write in this process
+(`refresh`, called by `invalidateUserCaches`). `authenticate` replaces the JWT's role with the user's current one, so
+a renamed, changed or deleted role (whose users moved) applies on the next request without signing anyone out; other
+API instances catch up within 15 s. Until the first load succeeds, roles get the access their names gave before
+(`legacyRole`); a role missing from a loaded snapshot gets own-records access and no admin panel.
+
+**Seeding** (`roles/roleSeed.ts`, at start-up): an empty table is filled with the old role names and every role a
+user holds, each with the access its name gave before (`legacyRole`: `Super Admin` and `Admin` open the admin panel
+and see every record, `Administrator` opens the admin panel with own records, the other every-record roles see every
+record without the admin panel, any other name gets own records), so nobody's access changes on deploy. Afterwards only Super Admin and roles
+users hold with no row are added; deleted roles are not brought back.
+
+The frontend reads the same rules from `user.access` (`/api/auth/me`): `usePermissions()` hides New, Import, Edit,
+Export, Convert and Quick Create items, `navGroupsFor(user)` drops modules without View, and `isAdminUser(user)` shows
+the Admin Panel link. `frontend-crm/src/utils/permissions.ts` and `utils/roleAccess.ts` mirror the backend and are
+contract-tested.
 
 **Other protections**
 
@@ -1597,6 +1628,24 @@ kept its time (`warning`; the API returns that note for 7 days after the calenda
   `SendInviteDialog` sends a new link (Resend invite / Send password reset link); when the email can't be sent the
   mail server's reason is shown in the dialog (also right after Add user: the user is added, Invited, and the dialog
   offers Try again).
+
+### 8.7a Admin › Roles (`/admin/roles`)
+
+- **Page:** `app/admin/roles/page.tsx` in `AdminPageShell`, content in `components/settings/roles/`; the "Roles" card
+  on the admin landing page. Not registered in Form Builder (admin page).
+- **List** (`RolesView`): a card grid (`repeat(auto-fill, minmax(min(100%, 280px), 1fr))`) with each role's name (a
+  lock on Super Admin), its access badges (Admin, Sees all, Custom), active / inactive user counts, description and the
+  number of modules it can open; actions Edit (View for Super Admin), Duplicate ("Copy of …") and Delete.
+- **Editor** (`RoleEditorDialog`, full screen on phones): Role Name, Description, the Admin panel switch and the
+  permission grid (`PermissionGrid`): one row per module, one All / Own / None (or Yes / No) select per action, with
+  presets (Full access, Own records, View only, No access). Edit / Delete can't be set above View and every action is
+  off while View is None, as the API normalizes them. A table from `md` up (own `overflowX: auto`), one card per
+  module on phones. Read-only for Super Admin. API field errors map to the inputs.
+- **Delete** (`DeleteRoleDialog`): a role with users asks for the role to move them to (Super Admin is offered only
+  to a Super Admin).
+- **Data:** `services/role.service.ts`, `hooks/queries/useRoles.ts` (key `['roles']`); writes also refresh the users
+  queries, the master data and the signed-in user (`refreshUser`), so a change to your own role shows at once.
+- **Admin › Users** picks a role from the roles of this page only (no free text).
 
 ### 8.8 Display formats (Admin › Company formats, Profile Phase 5)
 

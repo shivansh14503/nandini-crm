@@ -9,7 +9,7 @@ export { phoneDialogPaperSx } from '@/components/profile/profileUi';
 import { ApiClientError } from '@/services/apiClient';
 import type { UserEmailIssue } from '@/types/integration.types';
 import type { AdminUserDto } from '@/types/userAdmin.types';
-import { hasGlobalAccessRole, isAdminAccessRole } from '@/utils/roleAccess';
+import type { RoleAccess } from '@/utils/roleAccess';
 import { isOutOfOfficeOn } from '@/utils/notificationPreferences';
 import { shortDayLabel, useBusinessToday } from '@/utils/userAvailability';
 
@@ -21,21 +21,24 @@ export const EMAIL_ISSUE_CHIP: Record<UserEmailIssue, { tone: ChipTone; label: s
     not_company: { tone: 'warning', label: 'Other domain', title: 'Not one of the company email domains.' },
 };
 
-/** "Admin" (opens the admin panel) and "Sees all" (every record) badges for a role name; nothing for own-records roles. */
-export function RoleAccessBadges({ role }: { role: string }) {
-    const admin = isAdminAccessRole(role);
-    const all = hasGlobalAccessRole(role);
-    if (!admin && !all) return null;
+/** "Admin" (opens the admin panel) and "Sees all" (every record) badges for a role's access; "Custom" for a mix. */
+export function RoleAccessBadges({ access }: { access: RoleAccess | null | undefined }) {
+    if (!access || access === 'own-records') return null;
     return (
         <Box component="span" sx={{ display: 'inline-flex', gap: 0.5, flexWrap: 'wrap' }}>
-            {admin && (
-                <StatusChip tone="brand" title="Opens the admin panel (forms, users, PDF templates, …).">
+            {access === 'admin' && (
+                <StatusChip tone="brand" title="Opens the admin panel (forms, users, roles, PDF templates, …).">
                     Admin
                 </StatusChip>
             )}
-            {all && (
+            {access === 'all-records' && (
                 <StatusChip tone="info" title="Sees and changes every CRM record, not only their own.">
                     Sees all
+                </StatusChip>
+            )}
+            {access === 'custom' && (
+                <StatusChip tone="neutral" title="Its own mix of module permissions (Admin › Roles).">
+                    Custom
                 </StatusChip>
             )}
         </Box>
@@ -43,15 +46,12 @@ export function RoleAccessBadges({ role }: { role: string }) {
 }
 
 /** What a role gives access to, in a sentence (the role picker's hint). */
-export function roleAccessHint(role: string): string {
-    const name = role.trim();
-    if (!name) return 'Pick a role, or type a new one.';
-    const admin = isAdminAccessRole(name);
-    const all = hasGlobalAccessRole(name);
-    if (admin && all) return 'Opens the admin panel and sees every record.';
-    if (admin) return 'Opens the admin panel. Sees only their own records in the CRM modules.';
-    if (all) return 'Sees and changes every record. No admin panel.';
-    return 'Sees only the records they own or created. No admin panel.';
+export function roleAccessHint(access: RoleAccess | null | undefined): string {
+    if (!access) return 'Pick a role. Roles and what each may do are set in Admin › Roles.';
+    if (access === 'admin') return 'Opens the admin panel. Module permissions as set in Admin › Roles.';
+    if (access === 'all-records') return 'Sees and changes every record. No admin panel.';
+    if (access === 'own-records') return 'Sees only the records they own or created. No admin panel.';
+    return 'Its own module permissions, as set in Admin › Roles. No admin panel.';
 }
 
 /**

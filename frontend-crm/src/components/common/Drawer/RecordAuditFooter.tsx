@@ -12,6 +12,8 @@ export interface RecordAuditStamp {
     createdBy?: string | null;
     updatedAt?: string | null;
     updatedBy?: string | null;
+    /** The record's owner: with `createdBy`, decides whether a role at "Own" may edit it (Admin › Roles). */
+    assignedTo?: string | null;
 }
 
 /** `updatedAt` is stamped on create too; a gap under this is the same save, not an edit. */

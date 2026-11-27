@@ -9,7 +9,7 @@ import { LoadingScreen } from '@/components/common/LoadingScreen';
 import { ErrorAlert } from '@/components/common/ErrorAlert';
 import { AppBreadcrumbsBar } from '@/components/common/AppBreadcrumbsBar';
 import type { BreadcrumbItem } from '@/components/common/AppBreadcrumbs';
-import { isAdminRole } from '@/utils/adminRoles';
+import { isAdminUser } from '@/utils/adminRoles';
 
 /** Auth + admin guard and the standard admin chrome (Navbar, breadcrumbs) for the PDF template pages. */
 export function AdminPageShell({
@@ -39,7 +39,7 @@ export function AdminPageShell({
             <ErrorAlert error={error} onClose={clearError} />
             <Container maxWidth={maxWidth} sx={{ pt: 2, pb: 4, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
                 <AppBreadcrumbsBar items={breadcrumbs} />
-                {isAdminRole(user.role) ? (
+                {isAdminUser(user) ? (
                     children
                 ) : (
                     <Alert severity="warning" sx={{ borderRadius: '10px', fontSize: '13px' }}>

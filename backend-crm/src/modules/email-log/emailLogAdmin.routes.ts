@@ -1,12 +1,11 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
-import { authenticate, requireRole } from '../../middlewares/authMiddleware.js';
+import { authenticate, requireAdmin } from '../../middlewares/authMiddleware.js';
 import { createRateLimiter } from '../../middlewares/rateLimiter.js';
 import { validateRequest } from '../../middlewares/validateRequest.js';
 import { sendSuccess } from '../../utils/apiResponse.js';
 import { HttpError } from '../../utils/httpError.js';
 import { requireUser } from '../../utils/requestContext.js';
-import { FORM_CONFIG_ADMIN_ROLES } from '../form-configs/formConfig.routes.js';
 import { emailLogService } from './emailLog.service.js';
 import { usernameParamSchema } from './emailLog.validator.js';
 
@@ -31,7 +30,7 @@ import { usernameParamSchema } from './emailLog.validator.js';
  * Errors: 404 user not found, 400 VALIDATION_ERROR, 429 RATE_LIMITED.
  */
 const router = Router();
-router.use(authenticate, requireRole(...FORM_CONFIG_ADMIN_ROLES));
+router.use(authenticate, requireAdmin);
 
 const RUN_LIMIT = 6;
 const RUN_WINDOW_SECONDS = 60;

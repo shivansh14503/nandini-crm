@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticate } from '../../middlewares/authMiddleware.js';
+import { authenticate, requirePermission } from '../../middlewares/authMiddleware.js';
 import { validateRequest } from '../../middlewares/validateRequest.js';
 import { idParamSchema } from '../../validators/common.js';
 import { registerCrudRoutes } from '../shared/crud.js';
@@ -25,7 +25,14 @@ router.use(authenticate);
 
 // Before the CRUD routes so `/check-duplicates` isn't captured by `/:id`.
 router.get('/check-duplicates', leadController.checkDuplicates);
-router.post('/:id/convert', validateRequest({ params: idParamSchema }), leadController.convert);
-registerCrudRoutes(router, leadController);
+// Convert edits the lead and creates an opportunity (Admin › Roles: Leads › Edit and Opportunities › Create).
+router.post(
+    '/:id/convert',
+    requirePermission('leads', 'edit'),
+    requirePermission('opportunities', 'create'),
+    validateRequest({ params: idParamSchema }),
+    leadController.convert,
+);
+registerCrudRoutes(router, leadController, 'leads');
 
 export default router;

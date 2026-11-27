@@ -4,7 +4,7 @@ import type { PdfTemplate, Prisma } from '../../generated/prisma/client.js';
 import { auditService, diffRecords } from '../../services/audit.service.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
-import { FORM_CONFIG_ADMIN_ROLES } from '../form-configs/formConfig.routes.js';
+import { isAdminUser } from '../shared/accessControl.js';
 import { runInTransaction } from '../shared/transactions.js';
 import { validateDocumentRefs, type PdfDocument } from './document/index.js';
 import { getFieldRegistry } from './fieldRegistry.js';
@@ -35,8 +35,7 @@ import {
  * change; admins duplicate them to edit.
  */
 
-const ADMIN_ROLES = new Set<string>(FORM_CONFIG_ADMIN_ROLES.map((r) => r.toLowerCase()));
-export const isPdfAdmin = (user: AuthUser): boolean => ADMIN_ROLES.has(user.role.toLowerCase());
+export const isPdfAdmin = (user: AuthUser): boolean => isAdminUser(user);
 
 const notFound = () => HttpError.notFound('PDF template not found');
 

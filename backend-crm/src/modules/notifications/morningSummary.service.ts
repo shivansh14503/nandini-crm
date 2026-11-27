@@ -198,7 +198,7 @@ export function contractsEndingWhere(user: AuthUser, today: string): Prisma.Cont
     return {
         AND: [
             { isDeleted: false },
-            buildAccessScopeWhere(user, 'assignedTo'),
+            buildAccessScopeWhere(user, 'assignedTo', 'contracts', 'view'),
             { assignedTo: user.username },
             { status: { not: CONTRACT_EXPIRED_STATUS } },
             { endDate: { gte: fromDateOnly(today), lte: fromDateOnly(addDays(today, ENDING_SOON_DAYS)) } },

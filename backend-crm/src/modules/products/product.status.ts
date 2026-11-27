@@ -1,7 +1,7 @@
 import type { Product } from '../../generated/prisma/client.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
-import { isAdminAccessRole } from '../user-admin/roles.js';
+import { isAdminUser } from '../shared/accessControl.js';
 import { ACTIVE_PRODUCT_STATUS, INACTIVE_PRODUCT_STATUS, isActiveProductStatus, type ProductInput } from './product.validator.js';
 
 export const PRODUCT_STATUS_ADMIN_ONLY = "Only Admins can change a product's Status.";
@@ -17,7 +17,7 @@ type ProductStatusColumns = Pick<Product, 'status' | 'inactivityReason' | 'inact
 export function productStatusData(input: Pick<ProductInput, 'status' | 'inactivityReason'>, previous: ProductStatusColumns | null, actor: Pick<AuthUser, 'username' | 'role'>, now = new Date()): ProductStatusColumns {
     const wasActive = previous ? isActiveProductStatus(previous.status) : true;
     const active = isActiveProductStatus(input.status);
-    if (wasActive !== active && !isAdminAccessRole(actor.role)) {
+    if (wasActive !== active && !isAdminUser(actor)) {
         throw HttpError.forbidden(PRODUCT_STATUS_ADMIN_ONLY);
     }
     if (active) return { status: ACTIVE_PRODUCT_STATUS, inactivityReason: null, inactiveSince: null, inactivatedBy: null };

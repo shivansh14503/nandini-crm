@@ -41,6 +41,8 @@ import { DoubleClickCopyText } from '../useDoubleClickCopy';
 import { getModuleColor } from '@/theme/moduleColors';
 import { glassSurfaceSx, GLASS_SHADOW, GLASS_RADIUS, FLOAT_INSET } from '@/theme/glass';
 import { useRegisterRightPanel } from '@/components/layout/rightPanelStore';
+import { usePermissions } from '@/hooks/usePermissions';
+import type { OwnedRecord } from '@/utils/permissions';
 
 const CHANGES_TAB_ID = 'changes-tab';
 const ACTIVITIES_TAB_ID = 'activities-tab';
@@ -94,7 +96,7 @@ export function EntityDetailDrawer({
     verified = true,
     loading = false,
     badges = [],
-    headerActions,
+    headerActions: headerActionsProp,
     headerAside,
     titleAdornment,
     headerNote,
@@ -109,7 +111,7 @@ export function EntityDetailDrawer({
     emails,
     changesTabLabel = 'Changes',
     defaultTabIndex = 0,
-    primaryAction,
+    primaryAction: primaryActionProp,
     secondaryAction,
     footerActions,
     width = { xs: '100%', sm: 540, md: 580 },
@@ -122,6 +124,16 @@ export function EntityDetailDrawer({
     module,
 }: EntityDetailDrawerProps) {
     const moduleColor = module ? getModuleColor(module) : undefined;
+    // Admin › Roles: no Edit for a record the role can't edit (Own: only the user's own or created records). The
+    // footer's primary action counts as Edit when it runs the header's edit handler or is labelled "Edit …".
+    const { canRecord } = usePermissions();
+    const editAllowed = !module || canRecord(module, 'edit', recordAudit as OwnedRecord | undefined);
+    const primaryIsEdit =
+        Boolean(primaryActionProp) &&
+        ((headerActionsProp?.onEdit && primaryActionProp?.onClick === headerActionsProp.onEdit) ||
+            (typeof primaryActionProp?.label === 'string' && /^edit\b/i.test(primaryActionProp.label)));
+    const headerActions = editAllowed || !headerActionsProp ? headerActionsProp : { ...headerActionsProp, onEdit: undefined };
+    const primaryAction = editAllowed || !primaryIsEdit ? primaryActionProp : undefined;
     const [currentTab, setCurrentTab] = useResetTab<number>(defaultTabIndex);
     const [toastMessage, setToastMessage] = useState<string | null>(null);
     const [internalCollapsed, setInternalCollapsed] = useState<boolean>(false);

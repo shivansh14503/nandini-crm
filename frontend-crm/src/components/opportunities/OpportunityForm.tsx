@@ -225,7 +225,7 @@ export default function OpportunityForm({
                     reset(mode === 'edit' ? { ...found, customerResponse: '', remarks: '' } : found);
                     savedFollowupType.current = found.followupType ?? '';
                     setRecordCode(found.opportunityCode ?? '');
-                    setAudit({ createdAt: found.createdAt, createdBy: found.createdBy, updatedAt: found.updatedAt, updatedBy: found.updatedBy });
+                    setAudit({ createdAt: found.createdAt, createdBy: found.createdBy, updatedAt: found.updatedAt, updatedBy: found.updatedBy, assignedTo: found.assignedTo });
                 }
             })
             .catch(() => {})

@@ -36,7 +36,7 @@ import { ResponseRulesPanel } from './ResponseRulesPanel';
 import { opportunityResponseConfig } from '@/utils/opportunityResponseRules';
 import { leadRatingConfig } from '@/utils/leadRating';
 import LocalFireDepartmentOutlinedIcon from '@mui/icons-material/LocalFireDepartmentOutlined';
-import { isAdminRole } from '@/utils/adminRoles';
+import { isAdminUser } from '@/utils/adminRoles';
 import { CodedFieldDefaultsProvider, type CodedFieldDefaultsMap } from '@/context/CodedFieldDefaultsContext';
 import { CodedDefaultsHarvester } from './CodedDefaultsHarvester';
 import { DrawerLayoutPanel } from './drawer-layout/DrawerLayoutPanel';
@@ -69,7 +69,7 @@ const VIEWS = [
  */
 export function FormCustomizationView() {
     const { user } = useAuth();
-    const canEdit = isAdminRole(user?.role);
+    const canEdit = isAdminUser(user);
     const { data: savedConfigs, isLoading, isFetching, error, refetch } = useFormConfigsQuery();
     const { draft: configs, ops, dirty, saving, actions, save, discard } = useConfigDraft(savedConfigs, refetch);
     const changed = useMemo(() => changedIds(ops), [ops]);

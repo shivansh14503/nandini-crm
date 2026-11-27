@@ -86,6 +86,28 @@ model User {
   @@map("Users")
 }
 
+/// Admin › Roles: what each role may do. `Users.role` holds a role's `name` (matched by `normalizeRole`: any case, any
+/// dash style). Renaming a role renames it on its users in the same transaction. Seeded at start-up from the roles
+/// users held before (roles/roleSeed.ts), with the access their names gave, so nobody's access changed.
+model Role {
+  id              Int      @id @default(autoincrement())
+  name            String   @unique @db.NVarChar(50)
+  description     String?  @db.NVarChar(500)
+  /// Opens the admin panel (forms, users, roles, PDF templates, …).
+  adminPanel      Boolean  @default(false)
+  /// JSON `{ [module]: { view, create, edit, delete, export, import: 'all' | 'own' | 'none' } }` (roles/permissions.ts).
+  /// Read through `normalizePermissions`, which fills a missing module or action with 'none'.
+  permissionsJson String   @db.NVarChar(Max)
+  /// Super Admin: full access, can't be edited, renamed or deleted.
+  isSystem        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  createdBy       String?  @db.NVarChar(50)
+  updatedAt       DateTime @default(now()) @updatedAt
+  updatedBy       String?  @db.NVarChar(50)
+
+  @@map("Roles")
+}
+
 /// One-time set-password links (Admin › Users: the invite sent when a user is added, "Resend invite", "Send password
 /// reset link"). Only the SHA-256 of the token is stored; the token itself exists only in the email. A link works once,
 /// until `expiresAt` (72 h), and only while it is the user's newest: sending another revokes the older ones.

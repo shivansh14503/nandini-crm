@@ -139,8 +139,8 @@ interface Loader {
     search(db: Db, user: AuthUser, term: string | undefined, take: number): Promise<TargetRow[]>;
 }
 
-const listArgs = (user: AuthUser, search: Record<string, unknown>, take: number) => ({
-    where: { isDeleted: false, AND: [buildAccessScopeWhere(user, 'assignedTo'), search] },
+const listArgs = (user: AuthUser, module: ActivityRelatedModule, search: Record<string, unknown>, take: number) => ({
+    where: { isDeleted: false, AND: [buildAccessScopeWhere(user, 'assignedTo', module, 'view'), search] },
     orderBy: [{ updatedAt: 'desc' as const }, { id: 'asc' as const }],
     take,
 });
@@ -154,7 +154,7 @@ export const RELATED_LOADERS: Record<ActivityRelatedModule, Loader> = {
         },
         async search(db, user, term, take) {
             const rows = await db.lead.findMany({
-                ...listArgs(user, searchWhere(term, 'LD', 'leadCode', ['name', 'organizationName']), take),
+                ...listArgs(user, 'leads', searchWhere(term, 'LD', 'leadCode', ['name', 'organizationName']), take),
                 select: SELECTS.leads,
             });
             return rows.map(TARGET_MAPPERS.leads);
@@ -168,7 +168,7 @@ export const RELATED_LOADERS: Record<ActivityRelatedModule, Loader> = {
         },
         async search(db, user, term, take) {
             const rows = await db.opportunity.findMany({
-                ...listArgs(user, searchWhere(term, 'OPP', 'opportunityCode', ['opportunityName', 'organizationName', 'contact']), take),
+                ...listArgs(user, 'opportunities', searchWhere(term, 'OPP', 'opportunityCode', ['opportunityName', 'organizationName', 'contact']), take),
                 select: SELECTS.opportunities,
             });
             return rows.map(TARGET_MAPPERS.opportunities);
@@ -182,7 +182,7 @@ export const RELATED_LOADERS: Record<ActivityRelatedModule, Loader> = {
         },
         async search(db, user, term, take) {
             const rows = await db.contact.findMany({
-                ...listArgs(user, searchWhere(term, 'CON', 'contactCode', ['name', 'organizationName']), take),
+                ...listArgs(user, 'contacts', searchWhere(term, 'CON', 'contactCode', ['name', 'organizationName']), take),
                 select: SELECTS.contacts,
             });
             return rows.map(TARGET_MAPPERS.contacts);
@@ -196,7 +196,7 @@ export const RELATED_LOADERS: Record<ActivityRelatedModule, Loader> = {
         },
         async search(db, user, term, take) {
             const rows = await db.organization.findMany({
-                ...listArgs(user, searchWhere(term, 'ORG', 'accountCode', ['organizationName']), take),
+                ...listArgs(user, 'organizations', searchWhere(term, 'ORG', 'accountCode', ['organizationName']), take),
                 select: SELECTS.organizations,
             });
             return rows.map(TARGET_MAPPERS.organizations);
@@ -210,7 +210,7 @@ export const RELATED_LOADERS: Record<ActivityRelatedModule, Loader> = {
         },
         async search(db, user, term, take) {
             const rows = await db.quotation.findMany({
-                ...listArgs(user, searchWhere(term, 'QT', 'quotationCode', ['quotationTitle', 'organizationName', 'contact']), take),
+                ...listArgs(user, 'quotations', searchWhere(term, 'QT', 'quotationCode', ['quotationTitle', 'organizationName', 'contact']), take),
                 select: SELECTS.quotations,
             });
             return rows.map(TARGET_MAPPERS.quotations);
@@ -224,7 +224,7 @@ export const RELATED_LOADERS: Record<ActivityRelatedModule, Loader> = {
         },
         async search(db, user, term, take) {
             const rows = await db.ticket.findMany({
-                ...listArgs(user, searchWhere(term, 'TKT', 'ticketNumber', ['ticketSubject', 'organizationName', 'contact']), take),
+                ...listArgs(user, 'tickets', searchWhere(term, 'TKT', 'ticketNumber', ['ticketSubject', 'organizationName', 'contact']), take),
                 select: SELECTS.tickets,
             });
             return rows.map(TARGET_MAPPERS.tickets);
@@ -238,7 +238,7 @@ export const RELATED_LOADERS: Record<ActivityRelatedModule, Loader> = {
         },
         async search(db, user, term, take) {
             const rows = await db.contract.findMany({
-                ...listArgs(user, searchWhere(term, 'CTR', 'contractNumber', ['contractTitle', 'organizationName', 'contact']), take),
+                ...listArgs(user, 'contracts', searchWhere(term, 'CTR', 'contractNumber', ['contractTitle', 'organizationName', 'contact']), take),
                 select: SELECTS.contracts,
             });
             return rows.map(TARGET_MAPPERS.contracts);
@@ -312,7 +312,7 @@ export async function resolveActivityLinks(tx: TransactionClient, input: Activit
         const found = await loader.find(tx, input.relatedId);
         if (changed) {
             assertReference(found, input.relatedId, undefined, loader.label, 'relatedTo');
-            if (user && !canAccessRecord(user, found)) throw HttpError.forbidden(LINK_FORBIDDEN_MESSAGE);
+            if (user && !canAccessRecord(user, found, input.relatedModule, 'view')) throw HttpError.forbidden(LINK_FORBIDDEN_MESSAGE);
             picked = found;
         }
         related = found

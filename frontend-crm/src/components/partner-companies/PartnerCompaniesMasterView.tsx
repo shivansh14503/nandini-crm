@@ -28,6 +28,7 @@ import { findCrmUser } from '@/services/masterData.store';
 import type { ExtendedPartnerCompany } from '@/types/partner.types';
 import { telHref } from '@/utils/contactLinks';
 import { downloadCsv, type CsvColumn } from '@/utils/csvExport';
+import { usePermissions } from '@/hooks/usePermissions';
 import { formatDateTime } from '@/utils/date';
 import { fmtExportDateTime } from '@/utils/formats';
 import { PartnerCompanyDetailDrawer } from './PartnerCompanyDetailDrawer';
@@ -77,6 +78,7 @@ const cellTextSx = { fontSize: '0.8rem', color: 'var(--crm-slate-600)' } as cons
 export function PartnerCompaniesMasterView() {
     const router = useRouter();
     const { user } = useAuth();
+    const permissions = usePermissions();
     const currentUsername = user?.username || '';
     // Re-renders once the user directory loads, so "Assigned to" shows full names.
     useMasterData();
@@ -298,6 +300,8 @@ export function PartnerCompaniesMasterView() {
         }
     };
 
+    // Admin › Roles: Partner Companies › Export.
+    const canExport = permissions.can('partnerCompanies', 'export');
     const handleExport = () => {
         // Selected rows when there is a selection, otherwise everything matching the current filter / search.
         const rows = selectedIds.length > 0 ? filtered.filter((p) => selectedIds.includes(p.id)) : filtered;
@@ -342,15 +346,17 @@ export function PartnerCompaniesMasterView() {
                     newButtonLabel="New Partner Company"
                     onImportClick={() => setImportOpen(true)}
                 >
-                    <Button
-                        variant="outlined"
-                        size="small"
-                        startIcon={<FileDownloadOutlinedIcon sx={{ fontSize: 16 }} />}
-                        onClick={handleExport}
-                        sx={outlinedHeaderButtonSx}
-                    >
-                        Export
-                    </Button>
+                    {canExport && (
+                        <Button
+                            variant="outlined"
+                            size="small"
+                            startIcon={<FileDownloadOutlinedIcon sx={{ fontSize: 16 }} />}
+                            onClick={handleExport}
+                            sx={outlinedHeaderButtonSx}
+                        >
+                            Export
+                        </Button>
+                    )}
                 </MasterHeaderActions>
             )}
             searchConfig={buildExtendedSearchConfig({

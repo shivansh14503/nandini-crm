@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../../config/prisma.js';
 import type { Prisma } from '../../generated/prisma/client.js';
 import { CACHE_KEYS, cacheService } from '../../services/cache.service.js';
+import { assertPermission, canDo } from '../shared/accessControl.js';
 import type { AuthUser } from '../../types/user.types.js';
 import type { EntityCodePrefix } from '../../utils/codeGenerator.js';
 import type { SeriesModule } from '../document-series/documentSeries.format.js';
@@ -865,6 +866,26 @@ const MODULES: Record<GlobalSearchCategory, (ctx: Context) => Promise<Found>> = 
     },
 };
 
+/**
+ * Empties the categories of modules the user's role can't view (Admin › Roles: View None), after the shared cache. A
+ * module at View Own still lists every match, as search always has: opening a record checks access.
+ */
+export function hideUnviewable(response: GlobalSearchResponse, user: AuthUser): GlobalSearchResponse {
+    const hidden = GLOBAL_SEARCH_CATEGORIES.filter((c) => !canDo(user, c, 'view'));
+    if (!hidden.length) return response;
+    const out: GlobalSearchResponse = {
+        results: { ...response.results },
+        ...(response.totals ? { totals: { ...response.totals } } : {}),
+        ...(response.ids ? { ids: { ...response.ids } } : {}),
+    };
+    for (const c of hidden) {
+        out.results[c] = [];
+        if (out.totals) out.totals[c] = 0;
+        if (out.ids) out.ids[c] = [];
+    }
+    return out;
+}
+
 async function runSearch(
     q: string,
     options: { limit: number; page: number; category?: GlobalSearchCategory; totals: boolean; ids: boolean; minDigits: number },
@@ -897,7 +918,12 @@ export const searchService = {
      * Up to `limit` matches per category (one category and a page of it with `category` / `page`), plus total
      * counts with `totals=true` and every matching id with `ids=true`. Cached briefly; a blank query returns nothing.
      */
-    async search(query: unknown): Promise<GlobalSearchResponse> {
+    async search(query: unknown, user: AuthUser): Promise<GlobalSearchResponse> {
+        return hideUnviewable(await this.searchAll(query), user);
+    },
+
+    /** The search as every role with View on every module sees it (the cached part). */
+    async searchAll(query: unknown): Promise<GlobalSearchResponse> {
         const { q, limit, page, category, totals, ids, minDigits } = searchQuerySchema.parse(query ?? {});
         if (!q) {
             return {
@@ -922,6 +948,7 @@ export const searchService = {
      */
     async records(body: unknown, user: AuthUser): Promise<{ id: string }[]> {
         const { module, ids } = searchRecordsSchema.parse(body ?? {});
+        assertPermission(user, module, 'view');
         const rows: { id: string }[] = await RECORD_LOADERS[module](ids, user);
         const byId = new Map(rows.map((row) => [row.id, row]));
         return ids.map((id) => byId.get(id)).filter((row): row is { id: string } => Boolean(row));

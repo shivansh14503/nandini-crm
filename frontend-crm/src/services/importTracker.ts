@@ -75,9 +75,12 @@ function emit() {
 }
 
 function patch(importId: string, changes: Partial<TrackedImport>): TrackedImport | undefined {
-    let updated: TrackedImport | undefined;
-    imports = imports.map((item) => (item.importId === importId ? (updated = { ...item, ...changes }) : item));
-    if (updated) emit();
+    const current = find(importId);
+    if (!current) return undefined;
+    const updated = { ...current, ...changes };
+    // A new list only when something changed, so the snapshot stays the same between updates.
+    imports = imports.map((item) => (item === current ? updated : item));
+    emit();
     return updated;
 }
 
@@ -268,9 +271,10 @@ function dismissImport(importId: string) {
     clearTimeout(timers.get(importId));
     timers.delete(importId);
     pollErrors.delete(importId);
-    const before = imports.length;
-    imports = imports.filter((item) => item.importId !== importId || !isDone(item.phase));
-    if (imports.length !== before) emit();
+    const remaining = imports.filter((item) => item.importId !== importId || !isDone(item.phase));
+    if (remaining.length === imports.length) return;
+    imports = remaining;
+    emit();
 }
 
 function subscribe(listener: () => void) {
@@ -279,8 +283,10 @@ function subscribe(listener: () => void) {
     return () => listeners.delete(listener);
 }
 
+/** The server render has no imports; one shared empty list so React sees the same snapshot every call. */
+const NO_IMPORTS: TrackedImport[] = [];
 const getSnapshot = () => imports;
-const getServerSnapshot = (): TrackedImport[] => [];
+const getServerSnapshot = () => NO_IMPORTS;
 
 export function useTrackedImports(): TrackedImport[] {
     return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);

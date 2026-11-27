@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticate } from '../../middlewares/authMiddleware.js';
+import { authenticate, requirePermission } from '../../middlewares/authMiddleware.js';
 import { validateRequest } from '../../middlewares/validateRequest.js';
 import { idParamSchema } from '../../validators/common.js';
 import { registerCrudRoutes } from '../shared/crud.js';
@@ -71,14 +71,14 @@ router.use(authenticate);
 
 // Before the CRUD routes so these paths aren't captured by `/:id`.
 router.get('/meta', activityController.meta);
-router.get('/calendar', activityController.calendar);
+router.get('/calendar', requirePermission('activities', 'view'), activityController.calendar);
 router.get('/busy', busyLimiter, activityController.busy);
 router.get('/link-targets', activityController.linkTargets);
 router.get('/video-options', activityController.videoOptions);
 router.post('/:id/response', validateRequest({ params: idParamSchema }), activityController.respond);
-router.post('/:id/conference/retry', validateRequest({ params: idParamSchema }), activityController.retryConference);
-router.post('/:id/calendar-sync/retry', validateRequest({ params: idParamSchema }), activityController.retryCalendarSync);
-router.post('/:id/calendar-sync/send-invites', validateRequest({ params: idParamSchema }), activityController.sendCalendarInvites);
-registerCrudRoutes(router, activityController);
+router.post('/:id/conference/retry', requirePermission('activities', 'edit'), validateRequest({ params: idParamSchema }), activityController.retryConference);
+router.post('/:id/calendar-sync/retry', requirePermission('activities', 'edit'), validateRequest({ params: idParamSchema }), activityController.retryCalendarSync);
+router.post('/:id/calendar-sync/send-invites', requirePermission('activities', 'edit'), validateRequest({ params: idParamSchema }), activityController.sendCalendarInvites);
+registerCrudRoutes(router, activityController, 'activities');
 
 export default router;

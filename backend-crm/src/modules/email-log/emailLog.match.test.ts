@@ -214,9 +214,9 @@ describe('email logging: settings and visibility', () => {
     it('restricted: owner and global roles see all; record: everyone who opens the record', () => {
         const rep: AuthUser = { id: 2, username: 'rep', role: 'Sales Executive' };
         const manager: AuthUser = { id: 3, username: 'mgr', role: 'Sales Manager' };
-        assert.equal(seesAllRecordEmails(rep, { assignedTo: 'someone' }, 'restricted'), false);
-        assert.equal(seesAllRecordEmails(rep, { assignedTo: 'REP' }, 'restricted'), true);
-        assert.equal(seesAllRecordEmails(manager, { assignedTo: 'someone' }, 'restricted'), true);
-        assert.equal(seesAllRecordEmails(rep, { assignedTo: 'someone' }, 'record'), true);
+        assert.equal(seesAllRecordEmails(rep, 'leads', { assignedTo: 'someone' }, 'restricted'), false);
+        assert.equal(seesAllRecordEmails(rep, 'leads', { assignedTo: 'REP' }, 'restricted'), true);
+        assert.equal(seesAllRecordEmails(manager, 'leads', { assignedTo: 'someone' }, 'restricted'), true);
+        assert.equal(seesAllRecordEmails(rep, 'leads', { assignedTo: 'someone' }, 'record'), true);
     });
 });

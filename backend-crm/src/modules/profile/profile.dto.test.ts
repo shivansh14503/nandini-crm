@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { SessionRecord } from '../auth/sessionRecord.js';
+import { FULL_PERMISSIONS, OWN_RECORDS_PERMISSIONS } from '../roles/permissions.js';
 import { joinFullName, resolveNameParts, splitFullName, photoUrlOf, profileAuditSnapshot, toAuthMeDto, toProfileDto, toSessionDtos, type ProfileRow } from './profile.dto.js';
 
 const row: ProfileRow = {
@@ -65,8 +66,15 @@ describe('toProfileDto', () => {
 describe('toAuthMeDto', () => {
     it('adds photoUrl and keeps the names', () => {
         const base = { id: 7, username: 'palak', role: 'Admin', fullName: 'Palak Sharma', firstName: 'Palak', lastName: 'Sharma' };
-        assert.deepEqual(toAuthMeDto({ ...base, photo: { id: 'p1' } }), { ...base, photoUrl: '/api/user-photos/p1' });
-        assert.deepEqual(toAuthMeDto({ ...base, photo: null }), { ...base, photoUrl: null });
+        const access = { adminPanel: true, superAdmin: false, permissions: FULL_PERMISSIONS };
+        assert.deepEqual(toAuthMeDto({ ...base, photo: { id: 'p1' } }), { ...base, photoUrl: '/api/user-photos/p1', access });
+        assert.deepEqual(toAuthMeDto({ ...base, photo: null }), { ...base, photoUrl: null, access });
+    });
+
+    it('carries what the role allows (Admin › Roles)', () => {
+        const base = { id: 8, username: 'ravi', fullName: 'Ravi', firstName: 'Ravi', lastName: null, photo: null };
+        assert.deepEqual(toAuthMeDto({ ...base, role: 'Super Admin' }).access, { adminPanel: true, superAdmin: true, permissions: FULL_PERMISSIONS });
+        assert.deepEqual(toAuthMeDto({ ...base, role: 'Sales Executive' }).access, { adminPanel: false, superAdmin: false, permissions: OWN_RECORDS_PERMISSIONS });
     });
 });
 

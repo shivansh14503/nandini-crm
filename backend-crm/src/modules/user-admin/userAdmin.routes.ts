@@ -1,11 +1,10 @@
 import { Router, type Request, type Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
-import { authenticate, requireRole } from '../../middlewares/authMiddleware.js';
+import { authenticate, requireAdmin } from '../../middlewares/authMiddleware.js';
 import { createRateLimiter } from '../../middlewares/rateLimiter.js';
 import { validateRequest } from '../../middlewares/validateRequest.js';
 import { sendSuccess } from '../../utils/apiResponse.js';
 import { requireUser } from '../../utils/requestContext.js';
-import { FORM_CONFIG_ADMIN_ROLES } from '../form-configs/formConfig.routes.js';
 import { userAdminService } from './userAdmin.service.js';
 import {
     createUserSchema,
@@ -47,7 +46,7 @@ import {
  *                                502 INVITE_EMAIL_FAILED · 503 MAIL_DISABLED (message says why) · 429 after 20 / 10 min per admin
  */
 const router = Router();
-router.use(authenticate, requireRole(...FORM_CONFIG_ADMIN_ROLES));
+router.use(authenticate, requireAdmin);
 
 const sendInviteLimiter = createRateLimiter({
     keyPrefix: 'ratelimit:admin-send-invite',

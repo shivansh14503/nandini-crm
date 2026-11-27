@@ -1,8 +1,7 @@
 import { Router, type Request, type Response } from 'express';
-import { authenticate, requireRole } from '../../middlewares/authMiddleware.js';
+import { authenticate, requireAdmin } from '../../middlewares/authMiddleware.js';
 import { sendSuccess } from '../../utils/apiResponse.js';
 import { requireUser } from '../../utils/requestContext.js';
-import { FORM_CONFIG_ADMIN_ROLES } from '../form-configs/formConfig.routes.js';
 import { companyFormatsService } from './companyFormats.service.js';
 
 /**
@@ -21,7 +20,7 @@ router.get('/', authenticate, async (_req: Request, res: Response) => {
     sendSuccess(res, await companyFormatsService.get());
 });
 
-router.use(authenticate, requireRole(...FORM_CONFIG_ADMIN_ROLES));
+router.use(authenticate, requireAdmin);
 
 router.put('/', async (req: Request, res: Response) => {
     sendSuccess(res, await companyFormatsService.save(req.body, requireUser(req)), 'Company formats saved');
