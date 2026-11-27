@@ -88,10 +88,12 @@ export function CrmLineItemsReadOnly({ value, withCurrency = false }: { value: L
                                         <TableCell align="right" sx={cellSx}>
                                             {item.discount > 0 ? (
                                                 <>
-                                                    {fmtNumber(item.discount, { maxDecimals: 2 })}%
-                                                    <Typography component="span" sx={{ display: 'block', fontSize: '0.72rem', color: 'var(--mui-palette-error-main)' }}>
-                                                        − {money(item.discountAmount)}
-                                                    </Typography>
+                                                    {item.discountType === 'amount' ? money(item.discount) : `${fmtNumber(item.discount, { maxDecimals: 2 })}%`}
+                                                    {item.discountType !== 'amount' && (
+                                                        <Typography component="span" sx={{ display: 'block', fontSize: '0.72rem', color: 'var(--mui-palette-error-main)' }}>
+                                                            − {money(item.discountAmount)}
+                                                        </Typography>
+                                                    )}
                                                 </>
                                             ) : (
                                                 '—'

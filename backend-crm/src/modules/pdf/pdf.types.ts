@@ -86,10 +86,11 @@ export interface PdfLineItem {
     rateFormatted: string;
     grossAmount: number;
     grossAmountFormatted: string;
-    /** Percentage of the Gross Amount. */
+    /** As entered: a percentage of the Gross Amount, or an amount off the line (`discountType`). */
     discount: number;
+    discountType: 'percentage' | 'amount';
     discountAmount: number;
-    /** `10%` (or `-` when none). */
+    /** `10%` for a percentage, the money for an amount (or `-` when none). */
     discountFormatted: string;
     discountAmountFormatted: string;
     /** GST: `18%`. */

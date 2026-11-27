@@ -725,8 +725,10 @@ model OpportunityLineItem {
   rate           Decimal @db.Decimal(18, 2)
   /// Quantity × Rate.
   grossAmount    Decimal @default(0) @db.Decimal(18, 2)
-  /// Percentage of the Gross Amount (0–100), and the amount it comes to.
+  /// What was entered: a percentage of the Gross Amount (0–100) or an amount off the line (`discountType`).
   discount       Decimal @default(0) @db.Decimal(18, 2)
+  /// `percentage` (of the Gross Amount) or `amount` (off the line).
+  discountType   String  @default("percentage") @db.NVarChar(20)
   discountAmount Decimal @default(0) @db.Decimal(18, 2)
   /// GST: an option of the Product Catalog's Tax Rate dropdown (`18%`), taken from the product when it has one.
   taxRate        String  @db.NVarChar(20)
@@ -850,8 +852,10 @@ model QuotationLineItem {
   rate           Decimal @db.Decimal(18, 2)
   /// Quantity × Rate.
   grossAmount    Decimal @default(0) @db.Decimal(18, 2)
-  /// Percentage of the Gross Amount (0–100), and the amount it comes to.
+  /// What was entered: a percentage of the Gross Amount (0–100) or an amount off the line (`discountType`).
   discount       Decimal @default(0) @db.Decimal(18, 2)
+  /// `percentage` (of the Gross Amount) or `amount` (off the line).
+  discountType   String  @default("percentage") @db.NVarChar(20)
   discountAmount Decimal @default(0) @db.Decimal(18, 2)
   /// GST: an option of the Product Catalog's Tax Rate dropdown (`18%`), taken from the product when it has one.
   taxRate        String  @db.NVarChar(20)

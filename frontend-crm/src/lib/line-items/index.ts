@@ -1,5 +1,5 @@
 import type { LineItem, LineItemsValues } from '@/types/lineItem.types';
-import { clampDiscount, lineItemAmounts, lineItemTotals, normalizeTaxRate } from './lineItemMath';
+import { clampDiscount, DEFAULT_DISCOUNT_TYPE, lineItemAmounts, lineItemTotals, normalizeTaxRate, roundMoney, toDiscountType, type LineItemDiscountType } from './lineItemMath';
 
 export * from './lineItemMath';
 
@@ -18,6 +18,21 @@ export const LINE_ITEM_LABELS = {
     description: 'Description',
     note: 'Note',
 } as const satisfies Partial<Record<keyof LineItem, string>>;
+
+/** The Discount type dropdown: a percentage of the Gross Amount, or an amount off the line. */
+export const LINE_ITEM_DISCOUNT_TYPE_LABELS: Record<LineItemDiscountType, string> = {
+    percentage: 'Percentage',
+    amount: 'Amount',
+};
+
+/**
+ * A line's Discount as text, the same in the view page, the drawers and the PDF: `12.5% (− ₹1,000)` for a
+ * percentage, `− ₹1,000` for an amount, '' when there is none.
+ */
+export function lineDiscountText(item: Pick<LineItem, 'discount' | 'discountType' | 'discountAmount'>, money: (n: number) => string, percent: (n: number) => string): string {
+    if (!(item.discount > 0)) return '';
+    return toDiscountType(item.discountType) === 'amount' ? `− ${money(item.discountAmount)}` : `${percent(item.discount)} (− ${money(item.discountAmount)})`;
+}
 
 /** Record totals. `subtotal` is the Taxable Amount and `totalTax` the GST. */
 export const LINE_ITEM_TOTAL_LABELS = {
@@ -73,6 +88,7 @@ export function newLineItem(): LineItem {
         rate: 0,
         grossAmount: 0,
         discount: 0,
+        discountType: DEFAULT_DISCOUNT_TYPE,
         discountAmount: 0,
         taxRate: '',
         taxableAmount: 0,
@@ -81,29 +97,37 @@ export function newLineItem(): LineItem {
     };
 }
 
-/** A line with its computed amounts brought up to date. */
+/** A line with its computed amounts brought up to date (a percentage kept within 0–100, an amount within 0–Gross). */
 export function computeLineItem(item: LineItem): LineItem {
-    const discount = clampDiscount(item.discount);
-    return { ...item, discount, ...lineItemAmounts({ quantity: item.quantity, rate: item.rate, discount }) };
+    const discountType = toDiscountType(item.discountType);
+    const discount = discountType === 'amount' ? Math.max(0, roundMoney(item.discount)) : clampDiscount(item.discount);
+    return { ...item, discount, discountType, ...lineItemAmounts({ quantity: item.quantity, rate: item.rate, discount, discountType }) };
 }
 
 /**
  * Lines and totals from any stored shape (an API record, a converted opportunity, demo data): lines saved before
- * CRM-111 (`amount`, a per-unit discount, `GST 18%`) read as Rate, a percentage and `18%`.
+ * CRM-111 (`amount`, a per-unit `direct` discount, `GST 18%`) read as Rate, the amount the discount came to on the
+ * line and `18%`. A missing discount type is a percentage.
  */
 export function toLineItem(raw: Partial<LineItem> & Record<string, unknown>): LineItem {
     const legacyRate = typeof raw.amount === 'number' ? raw.amount : Number(raw.amount) || 0;
     const rate = typeof raw.rate === 'number' ? raw.rate : Number(raw.rate ?? legacyRate) || 0;
+    const quantity = Number(raw.quantity) || 1;
     let discount = Number(raw.discount) || 0;
-    if (raw.discountType === 'direct') discount = rate > 0 ? Math.min(100, Math.round((discount / rate) * 10000) / 100) : 0;
+    let discountType = toDiscountType(raw.discountType);
+    if ((raw.discountType as string) === 'direct') {
+        discount = roundMoney(discount * quantity);
+        discountType = 'amount';
+    }
     return computeLineItem({
         id: typeof raw.id === 'string' && raw.id ? raw.id : newLineItemId(),
         productId: typeof raw.productId === 'string' ? raw.productId : '',
         productName: typeof raw.productName === 'string' ? raw.productName : '',
-        quantity: Number(raw.quantity) || 1,
+        quantity,
         rate,
         grossAmount: 0,
         discount,
+        discountType,
         discountAmount: 0,
         taxRate: normalizeTaxRate(typeof raw.taxRate === 'string' ? raw.taxRate : ''),
         taxableAmount: 0,

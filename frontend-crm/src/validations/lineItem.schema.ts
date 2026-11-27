@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { FIELD_MAX_LENGTH as L } from '../config/fieldLimits';
-import { isBlankLineItem } from '../lib/line-items/lineItemMath';
+import { DEFAULT_DISCOUNT_TYPE, isBlankLineItem, LINE_ITEM_DISCOUNT_TYPES, roundMoney } from '../lib/line-items/lineItemMath';
 import { optionalString, optionalText, zodAmount } from './common';
 
 /**
@@ -16,6 +16,7 @@ const lineItemShape = z.object({
     rate: z.coerce.number().default(0),
     grossAmount: zodAmount.default(0),
     discount: z.coerce.number().default(0),
+    discountType: z.enum(LINE_ITEM_DISCOUNT_TYPES).catch(DEFAULT_DISCOUNT_TYPE).default(DEFAULT_DISCOUNT_TYPE),
     discountAmount: zodAmount.default(0),
     taxRate: z.string().trim().default(''),
     taxableAmount: zodAmount.default(0),
@@ -31,7 +32,11 @@ export function lineItemIssues(item: LineItemSchemaType): { path: keyof LineItem
     if (!item.productName.trim()) issues.push({ path: 'productName', message: 'Product is required.' });
     if (!(item.quantity >= 1)) issues.push({ path: 'quantity', message: 'Quantity must be at least 1.' });
     if (!(item.rate > 0)) issues.push({ path: 'rate', message: 'Rate is required.' });
-    if (item.discount < 0 || item.discount > 100) issues.push({ path: 'discount', message: 'Discount must be between 0% and 100%.' });
+    if (item.discountType === 'amount') {
+        if (item.discount < 0 || item.discount > roundMoney(item.quantity * item.rate)) issues.push({ path: 'discount', message: 'Discount cannot exceed the Gross Amount.' });
+    } else if (item.discount < 0 || item.discount > 100) {
+        issues.push({ path: 'discount', message: 'Discount must be between 0% and 100%.' });
+    }
     if (!item.taxRate.trim()) issues.push({ path: 'taxRate', message: 'GST is required.' });
     return issues;
 }

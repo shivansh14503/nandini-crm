@@ -60,7 +60,9 @@ const SAMPLE_QUOTATION: Omit<QuotationSource, 'customValues'> = {
             quantity: 10,
             rate: 12500,
             grossAmount: 125000,
-            discount: 5,
+            // An Amount discount (the other lines use a Percentage).
+            discount: 6250,
+            discountType: 'amount',
             discountAmount: 6250,
             taxRate: '18%',
             taxableAmount: 118750,

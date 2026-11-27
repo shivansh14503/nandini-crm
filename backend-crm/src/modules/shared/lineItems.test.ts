@@ -31,6 +31,26 @@ describe('line item math (CRM-111)', () => {
         assert.equal(lineItemListSchema.safeParse([{ ...line, discount: 101 }]).success, false);
     });
 
+    it('Discount is a Percentage (the default) or an Amount off the line, never more than the Gross Amount', () => {
+        const [percentage, amount] = lineItemListSchema.parse([line, { ...line, discount: 250, discountType: 'amount' }]);
+        assert.equal(percentage.discountType, 'percentage');
+        const { items, totals } = calculateLineItems([percentage, amount], 0);
+        assert.deepEqual(
+            items.map(({ discountAmount, taxableAmount }) => ({ discountAmount, taxableAmount })),
+            [
+                { discountAmount: 200, taxableAmount: 1800 },
+                { discountAmount: 250, taxableAmount: 1750 },
+            ],
+        );
+        assert.equal(totals.totalDiscount, 450);
+        // An amount may be more than 100 but not more than the Gross Amount (2 × 1000).
+        assert.ok(lineItemListSchema.safeParse([{ ...line, discount: 2000, discountType: 'amount' }]).success);
+        const over = lineItemListSchema.safeParse([{ ...line, discount: 2001, discountType: 'amount' }]);
+        assert.equal(over.success, false);
+        assert.ok(over.error?.issues.some((i) => i.message === 'Discount cannot exceed the Gross Amount.'));
+        assert.equal(lineItemListSchema.safeParse([{ ...line, discountType: 'flat' }]).success, false);
+    });
+
     it('drops lines nothing was entered on; a quotation still needs one real line', () => {
         const blank = { productName: '', quantity: 1, rate: 0, discount: 0, taxRate: '18%', description: '', note: '' };
         assert.deepEqual(lineItemListSchema.parse([blank]), []);
@@ -49,7 +69,9 @@ describe('line item math (CRM-111)', () => {
             { productName: 'Old', quantity: 3, amount: 500, discount: 50, discountType: 'direct', salePrice: 450, taxRate: 'GST 12%', taxAmount: 162, total: 1512 },
         ]);
         assert.equal(legacy.rate, 500);
-        assert.equal(legacy.discount, 10);
+        // ₹50 off each of 3 units: ₹150 off the line.
+        assert.equal(legacy.discountType, 'amount');
+        assert.equal(legacy.discount, 150);
         assert.equal(legacy.taxRate, '12%');
         assert.equal(normalizeTaxRate('--None--'), '0%');
         assert.equal(normalizeTaxRate(''), '');

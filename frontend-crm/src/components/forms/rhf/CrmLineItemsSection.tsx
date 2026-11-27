@@ -20,10 +20,7 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import ClearIcon from '@mui/icons-material/Clear';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
-import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
-import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
-import PercentIcon from '@mui/icons-material/Percent';
 import { useFormContext, useFormState, useWatch, type FieldErrors, type Path, type PathValue } from 'react-hook-form';
 
 import { FormField, fieldSx } from '../FormField';
@@ -43,6 +40,7 @@ import {
     currencyCodeOf,
     currencySymbolOf,
     DEFAULT_CURRENCY,
+    LINE_ITEM_DISCOUNT_TYPE_LABELS,
     LINE_ITEM_LABELS as LABELS,
     LINE_ITEM_TAX_RATE_CATEGORY,
     LINE_ITEM_TAX_RATES,
@@ -50,19 +48,22 @@ import {
     newLineItem,
     normalizeTaxRate,
     QUOTATION_CURRENCIES,
+    roundMoney,
     totalsOf,
 } from '@/lib/line-items';
+import { LINE_ITEM_DISCOUNT_TYPES, type LineItemDiscountType } from '@/lib/line-items/lineItemMath';
 
 /**
  * Line items of opportunities and quotations (Jira CRM-111): one editor, one set of fields, labels, API keys and
  * calculations wherever line items are edited (the view page and the drawers read the same values).
  *
  * - One empty line is always there (no "add a product" placeholder); "Add Product Line" adds more.
- * - With more than one line, lines can be dragged by their grip (touch too) or moved with the up / down buttons, and
- *   removed; with a single line the Action column and its remove button are hidden.
+ * - With more than one line, lines can be dragged by their grip (touch too) and removed; with a single line the grip,
+ *   the Action column and its remove button are hidden.
  * - Rate is the product's MRP (not editable); a product without an MRP, or a typed product, takes a typed Rate.
  * - Gross Amount = Quantity × Rate and Taxable Amount = Gross Amount − Discount are computed, never typed. Discount is
- *   a percentage, and the amount it comes to shows under it.
+ *   a Percentage of the Gross Amount or an Amount off the line (a dropdown beside it); the amount it comes to shows
+ *   under a percentage.
  * - GST offers the Product Catalog's Tax Rate options; a product with a Tax Rate sets it and it can't be changed.
  * - Only Discount, Description and Note may be left empty.
  */
@@ -115,9 +116,9 @@ const catalogRate = (product: Product | undefined): number => Math.max(0, Number
 const catalogTaxRate = (product: Product | undefined): string => normalizeTaxRate(product?.taxRate);
 
 // Column template: [grip] Quantity | Product | Rate | Gross Amount | Discount | GST | Taxable Amount [| Action]
-const COLUMNS = 'minmax(76px, 0.6fr) minmax(220px, 2.4fr) minmax(112px, 1.1fr) minmax(120px, 1.1fr) minmax(104px, 0.9fr) minmax(104px, 0.9fr) minmax(132px, 1.2fr)';
+const COLUMNS = 'minmax(76px, 0.6fr) minmax(220px, 2.4fr) minmax(112px, 1.1fr) minmax(120px, 1.1fr) minmax(140px, 1.1fr) minmax(104px, 0.9fr) minmax(132px, 1.2fr)';
 const GRIP_COLUMN = '32px';
-const ACTION_COLUMN = '112px';
+const ACTION_COLUMN = '56px';
 
 const headCellSx = { display: 'flex', alignItems: 'center', gap: 0.25, minWidth: 0 } as const;
 const requiredMark = (
@@ -167,6 +168,16 @@ const actionButtonSx = {
         color: 'var(--crm-text-blue-700)',
     },
     '&.Mui-disabled': { opacity: 0.4 },
+} as const;
+
+/** The Percentage / Amount picker inside the Discount field. */
+const discountTypeSelectSx = {
+    fontSize: '0.82rem',
+    fontWeight: 600,
+    color: 'var(--mui-palette-text-secondary)',
+    '& .MuiSelect-select': { py: 0, pr: '18px !important', pl: 0.5, minWidth: 0 },
+    '& .MuiSelect-icon': { fontSize: 18, right: -2 },
+    '&:hover': { color: 'var(--crm-text-blue-700)' },
 } as const;
 
 const removeButtonSx = {
@@ -238,14 +249,17 @@ export function CrmLineItemsEditor({ value, onChange, error, lineErrors, withCur
         commit(lines.map((item) => (item.id === id ? computeLineItem({ ...item, ...updates }) : item)));
     const addLine = () => commit([...lines, newLineItem()]);
     const removeLine = (id: string) => commit(lines.filter((item) => item.id !== id));
-    const moveLine = (id: string, step: -1 | 1) => {
-        const from = lines.findIndex((item) => item.id === id);
-        const to = from + step;
-        if (from < 0 || to < 0 || to >= lines.length) return;
-        const next = [...lines];
-        const [moved] = next.splice(from, 1);
-        next.splice(to, 0, moved);
-        commit(next);
+    /** A typed Discount: a percentage stays within 0–100, an amount within the line's Gross Amount. */
+    const changeDiscount = (item: LineItem, typed: number) => {
+        const max = item.discountType === 'amount' ? item.grossAmount : 100;
+        updateLine(item.id, { discount: Math.min(max, Math.max(0, typed)) });
+    };
+    /** Switching Percentage ⇄ Amount keeps the discount the line already had (12.5% of 8,000 ⇄ 1,000). */
+    const changeDiscountType = (item: LineItem, discountType: LineItemDiscountType) => {
+        if (discountType === item.discountType) return;
+        const discount =
+            discountType === 'amount' ? item.discountAmount : item.grossAmount > 0 ? roundMoney((item.discountAmount / item.grossAmount) * 100) : 0;
+        updateLine(item.id, { discountType, discount });
     };
 
     const canReorder = !isView && lines.length > 1;
@@ -304,6 +318,7 @@ export function CrmLineItemsEditor({ value, onChange, error, lineErrors, withCur
     const showActions = lines.length > 1;
     const gridTemplateColumns = [showActions ? GRIP_COLUMN : '', COLUMNS, showActions ? ACTION_COLUMN : ''].filter(Boolean).join(' ');
     const amountHeading = (label: string) => `${label} (${symbol})`;
+    const discountTypeSymbol = (type: LineItemDiscountType) => (type === 'amount' ? symbol : '%');
 
     return (
         <Box sx={{ p: { xs: 2, md: 3 } }}>
@@ -513,7 +528,7 @@ export function CrmLineItemsEditor({ value, onChange, error, lineErrors, withCur
                                             sx={computedSx()}
                                         />
 
-                                        {/* Discount: a percentage of the Gross Amount; the amount it comes to shows under it */}
+                                        {/* Discount: a Percentage of the Gross Amount or an Amount off the line, picked beside it */}
                                         <Box data-field={`lineItems.${index}.discount`} sx={{ minWidth: 0 }}>
                                             <TextField
                                                 size="small"
@@ -521,14 +536,33 @@ export function CrmLineItemsEditor({ value, onChange, error, lineErrors, withCur
                                                 fullWidth
                                                 value={item.discount === 0 ? '' : item.discount}
                                                 placeholder="0"
-                                                onChange={(e) => updateLine(item.id, { discount: Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)) })}
+                                                onChange={(e) => changeDiscount(item, parseFloat(e.target.value) || 0)}
                                                 error={Boolean(errs.discount)}
                                                 slotProps={{
-                                                    htmlInput: { min: 0, max: 100, step: 'any', 'aria-label': `${LABELS.discount} (%)` },
+                                                    htmlInput: {
+                                                        min: 0,
+                                                        max: item.discountType === 'amount' ? item.grossAmount : 100,
+                                                        step: 'any',
+                                                        'aria-label': `${LABELS.discount} (${discountTypeSymbol(item.discountType)})`,
+                                                    },
                                                     input: {
                                                         endAdornment: (
-                                                            <InputAdornment position="end">
-                                                                <PercentIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-secondary)' }} />
+                                                            <InputAdornment position="end" sx={{ ml: 0.5 }}>
+                                                                <Select
+                                                                    variant="standard"
+                                                                    disableUnderline
+                                                                    value={item.discountType ?? 'percentage'}
+                                                                    onChange={(e) => changeDiscountType(item, e.target.value as LineItemDiscountType)}
+                                                                    renderValue={(type) => discountTypeSymbol(type)}
+                                                                    inputProps={{ 'aria-label': `${LABELS.discount} type` }}
+                                                                    sx={discountTypeSelectSx}
+                                                                >
+                                                                    {LINE_ITEM_DISCOUNT_TYPES.map((type) => (
+                                                                        <MenuItem key={type} value={type}>
+                                                                            {LINE_ITEM_DISCOUNT_TYPE_LABELS[type]} ({discountTypeSymbol(type)})
+                                                                        </MenuItem>
+                                                                    ))}
+                                                                </Select>
                                                             </InputAdornment>
                                                         ),
                                                     },
@@ -537,7 +571,7 @@ export function CrmLineItemsEditor({ value, onChange, error, lineErrors, withCur
                                             />
                                             {errs.discount ? (
                                                 <FormHelperText error>{errs.discount}</FormHelperText>
-                                            ) : item.discountAmount > 0 ? (
+                                            ) : item.discountType === 'percentage' && item.discountAmount > 0 ? (
                                                 <FormHelperText sx={{ color: 'var(--mui-palette-error-main)', whiteSpace: 'nowrap' }}>− {money(item.discountAmount)}</FormHelperText>
                                             ) : null}
                                         </Box>
@@ -578,27 +612,7 @@ export function CrmLineItemsEditor({ value, onChange, error, lineErrors, withCur
                                         />
 
                                         {showActions && (
-                                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5, height: 40 }}>
-                                                <Tooltip title="Move up">
-                                                    <span>
-                                                        <IconButton size="small" aria-label="Move line up" disabled={index === 0} onClick={() => moveLine(item.id, -1)} sx={actionButtonSx}>
-                                                            <KeyboardArrowUpIcon sx={{ fontSize: 18 }} />
-                                                        </IconButton>
-                                                    </span>
-                                                </Tooltip>
-                                                <Tooltip title="Move down">
-                                                    <span>
-                                                        <IconButton
-                                                            size="small"
-                                                            aria-label="Move line down"
-                                                            disabled={index === lines.length - 1}
-                                                            onClick={() => moveLine(item.id, 1)}
-                                                            sx={actionButtonSx}
-                                                        >
-                                                            <KeyboardArrowDownIcon sx={{ fontSize: 18 }} />
-                                                        </IconButton>
-                                                    </span>
-                                                </Tooltip>
+                                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 40 }}>
                                                 <Tooltip title="Remove line">
                                                     <IconButton size="small" aria-label="Remove line" onClick={() => removeLine(item.id)} sx={removeButtonSx}>
                                                         <ClearIcon sx={{ fontSize: 16 }} />

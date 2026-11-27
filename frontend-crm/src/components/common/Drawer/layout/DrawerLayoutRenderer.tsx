@@ -11,7 +11,7 @@ import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
 import { getCountryNameByCode } from '@/data/addressMaster';
 import { useDropdownOptionLabel, useFormConfigs } from '@/hooks/queries/useFormConfigs';
-import { currencyCodeOf, LINE_ITEM_LABELS, LINE_ITEM_TAX_RATE_CATEGORY, LINE_ITEM_TOTAL_LABELS, toLineItem } from '@/lib/line-items';
+import { currencyCodeOf, LINE_ITEM_LABELS, LINE_ITEM_TAX_RATE_CATEGORY, LINE_ITEM_TOTAL_LABELS, toLineItem, lineDiscountText } from '@/lib/line-items';
 import type { LineItem } from '@/types/lineItem.types';
 import { useDrawerLayouts } from '@/hooks/queries/useDrawerLayouts';
 import { LINE_ITEM_MODULES, pruneLayout, type DrawerBadge, type DrawerBlock, type DrawerLayoutDocument, type DrawerLayoutModule, type DrawerSection, type SectionStyle } from '@/lib/drawer-layout';
@@ -555,7 +555,7 @@ function LineItemsBody({ block, ctx }: { block: Extract<DrawerBlock, { type: 'li
                         <Box>
                             <Typography sx={smallLabelSx}>{LINE_ITEM_LABELS.discount}</Typography>
                             <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: item.discount > 0 ? 'var(--mui-palette-error-main)' : undefined }}>
-                                {item.discount > 0 ? `${formatPercent(item.discount)} (− ${money(item.discountAmount)})` : '—'}
+                                {lineDiscountText(item, money, formatPercent) || '—'}
                             </Typography>
                         </Box>
                         <Box>

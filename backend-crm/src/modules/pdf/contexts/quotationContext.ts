@@ -4,6 +4,7 @@ import { decimalToNumber, parseCustomFields, text } from '../../../utils/mappers
 import type { AuthUser } from '../../../types/user.types.js';
 import { assertRecordAccess } from '../../shared/accessControl.js';
 import { lineItemsInclude } from '../../shared/lineItems.js';
+import { toDiscountType } from '../../shared/lineItemMath.js';
 import { shownNumberModules } from '../../document-series/documentSeries.service.js';
 import type { DisplayFormats } from '../../company-formats/core/displayFormats.js';
 import type { CustomFieldMeta } from '../fieldRegistry.js';
@@ -24,6 +25,8 @@ export interface QuotationSourceLineItem {
     rate: number;
     grossAmount: number;
     discount: number;
+    /** `percentage` (the default) or `amount`. */
+    discountType?: string;
     discountAmount: number;
     taxRate: string;
     taxableAmount: number;
@@ -97,8 +100,10 @@ export function assembleQuotationContext(source: QuotationSource, input: Context
         grossAmount: item.grossAmount,
         grossAmountFormatted: money(item.grossAmount),
         discount: item.discount,
+        discountType: toDiscountType(item.discountType),
         discountAmount: item.discountAmount,
-        discountFormatted: item.discount ? `${number(item.discount)}%` : '-',
+        // A percentage shows as `10%`, an amount as the money it takes off the line.
+        discountFormatted: !item.discount ? '-' : toDiscountType(item.discountType) === 'amount' ? money(item.discountAmount) : `${number(item.discount)}%`,
         discountAmountFormatted: item.discountAmount ? money(item.discountAmount) : '-',
         taxRate: item.taxRate,
         taxableAmount: item.taxableAmount,
@@ -295,6 +300,7 @@ async function loadSource(recordId: string): Promise<QuotationSource> {
             rate: decimalToNumber(item.rate),
             grossAmount: decimalToNumber(item.grossAmount),
             discount: decimalToNumber(item.discount),
+            discountType: toDiscountType(item.discountType),
             discountAmount: decimalToNumber(item.discountAmount),
             taxRate: item.taxRate,
             taxableAmount: decimalToNumber(item.taxableAmount),
