@@ -1,5 +1,7 @@
 import type { Request, Response, Router } from 'express';
+import { requirePermission } from '../../middlewares/authMiddleware.js';
 import { validateRequest } from '../../middlewares/validateRequest.js';
+import type { PermissionModule } from '../roles/permissions.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { sendCreated, sendPaginated, sendSuccess, type PaginatedResult } from '../../utils/apiResponse.js';
 import { requireUser } from '../../utils/requestContext.js';
@@ -55,19 +57,22 @@ export function createCrudController<TDto>(service: CrudService<TDto>, labels: E
 export type CrudController = ReturnType<typeof createCrudController>;
 
 /**
- * Registers the standard CRUD endpoints. Call it after any custom routes (e.g. `PATCH /bulk-status`) so
+ * Registers the standard CRUD endpoints, each behind the role permission it needs on `module` (Admin › Roles):
+ * GET → View, POST → Create, PUT / PATCH → Edit, DELETE and bulk-delete → Delete (403 when the role has None; the
+ * service limits "Own" to the user's records). Call it after any custom routes (e.g. `PATCH /bulk-status`) so
  * those paths aren't captured by `/:id`.
  */
-export function registerCrudRoutes(router: Router, controller: CrudController): Router {
+export function registerCrudRoutes(router: Router, controller: CrudController, module: PermissionModule): Router {
     const withId = validateRequest({ params: idParamSchema });
     const withPatch = validateRequest({ params: idParamSchema, body: patchBodySchema });
+    const can = (action: 'view' | 'create' | 'edit' | 'delete') => requirePermission(module, action);
 
-    router.get('/', controller.list);
-    router.post('/', controller.create);
-    router.post('/bulk-delete', validateRequest({ body: bulkIdsSchema }), controller.bulkRemove);
-    router.get('/:id', withId, controller.getById);
-    router.put('/:id', withPatch, controller.update);
-    router.patch('/:id', withPatch, controller.update);
-    router.delete('/:id', withId, controller.remove);
+    router.get('/', can('view'), controller.list);
+    router.post('/', can('create'), controller.create);
+    router.post('/bulk-delete', can('delete'), validateRequest({ body: bulkIdsSchema }), controller.bulkRemove);
+    router.get('/:id', can('view'), withId, controller.getById);
+    router.put('/:id', can('edit'), withPatch, controller.update);
+    router.patch('/:id', can('edit'), withPatch, controller.update);
+    router.delete('/:id', can('delete'), withId, controller.remove);
     return router;
 }

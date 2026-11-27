@@ -5,6 +5,7 @@ import { Box, Button } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { CreateSplitButton } from './CreateSplitButton';
+import { useMasterPermissions } from './masterPermissions';
 
 export interface MasterHeaderActionsProps {
     onRefresh?: () => void;
@@ -34,14 +35,20 @@ export const outlinedHeaderButtonSx = {
     },
 } as const;
 
-/** Standard right-aligned header action row shared by the entity master views. */
+/**
+ * Standard right-aligned header action row shared by the entity master views. New and Import show only when the
+ * user's role may create / import in the page's module (Admin › Roles, via CommonMasterView).
+ */
 export function MasterHeaderActions({
     onRefresh,
-    onNewClick,
+    onNewClick: onNewClickProp,
     newButtonLabel = 'New Record',
-    onImportClick,
+    onImportClick: onImportClickProp,
     children,
 }: MasterHeaderActionsProps) {
+    const { canCreate, canImport } = useMasterPermissions();
+    const onNewClick = canCreate ? onNewClickProp : undefined;
+    const onImportClick = canCreate && canImport ? onImportClickProp : undefined;
     return (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.2, flexWrap: 'wrap' }}>
             {onRefresh && (

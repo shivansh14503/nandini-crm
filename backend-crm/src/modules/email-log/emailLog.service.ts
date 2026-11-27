@@ -43,9 +43,9 @@ const sameUser = (a: string | null | undefined, b: string) => typeof a === 'stri
  * Whether `user` sees every email logged on a record they can open (else only the ones they took part in): always
  * with `visibility = record`; with `restricted` the record's owner and global-access roles (managers, admins). Pure.
  */
-export function seesAllRecordEmails(user: AuthUser, record: { assignedTo?: string | null }, visibility: EmailVisibility): boolean {
+export function seesAllRecordEmails(user: AuthUser, module: EmailLogModule, record: { assignedTo?: string | null }, visibility: EmailVisibility): boolean {
     if (visibility === 'record') return true;
-    return hasGlobalAccess(user) || sameUser(record.assignedTo, user.username);
+    return hasGlobalAccess(user, module, 'view') || sameUser(record.assignedTo, user.username);
 }
 
 // ── DTOs ──────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -142,9 +142,9 @@ export const emailLogService = {
         const { module, recordId, page, limit } = recordEmailsQuerySchema.parse(query ?? {});
         const record = await recordOf(module, recordId);
         if (!record || record.isDeleted) throw HttpError.notFound('Record not found.');
-        assertRecordAccess(user, record);
+        assertRecordAccess(user, record, module, 'view');
         const { settings } = await loadEmailLogContext();
-        const seesAll = seesAllRecordEmails(user, record, settings.visibility);
+        const seesAll = seesAllRecordEmails(user, module, record, settings.visibility);
         const empty: RecordEmailsDto = { enabled: false, visibility: settings.visibility, seesAll, total: 0, page, limit, items: [] };
         // Off means off: nothing is shown while the company switch is off (rows age out or are purged).
         if (!settings.enabled) return empty;

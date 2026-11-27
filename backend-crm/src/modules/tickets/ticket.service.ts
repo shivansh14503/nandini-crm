@@ -113,7 +113,7 @@ export const ticketService = {
         const page = parsePagination(query, TICKET_SORT_FIELDS);
         const filters = ticketListQuerySchema.parse(query ?? {});
 
-        const and: Prisma.TicketWhereInput[] = [{ isDeleted: false }, buildAccessScopeWhere(user, 'assignedTo')];
+        const and: Prisma.TicketWhereInput[] = [{ isDeleted: false }, buildAccessScopeWhere(user, 'assignedTo', 'tickets', 'view')];
         if (filters.ticketStatus?.length) and.push({ ticketStatus: { in: filters.ticketStatus } });
         if (filters.excludeStatus?.length) and.push({ ticketStatus: { notIn: filters.excludeStatus } });
         if (filters.ticketPriority?.length) and.push({ ticketPriority: { in: filters.ticketPriority } });
@@ -157,7 +157,7 @@ export const ticketService = {
     async getById(id: string, user: AuthUser): Promise<TicketDto> {
         const row = await prisma.ticket.findFirst({ where: { id, isDeleted: false } });
         if (!row) throw notFound();
-        assertRecordAccess(user, row);
+        assertRecordAccess(user, row, 'tickets', 'view');
         return toTicketDto(row);
     },
 
@@ -176,7 +176,7 @@ export const ticketService = {
             await lockRecords(tx, 'ticket', [id]);
             const existing = await tx.ticket.findFirst({ where: { id, isDeleted: false } });
             if (!existing) throw notFound();
-            assertRecordAccess(user, existing);
+            assertRecordAccess(user, existing, 'tickets', 'edit');
 
             const before = toTicketDto(existing);
             const merged: Record<string, unknown> = { ...before, ...patch };
@@ -211,7 +211,7 @@ export const ticketService = {
             await lockRecords(tx, 'ticket', [id]);
             const existing = await tx.ticket.findFirst({ where: { id, isDeleted: false }, select: OWNER_SELECT });
             if (!existing) throw notFound();
-            assertRecordAccess(user, existing);
+            assertRecordAccess(user, existing, 'tickets', 'delete');
             await tx.ticket.update({ where: { id }, data: softDeleteData(user) });
             await auditService.record(tx, { entityType: 'Ticket', entityId: id, action: 'DELETE', changedBy: user.username });
         });
@@ -236,7 +236,7 @@ export const ticketService = {
         const result = await runInTransaction(async (tx) => {
             await lockRecords(tx, 'ticket', ids);
             const live = await tx.ticket.findMany({ where: { id: { in: ids }, isDeleted: false }, select: { id: true, ...OWNER_SELECT } });
-            for (const row of live) assertRecordAccess(user, row);
+            for (const row of live) assertRecordAccess(user, row, 'tickets', 'delete');
             const liveIds = live.map((row) => row.id);
             if (liveIds.length > 0) {
                 await tx.ticket.updateMany({ where: { id: { in: liveIds } }, data: softDeleteData(user) });

@@ -48,7 +48,7 @@ import {
     type CreateAdminUserResult,
     type UpdateAdminUserPayload,
 } from '@/types/userAdmin.types';
-import { isSuperAdminRole, ROLE_NAME_MAX_LENGTH } from '@/utils/roleAccess';
+import { isSuperAdminRole, normalizeRole } from '@/utils/roleAccess';
 import { firstFreeUsername, normalizeUsername, suggestUsername, USERNAME_MAX_LENGTH, USERNAME_MIN_LENGTH } from '@/utils/username';
 import { needsOtherDomain, userFormSchema, type UserFormData, type UserFormOutput } from '@/validations/userAdmin.schema';
 import { getFirstErrorMessage } from '@/validations/common';
@@ -327,7 +327,8 @@ export function UserFormDrawer({
         () => (meta?.roles ?? []).map((r) => r.name).filter((name) => mayGrantSuperAdmin || !isSuperAdminRole(name)),
         [meta?.roles, mayGrantSuperAdmin],
     );
-    const roleCounts = useMemo(() => new Map((meta?.roles ?? []).map((r) => [r.name, r.userCount])), [meta?.roles]);
+    const roleByName = useMemo(() => new Map((meta?.roles ?? []).map((r) => [r.name, r])), [meta?.roles]);
+    const pickedRole = role ? (meta?.roles ?? []).find((r) => normalizeRole(r.name) === normalizeRole(role)) : undefined;
     const departmentOptions = useMemo(() => (meta?.departments ?? []).map((d) => d.name), [meta?.departments]);
     const departmentCounts = useMemo(() => new Map((meta?.departments ?? []).map((d) => [d.name, d.userCount])), [meta?.departments]);
     const managerOptions = useMemo<ManagerOption[]>(() => {
@@ -563,33 +564,30 @@ export function UserFormDrawer({
                                                 hint={
                                                     fieldState.error ? undefined : (
                                                         <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
-                                                            <RoleAccessBadges role={role ?? ''} />
-                                                            <span>{roleAccessHint(role ?? '')}</span>
+                                                            <RoleAccessBadges access={pickedRole?.access} />
+                                                            <span>{roleAccessHint(pickedRole?.access)}</span>
                                                             {isSelf ? <span>You can’t remove your own admin role.</span> : null}
                                                         </Box>
                                                     )
                                                 }
                                             >
                                                 <Autocomplete
-                                                    freeSolo
-                                                    autoHighlight={false}
+                                                    autoHighlight
                                                     options={roleOptions}
-                                                    value={field.value ?? ''}
-                                                    inputValue={field.value ?? ''}
-                                                    onInputChange={(_, v, reason) => {
-                                                        if (reason !== 'reset') field.onChange(v.slice(0, ROLE_NAME_MAX_LENGTH));
-                                                    }}
-                                                    onChange={(_, v) => field.onChange(typeof v === 'string' ? v : '')}
+                                                    value={field.value ? field.value : null}
+                                                    // A role the list doesn't hold (renamed or deleted meanwhile) still shows; Save asks for a listed one.
+                                                    isOptionEqualToValue={(option, value) => normalizeRole(option) === normalizeRole(value)}
+                                                    onChange={(_, v) => field.onChange(v ?? '')}
                                                     disabled={saving}
                                                     renderOption={(props, option) => {
                                                         const { key, ...rest } = props as typeof props & { key: React.Key };
-                                                        const count = roleCounts.get(option) ?? 0;
+                                                        const count = roleByName.get(option)?.userCount ?? 0;
                                                         return (
                                                             <Box component="li" key={key} {...rest} sx={optionRowSx}>
                                                                 <Box component="span" sx={{ minWidth: 0, overflowWrap: 'anywhere' }}>
                                                                     {option}
                                                                 </Box>
-                                                                <RoleAccessBadges role={option} />
+                                                                <RoleAccessBadges access={roleByName.get(option)?.access} />
                                                                 <Box component="span" sx={countSx}>
                                                                     {count === 0 ? 'nobody yet' : `${count} ${count === 1 ? 'user' : 'users'}`}
                                                                 </Box>
@@ -602,7 +600,7 @@ export function UserFormDrawer({
                                                             inputRef={field.ref}
                                                             onBlur={field.onBlur}
                                                             size="small"
-                                                            placeholder="Pick a role or type a new one"
+                                                            placeholder="Pick a role"
                                                             error={Boolean(fieldState.error)}
                                                             helperText={fieldState.error?.message}
                                                             sx={fieldSx}

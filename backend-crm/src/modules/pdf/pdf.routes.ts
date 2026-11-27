@@ -1,9 +1,8 @@
 import express, { Router, type Request } from 'express';
-import { authenticate, requireRole } from '../../middlewares/authMiddleware.js';
+import { authenticate, requireAdmin } from '../../middlewares/authMiddleware.js';
 import { createRateLimiter } from '../../middlewares/rateLimiter.js';
 import { validateRequest } from '../../middlewares/validateRequest.js';
 import { idParamSchema } from '../../validators/common.js';
-import { FORM_CONFIG_ADMIN_ROLES } from '../form-configs/formConfig.routes.js';
 import { pdfAssetController, pdfSavedItemController, pdfTemplateController, recordPdfHandler } from './pdfTemplate.controller.js';
 import {
     activeBodySchema,
@@ -15,7 +14,7 @@ import {
 } from './pdfTemplate.validator.js';
 import type { PdfModule } from './pdf.types.js';
 
-const admin = requireRole(...FORM_CONFIG_ADMIN_ROLES);
+const admin = requireAdmin;
 const perUser = (req: Request) => (req.user ? `user:${req.user.id}` : `ip:${req.ip ?? 'unknown'}`);
 
 /** Template documents can be large once JSON-encoded, so these routers parse with 2 MB. */

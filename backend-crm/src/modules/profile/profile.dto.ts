@@ -1,3 +1,5 @@
+import type { RolePermissions } from '../roles/permissions.js';
+import { resolveRole } from '../roles/roleRegistry.js';
 import type { SessionRecord } from '../auth/sessionRecord.js';
 import { describeUserAgent } from './userAgent.js';
 
@@ -167,15 +169,31 @@ export interface AuthMeDto {
     firstName: string | null;
     lastName: string | null;
     photoUrl: string | null;
+    /** What the user's role allows (Admin › Roles): the app hides what it doesn't, and the API refuses it. */
+    access: UserAccessDto;
 }
 
-export const toAuthMeDto = (row: Omit<AuthMeDto, 'photoUrl'> & { photo: { id: string } | null }): AuthMeDto => ({
+export interface UserAccessDto {
+    /** Opens the admin panel. */
+    adminPanel: boolean;
+    /** Super Admin (manages Super Admin users). */
+    superAdmin: boolean;
+    permissions: RolePermissions;
+}
+
+export function accessDtoOf(role: string): UserAccessDto {
+    const resolved = resolveRole(role);
+    return { adminPanel: resolved.adminPanel, superAdmin: resolved.superAdmin, permissions: resolved.permissions };
+}
+
+export const toAuthMeDto = (row: Omit<AuthMeDto, 'photoUrl' | 'access'> & { photo: { id: string } | null }): AuthMeDto => ({
     id: row.id,
     username: row.username,
     role: row.role,
     fullName: row.fullName,
     ...resolveNameParts(row),
     photoUrl: photoUrlOf(row.photo?.id),
+    access: accessDtoOf(row.role),
 });
 
 // ── Sessions ─────────────────────────────────────────────────────────────────

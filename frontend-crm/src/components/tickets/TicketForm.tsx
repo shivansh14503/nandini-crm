@@ -201,7 +201,7 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
             .then((found) => {
                 if (active && found) {
                     setTicketNumber(found.ticketNumber);
-                    setAudit({ createdAt: found.createdAt, createdBy: found.createdBy, updatedAt: found.updatedAt, updatedBy: found.updatedBy });
+                    setAudit({ createdAt: found.createdAt, createdBy: found.createdBy, updatedAt: found.updatedAt, updatedBy: found.updatedBy, assignedTo: found.assignedTo });
                     reset({ ...DEFAULT_TICKET_FORM, ...found });
                 }
             })

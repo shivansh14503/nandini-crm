@@ -26,6 +26,7 @@ import type { User } from '@/types/auth.types';
 import { glassSurfaceSx, GLASS_RADIUS, GLASS_SHADOW, FLOAT_INSET } from '@/theme/glass';
 import { moduleForPath } from '@/theme/moduleColors';
 import { APP_CONFIG, ROUTES } from '@/config/constants';
+import { isAdminUser } from '@/utils/adminRoles';
 import { ModuleDot, type NavGroup, type NavLinkItem } from './navItems';
 import { ThemeModeToggle } from './ThemeModeToggle';
 import { useShowBookingLinks } from './useShowBookingLinks';
@@ -103,7 +104,7 @@ export interface MobileNavDrawerProps {
     groups: readonly NavGroup[];
     /** Path of the page the menu was opened on; its item is highlighted and its group starts expanded. */
     currentPath: string;
-    user: Pick<User, 'username' | 'role' | 'fullName' | 'photoUrl'> | null;
+    user: Pick<User, 'username' | 'role' | 'fullName' | 'photoUrl' | 'access'> | null;
     onLogout: () => void;
 }
 
@@ -394,10 +395,12 @@ export function MobileNavDrawer({ open, onClose, groups, currentPath, user, onLo
                         Booking links
                     </ListItemButton>
                 )}
-                <ListItemButton component={Link} href={ROUTES.ADMIN} onClick={onClose} sx={rowSx}>
-                    <AdminPanelSettingsOutlinedIcon sx={{ fontSize: 19 }} />
-                    Admin Panel
-                </ListItemButton>
+                {isAdminUser(user) && (
+                    <ListItemButton component={Link} href={ROUTES.ADMIN} onClick={onClose} sx={rowSx}>
+                        <AdminPanelSettingsOutlinedIcon sx={{ fontSize: 19 }} />
+                        Admin Panel
+                    </ListItemButton>
+                )}
             </Box>
 
             {/* Footer: appearance + sign out */}

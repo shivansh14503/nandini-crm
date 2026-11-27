@@ -25,7 +25,7 @@ import { RaisedLayer } from '@/components/common/RaisedLayer';
 import { useAuth } from '@/context/AuthContext';
 import { useMorningSummaryPreview, useSendMorningSummaryTest } from '@/hooks/queries/useNotifications';
 import type { MorningSummaryNotSentReason, MorningSummaryTestResult } from '@/types/notification.types';
-import { isAdminRole } from '@/utils/adminRoles';
+import { isAdminUser } from '@/utils/adminRoles';
 
 export interface MorningSummaryPreviewDialogProps {
     open: boolean;
@@ -121,7 +121,7 @@ const toastSeverity = (status: MorningSummaryTestResult['status']): ToastState['
 
 function PreviewContent({ titleId, onClose }: { titleId: string; onClose: () => void }) {
     const { user } = useAuth();
-    const canSendTest = isAdminRole(user?.role);
+    const canSendTest = isAdminUser(user);
     const preview = useMorningSummaryPreview();
     const sendTest = useSendMorningSummaryTest();
     const [toast, setToast] = useState<ToastState>({ open: false, message: '', severity: 'success' });

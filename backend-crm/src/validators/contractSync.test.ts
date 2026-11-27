@@ -83,16 +83,9 @@ import * as bookingConstants from '../modules/booking-links/bookingLink.constant
 import * as emailLogConstants from '../modules/email-log/emailLog.constants.js';
 import { EMAIL_LOGGING_SETTING_KEY } from '../modules/email-log/emailLog.settings.js';
 import { normalizeUsername, RESERVED_USERNAMES, USERNAME_MAX_LENGTH, USERNAME_MIN_LENGTH, USERNAME_PATTERN, usernameIssue } from '../modules/user-admin/username.js';
-import {
-    ADMIN_ROLES,
-    GLOBAL_ACCESS_ROLES,
-    hasGlobalAccessRole,
-    isAdminAccessRole,
-    normalizeRole,
-    ROLE_ACCESS_LEVELS,
-    ROLE_NAME_MAX_LENGTH,
-    roleAccess,
-} from '../modules/user-admin/roles.js';
+import { isSuperAdminRole, normalizeRole, ROLE_ACCESS_LEVELS, ROLE_NAME_MAX_LENGTH } from '../modules/user-admin/roles.js';
+import { GLOBAL_ACCESS_ROLES, LEGACY_ADMIN_ROLES, SUPER_ADMIN_ROLE } from '../modules/roles/roleDefaults.js';
+import * as rolePermissions from '../modules/roles/permissions.js';
 import { ADMIN_USER_STATUSES, DEPARTMENT_MAX_LENGTH, JOB_TITLE_MAX_LENGTH } from '../modules/user-admin/userAdmin.validator.js';
 import { DEFAULT_REMINDER_NONE, IN_APP_NOTIFICATION_KINDS, OUT_OF_OFFICE_MAX_DAYS, OUT_OF_OFFICE_MESSAGE_MAX } from '../modules/preferences/preferences.constants.js';
 import { isOutOfOfficeOn, outOfOfficeIssues, type OutOfOfficeRange } from '../modules/preferences/preferences.rules.js';
@@ -265,14 +258,14 @@ interface FrontendUsername {
 
 interface FrontendRoleAccess {
     ROLE_ACCESS_LEVELS: readonly string[];
-    ADMIN_ROLES: readonly string[];
-    GLOBAL_ACCESS_ROLES: readonly string[];
     ROLE_NAME_MAX_LENGTH: number;
+    SUPER_ADMIN_ROLE: string;
     normalizeRole(role: string): string;
-    isAdminAccessRole(role: string | null | undefined): boolean;
-    hasGlobalAccessRole(role: string | null | undefined): boolean;
-    roleAccess(role: string): string;
+    isSuperAdminRole(role: string | null | undefined): boolean;
 }
+
+/** frontend utils/permissions.ts has the same exports as backend roles/permissions.ts (plus its own record helpers). */
+type FrontendPermissions = Omit<typeof rolePermissions, 'YES_NO_ACTIONS'> & { YES_NO_ACTIONS: ReadonlySet<string> };
 
 interface FrontendUserAdminTypes {
     USER_STATUS_FILTERS: readonly string[];
@@ -644,18 +637,18 @@ describe('backend ↔ frontend contract', { skip }, () => {
         }
     });
 
-    it('frontend utils/roleAccess.ts classifies roles exactly as the API enforces them', async () => {
+    it('frontend utils/roleAccess.ts names and matches roles exactly as the API does', async () => {
         const frontend = await loadFrontend<FrontendRoleAccess>('utils/roleAccess.ts');
         assert.deepEqual([...frontend.ROLE_ACCESS_LEVELS], [...ROLE_ACCESS_LEVELS]);
-        assert.deepEqual([...frontend.ADMIN_ROLES], [...ADMIN_ROLES]);
-        assert.deepEqual([...frontend.GLOBAL_ACCESS_ROLES], [...GLOBAL_ACCESS_ROLES]);
         assert.equal(frontend.ROLE_NAME_MAX_LENGTH, ROLE_NAME_MAX_LENGTH);
+        assert.equal(frontend.SUPER_ADMIN_ROLE, SUPER_ADMIN_ROLE);
         const roles = [
-            ...ADMIN_ROLES,
+            ...LEGACY_ADMIN_ROLES,
             ...GLOBAL_ACCESS_ROLES,
             'admin',
             'SUPER ADMIN',
             'Super  Admin',
+            'super-admin',
             ' Admin',
             'Director - Operations',
             'director — operations',
@@ -666,9 +659,52 @@ describe('backend ↔ frontend contract', { skip }, () => {
         ];
         for (const role of roles) {
             assert.equal(frontend.normalizeRole(role), normalizeRole(role), role);
-            assert.equal(frontend.isAdminAccessRole(role), isAdminAccessRole(role), role);
-            assert.equal(frontend.hasGlobalAccessRole(role), hasGlobalAccessRole(role), role);
-            assert.equal(frontend.roleAccess(role), roleAccess(role), role);
+            assert.equal(frontend.isSuperAdminRole(role), isSuperAdminRole(role), role);
+        }
+    });
+
+    it('frontend utils/permissions.ts has the modules, actions and permission rules of Admin › Roles', async () => {
+        const frontend = await loadFrontend<FrontendPermissions>('utils/permissions.ts');
+        const be = rolePermissions;
+        assert.deepEqual([...frontend.ACCESS_LEVELS], [...be.ACCESS_LEVELS]);
+        assert.deepEqual([...frontend.PERMISSION_ACTIONS], [...be.PERMISSION_ACTIONS]);
+        assert.deepEqual(frontend.PERMISSION_ACTION_LABELS, be.PERMISSION_ACTION_LABELS);
+        assert.deepEqual([...frontend.YES_NO_ACTIONS].sort(), [...be.YES_NO_ACTIONS].sort());
+        assert.deepEqual([...frontend.PERMISSION_MODULE_KEYS], [...be.PERMISSION_MODULE_KEYS]);
+        assert.deepEqual(frontend.PERMISSION_MODULES, be.PERMISSION_MODULES);
+        assert.deepEqual(frontend.FULL_PERMISSIONS, be.FULL_PERMISSIONS);
+        assert.deepEqual(frontend.OWN_RECORDS_PERMISSIONS, be.OWN_RECORDS_PERMISSIONS);
+        for (const level of be.ACCESS_LEVELS) assert.deepEqual(frontend.uniformPermissions(level), be.uniformPermissions(level), level);
+
+        for (const def of be.PERMISSION_MODULES) {
+            for (const action of def.actions) {
+                assert.deepEqual([...frontend.levelsFor(def, action)], [...be.levelsFor(def, action)], `${def.key}.${action}`);
+                for (const level of be.ACCESS_LEVELS) assert.equal(frontend.levelLabel(action, level), be.levelLabel(action, level), `${action} ${level}`);
+            }
+        }
+
+        const samples: unknown[] = [
+            null,
+            {},
+            'nope',
+            { leads: { view: 'own', edit: 'all', delete: 'all', create: 'own', import: 'all' } },
+            { contacts: { view: 'none', edit: 'all', create: 'all' }, products: { view: 'own', edit: 'own' } },
+            { partnerCompanies: { view: 'all', export: 'own' }, documents: { view: 'all', edit: 'all' }, bogus: { view: 'all' } },
+            { referrals: { view: 'all', edit: 'own', delete: 'sometimes' } },
+        ];
+        for (const sample of samples) {
+            const normalized = be.normalizePermissions(sample);
+            assert.deepEqual(frontend.normalizePermissions(sample), normalized, JSON.stringify(sample));
+            for (const adminPanel of [true, false]) {
+                assert.equal(frontend.accessSummary(adminPanel, normalized), be.accessSummary(adminPanel, normalized), JSON.stringify(sample));
+            }
+            for (const def of be.PERMISSION_MODULES) {
+                assert.equal(
+                    frontend.describeModulePermissions(def, normalized[def.key]),
+                    be.describeModulePermissions(def, normalized[def.key]),
+                    `${def.key} ${JSON.stringify(sample)}`,
+                );
+            }
         }
     });
 

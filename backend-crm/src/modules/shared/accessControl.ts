@@ -2,79 +2,118 @@ import type { TransactionClient } from '../../config/prisma.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
 
+import { PERMISSION_ACTION_LABELS, PERMISSION_MODULE_BY_KEY, levelOf, type AccessLevel, type PermissionAction, type PermissionModule } from '../roles/permissions.js';
+import { GLOBAL_ACCESS_ROLES, normalizeRole, type ResolvedRole } from '../roles/roleDefaults.js';
+import { resolveRole } from '../roles/roleRegistry.js';
+
+export { GLOBAL_ACCESS_ROLES, normalizeRole };
+export type { PermissionAction, PermissionModule };
+
 /**
- * Row-level access for the core CRM entities (organizations, contacts, leads, opportunities, quotations, tickets,
- * contracts, activities).
- *
- * Global roles see and change every record. Super Admin (the developer role) is one of them: it has full access to
- * every record and every admin page. Every other role is scoped to the records it owns (assignee) or
- * created. Activities extend this rule with their attendees: an invited colleague sees the activity but may only
- * reply to it (see activities/activity.access.ts). Role names are matched case-insensitively with any dash style,
- * so "Director - Operations" typed with a hyphen is the same role as the seeded "Director – Operations" (en dash).
+ * Row-level access for the CRM modules, decided by the user's role in Admin › Roles (roles/permissions.ts): each
+ * module's View / Edit / Delete is `all` (every record), `own` (records the user owns, `assignedTo`, or created) or
+ * `none`. Super Admin (the developer role) always has full access. Activities extend the rule with their attendees: an
+ * invited colleague sees the activity but may only reply to it (see activities/activity.access.ts). The route guard
+ * (`requirePermission`) answers 403 before a service runs when the level is `none`; the checks here are the record
+ * filter behind it.
  */
-export const GLOBAL_ACCESS_ROLES = [
-    'Super Admin',
-    'Admin',
-    'Director – Operations',
-    'Regional Sales Head',
-    'Sales Manager',
-    'System Administrator',
-    'Accounts Manager',
-] as const;
 
 /** Column holding a record's owner (`assignedTo` on every module). */
 export type OwnerField = 'assignedTo';
 
-/** The key role names are compared by: any case, any dash style, runs of spaces as one (mirrored in frontend utils/roleAccess.ts). */
-export const normalizeRole = (role: string): string =>
-    role
-        .normalize('NFKC')
-        .replace(/[‐-―−]/g, '-')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .toLowerCase();
-
-const GLOBAL_ROLE_KEYS: ReadonlySet<string> = new Set(GLOBAL_ACCESS_ROLES.map(normalizeRole));
-
-export function hasGlobalAccess(user: Pick<AuthUser, 'role'>): boolean {
-    return GLOBAL_ROLE_KEYS.has(normalizeRole(user.role ?? ''));
+/** The user's role as the access checks see it. */
+export function roleOf(user: Pick<AuthUser, 'role'>): ResolvedRole {
+    return resolveRole(user.role);
 }
 
-/** `{}` for global roles, otherwise "owned by or created by the user". */
+/** The level the user's role gives `action` on `module`. */
+export function accessLevel(user: Pick<AuthUser, 'role'>, module: PermissionModule, action: PermissionAction): AccessLevel {
+    return levelOf(roleOf(user).permissions, module, action);
+}
+
+/** Whether the user may do `action` on `module` at all (any level but `none`). */
+export function canDo(user: Pick<AuthUser, 'role'>, module: PermissionModule, action: PermissionAction): boolean {
+    return accessLevel(user, module, action) !== 'none';
+}
+
+/** Whether the role opens the admin panel. */
+export function isAdminUser(user: Pick<AuthUser, 'role'>): boolean {
+    return roleOf(user).adminPanel;
+}
+
+/** The 403 message for an action the role doesn't allow, e.g. "Your role doesn't allow you to delete Leads." */
+export function permissionDeniedMessage(module: PermissionModule, action: PermissionAction): string {
+    return `Your role doesn't allow you to ${PERMISSION_ACTION_LABELS[action].toLowerCase()} ${PERMISSION_MODULE_BY_KEY[module].label}.`;
+}
+
+/** Throws 403 unless the role allows `action` on `module` at some level. */
+export function assertPermission(user: Pick<AuthUser, 'role'>, module: PermissionModule, action: PermissionAction): void {
+    if (!canDo(user, module, action)) throw HttpError.forbidden(permissionDeniedMessage(module, action));
+}
+
+/** True when the role gives `action` on every record of `module`. */
+export function hasGlobalAccess(user: Pick<AuthUser, 'role'>, module: PermissionModule, action: PermissionAction): boolean {
+    return accessLevel(user, module, action) === 'all';
+}
+
+/** Matches no owner: usernames can't contain '#'. */
+const NO_ACCESS_OWNER = '#no-access#';
+
+/** `{}` for `all`, otherwise "owned by or created by the user" (nobody's records for `none`). */
 export type AccessScopeWhere<F extends OwnerField> =
     | Record<string, never>
     | { OR: [{ [K in F]: string }, { createdBy: string }] };
 
 /**
- * Prisma `where` fragment limiting a query to the records `user` may see. Combine it with `AND` (it carries its
- * own `OR`, which would otherwise collide with a search clause):
- * `{ isDeleted: false, AND: [buildAccessScopeWhere(user, 'assignedTo')] }`.
+ * Prisma `where` fragment limiting a query to the records `user` may `action` (default View) in `module`. Combine it
+ * with `AND` (it carries its own `OR`, which would otherwise collide with a search clause):
+ * `{ isDeleted: false, AND: [buildAccessScopeWhere(user, 'assignedTo', 'leads')] }`.
  * SQL Server's default collation compares case-insensitively, matching `assertRecordAccess`.
  */
-export function buildAccessScopeWhere<F extends OwnerField>(user: AuthUser, ownerField: F): AccessScopeWhere<F> {
-    if (hasGlobalAccess(user)) return {};
-    return { OR: [{ [ownerField]: user.username } as { [K in F]: string }, { createdBy: user.username }] };
+export function buildAccessScopeWhere<F extends OwnerField>(
+    user: AuthUser,
+    ownerField: F,
+    module: PermissionModule,
+    action: PermissionAction = 'view',
+): AccessScopeWhere<F> {
+    const level = accessLevel(user, module, action);
+    if (level === 'all') return {};
+    const who = level === 'own' ? user.username : NO_ACCESS_OWNER;
+    return { OR: [{ [ownerField]: who } as { [K in F]: string }, { createdBy: who }] };
 }
 
 const sameUser = (a: string | null | undefined, b: string) => typeof a === 'string' && a.trim().toLowerCase() === b.trim().toLowerCase();
 
-/** True when `user` may read / change `record` (global role, assignee or creator). */
-export function canAccessRecord(
-    user: AuthUser,
-    record: { assignedTo?: string | null; createdBy?: string | null },
-): boolean {
-    if (hasGlobalAccess(user)) return true;
+/** Whether `user` owns (assignee) or created `record`. */
+export function ownsRecord(user: AuthUser, record: { assignedTo?: string | null; createdBy?: string | null }): boolean {
     return sameUser(record.assignedTo, user.username) || sameUser(record.createdBy, user.username);
 }
 
-/** Throws 403 unless `user` may read / change `record`. Call it after the not-found check. */
+/** True when `user` may `action` (default View) `record` of `module`. */
+export function canAccessRecord(
+    user: AuthUser,
+    record: { assignedTo?: string | null; createdBy?: string | null },
+    module: PermissionModule,
+    action: PermissionAction = 'view',
+): boolean {
+    const level = accessLevel(user, module, action);
+    if (level === 'all') return true;
+    return level === 'own' && ownsRecord(user, record);
+}
+
+/** Throws 403 unless `user` may `action` (default View) `record` of `module`. Call it after the not-found check. */
 export function assertRecordAccess(
     user: AuthUser,
     record: { assignedTo?: string | null; createdBy?: string | null },
+    module: PermissionModule,
+    action: PermissionAction = 'view',
 ): void {
-    if (!canAccessRecord(user, record)) {
-        throw HttpError.forbidden('You do not have permission to access or modify this record.');
-    }
+    if (canAccessRecord(user, record, module, action)) return;
+    throw HttpError.forbidden(
+        canDo(user, module, action)
+            ? 'You do not have permission to access or modify this record.'
+            : permissionDeniedMessage(module, action),
+    );
 }
 
 /** Display suffix the user pickers append to the signed-in user, which older clients / data sometimes submitted. */

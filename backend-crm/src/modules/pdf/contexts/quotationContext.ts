@@ -210,7 +210,7 @@ async function loadRecordMeta(recordId: string, user: AuthUser): Promise<RecordM
         },
     });
     if (!row) throw notFound();
-    assertRecordAccess(user, row);
+    assertRecordAccess(user, row, 'quotations', 'view');
     // Numbers without an admin-added series stay in the backend.
     const code = (await shownNumberModules()).has('quotation') ? row.quotationCode : '';
     return {

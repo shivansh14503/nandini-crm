@@ -36,6 +36,7 @@
 | Audit log | ✅ ledger table with who / where / how per entry, Admin › Audit Log screen (`/api/admin/audit-logs`), undo / restore, CSV / Excel export, ledger integrity checks; alert rules later (Phase 11 E) |
 | My Profile | ✅ own name, mobile, office phone and photo; change password (signs out other sessions); list and sign out signed-in sessions; notification preferences, default reminder and out of office (2026-11-26) |
 | Users admin | ✅ Admin › Users (`/admin/users`): add, edit, deactivate / activate, reset password with must-change-password at next sign-in; job title and reports to (2026-11-26) |
+| Roles & permissions | ✅ Admin › Roles (`/admin/roles`, 2026-11-27): roles with View / Create / Edit / Delete / Export / Import per module at All, Own or None and an admin panel switch, enforced on every module route, list and record; the app hides what a role can't do. Password policy settings, security groups and security settings are next (Phase 18) |
 | Dashboard | ❌ static page, no data |
 | Tests | ⚠️ 100 backend unit test files (`node:test`); no API integration, no frontend, no E2E |
 | CI/CD, containers | ❌ none in repo |
@@ -778,6 +779,35 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
       days, date-times and amount-type fields in audit Before / After values, entry details and the undo preview; exports
       stay fixed), the `summarize()` export count and the `opportunity.validator.ts` commission message (mirrored in the
       frontend schema; `₹1,000` in both groupings). The legacy hints stay for now.
+
+### Phase 18 — Security module (P1, started 2026-11-27)
+
+Modelled on SuiteCRM's Users admin area. Audit of what existed (2026-11-27): User Management done (Admin › Users);
+Role Management partial (fixed role names in code, admin panel and "sees every record" by name); Password
+Management partial (fixed policy in code, change password, invite and reset links, sign-in rate limit per IP);
+Security Groups and Security Settings missing.
+
+- [x] **Role Management** (2026-11-27) — `Roles` table (migration `20261220090000_roles`) seeded at start-up from the
+      role names in use with the access they had, so nothing changes on deploy. `/api/admin/roles` (list, create,
+      edit, delete moving the users to another role; Super Admin locked; guards against removing your own or the
+      last admin panel). Per-module View / Create / Edit / Delete / Export / Import at All, Own or None for leads,
+      contacts, organizations, opportunities, quotations, contracts, tickets, referrals, activities, documents,
+      products and partner companies, enforced by `requirePermission` on every module route, `buildAccessScopeWhere`
+      / `assertRecordAccess` on lists and records, the import route and global search. `requireAdmin` (the role's
+      admin panel switch) replaced the hard-coded admin role list. Admin › Roles page (card grid, editor with the
+      permission grid and presets, duplicate, delete with reassign); Admin › Users picks roles from the table only;
+      the app hides New, Import, Edit, Export, Convert, Quick Create items and modules the role can't use.
+- [ ] **Password Management** — admin-set password rules (length, character classes, expiry, reuse history), account
+      lockout per user after failed sign-ins, forced change on expiry.
+- [ ] **Security Groups** — groups of users (teams / branches); records shared with a group are visible to its
+      members (a "Group" level alongside All / Own / None), group membership in Admin › Users.
+- [ ] **Security Settings** — company switches: inherit the creator's / assignee's groups on new records, who may
+      assign to whom, session timeout, sign-in IP allow-list.
+- [ ] Not yet: export permission on modules other than Partner Companies (their lists have no export today);
+      field-level permissions.
+
+Exit: an admin can create a role, limit it to own records or no access per module, assign it in Admin › Users, and
+the API refuses (403) and the app hides everything the role doesn't allow.
 
 ## Part 3 — Keeping these documents current
 

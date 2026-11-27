@@ -18,6 +18,6 @@ const router = Router();
 router.use(authenticate);
 // Before the CRUD routes, so /:id doesn't capture it.
 router.get('/manufacturers', productController.manufacturers);
-registerCrudRoutes(router, productController);
+registerCrudRoutes(router, productController, 'products');
 
 export default router;

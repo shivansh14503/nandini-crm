@@ -14,6 +14,6 @@ import { partnerCompanyController } from './partnerCompany.controller.js';
  */
 const router = Router();
 router.use(authenticate);
-registerCrudRoutes(router, partnerCompanyController);
+registerCrudRoutes(router, partnerCompanyController, 'partnerCompanies');
 
 export default router;

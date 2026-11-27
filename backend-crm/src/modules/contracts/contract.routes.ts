@@ -15,6 +15,6 @@ import { contractController } from './contract.controller.js';
  */
 const router = Router();
 router.use(authenticate);
-registerCrudRoutes(router, contractController);
+registerCrudRoutes(router, contractController, 'contracts');
 
 export default router;

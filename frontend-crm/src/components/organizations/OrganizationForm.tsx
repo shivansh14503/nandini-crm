@@ -259,7 +259,7 @@ export default function OrganizationForm({
     const showNumber = useShowRecordNumber();
     const [persistedStatus, setPersistedStatus] = useState(initialData?.accountStatus ?? 'Active');
     const [activeTab, setActiveTab] = useResetTab<TabKey>(initialTab);
-    const [audit, setAudit] = useState<{ createdAt?: string; createdBy?: string; updatedAt?: string; updatedBy?: string }>({});
+    const [audit, setAudit] = useState<{ createdAt?: string; createdBy?: string; updatedAt?: string; updatedBy?: string; assignedTo?: string | null }>({});
     const pendingFocusField = useRef<string | null>(null);
     // Values "Discard" resets to: blank for create, the last loaded record for edit.
     const baselineRef = useRef<OrganizationFormData>(startValues);
@@ -341,6 +341,7 @@ export default function OrganizationForm({
                         createdBy: found.createdBy,
                         updatedAt: found.updatedAt,
                         updatedBy: found.updatedBy,
+                        assignedTo: found.assignedTo,
                     });
                     baselineRef.current = { ...DEFAULT_FORM, ...normalized };
                     setRecordCode(found.accountCode ?? '');

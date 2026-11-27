@@ -1,8 +1,7 @@
 import { Router, type Request, type Response } from 'express';
-import { authenticate, requireRole } from '../../middlewares/authMiddleware.js';
+import { authenticate, requireAdmin } from '../../middlewares/authMiddleware.js';
 import { sendSuccess } from '../../utils/apiResponse.js';
 import { requireUser } from '../../utils/requestContext.js';
-import { FORM_CONFIG_ADMIN_ROLES } from '../form-configs/formConfig.routes.js';
 import { scorecardService } from './scorecard.service.js';
 
 /**
@@ -22,7 +21,7 @@ router.get('/', async (_req: Request, res: Response) => {
     sendSuccess(res, await scorecardService.listAll());
 });
 
-const admin = requireRole(...FORM_CONFIG_ADMIN_ROLES);
+const admin = requireAdmin;
 
 router.put('/:module', admin, async (req: Request, res: Response) => {
     sendSuccess(res, await scorecardService.save(req.params, req.body, requireUser(req)), 'Scorecard saved');

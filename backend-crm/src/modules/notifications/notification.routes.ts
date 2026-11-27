@@ -1,8 +1,7 @@
 import { Router } from 'express';
-import { authenticate, requireRole } from '../../middlewares/authMiddleware.js';
+import { authenticate, requireAdmin } from '../../middlewares/authMiddleware.js';
 import { validateRequest } from '../../middlewares/validateRequest.js';
 import { idParamSchema } from '../../validators/common.js';
-import { FORM_CONFIG_ADMIN_ROLES } from '../form-configs/formConfig.routes.js';
 import { notificationController } from './notification.controller.js';
 
 /**
@@ -24,7 +23,7 @@ router.get('/', notificationController.list);
 router.get('/unread-count', notificationController.unreadCount);
 router.post('/read-all', notificationController.markAllRead);
 router.get('/morning-summary/preview', notificationController.previewMorningSummary);
-router.post('/morning-summary/test', requireRole(...FORM_CONFIG_ADMIN_ROLES), notificationController.testMorningSummary);
+router.post('/morning-summary/test', requireAdmin, notificationController.testMorningSummary);
 router.post('/:id/read', validateRequest({ params: idParamSchema }), notificationController.markRead);
 
 export default router;

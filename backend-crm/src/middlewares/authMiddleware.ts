@@ -3,6 +3,9 @@ import { ENV } from '../config/env.js';
 import { sessionService } from '../modules/auth/session.service.js';
 import { tokenService, type VerifiedToken } from '../modules/auth/token.service.js';
 import { HttpError } from '../utils/httpError.js';
+import { canDo, isAdminUser, permissionDeniedMessage } from '../modules/shared/accessControl.js';
+import type { PermissionAction, PermissionModule } from '../modules/roles/permissions.js';
+import { currentRoleOf, ensureFresh } from '../modules/roles/roleRegistry.js';
 
 /** Reads the session token from the auth cookie, falling back to an `Authorization: Bearer` header. */
 export function readToken(req: Request): string | undefined {
@@ -37,9 +40,30 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
         return next(HttpError.unauthorized('Your session has ended. Please sign in again.'));
     }
 
-    req.user = { id: verified.id, username: verified.username, role: verified.role };
+    // The role as Admin › Users holds it now (a renamed role, or a role changed since sign-in), not the token's copy.
+    await ensureFresh();
+    req.user = { id: verified.id, username: verified.username, role: currentRoleOf(verified.id, verified.role) };
     req.auth = { jti: verified.jti, tracked: verified.tracked };
     next();
+}
+
+/** Restricts a route to roles that open the admin panel (Admin › Roles "Admin panel"). Use after `authenticate`. */
+export function requireAdmin(req: Request, _res: Response, next: NextFunction): void {
+    if (!req.user) return next(HttpError.unauthorized());
+    if (!isAdminUser(req.user)) return next(HttpError.forbidden());
+    next();
+}
+
+/**
+ * 403 unless the user's role allows `action` on `module` at some level (Admin › Roles). Record-level limits (`own`)
+ * are applied by the service. Use after `authenticate`.
+ */
+export function requirePermission(module: PermissionModule, action: PermissionAction) {
+    return (req: Request, _res: Response, next: NextFunction): void => {
+        if (!req.user) return next(HttpError.unauthorized());
+        if (!canDo(req.user, module, action)) return next(HttpError.forbidden(permissionDeniedMessage(module, action)));
+        next();
+    };
 }
 
 /** Restricts a route to the given roles (case-insensitive). Use after `authenticate`. */

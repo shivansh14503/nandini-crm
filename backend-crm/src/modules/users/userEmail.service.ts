@@ -2,6 +2,7 @@ import { StatusCodes } from 'http-status-codes';
 import { z } from 'zod';
 import { prisma, type TransactionClient } from '../../config/prisma.js';
 import { auditService } from '../../services/audit.service.js';
+import { refresh as refreshRoles } from '../roles/roleRegistry.js';
 import { CACHE_KEYS, cacheService } from '../../services/cache.service.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
@@ -106,9 +107,12 @@ export interface UserEmailRow {
 
 const USER_EMAIL_SELECT = { id: true, username: true, fullName: true, department: true, role: true, email: true, isActive: true, isGroupUser: true } as const;
 
-/** Drops the cached user directory (`cache:lookups:users:*`) after a write to a user commits. */
+/**
+ * Drops the cached user directory (`cache:lookups:users:*`) after a write to a user commits, and re-reads the role
+ * snapshot the access checks use (a new user, a changed role).
+ */
 export async function invalidateUserCaches(): Promise<void> {
-    await cacheService.invalidatePattern(`${CACHE_KEYS.lookups('users')}*`);
+    await Promise.all([cacheService.invalidatePattern(`${CACHE_KEYS.lookups('users')}*`), refreshRoles()]);
 }
 
 const domainList = (domains: readonly string[]) => domains.map((d) => `@${d}`).join(', ');
