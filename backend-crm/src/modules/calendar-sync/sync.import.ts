@@ -364,7 +364,11 @@ export function pulledConferenceColumns(stored: Partial<PulledConference> | null
 
 // ── The importer (one per pull run) ─────────────────────────────────────────────────────────────────────────────
 
-export type ImportOutcomeKind = 'imported' | 'attended' | 'applied' | 'deleted' | 'unchanged' | 'ignored' | 'skippedUnlinked';
+/**
+ * `held`: this copy can't be placed yet (the person's attendee link still points at an older copy no pull has read
+ * back); the pull counts it as failed, so it keeps its cursor and the replay offers the copy again.
+ */
+export type ImportOutcomeKind = 'imported' | 'attended' | 'applied' | 'deleted' | 'unchanged' | 'ignored' | 'skippedUnlinked' | 'held';
 
 export interface ImportOutcome {
     rows: ActivityCommitRow[];
@@ -376,6 +380,7 @@ export interface ImportOutcome {
 const UNCHANGED: ImportOutcome = { rows: [], outcome: 'unchanged' };
 const IGNORED: ImportOutcome = { rows: [], outcome: 'ignored' };
 const NOT_IMPORTED: ImportOutcome = { rows: [], outcome: 'skippedUnlinked' };
+const HELD: ImportOutcome = { rows: [], outcome: 'held' };
 
 export class MeetingImporter {
     private personOn = false;
@@ -558,9 +563,16 @@ export class MeetingImporter {
             const activity = (await tx.activity.findUnique({ where: { id: activityId }, include: WITH_ATTENDEES })) as ActivityRow | null;
             if (!activity || activity.isDeleted) return NOT_IMPORTED;
             // One link per activity and calendar (the owner's organizer link, or an attendee link made before).
-            const existing = await tx.activityExternalLink.findFirst({ where: { activityId, connectionId: this.connection.id }, select: { id: true, role: true, state: true } });
+            const existing = await tx.activityExternalLink.findFirst({
+                where: { activityId, connectionId: this.connection.id },
+                select: { id: true, role: true, state: true, etag: true, externalEventId: true },
+            });
             // An attendee link whose copy is gone (the meeting was made again, e.g. after an owner change) moves to this copy.
             const repoint = existing?.role === 'attendee' && existing.state === 'cancelled' ? existing.id : null;
+            // A re-attached link to another copy that no pull has read back yet (its read failed, or it wasn't among the
+            // ones read, `readReattached` in sync.pull.ts): that copy may be gone, and only its read can tell. The pull
+            // holds its cursor, so once the read has cancelled the old link the replay moves the link to this copy.
+            if (existing?.role === 'attendee' && existing.state === 'synced' && !existing.etag && existing.externalEventId && existing.externalEventId !== event.id) return HELD;
             if (existing && !repoint) return IGNORED;
             const taken = await tx.activityExternalLink.findFirst({ where: { connectionId: this.connection.id, externalEventKey: eventKeyOf(event.id) }, select: { id: true } });
             if (taken) return IGNORED;

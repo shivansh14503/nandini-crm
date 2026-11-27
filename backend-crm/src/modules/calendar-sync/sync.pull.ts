@@ -149,7 +149,7 @@ interface Applied {
     rows: ActivityCommitRow[];
     wake: DirtyLink[];
     records: FollowUpModule[];
-    outcome: 'applied' | 'unchanged' | 'deleted' | 'relinked' | 'unsupported' | 'ignored' | 'imported' | 'attended';
+    outcome: 'applied' | 'unchanged' | 'deleted' | 'relinked' | 'unsupported' | 'ignored' | 'imported' | 'attended' | 'held';
 }
 
 const NOTHING: Applied = { rows: [], wake: [], records: [], outcome: 'unchanged' };
@@ -340,6 +340,9 @@ class ConnectionPull {
         else if (outcome === 'ignored') this.counts.ignored += 1;
         else if (outcome === 'imported') this.counts.imported += 1;
         else if (outcome === 'attended') this.counts.attended += 1;
+        // P2-8: an invitation copy waiting for its person's older copy to be read back (sync.import.ts `attend`): counted
+        // as failed, so the cursor is held and the replay offers the copy again (PULL_HOLD_CURSOR_RUNS bounds it).
+        else if (outcome === 'held') this.counts.failed += 1;
         else this.counts.skipped += 1;
     }
 
@@ -703,8 +706,11 @@ class ConnectionPull {
             wake.push(...applied.wake);
             for (const r of applied.records) records.add(r);
         }
-        // A read that failed is tried again by the next pull (the etag is still empty); it says nothing about this
-        // listing, so it never holds the cursor back.
+        // A read that failed is tried again by the next pull (the etag is still empty). It holds the cursor only when
+        // this listing hands the person a replacement copy of that meeting: `attend` (sync.import.ts) answers `held`
+        // for a copy whose link still points at an unread older copy (also one past this `take`), so an unread link
+        // never makes the cursor move past its replacement. A failure with no replacement in the listing (most of them)
+        // never holds the cursor back, so one copy that keeps failing doesn't stall the calendar's pulls.
         this.counts.failed = failedBefore;
         await this.afterCommit(rows, wake, records);
     }

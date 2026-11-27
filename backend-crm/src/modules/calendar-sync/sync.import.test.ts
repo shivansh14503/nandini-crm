@@ -6,11 +6,11 @@ import { HttpError } from '../../utils/httpError.js';
 import { activityService } from '../activities/activity.service.js';
 import { blankActivity, blankLink, EMPTY_CONFIGS, installActivityDouble, restoreActivityDouble, type ActivityDoubleState } from '../activities/testing/activityDouble.js';
 import { fakeAddEvent, fakeDeleteEvent, fakeEditEvent, fakeMeetUrl, fakeProviderState, resetFakeProvider } from './providers/fake.js';
-import { resetProviderPauses } from './providers/http.js';
+import { ProviderTransientError, resetProviderPauses } from './providers/http.js';
 import { getAdapter, setAdapterForTests, setFakeHealth, setFakeProviderEnabledForTests } from './providers/registry.js';
 import type { GoogleEventWire } from './providers/wire.js';
 import { autoCompleteImported, classifyImport, inFlightMatch, MeetingImporter, selfReplyToApply, type ImportFacts, type InFlightMeeting } from './sync.import.js';
-import { syncKeyOf } from './sync.keys.js';
+import { eventKeyOf, syncKeyOf } from './sync.keys.js';
 import { pullConnection, resetPullStateForTests, type PullResult } from './sync.pull.js';
 import { pushLink } from './sync.push.js';
 import { normalizeGoogle, type ProviderEvent } from './sync.shapes.js';
@@ -836,6 +836,81 @@ describe('customer meetings: second review fixes', () => {
         const copy = state.links.find((l) => l.id === 'l-palak');
         assert.equal(copy?.state, 'synced');
         assert.equal(copy?.etag, null);
+    });
+
+    it('a re-attached copy whose read back fails holds the cursor when its replacement is listed: the replay moves the link to the new copy', async () => {
+        install({ importing: ['palak'] });
+        done(await pullConnection('c1', 'poll'));
+        const cursor = state.connections[0].syncCursor;
+        assert.ok(cursor, 'a cursor from the first pull');
+        const start = inDays(2);
+        // Restored on Microsoft (no undelete): Asha's push made the meeting again, so Palak has a new copy with a new id;
+        // her old link was re-attached (synced, no etag) and still points at the old, gone copy.
+        state.activities.push(
+            blankActivity({
+                id: 'crm1',
+                subject: 'Quarterly review with ACME',
+                assignedTo: 'asha',
+                createdBy: 'asha',
+                origin: 'crm',
+                status: 'Planned',
+                iCalUid: 'm-new@fake.calendar',
+                syncKey: syncKeyOf('m-new@fake.calendar'),
+                startAt: start,
+                endAt: new Date(start.getTime() + HOUR),
+            }),
+        );
+        state.links.push(
+            blankLink({ id: 'l-palak', activityId: 'crm1', connectionId: 'c1', provider: 'fake', requestedId: 'x', role: 'attendee', state: 'synced', externalEventId: 'm-old', externalEventKey: eventKeyOf('m-old'), etag: null }),
+        );
+        fakeAddEvent(
+            calendarMeeting('m-new', {
+                organizer: { email: 'asha@nandiniinfosys.com' },
+                start: { dateTime: rfc(start), timeZone: TZ },
+                end: { dateTime: rfc(new Date(start.getTime() + HOUR)), timeZone: TZ },
+                attendees: [
+                    { email: 'palak@nandiniinfosys.com', responseStatus: 'accepted' },
+                    { email: 'ravi@acme.com', responseStatus: 'accepted' },
+                ],
+            }),
+        );
+        fakeProviderState.failNext.get = new ProviderTransientError({ provider: 'fake', operation: 'get-event', status: 503, code: 'backendError' });
+
+        const first = done(await pullConnection('c1', 'poll'));
+        assert.equal(first.counts.verified, 1);
+        assert.equal(first.counts.attended, 0);
+        assert.equal(first.counts.failed, 1, 'the replacement copy is held, not ignored');
+        assert.equal(state.connections[0].syncCursor, cursor, 'the cursor is held');
+        const held = state.links.find((l) => l.id === 'l-palak');
+        assert.equal(held?.externalEventId, 'm-old');
+        assert.equal(held?.state, 'synced');
+
+        const second = done(await pullConnection('c1', 'poll'));
+        assert.equal(second.counts.failed, 0);
+        assert.equal(second.counts.attended, 1, 'the replay hands the new copy to the attend path');
+        const moved = state.links.find((l) => l.id === 'l-palak');
+        assert.equal(moved?.externalEventId, 'm-new');
+        assert.equal(moved?.state, 'synced');
+        assert.ok(moved?.etag, 'read: the etag is stored');
+        assert.equal(linksOf('crm1').length, 1, 'still one link for Palak');
+        assert.equal(attendeeOf('crm1', 'palak')?.responseStatus, 'accepted', 'her reply reaches the CRM');
+        assert.notEqual(state.connections[0].syncCursor, cursor, 'the cursor moves on');
+    });
+
+    it('a re-attached copy whose read back fails never holds the cursor when nothing replaces it', async () => {
+        install({ importing: ['palak'] });
+        done(await pullConnection('c1', 'poll'));
+        fakeAddEvent(calendarMeeting('m9', { attendees: [{ email: 'stranger@else.com', responseStatus: 'accepted' }] }));
+        const cursor = state.connections[0].syncCursor;
+        state.activities.push(blankActivity({ id: 'crm2', subject: 'Review', assignedTo: 'asha', createdBy: 'asha', origin: 'crm', status: 'Planned', startAt: inDays(3), endAt: inDays(3) }));
+        state.links.push(
+            blankLink({ id: 'l-p2', activityId: 'crm2', connectionId: 'c1', provider: 'fake', requestedId: 'y', role: 'attendee', state: 'synced', externalEventId: 'm-old2', externalEventKey: eventKeyOf('m-old2'), etag: null }),
+        );
+        fakeProviderState.failNext.get = new ProviderTransientError({ provider: 'fake', operation: 'get-event', status: 503, code: 'backendError' });
+        const result = done(await pullConnection('c1', 'poll'));
+        assert.equal(result.counts.failed, 0);
+        assert.notEqual(state.connections[0].syncCursor, cursor, 'the cursor moves on');
+        assert.equal(state.links.find((l) => l.id === 'l-p2')?.etag, null, 'read again by the next pull');
     });
 
     it('a cursor dropped while a pull runs (meeting import switched on) stays dropped: the next pull is full', async () => {

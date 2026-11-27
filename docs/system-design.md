@@ -377,7 +377,10 @@ which see every record (`modules/user-admin/roles.ts`, mirrored and contract-tes
     when Redis is down (as of 2026-11-26, P2-3b). Stopping a row sets its links `detached` (the calendar events stay);
     re-activating it re-attaches the organizer links of the person's activities that end after yesterday (dirty, so
     they push again) and, since P2-8 (as of 2026-11-27), its invitation copies of live activities ending after
-    yesterday (`synced` with no etag: the row's first pull reads each back once). Unique-index races surface outside the transaction (D45).
+    yesterday (`synced` with no etag: the row's first pull reads each back once; a read that fails is tried again by the
+    next pull, and while a link is still unread a replacement copy of that meeting is not ignored: the pull keeps its
+    cursor so the replay moves the link to it, bounded by `PULL_HOLD_CURSOR_RUNS`, as of 2026-11-27 review fix; no extra
+    database wakes, it rides the pull's own). Unique-index races surface outside the transaction (D45).
   - **Problems go to admins**, never to employees: `calendar_sync_issue` notifications (§5.1), the provider card's
     health and the People table. The employee's My Profile card and the Calendar page notice show a calm status only.
   - Provider calls go through `providerFetch` (timeouts, Retry-After, full-jitter backoff, a per-process pause after a

@@ -152,7 +152,10 @@ link). Deleting an imported activity detaches the links and keeps `syncKey`, so 
 activity (Admin › Audit Log; imported or CRM-made) re-attaches its detached invitation copies on live calendars, and
 the next pull of each such calendar reads each copy back once, so a change or a cancellation made while it was in the
 bin is applied (a gone copy cancels as usual). Re-activating a stopped connection row re-attaches its invitation copies
-of live activities ending after yesterday the same way (as of 2026-11-27, review fix). When the last invitation copy the CRM follows is cancelled and the owner holds none of their own (a colleague
+of live activities ending after yesterday the same way (as of 2026-11-27, review fix). If that read back fails, the
+next pull tries again; meanwhile a new copy of the same meeting in this person's calendar (the meeting was made again,
+e.g. on Microsoft after a restore) is held, not ignored: the pull keeps its cursor and its replay moves the link to the
+new copy once the old one is read back as gone, so the person's reply still reaches the CRM (as of 2026-11-27, review fix). When the last invitation copy the CRM follows is cancelled and the owner holds none of their own (a colleague
 who doesn't import organized it), the meeting is set Cancelled, and back to Planned if that copy returns. An imported
 meeting with no related record that ended before today and is still Planned is completed by the nightly maintenance
 (`completedBy` `calendar-sync`). Turning either switch on starts one full pull of each affected calendar, so meetings
