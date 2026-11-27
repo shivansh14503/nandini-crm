@@ -31,7 +31,6 @@ export interface QuotationDto {
     paymentTermsDescription: string;
     preparedFor: string;
     currency: string;
-    groupName: string;
     lineItems: LineItemDto[];
     lumpSumDiscount: number;
     totalAmount: number;
@@ -95,7 +94,6 @@ export function toQuotationDto(row: QuotationRow): QuotationDto {
         paymentTermsDescription: text(row.paymentTermsDescription),
         preparedFor: row.preparedFor,
         currency: row.currency,
-        groupName: text(row.groupName),
         lineItems: toLineItemDtos(row.lineItems),
         lumpSumDiscount: decimalToNumber(row.lumpSumDiscount),
         totalAmount: decimalToNumber(row.totalAmount),
@@ -185,7 +183,6 @@ export function toQuotationData(
         paymentTermsDescription: nullable(input.paymentTermsDescription),
         preparedFor: input.preparedFor,
         currency: input.currency ?? DEFAULT_CURRENCY,
-        groupName: nullable(input.groupName),
         lumpSumDiscount: input.lumpSumDiscount,
         ...totals,
         organizationName: nullable(input.organizationName),

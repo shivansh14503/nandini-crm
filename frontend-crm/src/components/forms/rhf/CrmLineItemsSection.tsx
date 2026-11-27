@@ -2,59 +2,88 @@
 
 import React, { useCallback, useMemo, useState } from 'react';
 import {
-    Box,
-    Typography,
-    TextField,
-    Button,
-    IconButton,
-    Select,
-    MenuItem,
-    FormControl,
-    Tooltip,
-    Divider,
-    Paper,
     Alert,
+    Box,
+    Button,
+    Divider,
+    FormControl,
+    FormHelperText,
+    IconButton,
+    InputAdornment,
+    MenuItem,
+    Paper,
+    Select,
+    TextField,
+    Tooltip,
+    Typography,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import ClearIcon from '@mui/icons-material/Clear';
-import { useFormContext, useWatch, type Path, type PathValue } from 'react-hook-form';
+import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import PercentIcon from '@mui/icons-material/Percent';
+import { useFormContext, useFormState, useWatch, type FieldErrors, type Path, type PathValue } from 'react-hook-form';
 
 import { FormField, fieldSx } from '../FormField';
 import { LookupField } from '../LookupField';
 import { ProductLookupModal } from '@/components/common/lookup/PresetLookupModals';
+import { useDragReorder } from '@/components/settings/form-customization/useDragReorder';
 import { useProducts } from '@/hooks/queries/useProducts';
+import { useDropdownOptionLabel, useDropdownOptions } from '@/hooks/queries/useFormConfigs';
 import { isActiveProduct, type Product } from '@/types/product.types';
+import type { LineItem, LineItemsValues } from '@/types/lineItem.types';
 import { FIELD_MAX_LENGTH, FIELD_SIZE_WIDTH } from '../fieldSizing';
 import { useFormMode } from '@/context/FormModeContext';
 import { CrmLineItemsReadOnly } from './CrmLineItemsReadOnly';
 import { fmtMoney, fmtNumber, useDisplayFormats } from '@/utils/formats';
 import {
-    OPPORTUNITY_CURRENCIES,
-    OPPORTUNITY_TAX_RATES,
-    type OpportunityLineItem,
-} from '@/types/opportunity.types';
+    computeLineItem,
+    currencyCodeOf,
+    currencySymbolOf,
+    DEFAULT_CURRENCY,
+    LINE_ITEM_LABELS as LABELS,
+    LINE_ITEM_TAX_RATE_CATEGORY,
+    LINE_ITEM_TAX_RATES,
+    LINE_ITEM_TOTAL_LABELS as TOTAL_LABELS,
+    newLineItem,
+    normalizeTaxRate,
+    QUOTATION_CURRENCIES,
+    totalsOf,
+} from '@/lib/line-items';
 
-export type CrmLineItem = OpportunityLineItem;
+/**
+ * Line items of opportunities and quotations (Jira CRM-111): one editor, one set of fields, labels, API keys and
+ * calculations wherever line items are edited (the view page and the drawers read the same values).
+ *
+ * - One empty line is always there (no "add a product" placeholder); "Add Product Line" adds more.
+ * - With more than one line, lines can be dragged by their grip (touch too) or moved with the up / down buttons, and
+ *   removed; with a single line the Action column and its remove button are hidden.
+ * - Rate is the product's MRP (not editable); a product without an MRP, or a typed product, takes a typed Rate.
+ * - Gross Amount = Quantity × Rate and Taxable Amount = Gross Amount − Discount are computed, never typed. Discount is
+ *   a percentage, and the amount it comes to shows under it.
+ * - GST offers the Product Catalog's Tax Rate options; a product with a Tax Rate sets it and it can't be changed.
+ * - Only Discount, Description and Note may be left empty.
+ */
 
-export interface CrmLineItemsValues {
-    currency: string;
-    groupName: string;
-    lineItems: OpportunityLineItem[];
-    lumpSumDiscount: number;
-    totalAmount?: number;
-    totalDiscount?: number;
-    subtotal?: number;
-    totalTax?: number;
-    grandTotal?: number;
-}
-
+export type CrmLineItem = LineItem;
+export type CrmLineItemsValues = LineItemsValues;
 // Backward compatibility alias
 export type CrmLineItemsData = CrmLineItemsValues;
+
+/** Messages of one line's fields (index-aligned with the lines). */
+export type LineItemErrors = (Partial<Record<keyof LineItem, string>> | undefined)[];
 
 export interface CrmLineItemsEditorProps {
     value: CrmLineItemsValues;
     onChange: <K extends keyof CrmLineItemsValues>(field: K, val: CrmLineItemsValues[K]) => void;
+    /** A message about the line items as a whole. */
     error?: string;
+    /** Field messages per line. */
+    lineErrors?: LineItemErrors;
+    /** Quotations: shows the Currency picker and the amounts in that currency. Opportunities have no currency (₹). */
+    withCurrency?: boolean;
 }
 
 export interface CrmLineItemsSectionProps {
@@ -63,28 +92,12 @@ export interface CrmLineItemsSectionProps {
     form?: Partial<CrmLineItemsValues>;
     setField?: <K extends keyof CrmLineItemsValues>(key: K, value: CrmLineItemsValues[K]) => void;
     error?: string;
+    withCurrency?: boolean;
 }
 
-/** The line's tax rate for a catalog product (`GST 18%` from its Tax Rate; GST 18% when it has none). */
-function productTaxRate(product: Product): string {
-    const rate = product.taxRate ? `GST ${product.taxRate}` : '';
-    return OPPORTUNITY_TAX_RATES.includes(rate) ? rate : 'GST 18%';
-}
-
-const NO_PRODUCTS: Product[] = [];
-
-/** Line-item amounts keep up to 3 decimals (as typed), in the company number grouping. */
-const LINE_MONEY = { minDecimals: 0, maxDecimals: 3 } as const;
-
-export function parseTaxRate(taxRateStr: string): number {
-    if (!taxRateStr || taxRateStr === '--None--' || taxRateStr === 'GST 0%') return 0;
-    const match = taxRateStr.match(/(\d+)%/);
-    return match ? Number(match[1]) : 0;
-}
+export { parseTaxRate } from '@/lib/line-items';
 
 export const DEFAULT_LINE_ITEMS_VALUES: CrmLineItemsValues = {
-    currency: 'Indian Rupee: ₹',
-    groupName: 'Products & Services',
     lineItems: [],
     lumpSumDiscount: 0,
     totalAmount: 0,
@@ -94,165 +107,212 @@ export const DEFAULT_LINE_ITEMS_VALUES: CrmLineItemsValues = {
     grandTotal: 0,
 };
 
+const NO_PRODUCTS: Product[] = [];
+
+/** The catalog Rate of a product: its MRP (0 when it has none). */
+const catalogRate = (product: Product | undefined): number => Math.max(0, Number(product?.mrp) || 0);
+/** The catalog GST of a product: its Tax Rate (blank when it has none). */
+const catalogTaxRate = (product: Product | undefined): string => normalizeTaxRate(product?.taxRate);
+
+// Column template: [grip] Quantity | Product | Rate | Gross Amount | Discount | GST | Taxable Amount [| Action]
+const COLUMNS = 'minmax(76px, 0.6fr) minmax(220px, 2.4fr) minmax(112px, 1.1fr) minmax(120px, 1.1fr) minmax(104px, 0.9fr) minmax(104px, 0.9fr) minmax(132px, 1.2fr)';
+const GRIP_COLUMN = '32px';
+const ACTION_COLUMN = '112px';
+
+const headCellSx = { display: 'flex', alignItems: 'center', gap: 0.25, minWidth: 0 } as const;
+const requiredMark = (
+    <Box component="span" aria-hidden sx={{ color: 'var(--mui-palette-error-main)', fontWeight: 700 }}>
+        *
+    </Box>
+);
+
+/** A computed (never typed) amount: same look in every row. */
+const computedSx = (strong = false) => ({
+    ...fieldSx,
+    '& .MuiOutlinedInput-root': {
+        ...fieldSx['& .MuiOutlinedInput-root'],
+        backgroundColor: strong ? 'var(--mui-palette-primary-soft)' : 'var(--mui-palette-background-hover)',
+    },
+    '& .MuiInputBase-input': {
+        fontWeight: strong ? 700 : 600,
+        color: strong ? 'var(--crm-text-blue-900)' : 'var(--mui-palette-text-primary)',
+        textAlign: 'right' as const,
+        cursor: 'default',
+    },
+});
+
+/** A value set by the Product Catalog (Rate from MRP, GST from Tax Rate): read-only, with a lock. */
+const lockedSx = {
+    ...fieldSx,
+    '& .MuiOutlinedInput-root': {
+        ...fieldSx['& .MuiOutlinedInput-root'],
+        backgroundColor: 'var(--mui-palette-background-hover)',
+    },
+    '& .MuiInputBase-input': { color: 'var(--mui-palette-text-primary)', cursor: 'default' },
+};
+
+const errorOutlineSx = { '& .MuiOutlinedInput-notchedOutline': { borderColor: 'var(--mui-palette-error-main)' } };
+
+const actionButtonSx = {
+    width: 32,
+    height: 32,
+    borderRadius: '6px',
+    border: '1px solid var(--mui-palette-border-main)',
+    color: 'var(--mui-palette-text-secondary)',
+    backgroundColor: 'var(--mui-palette-background-paper)',
+    transition: 'all 0.15s ease',
+    '&:hover': {
+        borderColor: 'var(--crm-blue-300)',
+        backgroundColor: 'var(--mui-palette-primary-soft)',
+        color: 'var(--crm-text-blue-700)',
+    },
+    '&.Mui-disabled': { opacity: 0.4 },
+} as const;
+
+const removeButtonSx = {
+    ...actionButtonSx,
+    '&:hover': {
+        color: 'var(--mui-palette-error-main)',
+        backgroundColor: 'var(--mui-palette-error-soft)',
+        borderColor: 'var(--mui-palette-error-softBorder)',
+    },
+} as const;
+
+const SummaryRow = ({ label, value, color, strong }: { label: string; value: string; color?: string; strong?: boolean }) => (
+    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+        <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)' }}>{label}</Typography>
+        <Typography sx={{ fontSize: '0.85rem', fontWeight: strong ? 700 : 600, color: color ?? 'var(--mui-palette-text-primary)', whiteSpace: 'nowrap' }}>{value}</Typography>
+    </Box>
+);
+
 // ══════════════════════════════════════════════════════════════════════
 // COMPONENT A: CrmLineItemsEditor (Pure Controlled UI — Zero RHF Hooks)
 // ══════════════════════════════════════════════════════════════════════
-export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEditorProps) {
+export function CrmLineItemsEditor({ value, onChange, error, lineErrors, withCurrency = false }: CrmLineItemsEditorProps) {
     const isView = useFormMode().mode === 'view';
     // Amounts are formatted while rendering: re-render when the company formats change.
     useDisplayFormats();
-    const currency = value.currency || 'Indian Rupee: ₹';
-    const groupName = value.groupName || '';
-    const lineItems = Array.isArray(value.lineItems) ? value.lineItems : [];
+    const currency = withCurrency ? value.currency || DEFAULT_CURRENCY : undefined;
+    const currencyCode = currencyCodeOf(currency);
+    const symbol = currencySymbolOf(currency);
+    const money = (n: number | undefined) => fmtMoney(n ?? 0, { minDecimals: 0, maxDecimals: 2, currencyCode });
+
+    // One empty line is always there: with no saved lines it is a stand-in that becomes real on the first edit
+    // (so opening a form doesn't count as a change).
+    const [standIn] = useState(newLineItem);
+    const saved = Array.isArray(value.lineItems) ? value.lineItems : [];
+    const lines = saved.length > 0 ? saved : [standIn];
     const lumpSumDiscount = value.lumpSumDiscount || 0;
-    const totalAmount = value.totalAmount ?? 0;
-    const totalDiscount = value.totalDiscount ?? 0;
-    const subtotal = value.subtotal ?? 0;
-    const totalTax = value.totalTax ?? 0;
-    const grandTotal = value.grandTotal ?? 0;
+    const totals = totalsOf(saved, lumpSumDiscount);
 
-    // ── Helper to recalculate all totals from line items ──────────────────────────
-    const recalculateTotals = useCallback(
-        (items: OpportunityLineItem[], lumpSum: number) => {
-            let grossAmount = 0;
-            let grossDiscount = 0;
-            let grossSubtotal = 0;
-            let grossTax = 0;
+    const taxOptions = useDropdownOptions(LINE_ITEM_TAX_RATE_CATEGORY, LINE_ITEM_TAX_RATES, 'products');
+    const taxLabel = useDropdownOptionLabel(LINE_ITEM_TAX_RATE_CATEGORY);
 
-            items.forEach((item) => {
-                const qty = item.quantity || 1;
-                const baseAmount = item.amount * qty;
-                grossAmount += baseAmount;
+    // ── Product Catalog ───────────────────────────────────────────────────────────
+    const { data: productData } = useProducts();
+    const allProducts = productData ?? NO_PRODUCTS;
+    const products = useMemo(() => allProducts.filter(isActiveProduct), [allProducts]);
+    const productNames = useMemo(() => products.map((p) => p.productName), [products]);
+    const productById = useMemo(() => new Map(allProducts.map((p) => [p.id, p])), [allProducts]);
+    const productOf = (item: LineItem) => (item.productId ? productById.get(item.productId) : undefined);
+    const rateLocked = (item: LineItem) => catalogRate(productOf(item)) > 0;
+    const taxLocked = (item: LineItem) => Boolean(catalogTaxRate(productOf(item)));
+    // Line whose Product Catalog popup is open.
+    const [catalogLine, setCatalogLine] = useState<string | null>(null);
 
-                let discVal = 0;
-                if (item.discountType === 'percentage') {
-                    discVal = (baseAmount * (item.discount || 0)) / 100;
-                } else {
-                    discVal = (item.discount || 0) * qty;
-                }
-                grossDiscount += discVal;
-
-                const lineSubtotal = Math.max(0, baseAmount - discVal);
-                grossSubtotal += lineSubtotal;
-
-                const taxPercent = parseTaxRate(item.taxRate);
-                const lineTax = (lineSubtotal * taxPercent) / 100;
-                grossTax += lineTax;
-            });
-
-            const computedGrandTotal = Math.max(0, grossSubtotal + grossTax - (lumpSum || 0));
-
+    // ── Writes: lines and the totals always change together ───────────────────────
+    const commit = useCallback(
+        (items: LineItem[], lumpSum: number = lumpSumDiscount) => {
+            const next = totalsOf(items, lumpSum);
             onChange('lineItems', items);
-            onChange('totalAmount', Math.round(grossAmount));
-            onChange('totalDiscount', Math.round(grossDiscount));
-            onChange('subtotal', Math.round(grossSubtotal));
-            onChange('totalTax', Math.round(grossTax));
-            onChange('grandTotal', Math.round(computedGrandTotal));
+            onChange('totalAmount', next.totalAmount);
+            onChange('totalDiscount', next.totalDiscount);
+            onChange('subtotal', next.subtotal);
+            onChange('totalTax', next.totalTax);
+            onChange('grandTotal', next.grandTotal);
         },
-        [onChange]
+        [onChange, lumpSumDiscount],
     );
 
-    // ── Add new product line item ────────────────────────────────────────────────
-    const handleAddLineItem = () => {
-        const newItem: OpportunityLineItem = {
-            id: `line-${Date.now()}`,
-            productId: '',
-            productName: '',
-            quantity: 1,
-            amount: 0,
-            discount: 0,
-            discountType: 'percentage',
-            salePrice: 0,
-            taxRate: 'GST 18%',
-            taxAmount: 0,
-            total: 0,
-            description: '',
-            note: '',
-        };
-        const updated = [...lineItems, newItem];
-        recalculateTotals(updated, lumpSumDiscount);
+    const updateLine = (id: string, updates: Partial<LineItem>) =>
+        commit(lines.map((item) => (item.id === id ? computeLineItem({ ...item, ...updates }) : item)));
+    const addLine = () => commit([...lines, newLineItem()]);
+    const removeLine = (id: string) => commit(lines.filter((item) => item.id !== id));
+    const moveLine = (id: string, step: -1 | 1) => {
+        const from = lines.findIndex((item) => item.id === id);
+        const to = from + step;
+        if (from < 0 || to < 0 || to >= lines.length) return;
+        const next = [...lines];
+        const [moved] = next.splice(from, 1);
+        next.splice(to, 0, moved);
+        commit(next);
     };
 
-    // ── Remove product line item ────────────────────────────────────────────────
-    const handleRemoveLineItem = (index: number) => {
-        const updated = lineItems.filter((_, i) => i !== index);
-        recalculateTotals(updated, lumpSumDiscount);
-    };
+    const canReorder = !isView && lines.length > 1;
+    const { orderedItems, getRowDragProps } = useDragReorder<LineItem>({
+        items: lines,
+        canDrag: canReorder,
+        onReorder: (ids) => {
+            const byId = new Map(lines.map((item) => [item.id, item]));
+            const next = ids.map((id) => byId.get(id)).filter((item): item is LineItem => Boolean(item));
+            if (next.length === lines.length) commit(next);
+        },
+    });
 
-    // ── Update specific line item ───────────────────────────────────────────────
-    const handleUpdateLineItem = (index: number, updates: Partial<OpportunityLineItem>) => {
-        const updated = lineItems.map((item, i) => {
-            if (i !== index) return item;
-            const merged: OpportunityLineItem = { ...item, ...updates };
-
-            const qty = merged.quantity || 1;
-            const baseAmount = merged.amount;
-            let discPerUnit = 0;
-            if (merged.discountType === 'percentage') {
-                discPerUnit = (baseAmount * (merged.discount || 0)) / 100;
-            } else {
-                discPerUnit = merged.discount || 0;
-            }
-            const salePrice = Math.max(0, baseAmount - discPerUnit);
-            const lineSubtotal = salePrice * qty;
-            const taxPercent = parseTaxRate(merged.taxRate);
-            const lineTax = (lineSubtotal * taxPercent) / 100;
-            const lineTotal = lineSubtotal + lineTax;
-
-            return {
-                ...merged,
-                salePrice: Math.round(salePrice),
-                taxAmount: Math.round(lineTax),
-                total: Math.round(lineTotal),
-            };
-        });
-
-        recalculateTotals(updated, lumpSumDiscount);
-    };
-
-    // ── Select product from the catalog (Product Catalog popup or a typed name) ─
-    const { data: productData } = useProducts();
-    const products = useMemo(() => (productData ?? NO_PRODUCTS).filter(isActiveProduct), [productData]);
-    const productNames = useMemo(() => products.map((p) => p.productName), [products]);
-    // Line whose Product Catalog popup is open.
-    const [catalogLine, setCatalogLine] = useState<number | null>(null);
-
-    /** Fills the line from a catalog product: name, MRP as the unit price, tax rate and (when empty) description. */
-    const handleSelectProduct = (index: number, product: Product) => {
-        const amount = Math.max(0, Number(product.mrp) || 0);
-        handleUpdateLineItem(index, {
+    /** Fills the line from a catalog product: name, Rate (MRP), GST (Tax Rate) and, when empty, the description. */
+    const selectProduct = (id: string, product: Product) => {
+        const line = lines.find((item) => item.id === id);
+        if (!line) return;
+        const previous = productOf(line);
+        const rate = catalogRate(product);
+        const taxRate = catalogTaxRate(product);
+        updateLine(id, {
             productId: product.id,
             productName: product.productName,
-            amount,
-            salePrice: amount,
-            taxRate: productTaxRate(product),
-            ...(lineItems[index]?.description?.trim() ? {} : { description: product.description || '' }),
+            // A product without an MRP takes a typed Rate: keep one typed before, not the previous product's MRP.
+            rate: rate > 0 ? rate : catalogRate(previous) > 0 ? 0 : line.rate,
+            taxRate: taxRate || (catalogTaxRate(previous) ? '' : line.taxRate),
+            ...(line.description?.trim() ? {} : { description: product.description || '' }),
         });
     };
 
-    /** A typed name: a catalog product's exact name fills the line from it; anything else is kept as a custom item. */
-    const handleProductNameChange = (index: number, name: string) => {
+    /** A typed name: a catalog product's exact name fills the line from it; anything else is a typed product. */
+    const changeProductName = (id: string, name: string) => {
         const match = products.find((p) => p.productName.trim().toLowerCase() === name.trim().toLowerCase());
-        if (match && name === match.productName) handleSelectProduct(index, match);
-        else handleUpdateLineItem(index, { productName: name, productId: '' });
+        if (match && name === match.productName) selectProduct(id, match);
+        else updateLine(id, { productName: name, productId: '' });
     };
 
-    // ── Handle lump sum discount update ─────────────────────────────────────────
-    const handleLumpSumChange = (val: number) => {
-        onChange('lumpSumDiscount', val);
-        recalculateTotals(lineItems, val);
+    const clearProduct = (id: string) => {
+        const line = lines.find((item) => item.id === id);
+        if (!line) return;
+        updateLine(id, {
+            productName: '',
+            productId: '',
+            ...(rateLocked(line) ? { rate: 0 } : {}),
+            ...(taxLocked(line) ? { taxRate: '' } : {}),
+        });
     };
 
-    if (isView) return <CrmLineItemsReadOnly value={value} />;
+    const changeLumpSum = (lumpSum: number) => {
+        onChange('lumpSumDiscount', lumpSum);
+        commit(saved, lumpSum);
+    };
+
+    if (isView) return <CrmLineItemsReadOnly value={value} withCurrency={withCurrency} />;
+
+    const showActions = lines.length > 1;
+    const gridTemplateColumns = [showActions ? GRIP_COLUMN : '', COLUMNS, showActions ? ACTION_COLUMN : ''].filter(Boolean).join(' ');
+    const amountHeading = (label: string) => `${label} (${symbol})`;
 
     return (
         <Box sx={{ p: { xs: 2, md: 3 } }}>
             <ProductLookupModal
                 open={catalogLine !== null}
                 onClose={() => setCatalogLine(null)}
-                selectedValue={catalogLine !== null ? lineItems[catalogLine]?.productName : undefined}
+                selectedValue={catalogLine !== null ? lines.find((item) => item.id === catalogLine)?.productName : undefined}
                 onSelect={(product) => {
-                    if (catalogLine !== null) handleSelectProduct(catalogLine, product);
+                    if (catalogLine !== null) selectProduct(catalogLine, product);
                     setCatalogLine(null);
                 }}
             />
@@ -262,307 +322,305 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
                 </Alert>
             )}
 
-            {/* ════════════ TOP SETTINGS (Currency) ════════════ */}
-            <FormField name="currency" label="Currency" size="sm" hint="Base billing currency" sx={{ mb: 3 }}>
-                <FormControl size="small" fullWidth sx={fieldSx}>
-                    <Select
-                        value={currency}
-                        onChange={(e) => onChange('currency', e.target.value)}
-                    >
-                        {OPPORTUNITY_CURRENCIES.map((cur) => (
-                            <MenuItem key={cur} value={cur}>
-                                {cur}
-                            </MenuItem>
-                        ))}
-                    </Select>
-                </FormControl>
-            </FormField>
+            {withCurrency && (
+                <FormField name="currency" label="Currency" size="sm" hint="Currency of this quotation" sx={{ mb: 3 }}>
+                    <FormControl size="small" fullWidth sx={fieldSx}>
+                        <Select value={currency} onChange={(e) => onChange('currency', e.target.value)}>
+                            {[...new Set([...QUOTATION_CURRENCIES, currency ?? DEFAULT_CURRENCY])].map((cur) => (
+                                <MenuItem key={cur} value={cur}>
+                                    {cur}
+                                </MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+                </FormField>
+            )}
 
-            {/* ════════════ LINE ITEMS SECTION ════════════ */}
+            {/* ════════════ LINE ITEMS ════════════ */}
             <Paper
                 variant="outlined"
                 sx={{
-                    p: 2.5,
+                    p: { xs: 1.5, sm: 2.5 },
                     borderRadius: '8px',
                     backgroundColor: 'var(--mui-palette-background-paper)',
                     border: '1px solid var(--mui-palette-border-strong)',
                     mb: 4,
+                    minWidth: 0,
                 }}
             >
-                <Typography sx={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--mui-palette-text-primary)', mb: 2 }}>
-                    Line Items
-                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+                    <Typography sx={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--mui-palette-text-primary)' }}>Line Items</Typography>
+                    {showActions && (
+                        <Typography sx={{ fontSize: '0.74rem', color: 'var(--mui-palette-text-muted)' }}>Drag a line by its grip, or use the arrows, to reorder</Typography>
+                    )}
+                </Box>
 
-                {/* Group Name input */}
-                <FormField
-                    name="groupName"
-                    label="Group Name"
-                    size="lg"
-                    hint="Logical bundle name (e.g. Products / Software / AMC)"
-                    sx={{ mb: 3 }}
-                >
-                    <TextField
-                        fullWidth
-                        size="small"
-                        value={groupName}
-                        onChange={(e) => onChange('groupName', e.target.value)}
-                        placeholder="e.g. Software Licenses & Add-ons"
-                        sx={fieldSx}
-                        slotProps={{ htmlInput: { maxLength: FIELD_MAX_LENGTH.shortText } }}
-                    />
-                </FormField>
-
-                {/* Dynamic Line items table container */}
+                {/* The lines scroll sideways inside this box on narrow screens, never the page. */}
                 <Box sx={{ overflowX: 'auto', mb: 2 }}>
-                    {lineItems.length === 0 ? (
+                    <Box sx={{ minWidth: showActions ? 1120 : 960 }}>
                         <Box
                             sx={{
-                                p: 4,
-                                textAlign: 'center',
-                                backgroundColor: 'var(--mui-palette-background-subtle)',
-                                border: '1px dashed var(--mui-palette-border-strong)',
-                                borderRadius: '8px',
+                                display: 'grid',
+                                gridTemplateColumns,
+                                gap: 1.5,
+                                px: 1.5,
+                                py: 1,
+                                backgroundColor: 'var(--mui-palette-background-hover)',
+                                borderRadius: '6px 6px 0 0',
+                                border: '1px solid var(--mui-palette-border-main)',
+                                borderBottom: 'none',
+                                fontSize: '0.74rem',
+                                fontWeight: 700,
+                                color: 'var(--crm-slate-600)',
                             }}
                         >
-                            <Typography sx={{ fontSize: '0.86rem', color: 'var(--mui-palette-text-secondary)', mb: 1.5 }}>
-                                No product line items added yet. Click below to add products or services.
-                            </Typography>
-                            <Button
-                                variant="contained"
-                                startIcon={<AddIcon />}
-                                onClick={handleAddLineItem}
-                                sx={{
-                                    backgroundColor: 'var(--crm-fill-blue-600)',
-                                    color: '#ffffff',
-                                    textTransform: 'none',
-                                    fontWeight: 700,
-                                    fontSize: '0.82rem',
-                                    px: 2.5,
-                                    '&:hover': { backgroundColor: 'var(--crm-fill-blue-700)' },
-                                }}
-                            >
-                                Add Product Line
-                            </Button>
-                        </Box>
-                    ) : (
-                        <Box sx={{ minWidth: 960 }}>
-                            {/* Table Header Row */}
-                            <Box
-                                sx={{
-                                    display: 'grid',
-                                    gridTemplateColumns: '70px 2.2fr 1.1fr 1.5fr 1.1fr 1.5fr 1.1fr 40px',
-                                    gap: 1.5,
-                                    px: 1.5,
-                                    py: 1,
-                                    backgroundColor: 'var(--mui-palette-background-hover)',
-                                    borderRadius: '6px 6px 0 0',
-                                    border: '1px solid var(--mui-palette-border-main)',
-                                    borderBottom: 'none',
-                                    fontSize: '0.74rem',
-                                    fontWeight: 700,
-                                    color: 'var(--crm-slate-600)',
-                                }}
-                            >
-                                <Box>Quantity</Box>
-                                <Box>Product</Box>
-                                <Box>Amount (₹)</Box>
-                                <Box>Discount</Box>
-                                <Box>Sale Price (₹)</Box>
-                                <Box>Tax Amount (₹)</Box>
-                                <Box>Total (₹)</Box>
-                                <Box sx={{ textAlign: 'center' }}>Action</Box>
+                            {showActions && <Box />}
+                            <Box sx={headCellSx}>
+                                {LABELS.quantity}
+                                {requiredMark}
                             </Box>
+                            <Box sx={headCellSx}>
+                                {LABELS.productName}
+                                {requiredMark}
+                            </Box>
+                            <Box sx={{ ...headCellSx, justifyContent: 'flex-end' }}>
+                                {amountHeading(LABELS.rate)}
+                                {requiredMark}
+                            </Box>
+                            <Box sx={{ ...headCellSx, justifyContent: 'flex-end' }}>{amountHeading(LABELS.grossAmount)}</Box>
+                            <Box sx={headCellSx}>{LABELS.discount}</Box>
+                            <Box sx={headCellSx}>
+                                {LABELS.taxRate}
+                                {requiredMark}
+                            </Box>
+                            <Box sx={{ ...headCellSx, justifyContent: 'flex-end' }}>{amountHeading(LABELS.taxableAmount)}</Box>
+                            {showActions && <Box sx={{ ...headCellSx, justifyContent: 'center' }}>Action</Box>}
+                        </Box>
 
-                            {/* Table Line Items */}
-                            {lineItems.map((item, idx) => (
+                        {orderedItems.map((item, idx) => {
+                            const index = lines.findIndex((line) => line.id === item.id);
+                            const errs = lineErrors?.[index] ?? {};
+                            const lockedRate = rateLocked(item);
+                            const lockedTax = taxLocked(item);
+                            const drag = getRowDragProps(item);
+                            const taxChoices = item.taxRate && !taxOptions.includes(item.taxRate) ? [...taxOptions, item.taxRate] : taxOptions;
+                            return (
                                 <Box
-                                    key={item.id || idx}
+                                    key={item.id}
+                                    ref={drag.ref}
+                                    data-line-item={item.id}
                                     sx={{
                                         border: '1px solid var(--mui-palette-border-main)',
                                         borderTop: idx > 0 ? 'none' : '1px solid var(--mui-palette-border-main)',
+                                        borderRadius: idx === orderedItems.length - 1 ? '0 0 6px 6px' : 0,
                                         p: 1.5,
-                                        backgroundColor: idx % 2 === 0 ? 'var(--mui-palette-background-paper)' : 'var(--mui-palette-background-subtle)',
-                                        '&:hover': { backgroundColor: 'var(--mui-palette-background-subtle)' },
+                                        backgroundColor: 'var(--mui-palette-background-paper)',
                                     }}
                                 >
-                                    {/* Main numbers row */}
-                                    <Box
-                                        sx={{
-                                            display: 'grid',
-                                            gridTemplateColumns: '70px 2.2fr 1.1fr 1.5fr 1.1fr 1.5fr 1.1fr 40px',
-                                            gap: 1.5,
-                                            alignItems: 'center',
-                                            mb: 1.5,
-                                        }}
-                                    >
+                                    <Box sx={{ display: 'grid', gridTemplateColumns, gap: 1.5, alignItems: 'start', mb: 1.5 }}>
+                                        {showActions && (
+                                            <Tooltip title="Drag to reorder">
+                                                <Box
+                                                    onPointerDown={drag.onPointerDown}
+                                                    aria-label={`Drag line ${idx + 1} to reorder`}
+                                                    sx={{
+                                                        height: 40,
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        borderRadius: '6px',
+                                                        color: 'var(--mui-palette-text-muted)',
+                                                        cursor: 'grab',
+                                                        // The grip alone starts a touch drag; a swipe anywhere else still scrolls.
+                                                        touchAction: 'none',
+                                                        '&:hover': { color: 'var(--crm-text-blue-700)', backgroundColor: 'var(--mui-palette-primary-soft)' },
+                                                    }}
+                                                >
+                                                    <DragIndicatorIcon sx={{ fontSize: 20 }} />
+                                                </Box>
+                                            </Tooltip>
+                                        )}
+
                                         {/* Quantity */}
-                                        <TextField
-                                            size="small"
-                                            type="number"
-                                            value={item.quantity}
-                                            onChange={(e) =>
-                                                handleUpdateLineItem(idx, {
-                                                    quantity: Math.max(1, parseInt(e.target.value, 10) || 1),
-                                                })
-                                            }
-                                            slotProps={{ htmlInput: { min: 1 } }}
-                                            sx={fieldSx}
-                                        />
-
-                                        {/* Product: type a name or pick from the Product Catalog popup */}
-                                        <LookupField
-                                            value={item.productName || ''}
-                                            onChange={(name) => handleProductNameChange(idx, name)}
-                                            options={productNames}
-                                            placeholder="Type or pick a product"
-                                            onLookupClick={() => setCatalogLine(idx)}
-                                            lookupTooltip="Open Product Catalog"
-                                            onClear={() => handleUpdateLineItem(idx, { productName: '', productId: '' })}
-                                            maxLength={FIELD_MAX_LENGTH.organizationName}
-                                        />
-
-                                        {/* Amount (Unit price) */}
-                                        <TextField
-                                            size="small"
-                                            type="number"
-                                            value={item.amount}
-                                            onChange={(e) =>
-                                                handleUpdateLineItem(idx, {
-                                                    amount: Math.max(0, parseFloat(e.target.value) || 0),
-                                                })
-                                            }
-                                            slotProps={{ htmlInput: { min: 0 } }}
-                                            sx={fieldSx}
-                                        />
-
-                                        {/* Discount + Pct/Price selector */}
-                                        <Box sx={{ display: 'flex', gap: 0.5 }}>
+                                        <Box data-field={`lineItems.${index}.quantity`} sx={{ minWidth: 0 }}>
                                             <TextField
                                                 size="small"
                                                 type="number"
-                                                value={item.discount}
-                                                onChange={(e) => {
-                                                    const raw = Math.max(0, parseFloat(e.target.value) || 0);
-                                                    const val = item.discountType === 'percentage' ? Math.min(100, raw) : raw;
-                                                    handleUpdateLineItem(idx, { discount: val });
-                                                }}
-                                                slotProps={{ htmlInput: { min: 0, max: item.discountType === 'percentage' ? 100 : undefined } }}
-                                                sx={{ flex: 1, ...fieldSx }}
+                                                fullWidth
+                                                value={item.quantity}
+                                                onChange={(e) => updateLine(item.id, { quantity: Math.max(1, parseInt(e.target.value, 10) || 1) })}
+                                                error={Boolean(errs.quantity)}
+                                                slotProps={{ htmlInput: { min: 1, 'aria-label': LABELS.quantity } }}
+                                                sx={fieldSx}
                                             />
-                                            <FormControl size="small" sx={{ width: 75, ...fieldSx }}>
-                                                <Select
-                                                    value={item.discountType}
-                                                    onChange={(e) => {
-                                                        const newType = e.target.value as 'percentage' | 'direct';
-                                                        const adjustedDiscount = newType === 'percentage' && item.discount > 100 ? 100 : item.discount;
-                                                        handleUpdateLineItem(idx, {
-                                                            discountType: newType,
-                                                            discount: adjustedDiscount,
-                                                        });
-                                                    }}
-                                                >
-                                                    <MenuItem value="percentage">Pct</MenuItem>
-                                                    <MenuItem value="direct">Price</MenuItem>
-                                                </Select>
-                                            </FormControl>
+                                            {errs.quantity && <FormHelperText error>{errs.quantity}</FormHelperText>}
                                         </Box>
 
-                                        {/* Sale Price (Readonly/calculated) */}
+                                        {/* Product: type a name or pick from the Product Catalog popup */}
+                                        <Box data-field={`lineItems.${index}.productName`} sx={{ minWidth: 0, ...(errs.productName ? errorOutlineSx : {}) }}>
+                                            <LookupField
+                                                value={item.productName || ''}
+                                                onChange={(name) => changeProductName(item.id, name)}
+                                                options={productNames}
+                                                placeholder="Type or pick a product"
+                                                onLookupClick={() => setCatalogLine(item.id)}
+                                                lookupTooltip="Open Product Catalog"
+                                                onClear={() => clearProduct(item.id)}
+                                                maxLength={FIELD_MAX_LENGTH.organizationName}
+                                                required
+                                            />
+                                            {errs.productName && <FormHelperText error>{errs.productName}</FormHelperText>}
+                                        </Box>
+
+                                        {/* Rate: the product's MRP (locked), or typed for a product without one */}
+                                        <Box data-field={`lineItems.${index}.rate`} sx={{ minWidth: 0 }}>
+                                            <Tooltip title={lockedRate ? 'Rate is the product’s MRP in the Product Catalog' : ''} placement="top">
+                                                <TextField
+                                                    size="small"
+                                                    type={lockedRate ? 'text' : 'number'}
+                                                    fullWidth
+                                                    value={lockedRate ? fmtNumber(item.rate, { maxDecimals: 2 }) : item.rate === 0 ? '' : item.rate}
+                                                    placeholder="0"
+                                                    onChange={(e) => {
+                                                        if (lockedRate) return;
+                                                        updateLine(item.id, { rate: Math.max(0, parseFloat(e.target.value) || 0) });
+                                                    }}
+                                                    error={Boolean(errs.rate)}
+                                                    slotProps={{
+                                                        htmlInput: { min: 0, step: 'any', readOnly: lockedRate, 'aria-label': LABELS.rate, style: { textAlign: 'right' } },
+                                                        input: lockedRate
+                                                            ? {
+                                                                  startAdornment: (
+                                                                      <InputAdornment position="start">
+                                                                          <LockOutlinedIcon sx={{ fontSize: 14, color: 'var(--mui-palette-text-muted)' }} />
+                                                                      </InputAdornment>
+                                                                  ),
+                                                              }
+                                                            : undefined,
+                                                    }}
+                                                    sx={lockedRate ? lockedSx : fieldSx}
+                                                />
+                                            </Tooltip>
+                                            {errs.rate && <FormHelperText error>{errs.rate}</FormHelperText>}
+                                        </Box>
+
+                                        {/* Gross Amount = Quantity × Rate */}
                                         <TextField
                                             size="small"
-                                            value={fmtNumber(item.salePrice, { maxDecimals: 3 })}
-                                            disabled
-                                            sx={{
-                                                ...fieldSx,
-                                                '& .MuiInputBase-input': {
-                                                    fontWeight: 600,
-                                                    color: 'var(--mui-palette-text-primary)',
-                                                    backgroundColor: 'var(--mui-palette-background-hover)',
-                                                },
-                                            }}
+                                            fullWidth
+                                            value={fmtNumber(item.grossAmount, { maxDecimals: 2 })}
+                                            slotProps={{ htmlInput: { readOnly: true, tabIndex: -1, 'aria-label': LABELS.grossAmount } }}
+                                            sx={computedSx()}
                                         />
 
-                                        {/* Tax Amount + Tax Rate selector */}
-                                        <Box sx={{ display: 'flex', gap: 0.5 }}>
+                                        {/* Discount: a percentage of the Gross Amount; the amount it comes to shows under it */}
+                                        <Box data-field={`lineItems.${index}.discount`} sx={{ minWidth: 0 }}>
                                             <TextField
                                                 size="small"
-                                                value={fmtNumber(item.taxAmount, { maxDecimals: 3 })}
-                                                disabled
-                                                sx={{
-                                                    flex: 1,
-                                                    ...fieldSx,
-                                                    '& .MuiInputBase-input': {
-                                                        fontWeight: 600,
-                                                        backgroundColor: 'var(--mui-palette-background-hover)',
+                                                type="number"
+                                                fullWidth
+                                                value={item.discount === 0 ? '' : item.discount}
+                                                placeholder="0"
+                                                onChange={(e) => updateLine(item.id, { discount: Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)) })}
+                                                error={Boolean(errs.discount)}
+                                                slotProps={{
+                                                    htmlInput: { min: 0, max: 100, step: 'any', 'aria-label': `${LABELS.discount} (%)` },
+                                                    input: {
+                                                        endAdornment: (
+                                                            <InputAdornment position="end">
+                                                                <PercentIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-secondary)' }} />
+                                                            </InputAdornment>
+                                                        ),
                                                     },
                                                 }}
+                                                sx={fieldSx}
                                             />
-                                            <FormControl size="small" sx={{ width: 95, ...fieldSx }}>
-                                                <Select
-                                                    value={item.taxRate}
-                                                    onChange={(e) =>
-                                                        handleUpdateLineItem(idx, { taxRate: e.target.value })
-                                                    }
-                                                >
-                                                    {OPPORTUNITY_TAX_RATES.map((rate) => (
-                                                        <MenuItem key={rate} value={rate}>
-                                                            {rate}
-                                                        </MenuItem>
-                                                    ))}
-                                                </Select>
-                                            </FormControl>
+                                            {errs.discount ? (
+                                                <FormHelperText error>{errs.discount}</FormHelperText>
+                                            ) : item.discountAmount > 0 ? (
+                                                <FormHelperText sx={{ color: 'var(--mui-palette-error-main)', whiteSpace: 'nowrap' }}>− {money(item.discountAmount)}</FormHelperText>
+                                            ) : null}
                                         </Box>
 
-                                        {/* Total */}
+                                        {/* GST: the Product Catalog's Tax Rate options; set by the product when it has one */}
+                                        <Box data-field={`lineItems.${index}.taxRate`} sx={{ minWidth: 0 }}>
+                                            <Tooltip title={lockedTax ? 'GST is the product’s Tax Rate in the Product Catalog' : ''} placement="top">
+                                                <FormControl size="small" fullWidth error={Boolean(errs.taxRate)} sx={lockedTax ? lockedSx : fieldSx}>
+                                                    <Select
+                                                        value={item.taxRate}
+                                                        displayEmpty
+                                                        readOnly={lockedTax}
+                                                        IconComponent={lockedTax ? () => <LockOutlinedIcon sx={{ fontSize: 14, mr: 1.25, color: 'var(--mui-palette-text-muted)' }} /> : undefined}
+                                                        onChange={(e) => updateLine(item.id, { taxRate: e.target.value })}
+                                                        renderValue={(selected) =>
+                                                            selected ? taxLabel(selected) : <Box component="span" sx={{ color: 'var(--mui-palette-text-muted)' }}>Select</Box>
+                                                        }
+                                                        inputProps={{ 'aria-label': LABELS.taxRate }}
+                                                    >
+                                                        {taxChoices.map((rate) => (
+                                                            <MenuItem key={rate} value={rate}>
+                                                                {taxLabel(rate)}
+                                                            </MenuItem>
+                                                        ))}
+                                                    </Select>
+                                                </FormControl>
+                                            </Tooltip>
+                                            {errs.taxRate && <FormHelperText error>{errs.taxRate}</FormHelperText>}
+                                        </Box>
+
+                                        {/* Taxable Amount = Gross Amount − Discount */}
                                         <TextField
                                             size="small"
-                                            value={fmtNumber(item.total, { maxDecimals: 3 })}
-                                            disabled
-                                            sx={{
-                                                ...fieldSx,
-                                                '& .MuiInputBase-input': {
-                                                    fontWeight: 700,
-                                                    color: 'var(--crm-text-blue-900)',
-                                                    backgroundColor: 'var(--mui-palette-primary-soft)',
-                                                },
-                                            }}
+                                            fullWidth
+                                            value={fmtNumber(item.taxableAmount, { maxDecimals: 2 })}
+                                            slotProps={{ htmlInput: { readOnly: true, tabIndex: -1, 'aria-label': LABELS.taxableAmount } }}
+                                            sx={computedSx(true)}
                                         />
 
-                                        {/* Delete button (X) */}
-                                        <Box sx={{ textAlign: 'center' }}>
-                                            <Tooltip title="Remove item">
-                                                <IconButton
-                                                    size="small"
-                                                    onClick={() => handleRemoveLineItem(idx)}
-                                                    sx={{
-                                                        width: 32,
-                                                        height: 32,
-                                                        backgroundColor: 'var(--crm-fill-blue-600)',
-                                                        color: '#ffffff',
-                                                        borderRadius: '4px',
-                                                        '&:hover': { backgroundColor: 'var(--mui-palette-error-main)' },
-                                                    }}
-                                                >
-                                                    <ClearIcon sx={{ fontSize: 16 }} />
-                                                </IconButton>
-                                            </Tooltip>
-                                        </Box>
+                                        {showActions && (
+                                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5, height: 40 }}>
+                                                <Tooltip title="Move up">
+                                                    <span>
+                                                        <IconButton size="small" aria-label="Move line up" disabled={index === 0} onClick={() => moveLine(item.id, -1)} sx={actionButtonSx}>
+                                                            <KeyboardArrowUpIcon sx={{ fontSize: 18 }} />
+                                                        </IconButton>
+                                                    </span>
+                                                </Tooltip>
+                                                <Tooltip title="Move down">
+                                                    <span>
+                                                        <IconButton
+                                                            size="small"
+                                                            aria-label="Move line down"
+                                                            disabled={index === lines.length - 1}
+                                                            onClick={() => moveLine(item.id, 1)}
+                                                            sx={actionButtonSx}
+                                                        >
+                                                            <KeyboardArrowDownIcon sx={{ fontSize: 18 }} />
+                                                        </IconButton>
+                                                    </span>
+                                                </Tooltip>
+                                                <Tooltip title="Remove line">
+                                                    <IconButton size="small" aria-label="Remove line" onClick={() => removeLine(item.id)} sx={removeButtonSx}>
+                                                        <ClearIcon sx={{ fontSize: 16 }} />
+                                                    </IconButton>
+                                                </Tooltip>
+                                            </Box>
+                                        )}
                                     </Box>
 
-                                    {/* Description and Note textareas below each row */}
+                                    {/* Description and Note (optional) under each line */}
                                     <Box
                                         sx={{
                                             display: 'grid',
                                             gridTemplateColumns: '1fr 1fr',
                                             gap: 2,
                                             pt: 1,
+                                            pl: showActions ? 5.5 : 0,
                                             borderTop: '1px dashed var(--mui-palette-border-main)',
                                         }}
                                     >
-                                        <Box>
-                                            <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)', mb: 0.5 }}>
-                                                Description:
-                                            </Typography>
+                                        <Box data-field={`lineItems.${index}.description`}>
+                                            <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)', mb: 0.5 }}>{LABELS.description}</Typography>
                                             <TextField
                                                 fullWidth
                                                 size="small"
@@ -570,17 +628,15 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
                                                 rows={2}
                                                 placeholder="Line item scope or package specifications..."
                                                 value={item.description || ''}
-                                                onChange={(e) =>
-                                                    handleUpdateLineItem(idx, { description: e.target.value })
-                                                }
+                                                onChange={(e) => updateLine(item.id, { description: e.target.value })}
+                                                error={Boolean(errs.description)}
+                                                helperText={errs.description}
                                                 slotProps={{ htmlInput: { maxLength: FIELD_MAX_LENGTH.longText } }}
                                                 sx={fieldSx}
                                             />
                                         </Box>
-                                        <Box>
-                                            <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)', mb: 0.5 }}>
-                                                Note:
-                                            </Typography>
+                                        <Box data-field={`lineItems.${index}.note`}>
+                                            <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)', mb: 0.5 }}>{LABELS.note}</Typography>
                                             <TextField
                                                 fullWidth
                                                 size="small"
@@ -588,140 +644,86 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
                                                 rows={2}
                                                 placeholder="Internal notes, discount justifications, or terms..."
                                                 value={item.note || ''}
-                                                onChange={(e) =>
-                                                    handleUpdateLineItem(idx, { note: e.target.value })
-                                                }
+                                                onChange={(e) => updateLine(item.id, { note: e.target.value })}
+                                                error={Boolean(errs.note)}
+                                                helperText={errs.note}
                                                 slotProps={{ htmlInput: { maxLength: FIELD_MAX_LENGTH.longText } }}
                                                 sx={fieldSx}
                                             />
                                         </Box>
                                     </Box>
                                 </Box>
-                            ))}
-                        </Box>
-                    )}
+                            );
+                        })}
+                    </Box>
                 </Box>
 
-                {/* + ADD PRODUCT LINE Button (the empty state above has its own, so it only shows below existing lines) */}
-                {lineItems.length > 0 && (
-                    <Button
-                        variant="contained"
-                        startIcon={<AddIcon />}
-                        onClick={handleAddLineItem}
-                        sx={{
-                            backgroundColor: 'var(--crm-fill-blue-600)',
-                            color: '#ffffff',
-                            textTransform: 'uppercase',
-                            fontWeight: 700,
-                            fontSize: '0.76rem',
-                            letterSpacing: '0.04em',
-                            px: 2.2,
-                            py: 0.8,
-                            borderRadius: '4px',
-                            '&:hover': { backgroundColor: 'var(--crm-fill-blue-700)' },
-                        }}
-                    >
-                        ADD PRODUCT LINE
-                    </Button>
-                )}
-            </Paper>
-
-            {/* ════════════ SUMMARY & FINANCIAL TOTALS ════════════ */}
-            <Box
-                sx={{
-                    display: 'grid',
-                    gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
-                    gap: 3,
-                }}
-            >
-                {/* Left side totals / lump sum */}
-                <Paper
-                    variant="outlined"
+                <Button
+                    variant="contained"
+                    startIcon={<AddIcon />}
+                    onClick={addLine}
                     sx={{
-                        p: 2.5,
-                        borderRadius: '8px',
-                        border: '1px solid var(--mui-palette-border-strong)',
-                        backgroundColor: 'var(--mui-palette-background-paper)',
+                        backgroundColor: 'var(--crm-fill-blue-600)',
+                        color: '#ffffff',
+                        textTransform: 'none',
+                        fontWeight: 700,
+                        fontSize: '0.8rem',
+                        px: 2.2,
+                        py: 0.8,
+                        borderRadius: '6px',
+                        boxShadow: 'none',
+                        '&:hover': { backgroundColor: 'var(--crm-fill-blue-700)', boxShadow: '0 4px 14px rgb(var(--crm-accent-rgb) / 0.28)' },
                     }}
                 >
-                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--crm-slate-700)', mb: 2 }}>
-                        Overall Deal Adjustments
-                    </Typography>
+                    Add Product Line
+                </Button>
+            </Paper>
 
+            {/* ════════════ SUMMARY & TOTALS ════════════ */}
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'repeat(2, minmax(0, 1fr))' }, gap: 3 }}>
+                <Paper
+                    variant="outlined"
+                    sx={{ p: 2.5, borderRadius: '8px', border: '1px solid var(--mui-palette-border-strong)', backgroundColor: 'var(--mui-palette-background-paper)' }}
+                >
+                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--crm-slate-700)', mb: 2 }}>Overall Deal Adjustments</Typography>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)' }}>Total Gross:</Typography>
-                            <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--mui-palette-text-primary)' }}>
-                                {fmtMoney(totalAmount, LINE_MONEY)}
-                            </Typography>
-                        </Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)' }}>Item Discounts:</Typography>
-                            <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--mui-palette-error-main)' }}>
-                                - {fmtMoney(totalDiscount, LINE_MONEY)}
-                            </Typography>
-                        </Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)' }}>Lump Sum Discount:</Typography>
+                        <SummaryRow label={TOTAL_LABELS.totalAmount} value={money(totals.totalAmount)} />
+                        <SummaryRow label={TOTAL_LABELS.totalDiscount} value={`− ${money(totals.totalDiscount)}`} color="var(--mui-palette-error-main)" />
+                        <Box data-field="lumpSumDiscount" sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
+                            <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)' }}>{TOTAL_LABELS.lumpSumDiscount}</Typography>
                             <TextField
                                 size="small"
                                 type="number"
-                                value={lumpSumDiscount}
-                                onChange={(e) => handleLumpSumChange(parseFloat(e.target.value) || 0)}
-                                sx={{ width: FIELD_SIZE_WIDTH.xs, ...fieldSx }}
-                                slotProps={{ htmlInput: { min: 0 } }}
+                                value={lumpSumDiscount === 0 ? '' : lumpSumDiscount}
+                                placeholder="0"
+                                onChange={(e) => changeLumpSum(Math.max(0, parseFloat(e.target.value) || 0))}
+                                sx={{ width: FIELD_SIZE_WIDTH.xs, maxWidth: '100%', ...fieldSx }}
+                                slotProps={{
+                                    htmlInput: { min: 0, step: 'any', 'aria-label': TOTAL_LABELS.lumpSumDiscount },
+                                    input: { startAdornment: <InputAdornment position="start">{symbol}</InputAdornment> },
+                                }}
                             />
                         </Box>
                     </Box>
                 </Paper>
 
-                {/* Right side calculated summary box */}
                 <Paper
                     variant="outlined"
-                    sx={{
-                        p: 2.5,
-                        borderRadius: '8px',
-                        border: '1.5px solid var(--mui-palette-primary-softBorder)',
-                        backgroundColor: 'var(--mui-palette-background-subtle)',
-                    }}
+                    sx={{ p: 2.5, borderRadius: '8px', border: '1.5px solid var(--mui-palette-primary-softBorder)', backgroundColor: 'var(--mui-palette-background-subtle)' }}
                 >
-                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--crm-text-blue-900)', mb: 2 }}>
-                        Summary Breakdown
-                    </Typography>
-
+                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--crm-text-blue-900)', mb: 2 }}>Summary Breakdown</Typography>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.2 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)' }}>Total:</Typography>
-                            <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>
-                                {fmtMoney(totalAmount, LINE_MONEY)}
-                            </Typography>
-                        </Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)' }}>Discount:</Typography>
-                            <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--mui-palette-error-main)' }}>
-                                - {fmtMoney(totalDiscount, LINE_MONEY)}
-                            </Typography>
-                        </Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)' }}>Subtotal:</Typography>
-                            <Typography sx={{ fontSize: '0.85rem', fontWeight: 700 }}>
-                                {fmtMoney(subtotal, LINE_MONEY)}
-                            </Typography>
-                        </Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)' }}>Tax:</Typography>
-                            <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--crm-text-blue-600)' }}>
-                                + {fmtMoney(totalTax, LINE_MONEY)}
-                            </Typography>
-                        </Box>
+                        <SummaryRow label={TOTAL_LABELS.totalAmount} value={money(totals.totalAmount)} />
+                        <SummaryRow label={TOTAL_LABELS.totalDiscount} value={`− ${money(totals.totalDiscount)}`} color="var(--mui-palette-error-main)" />
+                        <SummaryRow label={TOTAL_LABELS.subtotal} value={money(totals.subtotal)} strong />
+                        <SummaryRow label={TOTAL_LABELS.totalTax} value={`+ ${money(totals.totalTax)}`} color="var(--crm-text-blue-600)" />
+                        {lumpSumDiscount > 0 && (
+                            <SummaryRow label={TOTAL_LABELS.lumpSumDiscount} value={`− ${money(lumpSumDiscount)}`} color="var(--mui-palette-error-main)" />
+                        )}
                         <Divider sx={{ my: 0.5 }} />
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <Typography sx={{ fontSize: '0.92rem', fontWeight: 800, color: 'var(--crm-slate-900)' }}>
-                                Grand Total:
-                            </Typography>
-                            <Typography sx={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--crm-green-700)' }}>
-                                {fmtMoney(grandTotal, LINE_MONEY)}
-                            </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+                            <Typography sx={{ fontSize: '0.92rem', fontWeight: 800, color: 'var(--crm-slate-900)' }}>{TOTAL_LABELS.grandTotal}</Typography>
+                            <Typography sx={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--crm-green-700)', whiteSpace: 'nowrap' }}>{money(totals.grandTotal)}</Typography>
                         </Box>
                     </Box>
                 </Paper>
@@ -733,54 +735,62 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
 // ══════════════════════════════════════════════════════════════════════
 // COMPONENT B: RhfLineItemsConnected (Safe RHF Hook Caller)
 // ══════════════════════════════════════════════════════════════════════
-function RhfLineItemsConnected() {
+
+const messageOf = (value: unknown): string | undefined =>
+    value && typeof value === 'object' && 'message' in value && typeof (value as { message?: unknown }).message === 'string'
+        ? (value as { message: string }).message
+        : undefined;
+
+/** RHF's `errors.lineItems` as one message for the list and field messages per line. */
+function splitLineItemErrors(errors: FieldErrors<CrmLineItemsValues>['lineItems']): { error?: string; lineErrors: LineItemErrors } {
+    if (!errors) return { lineErrors: [] };
+    const list = errors as unknown as Record<string, unknown> & { root?: unknown };
+    const lineErrors: LineItemErrors = [];
+    for (const [key, entry] of Object.entries(list)) {
+        if (!/^\d+$/.test(key) || !entry || typeof entry !== 'object') continue;
+        const fields: Partial<Record<keyof LineItem, string>> = {};
+        for (const [field, fieldError] of Object.entries(entry as Record<string, unknown>)) {
+            const message = messageOf(fieldError);
+            if (message) fields[field as keyof LineItem] = message;
+        }
+        lineErrors[Number(key)] = fields;
+    }
+    return { error: messageOf(list) ?? messageOf(list.root), lineErrors };
+}
+
+function RhfLineItemsConnected({ withCurrency = false }: { withCurrency?: boolean }) {
     const { control, setValue } = useFormContext<CrmLineItemsValues>();
+    const { errors, isSubmitted } = useFormState({ control, name: 'lineItems' });
 
     const currency = useWatch({ control, name: 'currency' });
-    const groupName = useWatch({ control, name: 'groupName' });
     const lineItems = useWatch({ control, name: 'lineItems' });
     const lumpSumDiscount = useWatch({ control, name: 'lumpSumDiscount' });
-    const totalAmount = useWatch({ control, name: 'totalAmount' });
-    const totalDiscount = useWatch({ control, name: 'totalDiscount' });
-    const subtotal = useWatch({ control, name: 'subtotal' });
-    const totalTax = useWatch({ control, name: 'totalTax' });
-    const grandTotal = useWatch({ control, name: 'grandTotal' });
 
     const currentValue: CrmLineItemsValues = {
-        currency: currency || 'Indian Rupee: ₹',
-        groupName: groupName || '',
+        ...(withCurrency ? { currency: currency || DEFAULT_CURRENCY } : {}),
         lineItems: Array.isArray(lineItems) ? lineItems : [],
         lumpSumDiscount: typeof lumpSumDiscount === 'number' ? lumpSumDiscount : 0,
-        totalAmount: typeof totalAmount === 'number' ? totalAmount : 0,
-        totalDiscount: typeof totalDiscount === 'number' ? totalDiscount : 0,
-        subtotal: typeof subtotal === 'number' ? subtotal : 0,
-        totalTax: typeof totalTax === 'number' ? totalTax : 0,
-        grandTotal: typeof grandTotal === 'number' ? grandTotal : 0,
     };
 
     const handleChange = useCallback(
         <K extends keyof CrmLineItemsValues>(field: K, val: CrmLineItemsValues[K]) => {
-            setValue(
-                field as unknown as Path<CrmLineItemsValues>,
-                val as unknown as PathValue<CrmLineItemsValues, Path<CrmLineItemsValues>>,
-                {
-                    shouldDirty: true,
-                    shouldValidate: true,
-                }
-            );
+            setValue(field as unknown as Path<CrmLineItemsValues>, val as unknown as PathValue<CrmLineItemsValues, Path<CrmLineItemsValues>>, {
+                shouldDirty: true,
+                // Lines are checked on save; after a failed save, every edit re-checks so fixed fields clear at once.
+                shouldValidate: isSubmitted,
+            });
         },
-        [setValue]
+        [setValue, isSubmitted],
     );
 
-    return <CrmLineItemsEditor value={currentValue} onChange={handleChange} />;
+    const { error, lineErrors } = splitLineItemErrors(errors.lineItems);
+    return <CrmLineItemsEditor value={currentValue} onChange={handleChange} error={error} lineErrors={lineErrors} withCurrency={withCurrency} />;
 }
 
-export function RhfLineItemsSection() {
+export function RhfLineItemsSection({ withCurrency = false }: { withCurrency?: boolean } = {}) {
     const rhfContext = useFormContext<CrmLineItemsValues>();
-    if (!rhfContext) {
-        return null;
-    }
-    return <RhfLineItemsConnected />;
+    if (!rhfContext) return null;
+    return <RhfLineItemsConnected withCurrency={withCurrency} />;
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -788,41 +798,30 @@ export function RhfLineItemsSection() {
 // ══════════════════════════════════════════════════════════════════════
 export function CrmLineItemsSection(props: CrmLineItemsSectionProps = {}) {
     const rhfContext = useFormContext<CrmLineItemsValues>();
+    const withCurrency = props.withCurrency ?? false;
 
     // 1. If explicit value and onChange are provided, render pure controlled component
     if (props.value && props.onChange) {
-        return <CrmLineItemsEditor value={props.value} onChange={props.onChange} error={props.error} />;
+        return <CrmLineItemsEditor value={props.value} onChange={props.onChange} error={props.error} withCurrency={withCurrency} />;
     }
 
     // 2. If legacy form & setField are provided, adapt without RHF
     if (props.form && props.setField) {
         const legacyValue: CrmLineItemsValues = {
-            currency: props.form.currency || 'Indian Rupee: ₹',
-            groupName: props.form.groupName || '',
+            ...(withCurrency ? { currency: props.form.currency || DEFAULT_CURRENCY } : {}),
             lineItems: Array.isArray(props.form.lineItems) ? props.form.lineItems : [],
             lumpSumDiscount: props.form.lumpSumDiscount || 0,
-            totalAmount: props.form.totalAmount || 0,
-            totalDiscount: props.form.totalDiscount || 0,
-            subtotal: props.form.subtotal || 0,
-            totalTax: props.form.totalTax || 0,
-            grandTotal: props.form.grandTotal || 0,
         };
-        return <CrmLineItemsEditor value={legacyValue} onChange={props.setField} error={props.error} />;
+        return <CrmLineItemsEditor value={legacyValue} onChange={props.setField} error={props.error} withCurrency={withCurrency} />;
     }
 
     // 3. If within a FormProvider, delegate to the RHF connected wrapper
     if (rhfContext) {
-        return <RhfLineItemsConnected />;
+        return <RhfLineItemsConnected withCurrency={withCurrency} />;
     }
 
     // 4. Fallback safe editor if neither context nor props are supplied
-    return (
-        <CrmLineItemsEditor
-            value={DEFAULT_LINE_ITEMS_VALUES}
-            onChange={() => {}}
-            error={props.error}
-        />
-    );
+    return <CrmLineItemsEditor value={DEFAULT_LINE_ITEMS_VALUES} onChange={() => {}} error={props.error} withCurrency={withCurrency} />;
 }
 
 export default CrmLineItemsSection;

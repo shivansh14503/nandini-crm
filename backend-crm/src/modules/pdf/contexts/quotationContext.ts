@@ -21,13 +21,12 @@ export interface QuotationSourceLineItem {
     description: string;
     note: string;
     quantity: number;
-    amount: number;
+    rate: number;
+    grossAmount: number;
     discount: number;
-    discountType: string;
-    salePrice: number;
+    discountAmount: number;
     taxRate: string;
-    taxAmount: number;
-    total: number;
+    taxableAmount: number;
 }
 
 export interface QuotationSource {
@@ -44,7 +43,6 @@ export interface QuotationSource {
     otherRef: string;
     validationPeriod: string;
     issuingCompany: string;
-    groupName: string;
     currency: string;
     remarks: string;
     organizationName: string;
@@ -94,18 +92,17 @@ export function assembleQuotationContext(source: QuotationSource, input: Context
         note: item.note,
         quantity: item.quantity,
         quantityFormatted: number(item.quantity),
-        amount: item.amount,
-        amountFormatted: money(item.amount),
+        rate: item.rate,
+        rateFormatted: money(item.rate),
+        grossAmount: item.grossAmount,
+        grossAmountFormatted: money(item.grossAmount),
         discount: item.discount,
-        discountType: item.discountType,
-        discountFormatted: item.discount ? (item.discountType === 'percentage' ? `${number(item.discount)}%` : money(item.discount)) : '-',
-        salePrice: item.salePrice,
-        salePriceFormatted: money(item.salePrice),
+        discountAmount: item.discountAmount,
+        discountFormatted: item.discount ? `${number(item.discount)}%` : '-',
+        discountAmountFormatted: item.discountAmount ? money(item.discountAmount) : '-',
         taxRate: item.taxRate,
-        taxAmount: item.taxAmount,
-        taxAmountFormatted: money(item.taxAmount),
-        total: item.total,
-        totalFormatted: money(item.total),
+        taxableAmount: item.taxableAmount,
+        taxableAmountFormatted: money(item.taxableAmount),
     }));
 
     const t = source.totals;
@@ -144,7 +141,6 @@ export function assembleQuotationContext(source: QuotationSource, input: Context
         otherRef: source.otherRef,
         validationPeriod: source.validationPeriod,
         issuingCompany: source.issuingCompany,
-        groupName: source.groupName,
         currency,
         remarks: source.remarks,
     };
@@ -247,7 +243,6 @@ async function loadSource(recordId: string): Promise<QuotationSource> {
         otherRef: text(row.otherRef),
         validationPeriod: text(row.validationPeriod),
         issuingCompany: row.company,
-        groupName: text(row.groupName),
         currency: row.currency,
         remarks: text(row.remarks),
         organizationName: text(row.organizationName),
@@ -297,13 +292,12 @@ async function loadSource(recordId: string): Promise<QuotationSource> {
             description: text(item.description),
             note: text(item.note),
             quantity: decimalToNumber(item.quantity),
-            amount: decimalToNumber(item.amount),
+            rate: decimalToNumber(item.rate),
+            grossAmount: decimalToNumber(item.grossAmount),
             discount: decimalToNumber(item.discount),
-            discountType: item.discountType,
-            salePrice: decimalToNumber(item.salePrice),
+            discountAmount: decimalToNumber(item.discountAmount),
             taxRate: item.taxRate,
-            taxAmount: decimalToNumber(item.taxAmount),
-            total: decimalToNumber(item.total),
+            taxableAmount: decimalToNumber(item.taxableAmount),
         })),
         customValues: parseCustomFields(row.customDataJson),
     };

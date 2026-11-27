@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { DEFAULT_DISPLAY_FORMATS } from '../../company-formats/core/displayFormats.js';
 import type { ContextBuildInput } from '../contexts/contextTypes.js';
-import { buildFieldRegistry } from '../fieldRegistry.js';
+import { buildFieldRegistry, QUOTATION_LINE_ITEM_COLUMNS } from '../fieldRegistry.js';
 import { registryRefs } from '../pdfTemplate.service.js';
 import { buildSampleQuotationContext } from '../sampleContext.js';
 import { SYSTEM_TEMPLATES } from '../systemTemplates/index.js';
@@ -18,6 +18,8 @@ import {
     normalizeWidths,
     renderBlock,
     renderDocument,
+    upgradeLineItemColumns,
+    upgradeTotalRows,
     rich,
     styleToCss,
     validateDocumentRefs,
@@ -64,8 +66,13 @@ describe('system templates', () => {
         it(`${template.name}: renders the sample quotation`, () => {
             const out = renderDocument(template.build(), ctx, pdf);
             assert.match(out.body, /QT-00042/);
-            assert.match(out.body, /₹3,30,400\.00/);
-            assert.match(out.body, /Rupees Three Lakh Thirty Thousand Four Hundred Only/);
+            assert.match(out.body, /₹3,22,297\.00/);
+            assert.match(out.body, /Rupees Three Lakh Twenty Two Thousand Two Hundred Ninety Seven Only/);
+            // Line item columns as on the quotation form (Jira CRM-111).
+            assert.match(out.body, /<th[^>]*>Rate<\/th>/);
+            assert.match(out.body, /<th[^>]*>Gross Amount<\/th>/);
+            assert.match(out.body, /<th[^>]*>Taxable Amount<\/th>/);
+            assert.match(out.body, /₹1,44,400\.00/);
             assert.match(out.body, /24-Port Managed Gigabit Switch/);
             // Description renders under the item name, not as its own column.
             assert.doesNotMatch(out.body, /<th[^>]*>Description<\/th>/);
@@ -74,6 +81,38 @@ describe('system templates', () => {
             assert.match(out.body, /PO Number/);
         });
     }
+});
+
+describe('line items saved before CRM-111', () => {
+    it('moves Unit Price / Total to Rate / Taxable Amount, drops Sale Price / Tax Amount and adds a hidden Gross Amount', () => {
+        const legacy = [
+            { key: 'srNo', label: 'Sr. No.', visible: true, align: 'center' },
+            { key: 'amount', label: 'Unit Price', visible: true, align: 'right', widthPct: 12 },
+            { key: 'discount', label: 'Disc.', visible: true, align: 'right' },
+            { key: 'salePrice', label: 'Sale Price', visible: false, align: 'right' },
+            { key: 'taxRate', label: 'Tax', visible: true, align: 'right' },
+            { key: 'taxAmount', label: 'Tax Amount', visible: false, align: 'right' },
+            { key: 'total', label: 'Line Total', visible: true, align: 'right' },
+        ];
+        assert.deepEqual(upgradeLineItemColumns(legacy), [
+            { key: 'srNo', label: 'Sr. No.', visible: true, align: 'center' },
+            { key: 'rate', label: 'Rate', visible: true, align: 'right', widthPct: 12 },
+            { key: 'grossAmount', label: 'Gross Amount', visible: false, align: 'right', widthPct: 12 },
+            { key: 'discount', label: 'Disc.', visible: true, align: 'right' },
+            { key: 'taxRate', label: 'GST', visible: true, align: 'right' },
+            // An admin's own label stays.
+            { key: 'taxableAmount', label: 'Line Total', visible: true, align: 'right' },
+        ]);
+    });
+
+    it('leaves current columns alone and relabels the old default total rows', () => {
+        const current = QUOTATION_LINE_ITEM_COLUMNS.map((c) => ({ key: c.key, label: c.label, visible: true, align: c.align }));
+        assert.equal(upgradeLineItemColumns(current), current);
+        assert.deepEqual(upgradeTotalRows([{ key: 'subtotal', label: 'Subtotal', visible: true, hideIfZero: false }, { key: 'totalTax', label: 'VAT', visible: true, hideIfZero: false }]), [
+            { key: 'subtotal', label: 'Taxable Amount', visible: true, hideIfZero: false },
+            { key: 'totalTax', label: 'VAT', visible: true, hideIfZero: false },
+        ]);
+    });
 });
 
 describe('document schema', () => {

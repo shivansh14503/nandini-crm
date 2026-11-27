@@ -12,8 +12,6 @@ export type OpportunityRow = Opportunity & {
     document?: OpportunityDocumentRow | null;
 };
 
-export const DEFAULT_CURRENCY = 'Indian Rupee: ₹';
-
 /** `Opportunity` from frontend-crm/src/types/opportunity.types.ts. */
 export interface OpportunityDto {
     id: string;
@@ -60,8 +58,6 @@ export interface OpportunityDto {
     documentNo: string;
     documentDate: string;
     documentFile: RecordFileDto | null;
-    currency: string;
-    groupName: string;
     lineItems: LineItemDto[];
     lumpSumDiscount: number;
     totalAmount: number;
@@ -119,8 +115,6 @@ export function toOpportunityDto(row: OpportunityRow): OpportunityDto {
         documentNo: text(row.document?.documentNo),
         documentDate: toDateOnly(row.document?.documentDate ?? null),
         documentFile: row.document?.documentFile ? toRecordFileDto(row.document.documentFile) : null,
-        currency: row.currency,
-        groupName: text(row.groupName),
         lineItems: toLineItemDtos(row.lineItems),
         lumpSumDiscount: decimalToNumber(row.lumpSumDiscount),
         totalAmount: decimalToNumber(row.totalAmount),
@@ -189,8 +183,6 @@ export function toOpportunityData(
         ...commissionColumns(input),
         // The document itself is written to the Document table (syncOpportunityDocument).
         addDocument: input.addDocument,
-        currency: input.currency ?? DEFAULT_CURRENCY,
-        groupName: nullable(input.groupName),
         lumpSumDiscount: input.lumpSumDiscount,
         ...totals,
     };

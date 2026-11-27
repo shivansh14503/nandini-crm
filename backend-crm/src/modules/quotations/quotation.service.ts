@@ -9,7 +9,7 @@ import { HttpError } from '../../utils/httpError.js';
 import { daysAgo } from '../../utils/mappers.js';
 import { parsePagination } from '../../utils/pagination.js';
 import { CLOSED_SALES_STAGES, QUOTE_SALES_STAGE } from '../opportunities/opportunity.validator.js';
-import { assertTotalsMatch, calculateLineItems, lineItemsInclude, linkedProductIds, resolveProductIds, toLineItemData } from '../shared/lineItems.js';
+import { assertTotalsMatch, calculateLineItems, lineItemsInclude, linkedProductIds, prepareLineItems, toLineItemData, type PreparedLineItems } from '../shared/lineItems.js';
 import { asPayload, checkModulePayload, loadModuleFieldConfig, validateModulePayload } from '../form-configs/customFieldValidator.js';
 import { assertAssigneeValid, assertRecordAccess, buildAccessScopeWhere } from '../shared/accessControl.js';
 import { assertReference } from '../shared/references.js';
@@ -60,14 +60,21 @@ async function resolveLinks(tx: TransactionClient, input: QuotationInput, previo
     return links;
 }
 
-async function replaceLineItems(tx: TransactionClient, quotationId: string, input: QuotationInput, computed: ReturnType<typeof calculateLineItems>): Promise<void> {
-    // A line may keep an Inactive product it already had, or one on the opportunity the quotation is made from.
-    const saved = await tx.quotationLineItem.findMany({ where: { quotationId }, select: { productId: true } });
+/**
+ * The quotation's lines checked against the Product Catalog. A line may keep an Inactive product (and the Rate / GST
+ * it was saved with) when the quotation already had it, or when the opportunity it is made from carries it; newly
+ * added products take their Rate (MRP) and GST (Tax Rate) from the catalog.
+ */
+async function prepareQuotationLines(tx: TransactionClient, quotationId: string | null, input: QuotationInput): Promise<PreparedLineItems> {
+    const saved = quotationId ? await tx.quotationLineItem.findMany({ where: { quotationId }, select: { productId: true } }) : [];
     const fromOpportunity = input.opportunityId
         ? await tx.opportunityLineItem.findMany({ where: { opportunityId: input.opportunityId }, select: { productId: true } })
         : [];
+    return prepareLineItems(tx, input.lineItems, linkedProductIds([...saved, ...fromOpportunity]));
+}
+
+async function replaceLineItems(tx: TransactionClient, quotationId: string, computed: ReturnType<typeof calculateLineItems>, knownProducts: Set<string>): Promise<void> {
     await tx.quotationLineItem.deleteMany({ where: { quotationId } });
-    const knownProducts = await resolveProductIds(tx, input.lineItems, linkedProductIds([...saved, ...fromOpportunity]));
     await tx.quotationLineItem.createMany({
         data: computed.items.map((item, index) => ({ ...toLineItemData(item, index, knownProducts), quotationId })),
     });
@@ -121,13 +128,15 @@ export async function createQuotationRecord(
 ): Promise<{ quotation: QuotationDto; opportunityAdvanced: boolean }> {
     // Code first: its counter row lock queues concurrent creates before they take any other lock.
     const quotationCode = await generateEntityCode(tx, 'QT');
+    const lines = await prepareQuotationLines(tx, null, input);
+    input.lineItems = lines.items;
     const computed = calculateLineItems(input.lineItems, input.lumpSumDiscount);
     const assignedTo = (await assertAssigneeValid(tx, input.assignedTo)) ?? user.username;
     const links = await resolveLinks(tx, input);
     const row = await tx.quotation.create({
         data: { ...(await resolveAddressPlaces(tx, 'quotation', toQuotationData({ ...input, assignedTo }, links, computed.totals))), quotationCode, createdBy: user.username },
     });
-    await replaceLineItems(tx, row.id, input, computed);
+    await replaceLineItems(tx, row.id, computed, lines.knownProductIds);
     const opportunityAdvanced = links.opportunityId ? await advanceOpportunityStage(tx, links.opportunityId, user) : false;
 
     const quotation = toQuotationDto(await tx.quotation.findUniqueOrThrow({ where: { id: row.id }, include }));
@@ -217,8 +226,10 @@ export const quotationService = {
                 previousCustomFields: before.customFields,
             });
             assertNotInPast(quotationPastChecks(input, before));
+            assertTotalsMatch(patch, calculateLineItems(input.lineItems, input.lumpSumDiscount).totals);
+            const lines = 'lineItems' in patch ? await prepareQuotationLines(tx, id, input) : null;
+            if (lines) input.lineItems = lines.items;
             const computed = calculateLineItems(input.lineItems, input.lumpSumDiscount);
-            assertTotalsMatch(patch, computed.totals);
 
             const links = await resolveLinks(tx, input, existing);
             const assignedTo = (await assertAssigneeValid(tx, input.assignedTo, { previous: existing.assignedTo })) ?? existing.assignedTo;
@@ -226,7 +237,7 @@ export const quotationService = {
                 where: { id },
                 data: { ...(await resolveAddressPlaces(tx, 'quotation', toQuotationData({ ...input, assignedTo }, links, computed.totals))), updatedBy: user.username },
             });
-            if ('lineItems' in patch) await replaceLineItems(tx, id, input, computed);
+            if (lines) await replaceLineItems(tx, id, computed, lines.knownProductIds);
 
             const after = toQuotationDto(await tx.quotation.findUniqueOrThrow({ where: { id }, include }));
             const changes = diffRecords(before, after);

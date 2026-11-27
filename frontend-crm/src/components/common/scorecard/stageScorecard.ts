@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useDropdownOptions } from '@/hooks/queries/useFormConfigs';
+import { LINE_ITEM_TOTAL_LABELS } from '@/lib/line-items';
 import type { DefaultScorecard, ScorecardAmount } from './scorecardItems';
 import { SCORECARD_PALETTE, scorecardPaletteHex } from './scorecardUtils';
 
@@ -52,15 +53,16 @@ export interface LineItemTotals {
  * (backend scorecard.validator.ts).
  */
 export const LINE_ITEM_CARD_AMOUNTS = {
-    totalAmount: { key: 'builtin.totalAmount', label: 'Total', of: (r) => scorecardNumber(r.totalAmount) },
-    subtotal: { key: 'builtin.subtotal', label: 'Subtotal', of: (r) => scorecardNumber(r.subtotal) },
-    totalDiscount: { key: 'builtin.totalDiscount', label: 'Discount', of: (r) => scorecardNumber(r.totalDiscount) },
-    totalTax: { key: 'builtin.totalTax', label: 'Tax', of: (r) => scorecardNumber(r.totalTax) },
-    grandTotal: { key: 'builtin.grandTotal', label: 'Grand Total', of: (r) => scorecardNumber(r.grandTotal) },
+    // Labels of the Line Items totals (Jira CRM-111): Taxable Amount is `subtotal`, GST is `totalTax`.
+    totalAmount: { key: 'builtin.totalAmount', label: LINE_ITEM_TOTAL_LABELS.totalAmount, of: (r) => scorecardNumber(r.totalAmount) },
+    subtotal: { key: 'builtin.subtotal', label: LINE_ITEM_TOTAL_LABELS.subtotal, of: (r) => scorecardNumber(r.subtotal) },
+    totalDiscount: { key: 'builtin.totalDiscount', label: LINE_ITEM_TOTAL_LABELS.totalDiscount, of: (r) => scorecardNumber(r.totalDiscount) },
+    totalTax: { key: 'builtin.totalTax', label: LINE_ITEM_TOTAL_LABELS.totalTax, of: (r) => scorecardNumber(r.totalTax) },
+    grandTotal: { key: 'builtin.grandTotal', label: LINE_ITEM_TOTAL_LABELS.grandTotal, of: (r) => scorecardNumber(r.grandTotal) },
     subtotalPlusTax: {
         key: 'builtin.subtotalPlusTax',
-        label: 'Subtotal + Tax',
+        label: `${LINE_ITEM_TOTAL_LABELS.subtotal} + ${LINE_ITEM_TOTAL_LABELS.totalTax}`,
         of: (r) => scorecardNumber(r.subtotal) + scorecardNumber(r.totalTax),
     },
-    lumpSumDiscount: { key: 'builtin.lumpSumDiscount', label: 'Lump Sum Discount', of: (r) => scorecardNumber(r.lumpSumDiscount) },
+    lumpSumDiscount: { key: 'builtin.lumpSumDiscount', label: LINE_ITEM_TOTAL_LABELS.lumpSumDiscount, of: (r) => scorecardNumber(r.lumpSumDiscount) },
 } as const satisfies Record<string, ScorecardAmount<LineItemTotals>>;

@@ -104,9 +104,9 @@ export function lineItemColumnsFrom(columns: LineItemColumnInfo[]): BlockOf<'lin
 export const DEFAULT_TOTAL_ROWS: BlockOf<'totals'>['props']['rows'] = [
     { key: 'totalAmount', label: 'Gross Amount', visible: true, hideIfZero: false },
     { key: 'totalDiscount', label: 'Discount', visible: true, hideIfZero: true },
-    { key: 'lumpSumDiscount', label: 'Lump-sum Discount', visible: true, hideIfZero: true },
-    { key: 'subtotal', label: 'Subtotal', visible: true, hideIfZero: false },
-    { key: 'totalTax', label: 'Tax', visible: true, hideIfZero: false },
+    { key: 'lumpSumDiscount', label: 'Lump Sum Discount', visible: true, hideIfZero: true },
+    { key: 'subtotal', label: 'Taxable Amount', visible: true, hideIfZero: false },
+    { key: 'totalTax', label: 'GST', visible: true, hideIfZero: false },
     { key: 'grandTotal', label: 'Grand Total', visible: true, hideIfZero: false },
 ];
 

@@ -1,20 +1,8 @@
+import type { LineItem } from './lineItem.types';
 import type { RecordFile } from './recordFile.types';
 
-export interface OpportunityLineItem {
-    id: string;
-    productId: string;
-    productName: string;
-    quantity: number;
-    amount: number; // Unit / List price
-    discount: number;
-    discountType: 'percentage' | 'direct';
-    salePrice: number;
-    taxRate: string; // e.g. '18%', '12%', '5%', 'None'
-    taxAmount: number;
-    total: number;
-    description?: string;
-    note?: string;
-}
+/** Line items are the same on opportunities and quotations (Jira CRM-111). */
+export type OpportunityLineItem = LineItem;
 
 export interface OpportunityFormData {
     /** Admin-defined custom field values, keyed by FormFieldDefinition.fieldKey. */
@@ -92,9 +80,7 @@ export interface OpportunityFormData {
     documentDate?: string;
     documentFile?: RecordFile | null;
 
-    // Line Items Tab
-    currency: string;
-    groupName: string;
+    // Line Items Tab (no currency: it is set per quotation)
     lineItems: OpportunityLineItem[];
     lumpSumDiscount: number;
     totalAmount: number;
@@ -145,24 +131,7 @@ export const SMALL_COMMISSION_LIMIT = 1000;
 /** Sales Stage that needs a document: Add Document Yes, with the file (Upload Doc). */
 export const PO_SALES_STAGE = 'PO';
 
-export const OPPORTUNITY_CURRENCIES: string[] = [
-    'Indian Rupee: ₹',
-    'US Dollar: $',
-    'Euro: €',
-    'GBP: £',
-    'AED: د.إ',
-];
-
 export const OPPORTUNITY_DOCUMENT_OPTIONS: string[] = [
     'No',
     'Yes',
-];
-
-export const OPPORTUNITY_TAX_RATES: string[] = [
-    '--None--',
-    'GST 18%',
-    'GST 12%',
-    'GST 5%',
-    'GST 28%',
-    'GST 0%',
 ];
