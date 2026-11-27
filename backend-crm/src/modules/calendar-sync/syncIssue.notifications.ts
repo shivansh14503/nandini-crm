@@ -2,12 +2,12 @@ import { ENV } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
 import { prisma } from '../../config/prisma.js';
 import { notify, type NotificationInput } from '../notifications/notification.producer.js';
-import { ADMIN_ROLES } from '../user-admin/roles.js';
+import { adminRoleNames, ensureFresh } from '../roles/roleRegistry.js';
 import { ADMIN_INTEGRATIONS_ENTITY_MODULE, CALENDAR_PROVIDER_LABELS, PEOPLE_CALENDAR_PROBLEMS_ENTITY_ID, type CalendarProvider } from './connection.constants.js';
 import { ADMIN_ERROR_MESSAGES, type TokenErrorCode } from './syncErrors.js';
 
 /**
- * `calendar_sync_issue` (addendum AC9, §4.4): calendar sync problems go to **admins** (ADMIN_ROLES), never to the
+ * `calendar_sync_issue` (addendum AC9, §4.4): calendar sync problems go to **admins** (roles with the admin panel), never to the
  * employee, who can't fix anything themselves. A system kind: always delivers (no UserPreference column).
  *   - app-level (a provider can't be used): one per provider + code + business day,
  *     dedupe `calendar_sync_issue:<provider>:<code>:<business date>:<admin>`; opens Admin › API Integrations.
@@ -22,7 +22,8 @@ export function businessDateOf(now: Date): string {
 
 /** Active admin logins (the recipients). */
 export async function adminRecipients(): Promise<string[]> {
-    const rows = await prisma.user.findMany({ where: { isActive: true, role: { in: [...ADMIN_ROLES] } }, select: { username: true } });
+    await ensureFresh();
+    const rows = await prisma.user.findMany({ where: { isActive: true, role: { in: adminRoleNames() } }, select: { username: true } });
     return rows.map((row) => row.username);
 }
 

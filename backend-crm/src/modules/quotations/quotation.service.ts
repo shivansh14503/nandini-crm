@@ -150,7 +150,7 @@ export const quotationService = {
         const page = parsePagination(query, QUOTATION_SORT_FIELDS);
         const filters = quotationListQuerySchema.parse(query ?? {});
 
-        const where: Prisma.QuotationWhereInput = { isDeleted: false, AND: [buildAccessScopeWhere(user, 'assignedTo')] };
+        const where: Prisma.QuotationWhereInput = { isDeleted: false, AND: [buildAccessScopeWhere(user, 'assignedTo', 'quotations', 'view')] };
         if (filters.status?.length) where.status = { in: filters.status };
         if (filters.quoteStage?.length) where.quoteStage = { in: filters.quoteStage };
         if (filters.opportunityId) where.opportunityId = filters.opportunityId;
@@ -182,7 +182,7 @@ export const quotationService = {
     async getById(id: string, user: AuthUser): Promise<QuotationDto> {
         const row = await prisma.quotation.findFirst({ where: { id, isDeleted: false }, include });
         if (!row) throw notFound();
-        assertRecordAccess(user, row);
+        assertRecordAccess(user, row, 'quotations', 'view');
         return toQuotationDto(row);
     },
 
@@ -207,7 +207,7 @@ export const quotationService = {
             await lockRecords(tx, 'quotation', [id]);
             const existing = await tx.quotation.findFirst({ where: { id, isDeleted: false }, include });
             if (!existing) throw notFound();
-            assertRecordAccess(user, existing);
+            assertRecordAccess(user, existing, 'quotations', 'edit');
 
             const before = toQuotationDto(existing);
             const merged: Record<string, unknown> = mergePatch(before, patch);
@@ -245,7 +245,7 @@ export const quotationService = {
             await lockRecords(tx, 'quotation', [id]);
             const existing = await tx.quotation.findFirst({ where: { id, isDeleted: false }, select: OWNER_SELECT });
             if (!existing) throw notFound();
-            assertRecordAccess(user, existing);
+            assertRecordAccess(user, existing, 'quotations', 'delete');
             await tx.quotation.update({ where: { id }, data: softDeleteData(user) });
             await auditService.record(tx, { entityType: 'Quotation', entityId: id, action: 'DELETE', changedBy: user.username });
         });
@@ -270,7 +270,7 @@ export const quotationService = {
         const result = await runInTransaction(async (tx) => {
             await lockRecords(tx, 'quotation', ids);
             const live = await tx.quotation.findMany({ where: { id: { in: ids }, isDeleted: false }, select: { id: true, ...OWNER_SELECT } });
-            for (const row of live) assertRecordAccess(user, row);
+            for (const row of live) assertRecordAccess(user, row, 'quotations', 'delete');
             const liveIds = live.map((row) => row.id);
             if (liveIds.length > 0) {
                 await tx.quotation.updateMany({ where: { id: { in: liveIds } }, data: softDeleteData(user) });

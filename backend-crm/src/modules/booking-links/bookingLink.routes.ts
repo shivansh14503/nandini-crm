@@ -1,9 +1,8 @@
 import { Router, type Request, type Response } from 'express';
-import { authenticate, requireRole } from '../../middlewares/authMiddleware.js';
+import { authenticate, requireAdmin } from '../../middlewares/authMiddleware.js';
 import { validateRequest } from '../../middlewares/validateRequest.js';
 import { sendCreated, sendSuccess } from '../../utils/apiResponse.js';
 import { requireUser } from '../../utils/requestContext.js';
-import { FORM_CONFIG_ADMIN_ROLES } from '../form-configs/formConfig.routes.js';
 import { bookingLinkService } from './bookingLink.service.js';
 import { linkIdParamSchema } from './bookingLink.validator.js';
 
@@ -35,7 +34,7 @@ import { linkIdParamSchema } from './bookingLink.validator.js';
 const router = Router();
 router.use(authenticate);
 
-const admins = requireRole(...FORM_CONFIG_ADMIN_ROLES);
+const admins = requireAdmin;
 
 router.get('/access', async (req: Request, res: Response) => {
     res.setHeader('Cache-Control', 'no-store');

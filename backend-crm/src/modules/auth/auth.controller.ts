@@ -9,7 +9,7 @@ import { sendSuccess } from '../../utils/apiResponse.js';
 import { HttpError } from '../../utils/httpError.js';
 import { requireUser } from '../../utils/requestContext.js';
 import { logger } from '../../config/logger.js';
-import type { AuthMeDto } from '../profile/profile.dto.js';
+import { accessDtoOf, type AuthMeDto } from '../profile/profile.dto.js';
 
 // Responses keep the existing `AuthResponse` / `LogoutResponse` shapes the frontend's AuthContext reads.
 
@@ -35,7 +35,7 @@ export async function logout(req: Request, res: Response): Promise<void> {
 
 /**
  * GET /api/auth/me — requires `authenticate`. Read from the database (not the JWT) so a name or photo change shows at
- * once: `{ id, username, role, fullName, firstName, lastName, photoUrl }`. 401 when the account no longer exists.
+ * once: `{ id, username, role, fullName, firstName, lastName, photoUrl, access: { adminPanel, superAdmin, permissions } }`. 401 when the account no longer exists.
  * When the database can't answer (outage, a paused Azure SQL resuming), it falls back to the verified JWT's claims
  * with no name or photo, so a database blip never signs the user out.
  */
@@ -47,7 +47,16 @@ export async function getMe(req: Request, res: Response): Promise<void> {
     } catch (err) {
         if (err instanceof HttpError) throw err;
         logger.warn({ err: (err as Error).message, userId: authUser.id }, 'GET /api/auth/me: database unavailable; answering from the token');
-        user = { id: authUser.id, username: authUser.username, role: authUser.role, fullName: '', firstName: null, lastName: null, photoUrl: null };
+        user = {
+            id: authUser.id,
+            username: authUser.username,
+            role: authUser.role,
+            fullName: '',
+            firstName: null,
+            lastName: null,
+            photoUrl: null,
+            access: accessDtoOf(authUser.role),
+        };
     }
     res.status(StatusCodes.OK).json({ status: 'ok', user });
 }

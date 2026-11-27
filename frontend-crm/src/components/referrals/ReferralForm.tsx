@@ -157,7 +157,7 @@ export default function ReferralForm({ mode = 'create', initialData, referralId,
             .then((found) => {
                 if (active && found) {
                     reset({ ...REFERRAL_DEFAULT_FORM, ...found });
-                    setAudit({ createdAt: found.createdAt, createdBy: found.createdBy, updatedAt: found.updatedAt, updatedBy: found.updatedBy });
+                    setAudit({ createdAt: found.createdAt, createdBy: found.createdBy, updatedAt: found.updatedAt, updatedBy: found.updatedBy, assignedTo: found.assignedTo });
                 }
             })
             .catch(() => {})

@@ -28,6 +28,9 @@ import { useSearchScope } from '../search/SearchScope';
 import { moduleKeyFrom, moduleTableTintVars } from '@/theme/moduleColors';
 import { useScorecardColumns } from './scorecard/scorecardDisplay';
 import { useCloseOnOutsideClick } from './Drawer/useCloseOnOutsideClick';
+import { MasterPermissionsContext, type MasterPermissions } from './masterPermissions';
+import { usePermissions } from '@/hooks/usePermissions';
+import type { OwnedRecord, PermissionModule } from '@/utils/permissions';
 import { onImportFinished } from '@/services/importTracker';
 import type { ImportEntityType } from './import/types';
 
@@ -65,6 +68,13 @@ export interface CommonMasterViewProps<T = unknown, TFilter extends string = str
      * Identifies this table. When set, column visibility is persisted to localStorage.
      */
     tableId?: string;
+    /**
+     * Admin › Roles module whose permissions shape the page (default: the module `tableId` names; null for none):
+     * New / Import (via MasterHeaderActions), row Edit / Delete, Bulk delete and the empty state's create button
+     * show only when the role allows them (Own: only on the user's own or created rows), and a role with View None
+     * sees a notice instead of the list.
+     */
+    permissionModule?: PermissionModule | null;
     /**
      * Form whose fields the column manager offers (every built-in and custom field). Defaults to `tableId` when
      * that is a form module key; pass `null` to offer only the hand-built columns.
@@ -237,9 +247,10 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
     filters,
     headerActions,
     tableId,
+    permissionModule: permissionModuleProp,
     formModule,
     tableFilter,
-    searchConfig,
+    searchConfig: searchConfigProp,
     toolbar,
     columns,
     data,
@@ -254,11 +265,11 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
     sortOrder,
     onSort,
     onView,
-    onEdit,
+    onEdit: onEditProp,
     getViewHref,
-    getEditHref,
-    onDelete,
-    canDeleteRow,
+    getEditHref: getEditHrefProp,
+    onDelete: onDeleteProp,
+    canDeleteRow: canDeleteRowProp,
     onRowClick,
     getRowHref,
     activeRowId,
@@ -273,7 +284,7 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
     emptyTitle,
     emptyDescription,
     emptyActionLabel,
-    onEmptyAction,
+    onEmptyAction: onEmptyActionProp,
     minHeight = 280,
     loading,
     table,
@@ -290,6 +301,34 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
     contentSx,
     paperSx,
 }: CommonMasterViewProps<T, TFilter>) {
+    // ── Role permissions (Admin › Roles) ──
+    const { level, canRecord } = usePermissions();
+    const permissionModule = permissionModuleProp === undefined ? (moduleKeyFrom(tableId) ?? null) : permissionModuleProp;
+    const levelFor = (action: 'view' | 'create' | 'edit' | 'delete' | 'export' | 'import') => (permissionModule ? level(permissionModule, action) : 'all');
+    const viewLevel = levelFor('view');
+    const editLevel = levelFor('edit');
+    const deleteLevel = levelFor('delete');
+    const masterPermissions = React.useMemo<MasterPermissions>(
+        () => ({ canCreate: levelFor('create') !== 'none', canImport: levelFor('import') !== 'none', canExport: levelFor('export') !== 'none' }),
+        // levelFor reads `level` and the module only.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [level, permissionModule],
+    );
+    const ownsRow = (action: 'edit' | 'delete', row: T) => (permissionModule ? canRecord(permissionModule, action, row as OwnedRecord) : true);
+    const onEdit = editLevel === 'none' ? undefined : onEditProp;
+    const getEditHref =
+        editLevel === 'none' || !getEditHrefProp
+            ? undefined
+            : editLevel === 'own'
+              ? (row: T) => (ownsRow('edit', row) ? getEditHrefProp(row) : undefined)
+              : getEditHrefProp;
+    const onDelete = deleteLevel === 'none' ? undefined : onDeleteProp;
+    const canDeleteRow =
+        deleteLevel === 'own' ? (row: T) => ownsRow('delete', row) && (canDeleteRowProp?.(row) ?? true) : canDeleteRowProp;
+    const onEmptyAction = masterPermissions.canCreate ? onEmptyActionProp : undefined;
+    const searchConfig =
+        searchConfigProp && deleteLevel === 'none' && searchConfigProp.onBulkDelete ? { ...searchConfigProp, onBulkDelete: undefined } : searchConfigProp;
+
     const [isRightDrawerCollapsed, setIsRightDrawerCollapsed] = React.useState(false);
     // A secondary drawer is only active when it is mounted with a populated entity
     const hasSecondaryDrawer = Boolean(
@@ -472,7 +511,34 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
         pagination
     );
 
+    if (viewLevel === 'none') {
+        return (
+            <Box sx={{ flex: 1, px: { xs: 2, md: 3 }, pt: 2, pb: 2, minWidth: 0, backgroundColor: 'var(--mui-palette-background-subtle)', ...sx }}>
+                {!embedded && (
+                    <Box sx={{ mb: 1.5, minWidth: 0 }}>
+                        {breadcrumbs || <AppBreadcrumbs items={breadcrumbItems} />}
+                    </Box>
+                )}
+                <Paper
+                    elevation={0}
+                    sx={{
+                        p: { xs: 2.5, md: 4 },
+                        borderRadius: '12px',
+                        border: '1px solid var(--mui-palette-border-main)',
+                        backgroundColor: 'var(--mui-palette-background-paper)',
+                        color: 'var(--mui-palette-text-secondary)',
+                        fontSize: '0.88rem',
+                        textAlign: 'center',
+                    }}
+                >
+                    Your role doesn’t give access to this module. Ask an administrator if you need it.
+                </Paper>
+            </Box>
+        );
+    }
+
     return (
+        <MasterPermissionsContext.Provider value={masterPermissions}>
         <Box
             sx={{
                 flex: 1,
@@ -680,6 +746,7 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
             {/* ── Toast Notifications ──────────────────────────────────────── */}
             {toast}
         </Box>
+        </MasterPermissionsContext.Provider>
     );
 }
 

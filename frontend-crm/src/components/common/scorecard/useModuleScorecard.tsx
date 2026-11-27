@@ -6,7 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useFormConfigs, useFormConfigsQuery } from '@/hooks/queries/useFormConfigs';
 import { useScorecard, useScorecards } from '@/hooks/queries/useScorecards';
 import type { CrmModuleKey } from '@/types/formConfig.types';
-import { isAdminRole } from '@/utils/adminRoles';
+import { isAdminUser } from '@/utils/adminRoles';
 import { useDisplayFormats } from '@/utils/formats';
 import { StatusSummaryCards, StatusSummaryCardsSkeleton, type StatusSummaryItem } from '../StatusSummaryCards';
 import { SCORECARD_MODULES, scorecardAmountsOf, useDefaultScorecard } from './scorecardModules';
@@ -111,7 +111,7 @@ export function useModuleScorecard<T>({ module, rows, onActiveChange }: UseModul
         activeId,
         setActiveId,
         matches,
-        settingsHref: isAdminRole(user?.role) ? ROUTES.LIST_SCORECARDS_FOR(module) : undefined,
+        settingsHref: isAdminUser(user) ? ROUTES.LIST_SCORECARDS_FOR(module) : undefined,
     };
 }
 

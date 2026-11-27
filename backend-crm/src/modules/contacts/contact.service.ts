@@ -135,7 +135,7 @@ export const contactService = {
         const page = parsePagination(query, CONTACT_SORT_FIELDS);
         const filters = contactListQuerySchema.parse(query ?? {});
 
-        const where: Prisma.ContactWhereInput = { isDeleted: false, AND: [buildAccessScopeWhere(user, 'assignedTo')] };
+        const where: Prisma.ContactWhereInput = { isDeleted: false, AND: [buildAccessScopeWhere(user, 'assignedTo', 'contacts', 'view')] };
         if (filters.organizationId) where.organizationId = filters.organizationId;
         if (filters.assignedTo) where.assignedTo = filters.assignedTo;
         if (filters.mine) where.assignedTo = user.username;
@@ -167,7 +167,7 @@ export const contactService = {
     async getById(id: string, user: AuthUser): Promise<ContactDto> {
         const row = await prisma.contact.findFirst({ where: { id, isDeleted: false }, include });
         if (!row) throw notFound();
-        assertRecordAccess(user, row);
+        assertRecordAccess(user, row, 'contacts', 'view');
         return toContactDto(row);
     },
 
@@ -191,7 +191,7 @@ export const contactService = {
             await lockRecords(tx, 'contact', [id]);
             const existing = await tx.contact.findFirst({ where: { id, isDeleted: false }, include });
             if (!existing) throw notFound();
-            assertRecordAccess(user, existing);
+            assertRecordAccess(user, existing, 'contacts', 'edit');
 
             const before = toContactDto(existing);
             const merged: Record<string, unknown> = { ...before, ...patch };
@@ -234,7 +234,7 @@ export const contactService = {
             await lockRecords(tx, 'contact', [id]);
             const existing = await tx.contact.findFirst({ where: { id, isDeleted: false }, select: OWNER_SELECT });
             if (!existing) throw notFound();
-            assertRecordAccess(user, existing);
+            assertRecordAccess(user, existing, 'contacts', 'delete');
             await tx.contact.update({ where: { id }, data: softDeleteData(user) });
             await auditService.record(tx, { entityType: 'Contact', entityId: id, action: 'DELETE', changedBy: user.username });
         });
@@ -260,7 +260,7 @@ export const contactService = {
         const result = await runInTransaction(async (tx) => {
             await lockRecords(tx, 'contact', ids);
             const live = await tx.contact.findMany({ where: { id: { in: ids }, isDeleted: false }, select: { id: true, ...OWNER_SELECT } });
-            for (const row of live) assertRecordAccess(user, row);
+            for (const row of live) assertRecordAccess(user, row, 'contacts', 'delete');
             const liveIds = live.map((row) => row.id);
             if (liveIds.length > 0) {
                 await tx.contact.updateMany({ where: { id: { in: liveIds } }, data: softDeleteData(user) });

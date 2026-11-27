@@ -1,8 +1,7 @@
 import { Router, type Request, type Response } from 'express';
-import { authenticate, requireRole } from '../../middlewares/authMiddleware.js';
+import { authenticate, requireAdmin } from '../../middlewares/authMiddleware.js';
 import { sendSuccess } from '../../utils/apiResponse.js';
 import { requireUser } from '../../utils/requestContext.js';
-import { FORM_CONFIG_ADMIN_ROLES } from '../form-configs/formConfig.routes.js';
 import { auditActionsService } from './auditActions.service.js';
 import { auditAdminService } from './auditAdmin.service.js';
 import { auditExportService } from './auditExport.service.js';
@@ -56,7 +55,7 @@ import { auditLedgerService } from './auditLedger.service.js';
  */
 const router = Router();
 
-router.use(authenticate, requireRole(...FORM_CONFIG_ADMIN_ROLES));
+router.use(authenticate, requireAdmin);
 
 router.get('/', async (req: Request, res: Response) => {
     sendSuccess(res, await auditAdminService.list(req.query));

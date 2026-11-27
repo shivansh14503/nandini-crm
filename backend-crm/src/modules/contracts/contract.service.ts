@@ -115,7 +115,7 @@ export const contractService = {
         const page = parsePagination(query, CONTRACT_SORT_FIELDS);
         const filters = contractListQuerySchema.parse(query ?? {});
 
-        const and: Prisma.ContractWhereInput[] = [{ isDeleted: false }, buildAccessScopeWhere(user, 'assignedTo')];
+        const and: Prisma.ContractWhereInput[] = [{ isDeleted: false }, buildAccessScopeWhere(user, 'assignedTo', 'contracts', 'view')];
         if (filters.status?.length) and.push({ status: { in: filters.status } });
         if (filters.excludeStatus?.length) and.push({ status: { notIn: filters.excludeStatus } });
         if (filters.organizationId) and.push({ organizationId: filters.organizationId });
@@ -153,7 +153,7 @@ export const contractService = {
     async getById(id: string, user: AuthUser): Promise<ContractDto> {
         const row = await prisma.contract.findFirst({ where: { id, isDeleted: false } });
         if (!row) throw notFound();
-        assertRecordAccess(user, row);
+        assertRecordAccess(user, row, 'contracts', 'view');
         return toContractDto(row);
     },
 
@@ -173,7 +173,7 @@ export const contractService = {
             await lockRecords(tx, 'contract', [id]);
             const existing = await tx.contract.findFirst({ where: { id, isDeleted: false } });
             if (!existing) throw notFound();
-            assertRecordAccess(user, existing);
+            assertRecordAccess(user, existing, 'contracts', 'edit');
 
             const before = toContractDto(existing);
             const merged: Record<string, unknown> = { ...before, ...patch };
@@ -216,7 +216,7 @@ export const contractService = {
             await lockRecords(tx, 'contract', [id]);
             const existing = await tx.contract.findFirst({ where: { id, isDeleted: false }, select: OWNER_SELECT });
             if (!existing) throw notFound();
-            assertRecordAccess(user, existing);
+            assertRecordAccess(user, existing, 'contracts', 'delete');
             await tx.contract.update({ where: { id }, data: softDeleteData(user) });
             await auditService.record(tx, { entityType: 'Contract', entityId: id, action: 'DELETE', changedBy: user.username });
         });
@@ -241,7 +241,7 @@ export const contractService = {
         const result = await runInTransaction(async (tx) => {
             await lockRecords(tx, 'contract', ids);
             const live = await tx.contract.findMany({ where: { id: { in: ids }, isDeleted: false }, select: { id: true, ...OWNER_SELECT } });
-            for (const row of live) assertRecordAccess(user, row);
+            for (const row of live) assertRecordAccess(user, row, 'contracts', 'delete');
             const liveIds = live.map((row) => row.id);
             if (liveIds.length > 0) {
                 await tx.contract.updateMany({ where: { id: { in: liveIds } }, data: softDeleteData(user) });

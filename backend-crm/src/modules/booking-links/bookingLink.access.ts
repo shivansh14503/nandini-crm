@@ -1,19 +1,18 @@
 import type { AuthUser } from '../../types/user.types.js';
-import { hasGlobalAccess } from '../shared/accessControl.js';
-import { isAdminAccessRole } from '../user-admin/roles.js';
+import { hasGlobalAccess, isAdminUser } from '../shared/accessControl.js';
 import type { BookingCreatorScope } from './bookingLink.constants.js';
 import type { BookingSettings } from './bookingLink.settings.js';
 
 /** Who may do what with booking links (pure). */
 
-/** Admin roles (FORM_CONFIG_ADMIN_ROLES, matched like `requireRole`). */
-export const isBookingAdmin = (user: Pick<AuthUser, 'role'>): boolean => isAdminAccessRole(user.role);
+/** Roles with the admin panel (Admin › Roles, as `requireAdmin`). */
+export const isBookingAdmin = (user: Pick<AuthUser, 'role'>): boolean => isAdminUser(user);
 
 /** Whether a role may own a booking link under `scope` (admins and, for `managers`, global-access roles). */
 export function roleMayOwnLinks(user: Pick<AuthUser, 'role'>, scope: BookingCreatorScope): boolean {
     if (isBookingAdmin(user)) return true;
     if (scope === 'everyone') return true;
-    if (scope === 'managers') return hasGlobalAccess(user);
+    if (scope === 'managers') return hasGlobalAccess(user, 'activities', 'view');
     return false;
 }
 

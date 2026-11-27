@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticate, requireRole } from '../../middlewares/authMiddleware.js';
+import { authenticate, requireAdmin } from '../../middlewares/authMiddleware.js';
 import { validateRequest } from '../../middlewares/validateRequest.js';
 import { formConfigController } from './formConfig.controller.js';
 import {
@@ -10,9 +10,6 @@ import {
     optionIdParamSchema,
     sectionParamSchema,
 } from './formConfig.validator.js';
-
-/** Roles allowed to change forms and dropdowns. */
-export const FORM_CONFIG_ADMIN_ROLES = ['Admin', 'Administrator', 'Super Admin'] as const;
 
 /**
  * /api/form-configs
@@ -42,7 +39,7 @@ router.use(authenticate);
 
 router.get('/', formConfigController.getAll);
 
-const admin = requireRole(...FORM_CONFIG_ADMIN_ROLES);
+const admin = requireAdmin;
 
 router.post('/categories', admin, formConfigController.createCategory);
 router.patch('/categories/:categoryKey', admin, validateRequest({ params: categoryKeyParamSchema }), formConfigController.updateCategory);

@@ -1,11 +1,10 @@
 import { Router, type Request, type Response } from 'express';
-import { authenticate, requireRole } from '../../middlewares/authMiddleware.js';
+import { authenticate, requireAdmin } from '../../middlewares/authMiddleware.js';
 import { sendCreated, sendSuccess } from '../../utils/apiResponse.js';
 import { requireUser } from '../../utils/requestContext.js';
-import { FORM_CONFIG_ADMIN_ROLES } from '../form-configs/formConfig.routes.js';
 import { drawerLayoutService, drawerPieceService } from './drawerLayout.service.js';
 
-const admin = requireRole(...FORM_CONFIG_ADMIN_ROLES);
+const admin = requireAdmin;
 
 /**
  * /api/drawer-layouts   (record side drawer layouts, Admin › Form Customization › Drawer Layout)

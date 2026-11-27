@@ -1,8 +1,7 @@
 import { Router, type Request, type Response } from 'express';
-import { authenticate, requireRole } from '../../middlewares/authMiddleware.js';
+import { authenticate, requireAdmin } from '../../middlewares/authMiddleware.js';
 import { sendCreated, sendSuccess } from '../../utils/apiResponse.js';
 import { requireUser } from '../../utils/requestContext.js';
-import { FORM_CONFIG_ADMIN_ROLES } from '../form-configs/formConfig.routes.js';
 import { cityIdParamSchema } from './city.validator.js';
 import { cityService } from './city.service.js';
 
@@ -16,7 +15,7 @@ import { cityService } from './city.service.js';
  *   DELETE /:id          { action?: 'move' | 'clear', targetCityId? }  required when records use it (409 CITY_IN_USE)
  */
 const router = Router();
-router.use(authenticate, requireRole(...FORM_CONFIG_ADMIN_ROLES));
+router.use(authenticate, requireAdmin);
 
 const cityId = (req: Request) => cityIdParamSchema.parse(req.params).id;
 

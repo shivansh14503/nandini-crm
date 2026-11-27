@@ -54,6 +54,8 @@ import { startWorkers, stopWorkers } from './jobs/workers/index.js';
 import { errorHandler, notFoundHandler } from './middlewares/errorHandler.js';
 import integrationRouter from './modules/integrations/integration.routes.js';
 import userAdminRouter from './modules/user-admin/userAdmin.routes.js';
+import roleRouter from './modules/roles/role.routes.js';
+import { seedRolesSafely } from './modules/roles/roleSeed.js';
 import { serializeRequestForLog } from './utils/redactUrl.js';
 import { isAppOrigin } from './config/origins.js';
 import calendarConnectionRouter from './modules/calendar-sync/connection.routes.js';
@@ -156,6 +158,7 @@ app.use('/api/me', profileRouter);
 app.use('/api/user-photos', userPhotoRouter);
 app.use('/api/admin/integrations', integrationRouter);
 app.use('/api/admin/users', userAdminRouter);
+app.use('/api/admin/roles', roleRouter);
 app.use('/api/calendar-connections', calendarConnectionRouter);
 app.use('/api/booking-links', bookingLinkRouter);
 app.use('/api/email-logs', emailLogRouter);
@@ -186,6 +189,8 @@ async function start(): Promise<Server> {
     await loadProductCatalogSheetSafely();
     // Built-in PDF templates (Classic / Modern / Compact); admin-created templates are never touched.
     await seedPdfTemplatesSafely();
+    // Admin › Roles: a row for every role users hold (with the access its name gave before); saved roles untouched.
+    await seedRolesSafely();
     // Bulk email checks a restart interrupted (Settings › Email Validation) carry on.
     resumeEmailValidationRuns();
     if (ENV.RUN_WORKERS) startWorkers();

@@ -143,7 +143,7 @@ export default function ContactForm({
                 if (active && found) {
                     reset({ ...DEFAULT_FORM, ...found });
                     setRecordCode(found.contactCode ?? '');
-                    setAudit({ createdAt: found.createdAt, createdBy: found.createdBy, updatedAt: found.updatedAt, updatedBy: found.updatedBy });
+                    setAudit({ createdAt: found.createdAt, createdBy: found.createdBy, updatedAt: found.updatedAt, updatedBy: found.updatedBy, assignedTo: found.assignedTo });
                 }
             })
             .catch(() => {})

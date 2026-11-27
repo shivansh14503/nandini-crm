@@ -1,7 +1,7 @@
 import { prisma } from '../../config/prisma.js';
 import { Prisma } from '../../generated/prisma/client.js';
 import type { AuthUser } from '../../types/user.types.js';
-import { hasGlobalAccess } from '../shared/accessControl.js';
+import { accessLevel, buildAccessScopeWhere } from '../shared/accessControl.js';
 import { CLOSED_SALES_STAGES } from '../opportunities/opportunity.validator.js';
 
 /**
@@ -26,8 +26,7 @@ const ID_BATCH = 1000;
 
 /** Prisma `where` for products used on at least one live opportunity the viewer may see. */
 export function usedProductWhere(user: AuthUser): Prisma.ProductWhereInput {
-    const opportunity: Prisma.OpportunityWhereInput = { isDeleted: false };
-    if (!hasGlobalAccess(user)) opportunity.OR = [{ assignedTo: user.username }, { createdBy: user.username }];
+    const opportunity: Prisma.OpportunityWhereInput = { isDeleted: false, AND: [buildAccessScopeWhere(user, 'assignedTo', 'opportunities', 'view')] };
     return { opportunityLineItems: { some: { opportunity } } };
 }
 
@@ -46,7 +45,14 @@ interface UsageRow {
 export async function loadProductUsage(productIds: readonly string[], user: AuthUser): Promise<Map<string, ProductUsage>> {
     const usage = new Map<string, ProductUsage>();
     const ids = [...new Set(productIds)];
-    const scope = hasGlobalAccess(user) ? Prisma.empty : Prisma.sql`AND (o.[assignedTo] = ${user.username} OR o.[createdBy] = ${user.username})`;
+    // The opportunities the viewer may see (Admin › Roles: Opportunities › View).
+    const level = accessLevel(user, 'opportunities', 'view');
+    const scope =
+        level === 'all'
+            ? Prisma.empty
+            : level === 'own'
+              ? Prisma.sql`AND (o.[assignedTo] = ${user.username} OR o.[createdBy] = ${user.username})`
+              : Prisma.sql`AND 1 = 0`;
     for (let i = 0; i < ids.length; i += ID_BATCH) {
         const batch = ids.slice(i, i + ID_BATCH);
         const rows = await prisma.$queryRaw<UsageRow[]>(Prisma.sql`

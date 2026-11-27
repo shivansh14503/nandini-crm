@@ -23,7 +23,7 @@ export const documentService = {
         const page = parsePagination(query, DOCUMENT_SORT_FIELDS);
         const filters = documentListQuerySchema.parse(query ?? {});
 
-        const opportunity: Prisma.OpportunityWhereInput[] = [{ isDeleted: false }, buildAccessScopeWhere(user, 'assignedTo')];
+        const opportunity: Prisma.OpportunityWhereInput[] = [{ isDeleted: false }, buildAccessScopeWhere(user, 'assignedTo', 'documents', 'view')];
         if (filters.opportunityId) opportunity.push({ id: filters.opportunityId });
         if (filters.organizationId) opportunity.push({ organizationId: filters.organizationId });
         if (filters.contactId) opportunity.push({ contactId: filters.contactId });
@@ -60,7 +60,7 @@ export const documentService = {
     async getById(id: string, user: AuthUser): Promise<DocumentDto> {
         const row = await prisma.document.findFirst({ where: { id, opportunity: { isDeleted: false } }, include: DOCUMENT_INCLUDE });
         if (!row) throw notFound();
-        assertRecordAccess(user, row.opportunity);
+        assertRecordAccess(user, row.opportunity, 'documents', 'view');
         return toDocumentDto(row);
     },
 };

@@ -209,7 +209,7 @@ export function leadFollowupWhere(
 ): Prisma.LeadWhereInput {
     const and: Prisma.LeadWhereInput[] = [
         { isDeleted: false },
-        buildAccessScopeWhere(user, 'assignedTo'),
+        buildAccessScopeWhere(user, 'assignedTo', 'leads', 'view'),
         { assignedTo: { in: [...filters.users] } },
         { status: { notIn: [...closingStatuses] } },
         { nextFollowupDate: days },
@@ -222,7 +222,7 @@ export function leadFollowupWhere(
 export function opportunityFollowupWhere(user: AuthUser, filters: Pick<CalendarFilters, 'users' | 'types'>, days: FollowupDayFilter): Prisma.OpportunityWhereInput {
     const and: Prisma.OpportunityWhereInput[] = [
         { isDeleted: false },
-        buildAccessScopeWhere(user, 'assignedTo'),
+        buildAccessScopeWhere(user, 'assignedTo', 'opportunities', 'view'),
         { assignedTo: { in: [...filters.users] } },
         { salesStage: { notIn: [...CLOSED_SALES_STAGES] } },
         { nextFollowupDate: days },
@@ -236,7 +236,7 @@ export function contractRenewalWhere(user: AuthUser, filters: Pick<CalendarFilte
     return {
         AND: [
             { isDeleted: false },
-            buildAccessScopeWhere(user, 'assignedTo'),
+            buildAccessScopeWhere(user, 'assignedTo', 'contracts', 'view'),
             { assignedTo: { in: [...filters.users] } },
             { status: { not: CONTRACT_EXPIRED_STATUS } },
             { renewalReminderDate: range },

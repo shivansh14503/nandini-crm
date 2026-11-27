@@ -14,6 +14,6 @@ import { contactController } from './contact.controller.js';
  */
 const router = Router();
 router.use(authenticate);
-registerCrudRoutes(router, contactController);
+registerCrudRoutes(router, contactController, 'contacts');
 
 export default router;

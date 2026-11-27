@@ -14,6 +14,6 @@ import { referralController } from './referral.controller.js';
  */
 const router = Router();
 router.use(authenticate);
-registerCrudRoutes(router, referralController);
+registerCrudRoutes(router, referralController, 'referrals');
 
 export default router;

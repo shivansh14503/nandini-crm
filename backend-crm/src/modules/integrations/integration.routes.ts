@@ -1,12 +1,11 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
-import { authenticate, requireRole } from '../../middlewares/authMiddleware.js';
+import { authenticate, requireAdmin } from '../../middlewares/authMiddleware.js';
 import { createRateLimiter } from '../../middlewares/rateLimiter.js';
 import { validateRequest } from '../../middlewares/validateRequest.js';
 import { sendSuccess } from '../../utils/apiResponse.js';
 import { HttpError } from '../../utils/httpError.js';
 import { requireUser } from '../../utils/requestContext.js';
-import { FORM_CONFIG_ADMIN_ROLES } from '../form-configs/formConfig.routes.js';
 import type { IntegrationProviderKey } from './integration.constants.js';
 import { integrationService } from './integration.service.js';
 import { saveCalendarSettings } from './integration.settings.js';
@@ -76,7 +75,7 @@ import {
  * Removed in P2-2b: GET /connections and POST /connections/:id/disconnect (the People tab covers both).
  */
 const router = Router();
-router.use(authenticate, requireRole(...FORM_CONFIG_ADMIN_ROLES));
+router.use(authenticate, requireAdmin);
 
 const TEST_LIMIT = 6;
 const TEST_WINDOW_SECONDS = 60;

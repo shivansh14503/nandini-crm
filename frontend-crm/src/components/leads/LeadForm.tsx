@@ -223,7 +223,7 @@ export default function LeadForm({
                     reset(mode === 'edit' ? { ...loaded, customerResponse: '', remarks: '' } : loaded);
                     setSaved({ status: found.status ?? '', rating: found.rating ?? '', followupType: found.followupType ?? '' });
                     setRecordCode(found.leadCode ?? '');
-                    setAudit({ createdAt: found.createdAt, createdBy: found.createdBy, updatedAt: found.updatedAt, updatedBy: found.updatedBy });
+                    setAudit({ createdAt: found.createdAt, createdBy: found.createdBy, updatedAt: found.updatedAt, updatedBy: found.updatedBy, assignedTo: found.assignedTo });
                 }
             })
             .catch(() => {})

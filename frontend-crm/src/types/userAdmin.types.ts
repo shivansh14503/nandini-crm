@@ -34,7 +34,7 @@ export interface AdminUserDto {
     lastName: string | null;
     email: string | null;
     role: string;
-    /** The highest access the role gives (admin panel, then every record, else own records only). */
+    /** The role's access summary (admin panel, every record, own records, or a custom mix; Admin › Roles). */
     roleAccess: RoleAccess;
     department: string | null;
     jobTitle: string | null;
@@ -81,6 +81,8 @@ export interface AdminUserListResponse {
 }
 
 export interface AdminRoleOption {
+    /** Admin › Roles id. */
+    id: number;
     name: string;
     access: RoleAccess;
     /** Opens the admin panel. */

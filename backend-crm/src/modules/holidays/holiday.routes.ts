@@ -1,10 +1,9 @@
 import { Router, type Request, type Response } from 'express';
-import { authenticate, requireRole } from '../../middlewares/authMiddleware.js';
+import { authenticate, requireAdmin } from '../../middlewares/authMiddleware.js';
 import { validateRequest } from '../../middlewares/validateRequest.js';
 import { sendCreated, sendSuccess } from '../../utils/apiResponse.js';
 import { requireUser } from '../../utils/requestContext.js';
 import { idParamSchema, patchBodySchema } from '../../validators/common.js';
-import { FORM_CONFIG_ADMIN_ROLES } from '../form-configs/formConfig.routes.js';
 import { holidayService } from './holiday.service.js';
 import {
     holidayBulkSchema,
@@ -38,7 +37,7 @@ router.get('/calendar', validateRequest({ query: holidayCalendarQuerySchema }), 
     sendSuccess(res, await holidayService.calendar(from, to));
 });
 
-router.use(requireRole(...FORM_CONFIG_ADMIN_ROLES));
+router.use(requireAdmin);
 
 router.get('/', validateRequest({ query: holidayListQuerySchema }), async (req: Request, res: Response) => {
     const result = await holidayService.list(req.query as unknown as HolidayListQuery);

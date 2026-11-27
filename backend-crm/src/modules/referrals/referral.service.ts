@@ -8,7 +8,7 @@ import { HttpError } from '../../utils/httpError.js';
 import { daysAgo } from '../../utils/mappers.js';
 import { parsePagination } from '../../utils/pagination.js';
 import { asPayload, checkModulePayload, loadModuleFieldConfig, validateModulePayload } from '../form-configs/customFieldValidator.js';
-import { assertAssigneeValid, assertRecordAccess } from '../shared/accessControl.js';
+import { assertAssigneeValid, assertRecordAccess, buildAccessScopeWhere } from '../shared/accessControl.js';
 import { emailsInclude, normalizeEmails, replaceEmails } from '../shared/entityEmails.js';
 import { assertEmailsDeliverable, queueEmailVerification } from '../email-verification/emailVerification.service.js';
 import { invalidateSyncedCaches, propagateReferralName, type NameSyncCounts } from '../shared/nameSync.js';
@@ -46,15 +46,16 @@ async function invalidateReferralCaches(synced?: NameSyncCounts): Promise<void> 
 // ── Service ──────────────────────────────────────────────────────────────────
 
 /**
- * Referrals are shared reference data: every user can list and open them (any user may pick any active referral as
- * Referred By). Changing or deleting one takes the same access as a contact: its assignee, its creator or a global role.
+ * Referrals are shared reference data: by default every role lists and opens all of them (any user may pick any active
+ * referral as Referred By; the pickers read the lookups, not this list). Admin › Roles decides View / Edit / Delete:
+ * at "Own", the user's own (assignee or creator) referrals only.
  */
 export const referralService = {
     async list(query: unknown, user: AuthUser): Promise<PaginatedResult<ReferralDto>> {
         const page = parsePagination(query, REFERRAL_SORT_FIELDS);
         const filters = referralListQuerySchema.parse(query ?? {});
 
-        const where: Prisma.ReferralWhereInput = { isDeleted: false };
+        const where: Prisma.ReferralWhereInput = { isDeleted: false, AND: [buildAccessScopeWhere(user, 'assignedTo', 'referrals', 'view')] };
         if (filters.status?.length) where.status = { in: filters.status };
         if (filters.assignedTo) where.assignedTo = filters.assignedTo;
         if (filters.mine) where.assignedTo = user.username;
@@ -79,9 +80,10 @@ export const referralService = {
         return { data: rows.map(toReferralDto), total, page: page.page, limit: page.limit };
     },
 
-    async getById(id: string): Promise<ReferralDto> {
+    async getById(id: string, user: AuthUser): Promise<ReferralDto> {
         const row = await prisma.referral.findFirst({ where: { id, isDeleted: false }, include });
         if (!row) throw notFound();
+        assertRecordAccess(user, row, 'referrals', 'view');
         return toReferralDto(row);
     },
 
@@ -116,7 +118,7 @@ export const referralService = {
             await lockRecords(tx, 'referral', [id]);
             const existing = await tx.referral.findFirst({ where: { id, isDeleted: false }, include });
             if (!existing) throw notFound();
-            assertRecordAccess(user, existing);
+            assertRecordAccess(user, existing, 'referrals', 'edit');
 
             const before = toReferralDto(existing);
             const merged: Record<string, unknown> = { ...before, ...patch };
@@ -156,7 +158,7 @@ export const referralService = {
             await lockRecords(tx, 'referral', [id]);
             const existing = await tx.referral.findFirst({ where: { id, isDeleted: false }, select: OWNER_SELECT });
             if (!existing) throw notFound();
-            assertRecordAccess(user, existing);
+            assertRecordAccess(user, existing, 'referrals', 'delete');
             await tx.referral.update({ where: { id }, data: softDeleteData(user) });
             await auditService.record(tx, { entityType: 'Referral', entityId: id, action: 'DELETE', changedBy: user.username });
         });
@@ -182,7 +184,7 @@ export const referralService = {
         const result = await runInTransaction(async (tx) => {
             await lockRecords(tx, 'referral', ids);
             const live = await tx.referral.findMany({ where: { id: { in: ids }, isDeleted: false }, select: { id: true, ...OWNER_SELECT } });
-            for (const row of live) assertRecordAccess(user, row);
+            for (const row of live) assertRecordAccess(user, row, 'referrals', 'delete');
             const liveIds = live.map((row) => row.id);
             if (liveIds.length > 0) {
                 await tx.referral.updateMany({ where: { id: { in: liveIds } }, data: softDeleteData(user) });

@@ -25,6 +25,8 @@ export type AuditEntityType =
     | 'PartnerCompany'
     | 'Referral'
     | 'User'
+    /** A role of Admin › Roles: its name, description, admin panel switch and per-module permissions. */
+    | 'Role'
     | 'Import'
     | 'DropdownCategory'
     | 'DropdownOption'
@@ -150,6 +152,7 @@ const MODULE_BY_ENTITY: Record<AuditEntityType, string> = {
     PartnerCompany: 'partner-companies',
     Referral: 'referrals',
     User: 'users',
+    Role: 'roles',
     Import: 'imports',
     DropdownCategory: 'form-customization',
     DropdownOption: 'form-customization',
@@ -175,6 +178,7 @@ const MODULE_BY_ENTITY: Record<AuditEntityType, string> = {
 };
 
 const CONFIG_ENTITIES: ReadonlySet<AuditEntityType> = new Set([
+    'Role',
     'DropdownCategory',
     'DropdownOption',
     'FormField',

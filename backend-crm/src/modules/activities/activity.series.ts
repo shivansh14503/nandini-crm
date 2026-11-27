@@ -528,7 +528,7 @@ async function freeSlot(tx: TransactionClient, seriesId: string, slot: Date, exc
 
 /** 403 unless `user` may change the series as a record (its owner, its creator or a global role; Phase 1 D11). */
 function assertCanEditSeries(user: AuthUser, series: Pick<ActivitySeries, 'assignedTo' | 'createdBy'>): void {
-    if (!canAccessRecord(user, series)) throw HttpError.forbidden(SERIES_FORBIDDEN_MESSAGE);
+    if (!canAccessRecord(user, series, 'activities', 'edit')) throw HttpError.forbidden(SERIES_FORBIDDEN_MESSAGE);
 }
 
 const actorUser = (username: string): AuthUser => ({ id: 0, username, role: '' });

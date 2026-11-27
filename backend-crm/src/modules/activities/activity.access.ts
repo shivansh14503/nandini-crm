@@ -1,6 +1,6 @@
 import type { Activity, Prisma } from '../../generated/prisma/client.js';
 import type { AuthUser } from '../../types/user.types.js';
-import { canAccessRecord, hasGlobalAccess } from '../shared/accessControl.js';
+import { buildAccessScopeWhere, canAccessRecord, hasGlobalAccess } from '../shared/accessControl.js';
 import { isActivityOnlyFollowupType } from '../shared/followupTypes.js';
 
 /**
@@ -23,21 +23,22 @@ const sameUser = (a: string | null | undefined, b: string) => typeof a === 'stri
  * the attendee arm as an EXISTS on ActivityAttendee(username), and compares usernames case-insensitively.
  */
 export function activityScopeWhere(user: AuthUser): Prisma.ActivityWhereInput {
-    if (hasGlobalAccess(user)) return {};
-    return {
-        OR: [{ assignedTo: user.username }, { createdBy: user.username }, { attendees: { some: { username: user.username } } }],
-    };
+    if (hasGlobalAccess(user, 'activities', 'view')) return {};
+    // Invitations show whatever the role's View (Admin › Roles): a colleague's meeting is on the invitee's calendar.
+    const own = buildAccessScopeWhere(user, 'assignedTo', 'activities', 'view') as Prisma.ActivityWhereInput;
+    const owned = Array.isArray(own.OR) && Object.keys(own).length === 1 ? own.OR : [own];
+    return { OR: [...owned, { attendees: { some: { username: user.username } } }] };
 }
 
-/** True when `user` may see the activity: global role, owner, creator or invited colleague. */
+/** True when `user` may see the activity: View on all activities, owner / creator at View Own, or invited colleague. */
 export function canViewActivity(user: AuthUser, row: ActivityAccessRow): boolean {
-    if (canAccessRecord(user, row)) return true;
+    if (canAccessRecord(user, row, 'activities', 'view')) return true;
     return (row.attendees ?? []).some((attendee) => sameUser(attendee.username, user.username));
 }
 
-/** True when `user` may change or delete the activity: global role, owner or creator (not an invitee). */
-export function canEditActivity(user: AuthUser, row: ActivityAccessRow): boolean {
-    return canAccessRecord(user, row);
+/** True when `user` may change (`edit`, default) or delete the activity by their role: never as an invitee only. */
+export function canEditActivity(user: AuthUser, row: ActivityAccessRow, action: 'edit' | 'delete' = 'edit'): boolean {
+    return canAccessRecord(user, row, 'activities', action);
 }
 
 // ── Locks (Calendar Phase 2, spec §8.13) ─────────────────────────────────────

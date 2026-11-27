@@ -404,7 +404,7 @@ async function assertRelated(user: AuthUser, module: ActivityRelatedModule | nul
         const message = `The selected ${RELATED_LOADERS[module].label} does not exist.`;
         throw new HttpError(message, StatusCodes.BAD_REQUEST, { code: 'VALIDATION_ERROR', errors: [{ message, path: ['relatedId'] }] });
     }
-    if (!canAccessRecord(user, found)) throw HttpError.forbidden("You can't link booked meetings to a record you don't have access to.");
+    if (!canAccessRecord(user, found, module, 'view')) throw HttpError.forbidden("You can't link booked meetings to a record you don't have access to.");
 }
 
 /**

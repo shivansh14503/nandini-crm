@@ -448,7 +448,7 @@ export const organizationService = {
         const page = parsePagination(normalizedQuery, ORGANIZATION_SORT_FIELDS);
         const filters = organizationListQuerySchema.parse(normalizedQuery);
 
-        const where: Prisma.OrganizationWhereInput = { isDeleted: false, AND: [buildAccessScopeWhere(user, 'assignedTo')] };
+        const where: Prisma.OrganizationWhereInput = { isDeleted: false, AND: [buildAccessScopeWhere(user, 'assignedTo', 'organizations', 'view')] };
         if (filters.accountStatus) where.accountStatus = filters.accountStatus;
         if (filters.customerType?.length) where.customerType = { in: filters.customerType };
         if (filters.natureOfBusiness) where.natureOfBusiness = { contains: filters.natureOfBusiness };
@@ -486,7 +486,7 @@ export const organizationService = {
     async getById(id: string, user: AuthUser): Promise<OrganizationDto> {
         const row = await prisma.organization.findFirst({ where: { id, isDeleted: false }, include });
         if (!row) throw notFound();
-        assertRecordAccess(user, row);
+        assertRecordAccess(user, row, 'organizations', 'view');
 
         await recentViewsService.record(user.id, RECENT_ENTITY, id);
         const flagsFor = await viewerFlags(user);
@@ -566,7 +566,7 @@ export const organizationService = {
             await lockRecords(tx, 'organization', [id]);
             const existing = await tx.organization.findFirst({ where: { id, isDeleted: false }, include });
             if (!existing) throw notFound();
-            assertRecordAccess(user, existing);
+            assertRecordAccess(user, existing, 'organizations', 'edit');
 
             const before = toOrganizationDto(existing, flagsFor(existing));
             const merged: Record<string, unknown> = mergePatch(before, patch);
@@ -632,7 +632,7 @@ export const organizationService = {
             await lockRecords(tx, 'organization', [id]);
             const existing = await tx.organization.findFirst({ where: { id, isDeleted: false }, select: OWNER_SELECT });
             if (!existing) throw notFound();
-            assertRecordAccess(user, existing);
+            assertRecordAccess(user, existing, 'organizations', 'delete');
             await tx.organization.update({ where: { id }, data: softDeleteData(user) });
             await auditService.record(tx, { entityType: 'Organization', entityId: id, action: 'DELETE', changedBy: user.username });
         });
@@ -659,7 +659,7 @@ export const organizationService = {
         const result = await runInTransaction(async (tx) => {
             await lockRecords(tx, 'organization', ids);
             const live = await tx.organization.findMany({ where: { id: { in: ids }, isDeleted: false }, select: { id: true, ...OWNER_SELECT } });
-            for (const row of live) assertRecordAccess(user, row);
+            for (const row of live) assertRecordAccess(user, row, 'organizations', 'delete');
             const liveIds = live.map((row) => row.id);
             if (liveIds.length > 0) {
                 await tx.organization.updateMany({ where: { id: { in: liveIds } }, data: softDeleteData(user) });
@@ -689,7 +689,7 @@ export const organizationService = {
                 select: { id: true, accountStatus: true, ...OWNER_SELECT },
             });
             if (targets.length === 0) throw notFound();
-            for (const row of targets) assertRecordAccess(user, row);
+            for (const row of targets) assertRecordAccess(user, row, 'organizations', 'edit');
 
             await tx.organization.updateMany({
                 where: { id: { in: targets.map((row) => row.id) } },

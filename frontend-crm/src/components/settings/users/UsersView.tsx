@@ -451,7 +451,7 @@ export function UsersView() {
                                             <Box component="span" sx={{ fontWeight: 600 }}>
                                                 {user.role}
                                             </Box>
-                                            <RoleAccessBadges role={user.role} />
+                                            <RoleAccessBadges access={user.roleAccess} />
                                         </Box>
                                         {(user.jobTitle || user.department) && (
                                             <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)', overflowWrap: 'anywhere' }}>
@@ -507,7 +507,7 @@ export function UsersView() {
                                                         <Box component="span" sx={{ overflowWrap: 'anywhere' }}>
                                                             {user.role}
                                                         </Box>
-                                                        <RoleAccessBadges role={user.role} />
+                                                        <RoleAccessBadges access={user.roleAccess} />
                                                     </Box>
                                                 </TableCell>
                                                 <TableCell sx={{ ...cellSx, maxWidth: 160, overflowWrap: 'anywhere' }}>

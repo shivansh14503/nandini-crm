@@ -1,3 +1,5 @@
+import type { RolePermissions } from '@/utils/permissions';
+
 export interface User {
     id: number;
     username: string;
@@ -8,6 +10,16 @@ export interface User {
     lastName?: string | null;
     /** Relative URL of the profile photo (`/api/user-photos/<id>`), or null when there is none. */
     photoUrl?: string | null;
+    /** What the user's role allows (Admin › Roles). Read with `usePermissions`; the API enforces the same rules. */
+    access?: UserAccess;
+}
+
+export interface UserAccess {
+    /** Opens the admin panel. */
+    adminPanel: boolean;
+    /** Super Admin (manages Super Admin users). */
+    superAdmin: boolean;
+    permissions: RolePermissions;
 }
 
 export interface LoginPayload {

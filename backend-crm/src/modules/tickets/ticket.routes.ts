@@ -15,6 +15,6 @@ import { ticketController } from './ticket.controller.js';
  */
 const router = Router();
 router.use(authenticate);
-registerCrudRoutes(router, ticketController);
+registerCrudRoutes(router, ticketController, 'tickets');
 
 export default router;

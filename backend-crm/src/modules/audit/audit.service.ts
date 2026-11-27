@@ -4,16 +4,14 @@ import type { AuditEntityType } from '../../services/audit.service.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
 import { companyFormatsService } from '../company-formats/companyFormats.service.js';
-import { FORM_CONFIG_ADMIN_ROLES } from '../form-configs/formConfig.routes.js';
 import { canViewActivity } from '../activities/activity.access.js';
-import { assertRecordAccess } from '../shared/accessControl.js';
+import { assertRecordAccess, isAdminUser, type PermissionModule } from '../shared/accessControl.js';
 import { displayTime, displayValue, fieldLabel, isDiff, parseChanges, type AuditEntryDto, type AuditRevisionItem } from './audit.format.js';
 import { formConfigAuditService, isFormConfigsEntityType } from './formConfigAudit.service.js';
 
 export type { AuditEntryDto, AuditRevisionItem } from './audit.format.js';
 
-const ADMIN_ROLES = new Set<string>(FORM_CONFIG_ADMIN_ROLES.map((role) => role.toLowerCase()));
-export const isAuditAdmin = (user: AuthUser): boolean => ADMIN_ROLES.has(user.role.toLowerCase());
+export const isAuditAdmin = (user: AuthUser): boolean => isAdminUser(user);
 
 type OwnerColumns = { assignedTo: string | null; createdBy: string | null } | null;
 const OWNER_SELECT = { assignedTo: true, createdBy: true } as const;
@@ -22,18 +20,18 @@ const OWNER_SELECT = { assignedTo: true, createdBy: true } as const;
  * Row-scoped entities: a record's trail follows the record's own access rule (global role, assignee or creator).
  * Soft-deleted records are included, so an owner can still read why their record went away.
  */
-const ROW_SCOPED_OWNERS: Partial<Record<AuditEntityType, (id: string) => Promise<OwnerColumns>>> = {
-    Organization: (id) => prisma.organization.findUnique({ where: { id }, select: OWNER_SELECT }),
-    Contact: (id) => prisma.contact.findUnique({ where: { id }, select: OWNER_SELECT }),
-    Lead: (id) => prisma.lead.findUnique({ where: { id }, select: OWNER_SELECT }),
-    Opportunity: (id) => prisma.opportunity.findUnique({ where: { id }, select: OWNER_SELECT }),
-    Quotation: (id) => prisma.quotation.findUnique({ where: { id }, select: OWNER_SELECT }),
-    Ticket: (id) => prisma.ticket.findUnique({ where: { id }, select: OWNER_SELECT }),
-    Contract: (id) => prisma.contract.findUnique({ where: { id }, select: OWNER_SELECT }),
+const ROW_SCOPED_OWNERS: Partial<Record<AuditEntityType, { module: PermissionModule; load: (id: string) => Promise<OwnerColumns> }>> = {
+    Organization: { module: 'organizations', load: (id) => prisma.organization.findUnique({ where: { id }, select: OWNER_SELECT }) },
+    Contact: { module: 'contacts', load: (id) => prisma.contact.findUnique({ where: { id }, select: OWNER_SELECT }) },
+    Lead: { module: 'leads', load: (id) => prisma.lead.findUnique({ where: { id }, select: OWNER_SELECT }) },
+    Opportunity: { module: 'opportunities', load: (id) => prisma.opportunity.findUnique({ where: { id }, select: OWNER_SELECT }) },
+    Quotation: { module: 'quotations', load: (id) => prisma.quotation.findUnique({ where: { id }, select: OWNER_SELECT }) },
+    Ticket: { module: 'tickets', load: (id) => prisma.ticket.findUnique({ where: { id }, select: OWNER_SELECT }) },
+    Contract: { module: 'contracts', load: (id) => prisma.contract.findUnique({ where: { id }, select: OWNER_SELECT }) },
 };
 
 /** Admin-area trails (sign-ins carry IP addresses; templates are admin-managed). A user may read their own. */
-const ADMIN_ONLY: ReadonlySet<AuditEntityType> = new Set(['User', 'PdfTemplate', 'Scorecard']);
+const ADMIN_ONLY: ReadonlySet<AuditEntityType> = new Set(['User', 'Role', 'PdfTemplate', 'Scorecard']);
 
 /**
  * Who may read one record's trail. Admins read every trail. Otherwise: row-scoped records need access to the
@@ -57,11 +55,11 @@ async function assertCanReadTrail(user: AuthUser, entityType: AuditEntityType, e
         if (!canViewActivity(user, activity)) throw HttpError.forbidden('You do not have permission to access or modify this record.');
         return;
     }
-    const loadOwner = ROW_SCOPED_OWNERS[entityType];
-    if (!loadOwner) return;
-    const record = await loadOwner(entityId);
+    const scoped = ROW_SCOPED_OWNERS[entityType];
+    if (!scoped) return;
+    const record = await scoped.load(entityId);
     if (!record) throw HttpError.notFound('Record not found');
-    assertRecordAccess(user, record);
+    assertRecordAccess(user, record, scoped.module, 'view');
 }
 
 /** Route segment (plural or singular, any case) → stored entity type. */

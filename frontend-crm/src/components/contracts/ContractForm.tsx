@@ -191,7 +191,7 @@ export default function ContractForm({ mode = 'create', contractId, initialData 
                 if (active && found) {
                     const values = { ...DEFAULT_CONTRACT_FORM, ...found };
                     setContractNumber(found.contractNumber);
-                    setAudit({ createdAt: found.createdAt, createdBy: found.createdBy, updatedAt: found.updatedAt, updatedBy: found.updatedBy });
+                    setAudit({ createdAt: found.createdAt, createdBy: found.createdBy, updatedAt: found.updatedAt, updatedBy: found.updatedBy, assignedTo: found.assignedTo });
                     filledTerm.current = autoFilledTerm(values);
                     reset(values);
                 }

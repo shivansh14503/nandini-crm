@@ -46,12 +46,14 @@ import {
     superAdminOnly,
 } from './userAdmin.rules.js';
 import type { CreateUserInput, ListUsersQuery, UpdateUserInput } from './userAdmin.validator.js';
-import { ADMIN_ROLES, canonicalRoleName, GLOBAL_ACCESS_ROLES, isAdminAccessRole, roleOptionsFrom, type RoleOption } from './roles.js';
+import { canonicalRoleName, isAdminAccessRole, roleOptionsFrom, type RoleOption } from './roles.js';
+import { normalizePermissions } from '../roles/permissions.js';
+import { ADMIN_ROSTER_LOCK } from '../roles/role.service.js';
 
 /**
  * Admin › Users (/api/admin/users): list, add (with an emailed invite link), edit, deactivate / activate CRM users and
  * email them set-password links (auth/invite.service.ts).
- * Access stays decided by the role's name (roles.ts). Every write is audited as the acting admin and drops the user
+ * A user's role is one of Admin › Roles (modules/roles), which decides what it allows. Every write is audited as the acting admin and drops the user
  * lookup caches. Writes to one user serialize on the same lock as My Profile (`user:id:<id>`).
  */
 
@@ -60,7 +62,6 @@ import { ADMIN_ROLES, canonicalRoleName, GLOBAL_ACCESS_ROLES, isAdminAccessRole,
 const userLock = (id: number) => `user:id:${id}`;
 const usernameLock = (username: string) => `user-username:${username}`;
 /** Serializes changes that can take admin access away, so two admins can't demote each other at once. */
-const ADMIN_ROSTER_LOCK = 'user-admin:admins';
 /** Serializes "reports to" changes, so two edits can't close a cycle between them. */
 const REPORTS_TO_LOCK = 'user-admin:reports-to';
 
@@ -91,10 +92,12 @@ async function loadDto(id: number): Promise<AdminUserDto> {
     return toAdminUserDto(row, emailRule, businessToday());
 }
 
-/** Role names the picker offers, stored ones first (the spelling a typed role snaps to). */
-async function knownRoles(tx: TransactionClient): Promise<string[]> {
-    const rows = await tx.user.findMany({ distinct: ['role'], select: { role: true } });
-    return [...rows.map((r) => r.role.trim()).filter(Boolean), ...ADMIN_ROLES, ...GLOBAL_ACCESS_ROLES];
+/** The Admin › Roles spelling of the picked role; 400 VALIDATION_ERROR (role) when no role matches. */
+async function pickedRole(tx: TransactionClient, input: string): Promise<string> {
+    const rows = await tx.role.findMany({ select: { name: true } });
+    const role = canonicalRoleName(input, rows.map((r) => r.name));
+    if (!role) throw fieldError(`"${input}" is not a role. Pick one from the list (Admin › Roles).`, StatusCodes.BAD_REQUEST, 'VALIDATION_ERROR', 'role');
+    return role;
 }
 
 async function knownDepartments(tx: TransactionClient): Promise<string[]> {
@@ -107,6 +110,14 @@ async function countActiveAdmins(tx: TransactionClient): Promise<number> {
     const rows = await tx.user.findMany({ where: { isActive: true }, select: { role: true } });
     return rows.filter((r) => isAdminAccessRole(r.role)).length;
 }
+
+const safeJson = (json: string): unknown => {
+    try {
+        return JSON.parse(json);
+    } catch {
+        return {};
+    }
+};
 
 // ── Write checks ─────────────────────────────────────────────────────────────
 
@@ -240,7 +251,8 @@ export const userAdminService = {
     },
 
     async meta(): Promise<AdminUsersMeta> {
-        const [roleCounts, departmentCounts, managers, settings] = await Promise.all([
+        const [roleRows, roleCounts, departmentCounts, managers, settings] = await Promise.all([
+            prisma.role.findMany({ select: { id: true, name: true, adminPanel: true, permissionsJson: true } }),
             prisma.user.groupBy({ by: ['role', 'isActive'], _count: { _all: true } }),
             prisma.user.groupBy({ by: ['department', 'isActive'], _count: { _all: true } }),
             prisma.user.findMany({
@@ -251,7 +263,10 @@ export const userAdminService = {
             loadCalendarSettings(),
         ]);
         return {
-            roles: roleOptionsFrom(roleCounts.map((r) => ({ role: r.role, count: r.isActive ? r._count._all : 0, inactiveCount: r.isActive ? 0 : r._count._all }))),
+            roles: roleOptionsFrom(
+                roleRows.map((r) => ({ id: r.id, name: r.name, adminPanel: r.adminPanel, permissions: normalizePermissions(safeJson(r.permissionsJson)) })),
+                roleCounts.map((r) => ({ role: r.role, count: r.isActive ? r._count._all : 0, inactiveCount: r.isActive ? 0 : r._count._all })),
+            ),
             departments: departmentOptionsFrom(departmentCounts.map((d) => ({ department: d.department, count: d.isActive ? d._count._all : 0 }))),
             managers: managers.map((m) => ({ id: m.id, name: m.fullName.trim() || m.username, username: m.username, photoUrl: photoUrlOf(m.photo?.id) })),
             companyDomains: [...settings.companyDomains],
@@ -285,7 +300,7 @@ export const userAdminService = {
             }
             if (checksEmail) await assertUserEmailFree(tx, email, null);
             if (input.reportsToId) await assertManager(tx, null, input.reportsToId);
-            const role = canonicalRoleName(input.role, await knownRoles(tx));
+            const role = await pickedRole(tx, input.role);
             assertSuperAdminRule(actor, null, role, 'role');
             const department = input.department ? canonicalDepartment(input.department, await knownDepartments(tx)) : null;
 
@@ -363,7 +378,7 @@ export const userAdminService = {
             await acquireLocks(tx, [emailChanges ? calendarConnectionUserLockKey(before.username) : null, email && startsHolding ? userEmailLockKey(email) : null]);
             if (email && startsHolding) await assertUserEmailFree(tx, email, id);
 
-            const role = input.role !== undefined ? canonicalRoleName(input.role, await knownRoles(tx)) : before.role;
+            const role = input.role !== undefined && input.role !== before.role ? await pickedRole(tx, input.role) : before.role;
             if (role !== before.role) {
                 assertSuperAdminRule(actor, before.role, role, 'role');
                 await assertAdminsKept(tx, actor, before, { role, isActive: before.isActive }, 'role');

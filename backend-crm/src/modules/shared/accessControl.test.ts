@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { afterEach, describe, it } from 'node:test';
+import { setSnapshotForTests } from '../roles/roleRegistry.js';
 import type { TransactionClient } from '../../config/prisma.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
@@ -10,6 +11,8 @@ import {
     canAccessRecord,
     GLOBAL_ACCESS_ROLES,
     hasGlobalAccess,
+    assertPermission,
+    isAdminUser,
     normalizeAssignee,
 } from './accessControl.js';
 
@@ -35,32 +38,32 @@ function fakeTx(users: { username: string; isActive: boolean }[]) {
 
 describe('hasGlobalAccess', () => {
     it('grants every listed global role', () => {
-        for (const role of GLOBAL_ACCESS_ROLES) assert.equal(hasGlobalAccess(user(role)), true, role);
+        for (const role of GLOBAL_ACCESS_ROLES) assert.equal(hasGlobalAccess(user(role), 'leads', 'view'), true, role);
     });
 
     it('matches role names regardless of case, spacing and dash style', () => {
-        assert.equal(hasGlobalAccess(user('Director - Operations')), true);
-        assert.equal(hasGlobalAccess(user('director — operations')), true);
-        assert.equal(hasGlobalAccess(user('  sales   manager ')), true);
+        assert.equal(hasGlobalAccess(user('Director - Operations'), 'leads', 'view'), true);
+        assert.equal(hasGlobalAccess(user('director — operations'), 'leads', 'view'), true);
+        assert.equal(hasGlobalAccess(user('  sales   manager '), 'leads', 'view'), true);
     });
 
     it('scopes every other role', () => {
         for (const role of ['Sales Executive', 'Support Engineer', 'Telesales Executive', 'Area Sales Manager', 'Group – Sales Queue', '']) {
-            assert.equal(hasGlobalAccess(user(role)), false, role);
+            assert.equal(hasGlobalAccess(user(role), 'leads', 'view'), false, role);
         }
     });
 });
 
 describe('buildAccessScopeWhere', () => {
     it('returns an empty filter for global roles', () => {
-        assert.deepEqual(buildAccessScopeWhere(user('Admin'), 'assignedTo'), {});
+        assert.deepEqual(buildAccessScopeWhere(user('Admin'), 'assignedTo', 'leads'), {});
     });
 
     it('limits scoped roles to owned or created records on the given owner column', () => {
-        assert.deepEqual(buildAccessScopeWhere(user('Sales Executive'), 'assignedTo'), {
+        assert.deepEqual(buildAccessScopeWhere(user('Sales Executive'), 'assignedTo', 'leads'), {
             OR: [{ assignedTo: 'palak' }, { createdBy: 'palak' }],
         });
-        assert.deepEqual(buildAccessScopeWhere(user('Sales Executive'), 'assignedTo'), {
+        assert.deepEqual(buildAccessScopeWhere(user('Sales Executive'), 'assignedTo', 'leads'), {
             OR: [{ assignedTo: 'palak' }, { createdBy: 'palak' }],
         });
     });
@@ -70,23 +73,70 @@ describe('assertRecordAccess', () => {
     const scoped = user('Sales Executive');
 
     it('lets global roles access any record', () => {
-        assert.doesNotThrow(() => assertRecordAccess(user('Accounts Manager'), { assignedTo: 'someone', createdBy: 'else' }));
+        assert.doesNotThrow(() => assertRecordAccess(user('Accounts Manager'), { assignedTo: 'someone', createdBy: 'else' }, 'contacts'));
     });
 
     it('lets a scoped user access records they own or created (case-insensitively)', () => {
-        assert.doesNotThrow(() => assertRecordAccess(scoped, { assignedTo: 'PALAK', createdBy: 'admin' }));
-        assert.doesNotThrow(() => assertRecordAccess(scoped, { assignedTo: 'palak', createdBy: 'admin' }));
-        assert.doesNotThrow(() => assertRecordAccess(scoped, { assignedTo: 'nupur', createdBy: 'palak' }));
+        assert.doesNotThrow(() => assertRecordAccess(scoped, { assignedTo: 'PALAK', createdBy: 'admin' }, 'contacts'));
+        assert.doesNotThrow(() => assertRecordAccess(scoped, { assignedTo: 'palak', createdBy: 'admin' }, 'contacts'));
+        assert.doesNotThrow(() => assertRecordAccess(scoped, { assignedTo: 'nupur', createdBy: 'palak' }, 'contacts'));
     });
 
     it('rejects a scoped user on records they neither own nor created', () => {
-        assert.throws(() => assertRecordAccess(scoped, { assignedTo: 'nupur', createdBy: 'admin' }), isForbidden);
-        assert.throws(() => assertRecordAccess(scoped, { assignedTo: null, createdBy: null }), isForbidden);
-        assert.equal(canAccessRecord(scoped, {}), false);
+        assert.throws(() => assertRecordAccess(scoped, { assignedTo: 'nupur', createdBy: 'admin' }, 'contacts'), isForbidden);
+        assert.throws(() => assertRecordAccess(scoped, { assignedTo: null, createdBy: null }, 'contacts'), isForbidden);
+        assert.equal(canAccessRecord(scoped, {}, 'contacts'), false);
     });
 
     it('does not treat a username prefix as a match', () => {
-        assert.throws(() => assertRecordAccess(scoped, { assignedTo: 'palak.k', createdBy: 'admin' }), isForbidden);
+        assert.throws(() => assertRecordAccess(scoped, { assignedTo: 'palak.k', createdBy: 'admin' }, 'contacts'), isForbidden);
+    });
+});
+
+describe('Admin › Roles permissions', () => {
+    afterEach(() => setSnapshotForTests(null));
+    const reader = {
+        name: 'Reader',
+        adminPanel: false,
+        permissions: { leads: { view: 'all', create: 'none', edit: 'own', delete: 'none', import: 'all' }, contacts: { view: 'own' } },
+    };
+
+    it('applies each action at its own level', () => {
+        setSnapshotForTests([reader]);
+        const u = user('reader');
+        assert.deepEqual(buildAccessScopeWhere(u, 'assignedTo', 'leads', 'view'), {});
+        assert.deepEqual(buildAccessScopeWhere(u, 'assignedTo', 'leads', 'edit'), { OR: [{ assignedTo: 'palak' }, { createdBy: 'palak' }] });
+        assert.equal(canAccessRecord(u, { assignedTo: 'nupur' }, 'leads', 'view'), true);
+        assert.equal(canAccessRecord(u, { assignedTo: 'nupur' }, 'leads', 'edit'), false);
+        assert.equal(canAccessRecord(u, { assignedTo: 'palak' }, 'leads', 'edit'), true);
+        assert.equal(canAccessRecord(u, { assignedTo: 'palak' }, 'leads', 'delete'), false);
+    });
+
+    it('matches nothing and answers a named 403 for None', () => {
+        setSnapshotForTests([reader]);
+        const u = user('Reader');
+        const where = buildAccessScopeWhere(u, 'assignedTo', 'tickets', 'view') as { OR: { assignedTo?: string; createdBy?: string }[] };
+        assert.ok(where.OR.every((arm) => (arm.assignedTo ?? arm.createdBy)?.includes('#')));
+        assert.throws(
+            () => assertRecordAccess(u, { assignedTo: 'palak' }, 'tickets', 'view'),
+            (err: unknown) => err instanceof HttpError && err.statusCode === 403 && /Tickets/.test(err.message),
+        );
+        assert.throws(() => assertPermission(u, 'leads', 'create'), isForbidden);
+        assert.doesNotThrow(() => assertPermission(u, 'leads', 'import'));
+    });
+
+    it('gives Super Admin full access whatever is stored, and the admin panel from the role', () => {
+        setSnapshotForTests([{ name: 'Super Admin', adminPanel: false, permissions: {} }, reader]);
+        assert.equal(hasGlobalAccess(user('super admin'), 'tickets', 'delete'), true);
+        assert.equal(isAdminUser(user('Super Admin')), true);
+        assert.equal(isAdminUser(user('Reader')), false);
+    });
+
+    it('treats a role the table lacks as own records without the admin panel', () => {
+        setSnapshotForTests([reader]);
+        assert.equal(isAdminUser(user('Admin')), false);
+        assert.equal(hasGlobalAccess(user('Admin'), 'leads', 'view'), false);
+        assert.equal(canAccessRecord(user('Admin'), { assignedTo: 'palak' }, 'leads', 'edit'), true);
     });
 });
 
