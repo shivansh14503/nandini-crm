@@ -662,6 +662,11 @@ tracker (`frontend-crm/src/services/importTracker.ts`), not in the wizard, so cl
 to a background card (`BackgroundImports`, kept across reloads in sessionStorage) and the module's lists still refresh
 (`notifyCrmUpdate`) when it finishes. Every finished import raises a snackbar, and the module's list
 (`CommonMasterView` with `importEntity`) switches to its largest page size on the first page so the new rows are in view.
+List page size: every `CommonMasterView` list starts at the smallest rows-per-page option that fits all its
+(filtered) records (50 products → 50 per page), capped at the largest option offered (50, or 100 on Organizations),
+and re-picks it as the count changes (`useAutoPageSize`, applied in a layout effect from the count the list already
+has, so no extra request and no flicker). A size the user picks in the selector is saved per list in localStorage
+(`crm_rows_per_page_<tableId>`) and is never overridden; the post-import jump is not saved as a choice.
 The background card has an expand button that reopens the import in the full-size window (live progress or results),
 which can be minimized back to the card. Rows that weren't imported download as an .xlsx (exceljs, loaded on click):
 exactly the uploaded file's columns plus a red-filled `Errors` column (a CSV can't carry colors); re-uploading that
