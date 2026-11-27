@@ -29,6 +29,12 @@ export const NOT_IMPORTABLE_FIELDS: Readonly<Record<string, ReadonlySet<string>>
 /** Built-in fields the form keeps as a list of email rows. */
 const EMAIL_LIST_KEYS = new Set(['emailAddress']);
 
+/**
+ * Built-in dropdowns the form lets you type a new value into (pick or type): a cell naming no option is kept as
+ * written, and saving the record adds it to the dropdown (the product's Manufacturer, product.manufacturer.ts).
+ */
+export const OPEN_DROPDOWN_FIELDS: Readonly<Record<string, ReadonlySet<string>>> = { products: new Set(['manufacturer']) };
+
 /** Older import templates named a few fields differently; their cells are read as the form's key. */
 const LEGACY_KEYS: Record<string, string> = {
     email: 'emailAddress',
@@ -193,11 +199,13 @@ export function buildImportPayload(config: ModuleFieldConfig, values: Record<str
                     value = field.fieldType === 'multiselect' ? entries : cell;
                     break;
                 }
+                const open = field.isSystem && OPEN_DROPDOWN_FIELDS[config.module]?.has(field.fieldKey);
                 const matched: string[] = [];
                 const hidden = (option: string) => config.module !== 'activities' && field.fieldKey === 'followupType' && isActivityOnlyFollowupType(option);
                 for (const entry of entries) {
                     const option = matchImportOption(lookup, entry);
                     if (option !== undefined && !hidden(option)) matched.push(option);
+                    else if (open) matched.push(entry);
                     else fail(`"${entry}" is not an option of ${field.label}. ${allowedOptionsText([...lookup.values()].filter((o) => !hidden(o)))}.`);
                 }
                 value = field.fieldType === 'multiselect' ? [...new Set(matched)] : matched[0];

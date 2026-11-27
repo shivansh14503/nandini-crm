@@ -149,6 +149,8 @@ export const APP_REQUIRED_CATEGORY_KEYS: ReadonlySet<string> = new Set([
     'activity_reminder',
     // The Products list pills (one per Status option) and the Status field read it by key.
     'product_status',
+    // The product form offers its options as Manufacturer suggestions; saving a product adds a new manufacturer to it.
+    'product_manufacturer',
 ]);
 
 /**
@@ -268,24 +270,44 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
         label: 'Product Category',
         module: 'shared',
         description: 'Product lines (Leads, Opportunities, Products).',
+        // The product lines of the Product Catalog sheet (Jira CRM-15) as well as the earlier list.
         options: [
             'Acronis',
+            'AMC',
             'Biz Analyst',
+            'BizDarpan',
             'Connect 21',
             'CredFlow',
             'CRM',
+            'Data Implementation',
             'Data Warehouse',
+            'DMS',
+            'Dox2U',
+            'E-Invoice Module',
+            'E-way Bill Module',
+            'Garruda ERP',
+            'GoEffortless',
+            'GST Software',
+            'HRMS Software',
+            'Livekeeping',
+            'MAssist',
             'Tally AMC',
             'Tally Customization',
+            'Tally on AWS',
             'Tally On Cloud',
             'Tally Service',
             'Tally Software Service (TSS)',
             'Tally Training',
             'Tally Upgrade',
+            'TallyDrive',
             'TallyPrime',
+            'TallyPrime On Rent',
             'TallyPrime Server',
+            'TallyPrime with WhatsApp',
             'Teramind',
             'TVU',
+            'WhatsApp Module',
+            'Zoho',
         ],
     },
     {
@@ -661,7 +683,31 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
 
     // ── Products ──
     { key: 'product_contract_create', label: 'Contract Create', module: 'products', description: 'Fixed options: Yes / No.', options: yesNo('Yes') },
-    { key: 'product_type', label: 'Product Type', module: 'products', options: ['Product', 'Service', 'Bundle', 'Subscription', 'License', 'Other'] },
+    { key: 'product_type', label: 'Product Type', module: 'products', options: ['Product', 'Software', 'Service', 'Bundle', 'Subscription', 'License', 'Other'] },
+    {
+        key: 'product_manufacturer',
+        label: 'Manufacturer',
+        module: 'products',
+        description: 'Manufacturers of the product catalog. A new manufacturer typed on a product is added here when the product is saved.',
+        options: [
+            'Acronis',
+            'Agrya FinLabs Pvt Ltd',
+            'Biz Analyst',
+            'Computax',
+            'CredFlow',
+            'DMS',
+            'Enjay IT Solutions',
+            'Greytip Software Private Limited',
+            'Inthink Technology',
+            'Livekeeping Technologies Private Limited',
+            'Nandini Infosystems',
+            'Privet Ventures Pvt Ltd',
+            'Tally Solutions Private Limited',
+            'Teramind',
+            'TS Plus',
+            'Zoho Corporation',
+        ],
+    },
     { key: 'product_tax_rate', label: 'Tax Rate', module: 'products', options: ['0%', '5%', '12%', '18%', '28%'] },
     {
         key: 'product_status',
@@ -1051,7 +1097,8 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         // Same field (label, key, dropdown) as on Leads / Opportunities; a product has one category.
         sel('productCategory', 'Product Category', 'shared_product_category'),
         sel('type', 'Type', 'product_type'),
-        t('manufacturer', 'Manufacturer'),
+        // Pick a manufacturer of the dropdown or type a new one: saving the product adds it to the dropdown.
+        sel('manufacturer', 'Manufacturer', 'product_manufacturer'),
         t('hsnCode', 'HSN Code'),
     ]),
     ...section('products', 'overview', 'Pricing & Tax', [

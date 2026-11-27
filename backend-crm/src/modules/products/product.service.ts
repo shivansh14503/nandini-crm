@@ -13,6 +13,7 @@ import { shownNumberModules } from '../document-series/documentSeries.service.js
 import { codeSearchPrefix } from '../shared/searchTerms.js';
 import { acquireLocks, assertDeletedRow, lockRecords, restoreData, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { loadProductUsage, usageOf, usedProductWhere } from './product.usage.js';
+import { afterManufacturersAdded, ensureManufacturerOption } from './product.manufacturer.js';
 import { toProductData, toProductDto, type ProductDto } from './product.mapper.js';
 import { productStatusData } from './product.status.js';
 import { manufacturerQuerySchema, PRODUCT_SORT_FIELDS, productInputSchema, productListQuerySchema, type ProductInput } from './product.validator.js';
@@ -41,11 +42,15 @@ async function assertUniqueName(tx: TransactionClient, productName: string, excl
     }
 }
 
-/** Inserts a product inside the caller's transaction (used by `create`, import and the seed). */
+/**
+ * Inserts a product inside the caller's transaction (used by `create`, import and the seed). A Manufacturer that
+ * isn't in the Manufacturer dropdown yet is added to it: callers drop the form-config cache after the commit.
+ */
 export async function createProductRecord(tx: TransactionClient, input: ProductInput, actor: AuthUser): Promise<ProductDto> {
     // Code first: its counter row lock queues concurrent creates before they take any other lock.
     const productCode = await generateEntityCode(tx, 'PRD');
     await assertUniqueName(tx, input.productName);
+    await ensureManufacturerOption(tx, input.manufacturer);
     const row = await tx.product.create({ data: { ...toProductData(input), ...productStatusData(input, null, actor), productCode, createdBy: actor.username } });
     const dto = toProductDto(row);
     await auditService.record(tx, { entityType: 'Product', entityId: row.id, action: 'CREATE', changedBy: actor.username, changes: dto });
@@ -126,6 +131,7 @@ export const productService = {
 
         const created = await runInTransaction((tx) => createProductRecord(tx, input, actor));
         await cacheService.invalidateEntityCaches('products');
+        await afterManufacturersAdded(Boolean(created.manufacturer));
         return created;
     },
 
@@ -146,6 +152,9 @@ export const productService = {
             });
             // Renaming isn't checked against other products' names (Jira CRM-108); only a new product's name is.
 
+            // A new manufacturer joins the Manufacturer dropdown.
+            const addedManufacturer = input.manufacturer !== existing.manufacturer && (await ensureManufacturerOption(tx, input.manufacturer));
+
             const status = productStatusData(input, existing, actor);
             const row = await tx.product.update({ where: { id }, data: { ...toProductData(input), ...status, updatedBy: actor.username } });
             const after = toProductDto(row);
@@ -153,11 +162,12 @@ export const productService = {
             if (Object.keys(changes).length > 0) {
                 await auditService.record(tx, { entityType: 'Product', entityId: id, action: 'UPDATE', changedBy: actor.username, changes });
             }
-            return after;
+            return { after, addedManufacturer };
         });
 
         await cacheService.invalidateEntityCaches('products');
-        return updated;
+        await afterManufacturersAdded(updated.addedManufacturer);
+        return updated.after;
     },
 
     async remove(id: string, actor: AuthUser): Promise<void> {
