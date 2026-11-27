@@ -20,7 +20,9 @@ import { ImportProgressPanel } from './ImportProgressPanel';
 import { FileUploadDropzone } from './FileUploadDropzone';
 import { ColumnMappingStep } from './ColumnMappingStep';
 import { ImportPreviewStep } from './ImportPreviewStep';
-import { autoMapColumns, downloadSampleTemplate, IMPORT_CONFIGS, mapAndValidateRows } from './importConfigs';
+import { useFormConfigs } from '@/hooks/queries/useFormConfigs';
+import { autoMapColumns, downloadSampleTemplate, mapAndValidateRows } from './importConfigs';
+import { buildImportConfig } from './importFields';
 import { parseFile } from './parseFile';
 import type { ColumnMapping, ImportEntityType, ParsedFile } from './types';
 
@@ -67,7 +69,9 @@ export function DataImportModal(props: DataImportModalProps) {
 }
 
 function DataImportWizard({ open, entity, onClose, onImported }: DataImportModalProps) {
-    const config = IMPORT_CONFIGS[entity];
+    // Every field of the module's creation form (Form Builder configuration), custom fields included.
+    const formConfigs = useFormConfigs();
+    const config = useMemo(() => buildImportConfig(entity, formConfigs), [entity, formConfigs]);
     const [step, setStep] = useState(0);
     const [parsed, setParsed] = useState<ParsedFile | null>(null);
     const [mapping, setMapping] = useState<ColumnMapping>({});
@@ -96,8 +100,8 @@ function DataImportWizard({ open, entity, onClose, onImported }: DataImportModal
     }, [tracked, finished, onImported]);
 
     const mappedRows = useMemo(
-        () => (parsed ? mapAndValidateRows(entity, parsed, mapping) : []),
-        [entity, parsed, mapping]
+        () => (parsed ? mapAndValidateRows(config, parsed, mapping) : []),
+        [config, parsed, mapping]
     );
     const validRows = useMemo(() => mappedRows.filter((r) => r.errors.length === 0), [mappedRows]);
 
@@ -109,7 +113,7 @@ function DataImportWizard({ open, entity, onClose, onImported }: DataImportModal
         try {
             const result = await parseFile(file);
             setParsed(result);
-            setMapping(autoMapColumns(entity, result.headers));
+            setMapping(autoMapColumns(config, result.headers));
             setStep(1);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Could not read this file.');
@@ -167,7 +171,7 @@ function DataImportWizard({ open, entity, onClose, onImported }: DataImportModal
                         error={error}
                         entityPlural={config.plural}
                         onFileSelected={handleFile}
-                        onDownloadTemplate={() => downloadSampleTemplate(entity)}
+                        onDownloadTemplate={() => downloadSampleTemplate(config)}
                     />
                 )}
 
