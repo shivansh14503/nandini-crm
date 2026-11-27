@@ -31,6 +31,8 @@ import { enqueueCheck, enqueueEnrolled, enqueuePull, type PushJobData } from './
 import { isFakeProviderEnabled, loadProviderAccess } from './providers/registry.js';
 import { isInsideSyncHours, pollMinutes } from './syncHours.js';
 import { adminRecipients } from './syncIssue.notifications.js';
+import { enqueueEmailLogRuns, runEmailLogInline } from '../email-log/emailLog.ingest.js';
+import { runEmailLogNightly } from '../email-log/emailLog.maintenance.js';
 
 /**
  * The calendar worker's housekeeping (Calendar Phase 2 spec §8.12, §10.1, §10.2; admin-managed model: addendum §8):
@@ -362,7 +364,9 @@ export async function runCalendarNightly(now: Date = new Date()) {
     const staleVideoLinks = await step('stale-video-links', () => failStaleConferences(now), 0);
     const rebaselined = await step('graph-rebaseline', () => rebaselineGraphWindows(now), 0);
     const channels = await step('webhook-channels', () => maintainChannels('nightly', now), null);
-    const result = { connections, followUps, retried, secrets, leases, staleVideoLinks, rebaselined, channels };
+    // Calendar Phase 4: logged emails past the retention (and ones left without a copy), bounded.
+    const emailRetention = await step('email-retention', () => runEmailLogNightly(now), null);
+    const result = { connections, followUps, retried, secrets, leases, staleVideoLinks, rebaselined, channels, emailRetention };
     logger.info({ ...result, followUps: followUps ? 'done' : 'failed' }, 'Calendar nightly done');
     return result;
 }
@@ -409,14 +413,16 @@ export async function backfillDueInline(now: Date = new Date()): Promise<number>
  * (e.g. 08:30-18:00) does nothing at all.
  */
 export async function runCalendarPoll(now: Date = new Date()) {
-    if (!isInsideSyncWindow(now)) return { pulls: 0, queued: 0, checks: 0, backfills: 0, channels: 0 };
+    if (!isInsideSyncWindow(now)) return { pulls: 0, queued: 0, checks: 0, backfills: 0, channels: 0, emailRuns: 0 };
     const pulls = await step('pulls', () => enqueuePulls(now), 0);
     const queued = await step('outbox-sweep', () => sweepOutbox(now), 0);
     const checks = await step('due-checks', () => enqueueDueChecks(now), 0);
     const backfills = await step('backfill-recovery', () => enqueueDueBackfills(now), 0);
     // P2-7: missing / expiring webhook channels, ≤ 20 people per tick (nothing while webhooks are off).
     const channels = await step('webhook-channels', async () => (webhooksLive() ? (await maintainChannels('poll', now)).ensured : 0), 0);
-    return { pulls, queued, checks, backfills, channels };
+    // Calendar Phase 4: email logging, ≤ 25 due mailboxes queued (nothing while its company switch is off).
+    const emailRuns = await step('email-logging', () => enqueueEmailLogRuns(now), 0);
+    return { pulls, queued, checks, backfills, channels, emailRuns };
 }
 
 /**
@@ -429,5 +435,7 @@ export async function runFallbackTick(now: Date = new Date()): Promise<{ checked
     const backfilled = await step('fallback-backfill', () => backfillDueInline(now), 0);
     const pushed = await step('fallback-push', () => pushDueInline(now), 0);
     const pulled = await step('fallback-pull', () => pullDueInline(now), 0);
+    // Calendar Phase 4: one due mailbox's email logging in-process.
+    await step('fallback-email-logging', () => runEmailLogInline(now), 0);
     return { checked, pushed, backfilled, pulled };
 }

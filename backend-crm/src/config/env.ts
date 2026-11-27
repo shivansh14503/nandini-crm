@@ -201,6 +201,16 @@ const envSchema = z
             .enum(['true', 'false'])
             .default('true')
             .transform((value) => value === 'true'),
+        /**
+         * Email logging (Calendar Phase 4) server kill switch, default true. The company switch on Admin › API
+         * Integrations decides; false here stops every mailbox run (logged emails stay readable).
+         */
+        EMAIL_LOG_ENABLED: z
+            .enum(['true', 'false'])
+            .default('true')
+            .transform((value) => value === 'true'),
+        /** Minutes between two email-logging runs of one mailbox (5–120, default 15), inside CALENDAR_SYNC_HOURS only. */
+        EMAIL_LOG_POLL_MINUTES: z.coerce.number().int().min(5).max(120).default(15),
 
         /**
          * Booking links (Calendar Phase 4): the key that signs the times a public booking page offers (slot tokens,
@@ -357,5 +367,9 @@ export const ENV = {
         WEBHOOKS_ACTIVE: webhooksOffReason === null,
         /** Why they are not (null while live). */
         WEBHOOKS_OFF_REASON: webhooksOffReason,
+        /** EMAIL_LOG_ENABLED: email-logging runs may happen (the company switch still decides). */
+        EMAIL_LOG_ENABLED: env.EMAIL_LOG_ENABLED,
+        /** EMAIL_LOG_POLL_MINUTES: minutes between two runs of one mailbox (inside the sync hours). */
+        EMAIL_LOG_POLL_MINUTES: env.EMAIL_LOG_POLL_MINUTES,
     },
 } as const;

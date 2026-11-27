@@ -113,6 +113,7 @@ export function LeadDetailDrawer({
             tabContents={view.tabContents}
             auditEntity={{ type: 'leads', id: l.id }}
             activities={recordActivitiesContext('leads', l)}
+            emails={{ module: 'leads', id: l.id }}
             recordAudit={l}
             includeChangesTab={true}
             primaryAction={{

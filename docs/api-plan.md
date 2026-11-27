@@ -10,7 +10,8 @@
 > `/api/me/preferences` (My Profile › Notifications); Profile Phase 5: `/api/company-formats` (Admin › Company formats), with PR5b's audit field values in the company formats; P2-6: `GET /api/activities/busy`, colleagues' busy times; Calendar Phase 4: booking links, `/api/booking-links` and the public
 > `/api/public/booking`; P2-5: calendar changes come back (`POST /api/calendar-connections/sync`, admin
 > `POST /api/admin/integrations/people/:username/calendar/sync`, own calendar `syncHours`); P2-7: calendar webhooks `/api/webhooks/*` and the admin webhook status fields; Calendar Phase 3 P3-1: video meetings, `videoMeeting` on activity writes, `GET /api/activities/video-options`, `POST /api/activities/:id/conference/retry`; Calendar Phase 4: recurring activities, `repeat` on activity writes, `?scope=this|following|all`,
-> `ActivityView.series`, `CalendarItem.seriesId`, as of 2026-11-26)
+> `ActivityView.series`, `CalendarItem.seriesId`; Calendar Phase 4
+> email logging: `/api/email-logs` and `/api/admin/email-logging`, as of 2026-11-27)
 > plus the planned ones.
 > When you add, change or remove a route, update this file in the same change (the route files'
 > header comments are the per-module source of truth; keep them in step too).
@@ -715,6 +716,35 @@ admins) | `admins`; admins can always create a link for an active, non-group col
 Errors: `409 BOOKING_LINKS_OFF`, `403 BOOKING_LINKS_NOT_ALLOWED` (role), `409 BOOKING_LINK_LIMIT` (20 links per person, active
 or not), `400 VALIDATION_ERROR` (`errors[].path` = field; `availability.<weekday>`).
 
+**Email logging** — `/email-logs` (signed in) and `/admin/email-logging` (admin roles, `FORM_CONFIG_ADMIN_ROLES`)
+(Calendar Phase 4, spec §17, as of 2026-11-27 with the review fixes; `backend-crm/src/modules/email-log/emailLog.routes.ts` and
+`emailLogAdmin.routes.ts`, route header comments = source of truth). Emails between enrolled employees and CRM contacts /
+leads (and those contacts' opportunities) are logged automatically from the company mailboxes; see
+[system design › Email logging](system-design.md) for who is logged, matching and privacy. Only metadata and a short
+plain-text snippet are returned: never a body, HTML, an attachment or Bcc. **Visibility** (company setting): `restricted`
+(default) = the record's owner and global-access roles (managers, admins) see every email logged on a record they can
+open, everyone else who can open it sees only the emails they took part in (their mailbox holds a copy); `record` =
+everyone who can open the record sees all of them. "Open in Gmail / Outlook" (`openLink`) is set only on the caller's own
+copy. `participants` lists the employees whose mailbox holds the email as sender, To or Cc; a copy received as Bcc or
+through a list is listed only to that employee (a Bcc is never revealed). While "Keep a short snippet" is off, `snippet`
+is always null (snippets kept from before are cleared). While the company switch is off the record list is empty
+(`enabled: false`) and the drawers hide the Emails tab.
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/email-logs` | `?module=contacts\|leads\|opportunities&recordId&page (1)&limit (20, ≤ 50)` → `{ enabled, visibility, seesAll, total, page, limit, items: [{ id, subject, from: { email, name? }, to: [], cc: [] (≤ 25 kept together), moreRecipients, sentAt, direction: in\|out, snippet (plain text, ≤ 500) \| null, hasAttachments, provider, participants: [{ username, name }], openLink: { provider, url } \| null }] }`, newest first (`sentAt`). `404` record missing or deleted, `403` no access to the record (the usual record rules). `Cache-Control: no-store` |
+| GET | `/email-logs/me` | The caller's own status, read-only (employees have no switch): `{ companyEnabled, logging, reason: server_off\|company_off\|user_inactive\|person_off\|not_synced\|null, provider, accountEmail, status: idle\|ok\|error\|null, lastSuccessAt, storeSnippets, retentionMonths, visibility }` (no error text: admins fix problems) |
+| GET | `/admin/email-logging` | `{ settings, serverEnabled (EMAIL_LOG_ENABLED), pollMinutes, scopes: { google (gmail.readonly), googleAdminConsole (the full comma-delimited DWD list: the two calendar scopes + gmail.readonly), microsoft ('Mail.Read') }, providers: [{ provider, label, problem: { code, message, at } \| null, people, mailboxes: { ok, error } }], counts: { people, emails } }`. `problem` = the newest app-level mail error (missing scope / permission) newer than the provider's last successful mail run |
+| PUT | `/admin/email-logging/settings` | `{ enabled?, defaultForPeople?: on\|off, visibility?: restricted\|record, retentionMonths?: 6\|12\|24\|36, storeSnippets? }` (at least one; strict) → settings (plus the read-only stamps `enabledAt`, `defaultOnAt`: ISO \| null, set by the server when the switch / the default for people turns on; a body can't set them). Written through `formConfigService.updateModuleSetting('activities', 'emailLogging')` (audited as a form-config change; reaches every client in the form configs). Side effects: switch on → nothing from before `enabledAt` is logged; switch off → every mailbox cursor is cleared (default for people off → the cursors of people on the default), so switching on again starts from a fresh baseline instead of catching up; snippets off → stored snippets are cleared (≤ 20 × 500 at once, the nightly finishes the rest) |
+| GET | `/admin/email-logging/people/:username` | `{ username, fullName, mode: on\|off\|null (null = company default), effective, companyDefault, logging, reason, mailbox: { provider, accountEmail, status, errorLevel: user\|app\|null, lastErrorCode, lastErrorMessage, lastRunAt, lastSuccessAt, nextRunAt, loggedCount, purgedAt } \| null, copies }`; `404` unknown user |
+| PUT | `/admin/email-logging/people/:username` | `{ mode: on\|off\|null }` (strict) → person. Audited `LoggedEmailMailbox` CREATE / UPDATE `{ username, mode: { from, to } }` (module `admin-integrations`); unchanged mode writes nothing. When the person's effective switch turns on: `loggingSince` = now (nothing from before is logged) and the mailbox is due at the next tick; when it turns off: the cursor is cleared |
+| POST | `/admin/email-logging/people/:username/run` | "Log now" → person + `run: { status: 'queued' }` (Redis up: a job on the calendar sync queue) or `{ status, logged, copies }` (no Redis: run inline, bounded). `409 EMAIL_LOGGING_OFF` while the person isn't logged; 6 / min per admin → `429 RATE_LIMITED` + `Retry-After` |
+| DELETE | `/admin/email-logging/people/:username/emails` | Purge: first takes the person's mailbox lease and sets `purgedAt` (clearing the cursor), then deletes the person's copies and every email left without a copy (bounded batches, outside a transaction), frees the lease → `{ copies, emails }`. Audited `LoggedEmailMailbox PURGE` `{ username, copies, emails }` (NOTICE) after the lease is freed. A run that was working removes what it stored; mail from before `purgedAt` is never logged again for this person. Emails another enrolled employee also holds stay. The person's switch is unchanged (turn it off to stop new logging) |
+
+Errors: `400 VALIDATION_ERROR`, `404`, `409 EMAIL_LOGGING_OFF`, `429 RATE_LIMITED`. Mail provider problems never fail a
+request: they show on the mailbox (`lastErrorCode`: `mail_scope_missing`, `mail_permission_missing`, `mailbox_out_of_scope`,
+`mail_unavailable`, `no_mailbox`, `provider_error`, …) and the provider's `problem`.
+
 **Public booking page** — `/public/booking` (**no sign-in**; Calendar Phase 4, as of 2026-11-26;
 `bookingLink.public.routes.ts`). Mounted before the global body parser with its own **16 KB** JSON limit; every answer
 `Cache-Control: no-store`, `X-Robots-Tag: noindex, nofollow`. CORS, helmet and CSP are unchanged (the page `/book/<slug>`
@@ -810,6 +840,7 @@ Limited responses carry `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Res
 | 403 | `BOOKING_LINKS_NOT_ALLOWED` | Booking links: the user's role may not create links (`whoCanCreate`) |
 | 409 | `BOOKING_LINKS_OFF` | Booking links: the company switch is off (creating or changing a link; turning one off still works) |
 | 409 | `BOOKING_LINK_LIMIT` | Booking links: the owner already has 20 links |
+| 409 | `EMAIL_LOGGING_OFF` | Email logging: "Log now" for a person whose email isn't being logged (switch off, no synced calendar, …) |
 | 409 | `SLOT_UNAVAILABLE` | Public booking: the time is taken, the token is invalid / expired / for an older version of the link, or the time breaks the link's rules now |
 | 409 | `BOOKING_DAY_FULL` | Public booking: that day reached the link's bookings-a-day limit |
 | 409 | `NOT_UNDOABLE`, `NOT_RESTORABLE`, `ALREADY_REVERSED` | Audit log: the entry can't be undone / restored, or was already |

@@ -61,6 +61,7 @@ export function ContactDetailDrawer({ contact, open, onClose, onEdit }: ContactD
             tabContents={view.tabContents}
             auditEntity={{ type: 'contacts', id: c.id }}
             activities={recordActivitiesContext('contacts', c)}
+            emails={{ module: 'contacts', id: c.id }}
             recordAudit={c}
             includeChangesTab={true}
             primaryAction={{

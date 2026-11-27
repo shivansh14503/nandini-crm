@@ -73,6 +73,14 @@ export const queryKeys = {
         bookings: (id: string) => ['bookingLinks', 'bookings', id] as const,
         settings: () => ['bookingLinks', 'settings'] as const,
     },
+    /** Email logging (`/api/email-logs`, Calendar Phase 4); `notifyCrmUpdate('/api/email-logs')` refreshes it. */
+    emailLogs: {
+        all: ['emailLogs'] as const,
+        record: (module: string, recordId: string) => ['emailLogs', 'record', module, recordId] as const,
+        own: () => ['emailLogs', 'own'] as const,
+        admin: () => ['emailLogs', 'admin'] as const,
+        person: (username: string) => ['emailLogs', 'person', username.toLowerCase()] as const,
+    },
     /** The signed-in user's notifications (navbar bell); `notifyCrmUpdate('/api/notifications')` refreshes them. */
     notifications: {
         all: ['notifications'] as const,
