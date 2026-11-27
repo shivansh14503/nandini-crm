@@ -27,6 +27,7 @@ import type { FilterTab, SortField } from './master';
 import { useSearchScope, useSearchScopedRows } from '../search/SearchScope';
 import { useOrganizationColumns } from './organizationColumns';
 import { ModuleScorecardSummary, useModuleScorecard } from '../common/scorecard/useModuleScorecard';
+import { sameOption, useDropdownPillOptions } from '../common/filterPills/useDropdownPillOptions';
 
 /** Stable empty list while the first page loads (keeps memoized filters from recomputing). */
 const NO_RECORDS: ExtendedOrganization[] = [];
@@ -95,15 +96,23 @@ export function OrganizationsMasterView() {
 
     // ── Filter & Search Logic ─────────────────────────────────────────────────
     /** Organizations in the active pill view: the scorecard counts these. */
+    // The Distributor and End User pills follow their dropdown options (Nature of Business / Customer Type): each
+    // shows only while its option is active, under the option's label, and matches records by the option's value.
+    const natureOptions = useDropdownPillOptions('org_nature_of_business', 'organizations');
+    const customerTypeOptions = useDropdownPillOptions('org_customer_type', 'organizations');
+    const distributorOption = useMemo(() => natureOptions.options.find((o) => /distributor/i.test(o.value)), [natureOptions]);
+    const endUserOption = customerTypeOptions.find('End User');
+    const effectiveTab: FilterTab =
+        (activeTab === 'distributor' && !distributorOption) || (activeTab === 'enduser' && !endUserOption) ? 'all' : activeTab;
     const tabOrganizations = useMemo(() => {
         return organizations.filter((org) => {
-            if (activeTab === 'recent' && !org.isRecentlyViewed) return false;
-            if (activeTab === 'my' && !org.isMyAccount) return false;
-            if (activeTab === 'distributor' && !org.natureOfBusiness?.toLowerCase().includes('distributor')) return false;
-            if (activeTab === 'enduser' && org.customerType !== 'End User') return false;
+            if (effectiveTab === 'recent' && !org.isRecentlyViewed) return false;
+            if (effectiveTab === 'my' && !org.isMyAccount) return false;
+            if (effectiveTab === 'distributor' && distributorOption && !sameOption(org.natureOfBusiness, distributorOption.value)) return false;
+            if (effectiveTab === 'enduser' && endUserOption && !sameOption(org.customerType, endUserOption.value)) return false;
             return true;
         });
-    }, [organizations, activeTab]);
+    }, [organizations, effectiveTab, distributorOption, endUserOption]);
 
     // Summary cards, once an admin switches them on under Admin › List Scorecards.
     const goToFirstPage = useCallback(() => setCurrentPage(1), []);
@@ -271,18 +280,12 @@ export function OrganizationsMasterView() {
                 label: 'My Accounts',
                 icon: <PersonOutlinedIcon sx={{ fontSize: 16, color: 'var(--mui-palette-text-muted)' }} />,
             },
-            {
-                id: 'distributor',
-                label: 'Distributor/Trading',
-                dotColor: 'var(--mui-palette-primary-main)',
-            },
-            {
-                id: 'enduser',
-                label: 'End User',
-                dotColor: 'var(--crm-emerald-500)',
-            },
+            ...(distributorOption
+                ? [{ id: 'distributor' as const, label: distributorOption.label, dotColor: 'var(--mui-palette-primary-main)' }]
+                : []),
+            ...(endUserOption ? [{ id: 'enduser' as const, label: endUserOption.label, dotColor: 'var(--crm-emerald-500)' }] : []),
         ],
-        [organizations]
+        [organizations, distributorOption, endUserOption]
     );
 
 
@@ -319,7 +322,7 @@ export function OrganizationsMasterView() {
             summary={<ModuleScorecardSummary state={scorecard} loading={listLoading} />}
             filterConfig={{
                 filters: filterItems,
-                activeFilter: activeTab,
+                activeFilter: effectiveTab,
                 onFilterChange: (tab) => {
                     setActiveTab(tab);
                     setCurrentPage(1);

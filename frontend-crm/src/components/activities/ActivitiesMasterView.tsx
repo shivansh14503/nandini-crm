@@ -39,11 +39,16 @@ import { useActivityColumns } from './activityColumns';
 import { useActivityTypeLabel } from './ActivityBadges';
 import { attendeeLabel } from './RhfAttendeesField';
 import { activitySortTime, isActivityOverdue, useBusinessClock } from './activityTime';
+import { useDropdownPillOptions } from '../common/filterPills/useDropdownPillOptions';
+import { FOLLOWUP_TYPE_CATEGORY_KEY } from '@/utils/formConfig';
 
 /** Quick-view pills ('all' = none picked). `type` is a Followup Type the nav asked for that has no pill of its own. */
 export type ActivityFilterTab = 'all' | 'mine' | 'today' | 'overdue' | 'next7' | 'calls' | 'meetings' | 'tasks' | 'notes' | 'type';
 
-/** Pills that stand for one Followup Type (option values; an admin rename keeps them). */
+/**
+ * Pills that stand for one Followup Type (option values; an admin rename keeps them). Each shows only while its
+ * option is active in the Dropdown Manager, under the option's label once an admin renames it.
+ */
 const TYPE_PILLS: Partial<Record<ActivityFilterTab, string>> = { calls: 'Call', meetings: 'Meeting', tasks: TASK_TYPE, notes: NOTE_TYPE };
 
 /** The days the list loads around today (business timezone): `[today − back, today + ahead]`. */
@@ -140,6 +145,7 @@ export function ActivitiesMasterView({ mine = false, type = '', status = '' }: A
         : ((Object.entries(TYPE_PILLS).find(([, value]) => value.toLowerCase() === type.toLowerCase())?.[0] as ActivityFilterTab | undefined) ??
           (type ? 'type' : 'all'));
     const [activeTab, setActiveTab] = useResetTab<ActivityFilterTab>(initialTab);
+    const followupTypes = useDropdownPillOptions(FOLLOWUP_TYPE_CATEGORY_KEY, 'activities');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [page, setPage] = useState(0);
@@ -303,6 +309,12 @@ export function ActivitiesMasterView({ mine = false, type = '', status = '' }: A
 
     const filterItems: DataTableFilterItem<ActivityFilterTab>[] = useMemo(() => {
         const count = (id: Exclude<ActivityFilterTab, 'all'>) => activities.filter(predicates[id]).length;
+        // A type pill whose option an admin removed is left out; a renamed option shows its new label.
+        const typePill = (id: Exclude<ActivityFilterTab, 'all'>, plural: string, icon: React.ReactElement) => {
+            const option = followupTypes.find(TYPE_PILLS[id] ?? '');
+            if (!option) return [];
+            return [{ id, label: option.label === option.value ? plural : option.label, icon, count: count(id) }];
+        };
         return [
             { id: 'mine', label: 'My Activities', icon: <AccountCircleOutlinedIcon sx={{ fontSize: 16 }} />, count: count('mine') },
             { id: 'today', label: 'Today', icon: <TodayOutlinedIcon sx={{ fontSize: 16 }} />, count: count('today') },
@@ -314,19 +326,24 @@ export function ActivitiesMasterView({ mine = false, type = '', status = '' }: A
                 activeColor: 'var(--mui-palette-error-main)',
             },
             { id: 'next7', label: 'Next 7 days', icon: <DateRangeOutlinedIcon sx={{ fontSize: 16 }} />, count: count('next7') },
-            { id: 'calls', label: 'Calls', icon: <CallOutlinedIcon sx={{ fontSize: 16 }} />, count: count('calls') },
-            { id: 'meetings', label: 'Meetings', icon: <GroupsOutlinedIcon sx={{ fontSize: 16 }} />, count: count('meetings') },
-            { id: 'tasks', label: 'Tasks', icon: <TaskAltOutlinedIcon sx={{ fontSize: 16 }} />, count: count('tasks') },
-            { id: 'notes', label: 'Notes', icon: <StickyNote2OutlinedIcon sx={{ fontSize: 16 }} />, count: count('notes') },
+            ...typePill('calls', 'Calls', <CallOutlinedIcon sx={{ fontSize: 16 }} />),
+            ...typePill('meetings', 'Meetings', <GroupsOutlinedIcon sx={{ fontSize: 16 }} />),
+            ...typePill('tasks', 'Tasks', <TaskAltOutlinedIcon sx={{ fontSize: 16 }} />),
+            ...typePill('notes', 'Notes', <StickyNote2OutlinedIcon sx={{ fontSize: 16 }} />),
             // A type the nav asked for (Emails …) without a pill of its own.
             ...(initialTab === 'type'
                 ? [{ id: 'type' as const, label: typeLabel(type) || type, icon: <FilterAltOutlinedIcon sx={{ fontSize: 16 }} />, count: count('type') }]
                 : []),
         ];
-    }, [activities, predicates, initialTab, type, typeLabel]);
+    }, [activities, predicates, initialTab, type, typeLabel, followupTypes]);
 
     /** Activities in the active pill view: the scorecard counts these. */
-    const tabActivities = useMemo(() => (activeTab === 'all' ? activities : activities.filter(predicates[activeTab])), [activities, activeTab, predicates]);
+    // A selected type pill whose option was removed shows the whole list (its pill is gone).
+    const effectiveTab: ActivityFilterTab = TYPE_PILLS[activeTab] && !followupTypes.find(TYPE_PILLS[activeTab] ?? '') ? 'all' : activeTab;
+    const tabActivities = useMemo(
+        () => (effectiveTab === 'all' ? activities : activities.filter(predicates[effectiveTab])),
+        [activities, effectiveTab, predicates]
+    );
 
     const goToFirstPage = useCallback(() => setPage(0), []);
     const scorecard = useModuleScorecard<Activity>({ module: 'activities', rows: tabActivities, onActiveChange: goToFirstPage });
@@ -379,7 +396,7 @@ export function ActivitiesMasterView({ mine = false, type = '', status = '' }: A
             summary={<ModuleScorecardSummary state={scorecard} loading={listLoading} />}
             filterConfig={{
                 filters: filterItems,
-                activeFilter: activeTab,
+                activeFilter: effectiveTab,
                 onFilterChange: (tab) => {
                     setActiveTab((prev) => (prev === tab ? 'all' : tab));
                     setPage(0);

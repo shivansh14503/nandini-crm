@@ -1375,6 +1375,15 @@ frontend-crm/src/
 - **Bootstrap:** after sign-in, `CrmDataBootstrap` prefetches lightweight masters (users, Nature of Call, partners);
   on sign-out it clears the whole query cache.
 - **Theme:** MUI `cssVariables` with class-based colour schemes; see the root `CLAUDE.md` for the token rules.
+- **Filter pills follow the dropdowns:** a list's quick-view pills, scorecard cards and Filter dialog options read
+  the same admin dropdown configuration as the forms (`useFormConfigs`, refreshed on the `form-configs` sync event
+  whenever the Dropdown Manager saves). Pills that filter by an option value come from `useDropdownPillOptions`
+  (`components/common/filterPills`): one pill per active option (Products by Type), or a fixed pill that shows only
+  while its option is active (Activities Calls / Meetings, Organizations Distributor / End User), labelled with the
+  option's current label. Removing an option removes its pill and card; records still holding the old value stay in
+  "All" and keep showing it in their drawer. Inline lists of option values in a list screen
+  (`['Services', 'AMC'].includes(x)`) fail lint (`eslint.config.mjs`, `*MasterView.tsx` and `master/**`); options the
+  code relies on are system options (`isSystem`, can't be removed) kept in named constants such as `CLOSED_STAGES`.
 
 ### 8.3 Activities and the calendar
 

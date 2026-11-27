@@ -130,9 +130,14 @@ export function resolveScorecard(
 /**
  * The cards of a scorecard in the admin's order: its saved options, then any option added to the field's dropdown
  * since (active ones, in dropdown order, with a suggested color), so a new option gets a card straight away.
+ * Saved options an admin has since removed (archived) from the dropdown lose their card, like the list's other
+ * pills; their records still count under "All".
  */
 export function scorecardCardOptions(scorecard: ResolvedScorecard): ScorecardOption[] {
-    return withNewOptions(scorecard.config.options, scorecard.category, scorecard.field.module);
+    const options = withNewOptions(scorecard.config.options, scorecard.category, scorecard.field.module);
+    if (!scorecard.category) return options;
+    const active = new Set(scorecard.category.options.filter((o) => o.isActive).map((o) => o.value));
+    return options.filter((o) => active.has(o.value));
 }
 
 /** `module`: the list's module, so a shared dropdown only adds options that module offers (`optionsForModule`). */
