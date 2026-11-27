@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { FIELD_MAX_LENGTH as L } from '../../config/fieldLimits.js';
 import {
+    optionalLongText,
+    requiredLongText,
     booleanQuery,
     createdWithinDaysQuery,
     csvQuery,
@@ -36,9 +38,9 @@ export const ticketInputSchema = z.object({
     ticketPriority: optionalText('Ticket Priority', 20),
     source: textWithDefault('Source', 20, 'Call'),
     supportType: textWithDefault('Support Type', 20, 'Free'),
-    problemReported: requiredText('Problem Reported', L.longText),
-    resolution: optionalText('Resolution', L.longText),
-    reasonForEscalatedCalls: optionalText('Reason For Escalated Calls', L.longText),
+    problemReported: requiredLongText('Problem Reported'),
+    resolution: optionalLongText(),
+    reasonForEscalatedCalls: optionalLongText(),
     assignedTo: requiredText('Assigned to', L.username),
 
     cloudFlag: z.boolean().default(false),
@@ -49,9 +51,9 @@ export const ticketInputSchema = z.object({
     ticketStatus: textWithDefault('Ticket Status', 30, 'New'),
     dueDate: requiredWallClock('Due Date'),
     supportMode: optionalText('Support Mode', 50),
-    problemObserved: optionalText('Problem Observed', L.longText),
-    rca: optionalText('RCA', L.longText),
-    addDescription: optionalText('Add Description', L.longText),
+    problemObserved: optionalLongText(),
+    rca: optionalLongText(),
+    addDescription: optionalLongText(),
 
     partnerCompany: optionalText('Partner Company', L.organizationName),
     partnerCompanyContact: optionalText('Partner Company Contact', L.personName),

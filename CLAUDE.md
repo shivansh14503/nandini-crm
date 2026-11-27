@@ -16,6 +16,10 @@ Whenever creating or modifying UI components in `frontend-crm`, **you must stric
 Anything new in `frontend-crm` must also be **fully responsive** (phone, tablet and desktop, touch included): see
 [.claude/rules/responsive-ui.md](.claude/rules/responsive-ui.md).
 
+Long text fields (descriptions, remarks, notes, terms, reasons) have **no character limit** anywhere (UI, validation,
+NVARCHAR(MAX) columns) and use the shared auto-growing input and Show more display: see
+[.claude/rules/long-text-fields.md](.claude/rules/long-text-fields.md).
+
 Filter pills, scorecard cards and Filter dialog options must follow the admin's dropdown options: when dropdown
 options change, the pills change with them from the same source (`useDropdownPillOptions`), never from a hand-written
 list of values: see [.claude/rules/dropdown-filter-pills.md](.claude/rules/dropdown-filter-pills.md).

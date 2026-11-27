@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { FIELD_MAX_LENGTH as L } from '../../config/fieldLimits.js';
 import {
+    optionalLongText,
     createdWithinDaysQuery,
     csvQuery,
     customFieldsSchema,
@@ -20,8 +21,6 @@ export const PRODUCT_STATUSES = ['Active', 'Inactive'] as const;
 export type ProductStatus = (typeof PRODUCT_STATUSES)[number];
 export const ACTIVE_PRODUCT_STATUS: ProductStatus = 'Active';
 export const INACTIVE_PRODUCT_STATUS: ProductStatus = 'Inactive';
-/** Longest Inactivity Reason (the Organizations one has the same limit). */
-export const INACTIVITY_REASON_MAX_LENGTH = L.inactivityReason;
 /** Whether a stored status is Active (ignoring case and spaces, as the default SQL Server collation compares). */
 export const isActiveProductStatus = (status: string | null | undefined): boolean =>
     (status ?? '').trim().toLowerCase() === ACTIVE_PRODUCT_STATUS.toLowerCase();
@@ -45,11 +44,11 @@ export const productInputSchema = z
         mrp: optionalAmountString('MRP'),
         msp: optionalAmountString('MSP'),
         contractCreate: enumWithDefault('Contract Create', ['Yes', 'No'], 'No'),
-        description: optionalText('Description', L.longText),
-        termsAndConditions: optionalText('Terms and Conditions', L.longText),
+        description: optionalLongText(),
+        termsAndConditions: optionalLongText(),
         status: enumWithDefault('Status', PRODUCT_STATUSES, ACTIVE_PRODUCT_STATUS),
         /** Asked when a product is made Inactive; stored with the date and the admin (product.service.ts). */
-        inactivityReason: optionalText('Inactivity Reason', INACTIVITY_REASON_MAX_LENGTH),
+        inactivityReason: optionalLongText(),
         customFields: customFieldsSchema,
     })
     .superRefine((product, ctx) => {

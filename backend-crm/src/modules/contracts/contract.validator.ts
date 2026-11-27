@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { FIELD_MAX_LENGTH as L } from '../../config/fieldLimits.js';
 import {
+    optionalLongText,
     booleanQuery,
     createdWithinDaysQuery,
     csvQuery,
@@ -49,7 +50,7 @@ export const contractInputSchema = z
         billNumber: optionalText('Bill Number', L.shortCode),
         billDate: optionalDate('Bill Date'),
         billAmount: optionalAmountString('Bill Amount'),
-        description: optionalText('Description', L.longText),
+        description: optionalLongText(),
 
         customFields: customFieldsSchema,
     })

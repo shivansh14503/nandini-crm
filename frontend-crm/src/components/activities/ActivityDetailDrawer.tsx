@@ -41,7 +41,6 @@ import { NestedDrawerLayer, RaisedLayer } from '@/components/common/RaisedLayer'
 import { fieldSx } from '@/components/forms/FormField';
 import { LongTextInput } from '@/components/forms/LongTextInput';
 import { ClampedText } from '@/components/common/ClampedText';
-import { FIELD_MAX_LENGTH } from '@/config/fieldLimits';
 import { activityResponseCategory, CUSTOMER_RESPONSES } from '@/components/forms/FollowUpDecision';
 import { useActivity, useDeleteActivity, useDeleteActivityScoped } from '@/hooks/queries/useActivities';
 import { useActivityResponseLabel, useDropdownOptionLabel, useModuleFormConfig } from '@/hooks/queries/useFormConfigs';
@@ -218,7 +217,6 @@ function CompleteDialog({ activity, onClose, onDone }: { activity: Activity; onC
                         inputLabel={remarksField.label}
                         value={remarks}
                         onChange={setRemarks}
-                        maxLength={FIELD_MAX_LENGTH.longText}
                         placeholder="How did it go? Next steps..."
                         error={remarksTooShort ? `${remarksField.label} must be at least 3 characters.` : undefined}
                     />

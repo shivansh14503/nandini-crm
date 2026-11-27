@@ -1,15 +1,6 @@
 import { z } from 'zod';
 import { FIELD_MAX_LENGTH as L } from '../config/fieldLimits';
-import {
-    requiredString,
-    optionalString,
-    requiredText,
-    optionalText,
-    zodPhone,
-    zodPhoneOptional,
-    zodEmailOptional,
-    customFieldsSchema,
-} from './common';
+import { customFieldsSchema, optionalLongText, optionalString, requiredString, requiredText, zodEmailOptional, zodPhone, zodPhoneOptional } from './common';
 
 export const corporateEmailSchema = z
     .object({
@@ -55,7 +46,7 @@ export const contactFormSchema = z.object({
     leftJob: z.enum(['No', 'Yes']).default('No'),
     communicationType: z.array(z.string()).default(['Call', 'Email']),
     doNotCall: z.boolean().default(false),
-    addDescription: optionalText('Add Description', L.longText),
+    addDescription: optionalLongText,
 
     /** Admin-defined custom field values (validated against the form configuration by useRhfForm). */
     customFields: customFieldsSchema,

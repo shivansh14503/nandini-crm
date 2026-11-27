@@ -1,4 +1,3 @@
-import { FIELD_MAX_LENGTH } from '@/config/fieldLimits';
 
 // ─── Product Catalog Types ─────────────────────────────────────────────────────
 
@@ -28,8 +27,6 @@ export const ACTIVE_PRODUCT_STATUS: ProductStatus = 'Active';
 export const INACTIVE_PRODUCT_STATUS: ProductStatus = 'Inactive';
 /** Dropdown category of the product Status. */
 export const PRODUCT_STATUS_CATEGORY = 'product_status';
-/** Longest Inactivity Reason (same as the backend's INACTIVITY_REASON_MAX_LENGTH). */
-export const INACTIVITY_REASON_MAX_LENGTH = FIELD_MAX_LENGTH.inactivityReason;
 /**
  * Whether a product is Active (ignoring case and spaces). Only Active products are offered in line item pickers;
  * a product read without a Status (an older cached copy) counts as Active.

@@ -3,7 +3,6 @@
 import React from 'react';
 import { FormGrid, FormGridItem, RhfTextField } from '@/components/forms';
 import type { QuotationFormData } from '@/types/quotation.types';
-import { FIELD_MAX_LENGTH } from '@/config/fieldLimits';
 
 export function QuotationTermsSection() {
     return (
@@ -13,7 +12,6 @@ export function QuotationTermsSection() {
                     name="termsAndConditions"
                     label="Terms and Conditions"
                     multiline
-                    maxLength={FIELD_MAX_LENGTH.termsText}
                     placeholder="Enter statutory, payment, and delivery terms..."
                 />
             </FormGridItem>

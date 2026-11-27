@@ -1,20 +1,6 @@
 import { z } from 'zod';
 import { FIELD_MAX_LENGTH as L } from '../config/fieldLimits';
-import {
-    requiredString,
-    optionalString,
-    requiredText,
-    optionalText,
-    zodPhoneOptional,
-    zodPostalCode,
-    zodPostalCodeOptional,
-    refinePostalCodeForCountry,
-    zodEmailOptional,
-    zodGstOptional,
-    zodAmount,
-    configurableOption,
-    customFieldsSchema,
-} from './common';
+import { configurableOption, customFieldsSchema, optionalLongText, optionalString, optionalText, refinePostalCodeForCountry, requiredString, requiredText, zodAmount, zodEmailOptional, zodGstOptional, zodPhoneOptional, zodPostalCode, zodPostalCodeOptional } from './common';
 import { lineItemListSchema } from './lineItem.schema';
 
 /** Same line items as opportunities (Jira CRM-111): see lineItem.schema.ts. A quotation needs at least one. */
@@ -27,10 +13,10 @@ export const quotationFormSchema = z.object({
     quoteStage: configurableOption('Quote Stage', 'Draft'),
     quotationDate: requiredString('Quotation Date'),
     validUntil: requiredString('Valid Until Date'),
-    remarks: optionalText('Remarks', L.longText),
+    remarks: optionalLongText,
     // Terms, Payment Terms and Validation Period are required by the form configuration (admin-relaxable).
     termsAndCondition: optionalString,
-    termsAndConditionDescription: optionalText('Terms & Condition Description', L.termsText),
+    termsAndConditionDescription: optionalLongText,
     assignedTo: requiredString('Assigned Representative'),
 
     opportunity: requiredString('Opportunity'),
@@ -38,7 +24,7 @@ export const quotationFormSchema = z.object({
     validationPeriod: optionalString,
     otherRef: optionalText('Other Ref.', L.shortText),
     paymentTerms: optionalString,
-    paymentTermsDescription: optionalText('Payment Terms Description', L.termsText),
+    paymentTermsDescription: optionalLongText,
     preparedFor: requiredString('Prepared For'),
 
     // ── Tab 2: Line Items ─────────────────────────────────────────
@@ -80,8 +66,8 @@ export const quotationFormSchema = z.object({
     status: optionalString,
     quoteDate: optionalString,
     quotationSubject: optionalText('Quotation Subject', L.title),
-    notes: optionalText('Internal Notes', L.longText),
-    termsAndConditions: optionalText('Terms and Conditions', L.termsText),
+    notes: optionalLongText,
+    termsAndConditions: optionalLongText,
 
     /** Admin-defined custom field values (validated against the form configuration by useRhfForm). */
     customFields: customFieldsSchema,

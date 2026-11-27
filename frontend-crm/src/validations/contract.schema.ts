@@ -1,14 +1,6 @@
 import { z } from 'zod';
 import { FIELD_MAX_LENGTH as L } from '../config/fieldLimits';
-import {
-    requiredString,
-    optionalString,
-    requiredText,
-    optionalText,
-    configurableOption,
-    customFieldsSchema,
-    tallySerialNoOptional,
-} from './common';
+import { configurableOption, customFieldsSchema, optionalLongText, optionalString, optionalText, requiredString, requiredText, tallySerialNoOptional } from './common';
 
 // Same shapes the API accepts (backend-crm/src/validators/common.ts optionalAmountString / optionalDate / optionalWallClock).
 const AMOUNT_PATTERN = /^\d{1,16}(\.\d{1,2})?$/;
@@ -63,7 +55,7 @@ export const contractFormSchema = z
         billNumber: optionalText('Bill Number', L.shortCode),
         billDate: optionalDate('Bill Date'),
         billAmount: optionalAmount('Bill Amount'),
-        description: optionalText('Description', L.longText),
+        description: optionalLongText,
 
         /** Admin-defined custom field values (validated against the form configuration by useRhfForm). */
         customFields: customFieldsSchema,

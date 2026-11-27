@@ -87,7 +87,7 @@ export const activityFormSchema = z
             .max(MAX_ACTIVITY_ATTENDEES, { message: `An activity can have at most ${MAX_ACTIVITY_ATTENDEES} attendees.` })
             .default([]),
         customerResponse: optionalText('Customer Response', L.option),
-        remarks: optionalDescription('Remarks', L.longText),
+        remarks: optionalDescription('Remarks'),
         customFields: customFieldsSchema,
     })
     .superRefine((activity, ctx) => {

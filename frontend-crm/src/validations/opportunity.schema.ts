@@ -4,20 +4,7 @@ import type { ConfigValidationIssue } from '../utils/formConfig';
 import { PO_SALES_STAGE, SMALL_COMMISSION_LIMIT } from '../types/opportunity.types';
 import { isRecordFile } from '../types/recordFile.types';
 import { fmtMoney } from '../utils/formats';
-import {
-    requiredString,
-    optionalString,
-    requiredText,
-    optionalText,
-    optionalDescription,
-    zodPhoneOptional,
-    zodEmailOptional,
-    zodIfscOptional,
-    zodPanOptional,
-    zodAmount,
-    customFieldsSchema,
-    tallySerialNoOptional,
-} from './common';
+import { customFieldsSchema, optionalDescription, optionalLongText, optionalString, optionalText, requiredString, requiredText, tallySerialNoOptional, zodAmount, zodEmailOptional, zodIfscOptional, zodPanOptional, zodPhoneOptional } from './common';
 import { lineItemListSchema } from './lineItem.schema';
 
 /** Same line items as quotations (Jira CRM-111): see lineItem.schema.ts. An opportunity needs at least one too. */
@@ -48,8 +35,8 @@ export const opportunityFormSchema = z.object({
     nextFollowupTime: optionalString,
     followupType: optionalString.default('Call'),
     customerResponse: optionalString,
-    remarks: optionalDescription('Remarks', L.longText),
-    description: optionalText('Description', L.longText),
+    remarks: optionalDescription('Remarks'),
+    description: optionalLongText,
     assignedTo: requiredString('Assigned Representative'),
 
     // Billing Details

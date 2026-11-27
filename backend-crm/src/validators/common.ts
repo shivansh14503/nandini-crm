@@ -45,9 +45,23 @@ export const requiredUpperText = (field: string, max: number) => requiredText(fi
 /** Required person name, stored name-cased with titles like CA kept uppercase (see formatPersonName). */
 export const requiredPersonName = (field: string, max: number) => requiredText(field, max).transform(formatPersonName);
 
-/** "Add Description": optional (the form configuration decides), but at least 3 characters when given. */
+/**
+ * Long text (descriptions, remarks, notes, terms, reasons): no character limit. Stored in NVARCHAR(MAX) columns; the
+ * request body size limit is the only cap. Trimmed; '' / null / missing become undefined.
+ */
+export const optionalLongText = () =>
+    z.preprocess(
+        (value) => (value === null || (typeof value === 'string' && value.trim() === '') ? undefined : value),
+        z.string().trim().optional(),
+    );
+
+/** Required long text (e.g. a ticket's Problem Reported): no character limit. */
+export const requiredLongText = (field: string) =>
+    z.string({ error: `${field} is required.` }).trim().min(1, { message: `${field} is required.` });
+
+/** "Add Description": optional (the form configuration decides), but at least 3 characters when given; no upper limit. */
 export const optionalDescription = (field: string) =>
-    optionalText(field, L.longText).refine((value) => value === undefined || value.length >= 3, {
+    optionalLongText().refine((value) => value === undefined || value.length >= 3, {
         message: `${field} must be at least 3 characters.`,
     });
 

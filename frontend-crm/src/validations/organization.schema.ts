@@ -1,22 +1,7 @@
 import { z } from 'zod';
 import { FIELD_MAX_LENGTH as L } from '../config/fieldLimits';
 import { isGstRegistrationType, isPartnerCustomerType, NATURE_OF_PARTNER_REQUIRED_MESSAGE } from '../config/constants';
-import {
-    requiredString,
-    optionalString,
-    requiredText,
-    optionalText,
-    zodPostalCodeOptional,
-    refinePostalCodeForCountry,
-    zodPanOptional,
-    zodGstOptional,
-    zodIfscOptional,
-    zodPhoneOptional,
-    zodEmailOptional,
-    GST_REGEX,
-    configurableOption,
-    customFieldsSchema,
-} from './common';
+import { GST_REGEX, configurableOption, customFieldsSchema, optionalLongText, optionalString, optionalText, refinePostalCodeForCountry, requiredString, requiredText, zodEmailOptional, zodGstOptional, zodIfscOptional, zodPanOptional, zodPhoneOptional, zodPostalCodeOptional } from './common';
 import { corporateEmailSchema } from './contact.schema';
 
 export const partnerCompanySchema = z.object({
@@ -51,7 +36,7 @@ export const organizationFieldsSchema = z.object({
         memberOf: optionalText('Parent Corporation', L.organizationName),
         numberOfEmployees: optionalString,
         annualTurnover: optionalString,
-        addDescriptionAndScope: optionalText('Description', L.organizationDescription),
+        addDescriptionAndScope: optionalLongText,
         accountVerified: z.boolean().default(false),
         verifiedAt: optionalString,
         verifiedBy: optionalString,

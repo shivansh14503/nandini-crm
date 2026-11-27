@@ -304,10 +304,10 @@ export interface FollowUpChange {
 
 const nameKey = (value: string | null | undefined) => (value ?? '').trim().toLowerCase();
 const optional = (value: string | null | undefined) => (value && value.trim() ? value : undefined);
-/** Remarks are stored only when at least 3 characters (the activity rule), at most 2000. */
+/** Remarks are stored only when at least 3 characters (the activity rule); no upper limit (long text). */
 const remarksValue = (value: string) => {
     const text = value.trim();
-    return text.length >= 3 ? clip(text, L.longText) : undefined;
+    return text.length >= 3 ? text : undefined;
 };
 
 function whenFields(when: FollowUpWhen): Partial<SystemActivityFields> {

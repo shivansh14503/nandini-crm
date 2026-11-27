@@ -160,10 +160,11 @@ describe('checkModulePayload: formats and rules', () => {
         });
     }
 
-    it('caps text and textarea lengths like the form', () => {
+    it('caps text length like the form; long text (textarea) has no limit', () => {
         const config = configWith([field({ fieldKey: 'cf_t', fieldType: 'text' }), field({ fieldKey: 'cf_a', fieldType: 'textarea' })]);
-        assert.doesNotThrow(() => checkModulePayload(config, {}, { cf_t: 'x'.repeat(500), cf_a: 'x'.repeat(4000) }));
-        assert.equal(issuesOf(() => checkModulePayload(config, {}, { cf_t: 'x'.repeat(501), cf_a: 'x'.repeat(4001) })).length, 2);
+        assert.doesNotThrow(() => checkModulePayload(config, {}, { cf_t: 'x'.repeat(500), cf_a: 'x'.repeat(50_000) }));
+        const issues = issuesOf(() => checkModulePayload(config, {}, { cf_t: 'x'.repeat(501), cf_a: 'x'.repeat(50_000) }));
+        assert.deepEqual(issues.map((i) => i.path?.at(-1)), ['cf_t']);
     });
 
     it('applies validationRules min / max / minLength / maxLength / pattern', () => {

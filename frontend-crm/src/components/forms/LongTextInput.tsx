@@ -20,7 +20,10 @@ export interface LongTextInputProps {
     /** Field label: names the expand editor and the input for screen readers. */
     label: string;
     name?: string;
-    /** Character limit: enforced while typing and shown as "420 / 2,000" under the field. */
+    /**
+     * Character limit, shown as "120 / 250" under the field. Long text (descriptions, remarks, notes, terms, reasons)
+     * has none: leave it unset. Only short multi-line values (street address, a status message) pass one.
+     */
     maxLength?: number;
     placeholder?: string;
     disabled?: boolean;
@@ -50,8 +53,8 @@ export interface LongTextInputProps {
 /**
  * The one long text control of the CRM (descriptions, remarks, notes, terms, reasons): starts at
  * {@link LONG_TEXT_MIN_ROWS} lines, grows as the user types up to {@link LONG_TEXT_MAX_ROWS}, then scrolls inside;
- * no resize handle. A live character counter sits under it and an expand button opens a larger editor for very long
- * text. Use it through `RhfTextField multiline` in React Hook Form forms.
+ * no resize handle. No character limit; an expand button opens a larger editor for very long text. Use it through
+ * `RhfTextField multiline` in React Hook Form forms.
  */
 export function LongTextInput({
     value,

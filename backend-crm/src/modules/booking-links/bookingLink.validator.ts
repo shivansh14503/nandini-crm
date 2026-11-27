@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { optionalPhone, optionalText, requiredText } from '../../validators/common.js';
+import { optionalLongText, optionalPhone, optionalText, requiredText } from '../../validators/common.js';
 import { ACTIVITY_RELATED_MODULES, ACTIVITY_REMINDERS } from '../activities/activity.schedule.js';
 import {
     BOOKING_DURATION_MAX_MINUTES,
@@ -11,7 +11,6 @@ import {
     BOOKING_MAX_NOTICE_MINUTES,
     BOOKING_MAX_PER_DAY,
     BOOKING_MAX_WINDOWS_PER_DAY,
-    BOOKING_NOTE_MAX,
     BOOKING_SLOT_STEPS,
     BOOKING_TITLE_MAX,
     BOOKING_VIDEO_PROVIDERS,
@@ -95,7 +94,7 @@ const linkFields = {
     ),
     location: optionalText('Location', BOOKING_LOCATION_MAX).nullable(),
     videoMeeting: videoMeetingSchema,
-    note: optionalText('Note', BOOKING_NOTE_MAX).nullable(),
+    note: optionalLongText().nullable(),
     availability: availabilitySchema,
     bufferBeforeMinutes: minutes('Buffer before', 0, BOOKING_MAX_BUFFER_MINUTES),
     bufferAfterMinutes: minutes('Buffer after', 0, BOOKING_MAX_BUFFER_MINUTES),

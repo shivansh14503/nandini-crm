@@ -1739,23 +1739,30 @@ guard; `PersonEmailLoggingSection` inside the People › calendar dialog (compan
 
 ### 8.11 Long text fields (descriptions, remarks, notes, terms, reasons)
 
-As of 2026-11-27. Every long text input is one control, `LongTextInput` (`components/forms/LongTextInput.tsx`), reached
-through `RhfTextField multiline` in React Hook Form forms (so Form Builder-rendered textarea fields, built-in or custom,
-get it too) and used directly in dialogs and non-RHF forms. It starts at 3 lines, grows with the text to 10 lines, then
-scrolls inside (no resize handle); a live counter ("420 / 2,000", amber from 90 %, red at the limit) sits under it next
-to the error / helper text; an expand button opens `LongTextEditorDialog`, a larger editor that edits a copy (Done or
-Ctrl / ⌘ + Enter applies it, Cancel / Escape leaves the field as it was; Enter there never reaches the form's or
-dialog's own Enter handlers). Short dialogs (inactivity reason, Out of office message) and street addresses turn the
-expand button off (`expandable={false}`). Limits come from `config/fieldLimits.ts` (mirrored and enforced by the API
-validators; contract-tested): `longText` 2,000 (default for any multiline field), `organizationDescription` 1,000
-(Organization "Add Description & Scope", also on Convert Lead), `termsText` 4,000 (quotation Terms & Condition /
-Payment Terms descriptions and Terms and Conditions), `inactivityReason` 500, `customLongText` 4,000 (admin-added Long
-Text fields). Read-only places show long text through `ClampedText` (`components/common/ClampedText.tsx`): the first 3
-lines and a "Show more / Show less" toggle that appears only when the text runs longer (measured, follows resizes; a
-click doesn't reach the table row). `ReadOnlyField` (record views, drawer field blocks, drawer custom fields) clamps
-text values by default; the generated textarea table columns, Latest Remarks columns, line item descriptions, the
-follow-up history and the activity drawer use it too. PDFs print long text in full: line breaks kept and
-`overflow-wrap: break-word` on the page (and on the PDF builder canvas).
+As of 2026-11-27. **Long text has no character limit**, end to end: no counter or `maxLength` in the UI, no `.max()` in
+the Zod schemas (frontend `optionalLongText` / `requiredLongText` / `optionalDescription` in `validations/common.ts`,
+backend the same names in `validators/common.ts`), and NVARCHAR(MAX) columns (migration
+`20261227090000_long_text_unlimited`; `validators/longTextLimits.test.ts` checks the columns and that the schemas take
+any length). The only cap is the API's 1 MB JSON body limit. This covers descriptions, remarks, notes, terms (product
+and quotation), inactivity reasons, line item Description / Note, ticket case notes, contract / partner descriptions,
+activity remarks, the booking link note and admin-added Long Text (textarea) fields (an admin's own Max Length rule
+on a custom field still applies). Kept on purpose: street addresses (250, shown with a counter), the public booking
+page's visitor message (1,000, an unauthenticated form) and the Out of office message (200, a one-line status).
+
+Every long text input is one control, `LongTextInput` (`components/forms/LongTextInput.tsx`), reached through
+`RhfTextField multiline` in React Hook Form forms (so Form Builder-rendered textarea fields, built-in or custom, get it
+too) and used directly in dialogs and non-RHF forms. It starts at 3 lines, grows with the text to 10 lines, then
+scrolls inside (no resize handle); an expand button opens `LongTextEditorDialog`, a larger editor that edits a copy
+(Done or Ctrl / ⌘ + Enter applies it, Cancel / Escape leaves the field as it was; Enter there never reaches the form's
+or dialog's own Enter handlers). Short dialogs (inactivity reason, Out of office message) and street addresses turn the
+expand button off (`expandable={false}`). A counter shows only when a `maxLength` is passed, which long text never
+does. Read-only places show long text through `ClampedText` (`components/common/ClampedText.tsx`): the first 3 lines
+and a "Show more / Show less" toggle that appears only when the text runs longer (measured, follows resizes; a click
+doesn't reach the table row; unbroken strings wrap). `ReadOnlyField` (record views, drawer field blocks, drawer custom
+fields) clamps text values by default; the generated textarea table columns, Latest Remarks columns, line item
+descriptions, the follow-up history and the activity drawer use it too. PDFs print long text in full: line breaks kept
+and `overflow-wrap: break-word` on the page (and on the PDF builder canvas). New long text fields follow
+`.claude/rules/long-text-fields.md`.
 
 ## 9. Deployment topology
 

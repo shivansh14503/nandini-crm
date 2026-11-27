@@ -22,8 +22,8 @@ describe('productInputSchema Status', () => {
         assert.equal(productInputSchema.parse({ ...valid, status: 'Inactive', inactivityReason: 'x' }).status, 'Inactive');
         assert.throws(() => productInputSchema.parse({ ...valid, status: 'Paused' }));
     });
-    it('caps the Inactivity Reason at 500 characters', () => {
-        assert.throws(() => productInputSchema.parse({ ...valid, inactivityReason: 'x'.repeat(501) }));
+    it('takes an Inactivity Reason of any length (long text)', () => {
+        assert.doesNotThrow(() => productInputSchema.parse({ ...valid, inactivityReason: 'x'.repeat(5_000) }));
     });
     it('filters the list by Status', () => {
         assert.deepEqual(productListQuerySchema.parse({ status: 'Inactive' }).status, ['Inactive']);

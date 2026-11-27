@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { FIELD_MAX_LENGTH as L } from '../../config/fieldLimits.js';
 import {
+    optionalLongText,
     booleanQuery,
     createdWithinDaysQuery,
     customFieldsSchema,
@@ -36,8 +37,8 @@ const partnerCompanyFields = z
                 ctx.addIssue({ code: 'custom', message: 'Email Address is required.' });
             }
         }),
-        addDescription: optionalText('Add Description', L.longText),
-        description: optionalText('Description', L.longText),
+        addDescription: optionalLongText(),
+        description: optionalLongText(),
         assignedTo: optionalText('Assigned to', L.username),
         principalCompany: optionalText('Principal Company', L.organizationName),
 

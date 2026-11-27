@@ -237,7 +237,7 @@ model Organization {
   tradeName              String?   @db.NVarChar(200)
   natureOfBusiness       String?   @db.NVarChar(100)
   accountStatus          String    @default("Active") @db.NVarChar(20)
-  inactivityReason       String?   @db.NVarChar(500)
+  inactivityReason       String?   @db.NVarChar(Max)
   typeOfEntity           String?   @db.NVarChar(50)
   customerType           String?   @db.NVarChar(50)
   /// Partner organizations only (customerType = Partner): the Partner Company form's Nature of Partner list (partner_nature).
@@ -250,7 +250,7 @@ model Organization {
   parentOrganizationId   String?   @db.NVarChar(50)
   numberOfEmployees      String?   @db.NVarChar(30)
   annualTurnover         String?   @db.NVarChar(30)
-  addDescriptionAndScope String?   @db.NVarChar(1000)
+  addDescriptionAndScope String?   @db.NVarChar(Max)
   accountVerified        Boolean   @default(false)
   verifiedAt             DateTime?
   verifiedBy             String?   @db.NVarChar(50)
@@ -392,7 +392,7 @@ model Contact {
   /// string[] as JSON (e.g. ["Call","Email"]).
   communicationTypeJson String? @db.NVarChar(Max)
   doNotCall             Boolean @default(false)
-  addDescription        String? @db.NVarChar(2000)
+  addDescription        String? @db.NVarChar(Max)
 
   /// Admin-defined custom field values `{ [fieldKey]: value }` (see FormFieldDefinition) as JSON.
   customDataJson String? @db.NVarChar(Max)
@@ -482,7 +482,7 @@ model Lead {
   followupType        String?   @db.NVarChar(30)
   /// Latest follow-up outcome (the module's own Customer Response dropdown), picked on every edit.
   customerResponse    String?   @db.NVarChar(100)
-  remarks             String?   @db.NVarChar(2000)
+  remarks             String?   @db.NVarChar(Max)
   registrationType    String?   @db.NVarChar(30)
   gstNumber           String?   @db.NVarChar(15)
   turnover            String?   @db.NVarChar(30)
@@ -505,7 +505,7 @@ model Lead {
   status              String    @default("New") @db.NVarChar(30)
   nextFollowupDate    DateTime? @db.Date
   nextFollowupTime    String?   @db.NVarChar(20)
-  description         String?   @db.NVarChar(2000)
+  description         String?   @db.NVarChar(Max)
   noOfEmployee        String?   @db.NVarChar(30)
   /// Name of the Referral picked as Referred By (written through on rename), or legacy free text when `referredById` is null.
   referredBy          String?   @db.NVarChar(200)
@@ -593,13 +593,13 @@ model Product {
   mrp                Decimal? @db.Decimal(18, 2)
   msp                Decimal? @db.Decimal(18, 2)
   contractCreate     String   @default("No") @db.NVarChar(3)
-  description        String?  @db.NVarChar(2000)
-  termsAndConditions String?  @db.NVarChar(2000)
+  description        String?  @db.NVarChar(Max)
+  termsAndConditions String?  @db.NVarChar(Max)
   /// Option of the fixed `product_status` dropdown: Active / Inactive. Only Admins change it; only Active products are
   /// offered in the opportunity / quotation line items (lines that already carry an inactive product keep it).
   status             String   @default("Active") @db.NVarChar(30)
   /// Set while Inactive (cleared on reactivation): the reason the admin gave, when and by whom (username).
-  inactivityReason   String?  @db.NVarChar(500)
+  inactivityReason   String?  @db.NVarChar(Max)
   inactiveSince      DateTime?
   inactivatedBy      String?  @db.NVarChar(50)
 
@@ -653,8 +653,8 @@ model Opportunity {
   followupType        String?   @db.NVarChar(30)
   /// Latest follow-up outcome (the module's own Customer Response dropdown), picked on every edit.
   customerResponse    String?   @db.NVarChar(100)
-  remarks             String?   @db.NVarChar(2000)
-  description         String?   @db.NVarChar(2000)
+  remarks             String?   @db.NVarChar(Max)
+  description         String?   @db.NVarChar(Max)
   assignedTo          String    @db.NVarChar(50)
 
   // Billing
@@ -734,8 +734,8 @@ model OpportunityLineItem {
   taxRate        String  @db.NVarChar(20)
   /// Gross Amount − Discount. GST on it is summed into the record's totals only.
   taxableAmount  Decimal @default(0) @db.Decimal(18, 2)
-  description    String? @db.NVarChar(2000)
-  note           String? @db.NVarChar(2000)
+  description    String? @db.NVarChar(Max)
+  note           String? @db.NVarChar(Max)
   sortOrder      Int     @default(0)
 
   opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade, onUpdate: NoAction)
@@ -757,16 +757,16 @@ model Quotation {
   quoteStage                   String   @default("Draft") @db.NVarChar(30)
   quotationDate                DateTime @db.Date
   validUntil                   DateTime @db.Date
-  remarks                      String?  @db.NVarChar(2000)
+  remarks                      String?  @db.NVarChar(Max)
   termsAndCondition            String?  @db.NVarChar(100)
-  termsAndConditionDescription String?  @db.NVarChar(4000)
+  termsAndConditionDescription String?  @db.NVarChar(Max)
   assignedTo                   String   @db.NVarChar(50)
   opportunity                  String   @db.NVarChar(200)
   company                      String   @db.NVarChar(100)
   validationPeriod             String?  @db.NVarChar(30)
   otherRef                     String?  @db.NVarChar(80)
   paymentTerms                 String?  @db.NVarChar(100)
-  paymentTermsDescription      String?  @db.NVarChar(4000)
+  paymentTermsDescription      String?  @db.NVarChar(Max)
   preparedFor                  String   @db.NVarChar(200)
 
   // Line-item totals (verified server-side)
@@ -809,8 +809,8 @@ model Quotation {
   opportunityId      String? @db.NVarChar(50)
   status             String? @db.NVarChar(30)
   quotationSubject   String? @db.NVarChar(200)
-  notes              String? @db.NVarChar(2000)
-  termsAndConditions String? @db.NVarChar(4000)
+  notes              String? @db.NVarChar(Max)
+  termsAndConditions String? @db.NVarChar(Max)
 
   /// Admin-defined custom field values `{ [fieldKey]: value }` (see FormFieldDefinition) as JSON.
   customDataJson String? @db.NVarChar(Max)
@@ -861,8 +861,8 @@ model QuotationLineItem {
   taxRate        String  @db.NVarChar(20)
   /// Gross Amount − Discount. GST on it is summed into the record's totals only.
   taxableAmount  Decimal @default(0) @db.Decimal(18, 2)
-  description    String? @db.NVarChar(2000)
-  note           String? @db.NVarChar(2000)
+  description    String? @db.NVarChar(Max)
+  note           String? @db.NVarChar(Max)
   sortOrder      Int     @default(0)
 
   quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
@@ -895,12 +895,12 @@ model Ticket {
   ticketStatus            String   @default("New") @db.NVarChar(30)
   /// Local date-time from the form (`YYYY-MM-DDTHH:mm`), stored as datetime for overdue queries.
   dueDate                 DateTime
-  problemReported         String   @db.NVarChar(2000)
-  problemObserved         String?  @db.NVarChar(2000)
-  resolution              String?  @db.NVarChar(2000)
-  reasonForEscalatedCalls String?  @db.NVarChar(2000)
-  rca                     String?  @db.NVarChar(2000)
-  addDescription          String?  @db.NVarChar(2000)
+  problemReported         String   @db.NVarChar(Max)
+  problemObserved         String?  @db.NVarChar(Max)
+  resolution              String?  @db.NVarChar(Max)
+  reasonForEscalatedCalls String?  @db.NVarChar(Max)
+  rca                     String?  @db.NVarChar(Max)
+  addDescription          String?  @db.NVarChar(Max)
   accountAddress          String?  @db.NVarChar(250)
   leftJob                 String   @default("No") @db.NVarChar(3)
   assignedTo              String   @db.NVarChar(50)
@@ -968,7 +968,7 @@ model Contract {
   billNumber  String?   @db.NVarChar(30)
   billDate    DateTime? @db.Date
   billAmount  Decimal?  @db.Decimal(18, 2)
-  description String?   @db.NVarChar(2000)
+  description String?   @db.NVarChar(Max)
 
   /// Admin-defined custom field values `{ [fieldKey]: value }` (see FormFieldDefinition) as JSON.
   customDataJson String? @db.NVarChar(Max)
@@ -1056,7 +1056,7 @@ model Activity {
   /// Option of the related lead's / opportunity's Customer Response list, else activity_customer_response. Recorded only:
   /// never changes a lead's Rating or follow-up, and isn't checked against an opportunity's Sales Stage.
   customerResponse String?   @db.NVarChar(100)
-  remarks          String?   @db.NVarChar(2000)
+  remarks          String?   @db.NVarChar(Max)
   completedAt      DateTime?
   completedBy      String?   @db.NVarChar(50)
 
@@ -1284,8 +1284,8 @@ model PartnerCompany {
 
   // Overview
   website          String? @db.NVarChar(200)
-  addDescription   String? @db.NVarChar(2000)
-  description      String? @db.NVarChar(2000)
+  addDescription   String? @db.NVarChar(Max)
+  description      String? @db.NVarChar(Max)
   principalCompany String? @db.NVarChar(200)
   /// JSON `CorporateEmail[]` (without ids), primary first.
   emailAddressJson String? @db.NVarChar(Max)
@@ -2183,7 +2183,7 @@ model BookingLink {
   /// creates when its type offers video, so the calendar push asks for the link (P3-1). Zoom is never offered here.
   videoMeeting        String?  @db.NVarChar(20)
   /// Shown to visitors above the times.
-  note                String?  @db.NVarChar(1000)
+  note                String?  @db.NVarChar(Max)
   /// Weekly hours in BUSINESS_TIMEZONE: { "1": [{ "start": "09:00", "end": "13:00" }], … } (ISO weekday 1 = Monday).
   availabilityJson    String   @db.NVarChar(Max)
   bufferBeforeMinutes Int      @default(0)

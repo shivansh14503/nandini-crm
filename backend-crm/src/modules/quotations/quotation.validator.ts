@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { FIELD_MAX_LENGTH as L } from '../../config/fieldLimits.js';
 import {
+    optionalLongText,
     booleanQuery,
     createdWithinDaysQuery,
     csvQuery,
@@ -49,17 +50,17 @@ export const quotationInputSchema = z.preprocess(
             quoteStage: textWithDefault('Quote Stage', 30, 'Draft'),
             quotationDate: requiredDate('Quotation Date'),
             validUntil: requiredDate('Valid Until Date'),
-            remarks: optionalText('Remarks', L.longText),
+            remarks: optionalLongText(),
             // Terms, payment terms and validation period are admin-relaxable (form configuration enforces them).
             termsAndCondition: optionalText('Terms & Condition', L.option),
-            termsAndConditionDescription: optionalText('Terms & Condition Description', L.termsText),
+            termsAndConditionDescription: optionalLongText(),
             assignedTo: requiredText('Assigned Representative', L.username),
             opportunity: requiredText('Opportunity', L.organizationName),
             company: requiredText('Company', L.option),
             validationPeriod: optionalText('Validation Period', 30),
             otherRef: optionalText('Other Ref.', L.shortText),
             paymentTerms: optionalText('Payment Terms', L.option),
-            paymentTermsDescription: optionalText('Payment Terms Description', L.termsText),
+            paymentTermsDescription: optionalLongText(),
             preparedFor: requiredText('Prepared For', L.organizationName),
 
             // Line items
@@ -95,8 +96,8 @@ export const quotationInputSchema = z.preprocess(
             opportunityId: optionalText('Opportunity', 50),
             status: optionalText('Status', 30),
             quotationSubject: optionalText('Quotation Subject', L.title),
-            notes: optionalText('Internal Notes', L.longText),
-            termsAndConditions: optionalText('Terms and Conditions', L.termsText),
+            notes: optionalLongText(),
+            termsAndConditions: optionalLongText(),
 
             customFields: customFieldsSchema,
         })

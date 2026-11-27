@@ -789,7 +789,6 @@ describe('backend ↔ frontend contract', { skip }, () => {
             'BOOKING_MAX_LINKS_PER_OWNER',
             'BOOKING_TITLE_MAX',
             'BOOKING_LOCATION_MAX',
-            'BOOKING_NOTE_MAX',
             'BOOKING_VISITOR_NAME_MAX',
             'BOOKING_VISITOR_COMPANY_MAX',
             'BOOKING_VISITOR_MESSAGE_MAX',

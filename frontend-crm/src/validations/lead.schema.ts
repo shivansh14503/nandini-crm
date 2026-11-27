@@ -2,19 +2,7 @@ import { z } from 'zod';
 import { FIELD_MAX_LENGTH as L } from '../config/fieldLimits';
 import { isGstRegistrationType } from '../config/constants';
 import { leadSourceDetailIssues } from '../utils/leadSource';
-import {
-    requiredString,
-    optionalString,
-    requiredText,
-    optionalText,
-    optionalDescription,
-    zodPhoneOptional,
-    zodPostalCodeOptional,
-    refinePostalCodeForCountry,
-    customFieldsSchema,
-    zodGstOptional,
-    GST_REGEX,
-} from './common';
+import { GST_REGEX, customFieldsSchema, optionalDescription, optionalLongText, optionalString, optionalText, refinePostalCodeForCountry, requiredString, requiredText, zodGstOptional, zodPhoneOptional, zodPostalCodeOptional } from './common';
 import { corporateEmailSchema } from './contact.schema';
 
 /**
@@ -34,7 +22,7 @@ export const leadFormSchema = z.object({
     productCategory: z.array(z.string()).default([]),
     followupType: optionalString.default('Call'),
     customerResponse: optionalString,
-    remarks: optionalDescription('Remarks', L.longText),
+    remarks: optionalDescription('Remarks'),
     registrationType: optionalString,
     gstNumber: zodGstOptional,
     turnover: optionalString,
@@ -48,7 +36,7 @@ export const leadFormSchema = z.object({
     status: optionalString.default('New'),
     nextFollowupDate: optionalString,
     nextFollowupTime: optionalString,
-    description: optionalText('Description', L.longText),
+    description: optionalLongText,
     noOfEmployee: optionalString,
     // Required for Lead Source CA / Reference; Partner Company for Lead Source Partner (below).
     referredBy: optionalString,

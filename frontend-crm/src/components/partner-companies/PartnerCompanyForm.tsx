@@ -324,14 +324,12 @@ export default function PartnerCompanyForm({
                                 label="Add Description"
                                 multiline
                                 placeholder="Short note about this partner..."
-                                maxLength={FIELD_MAX_LENGTH.longText}
                             />
                             <RhfTextField<PartnerCompanyFormData>
                                 name="description"
                                 label="Description"
                                 multiline
                                 placeholder="Partnership scope, products covered, terms..."
-                                maxLength={FIELD_MAX_LENGTH.longText}
                             />
                         </FormGrid>
 

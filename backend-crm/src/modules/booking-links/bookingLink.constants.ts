@@ -32,7 +32,6 @@ export const BOOKING_MAX_LINKS_PER_OWNER = 20;
 /** Text limits (= column widths). */
 export const BOOKING_TITLE_MAX = 120;
 export const BOOKING_LOCATION_MAX = 250;
-export const BOOKING_NOTE_MAX = 1000;
 export const BOOKING_VISITOR_NAME_MAX = 100;
 export const BOOKING_VISITOR_COMPANY_MAX = 200;
 export const BOOKING_VISITOR_MESSAGE_MAX = 1000;

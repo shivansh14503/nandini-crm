@@ -71,7 +71,6 @@ const INACTIVITY_REASONS = [
     'Other',
 ];
 
-const DESCRIPTION_MAX_LENGTH = FIELD_MAX_LENGTH.organizationDescription;
 
 export interface OverviewTabProps {
     form: OrganizationFormData;
@@ -514,7 +513,6 @@ function OverviewTabInner({
                         reasonLabel="Reason"
                         reasonPlaceholder="Why is this organization being deactivated?"
                         presetReasons={INACTIVITY_REASONS}
-                        maxLength={FIELD_MAX_LENGTH.inactivityReason}
                         confirmLabel="Deactivate Organization"
                         confirmColor="warning"
                         onConfirm={(reason) => {
@@ -620,7 +618,6 @@ function OverviewTabInner({
                         placeholder="Describe the organization's scope, activities, and key details..."
                         value={form.addDescriptionAndScope}
                         onChange={(value) => set('addDescriptionAndScope', value)}
-                        maxLength={DESCRIPTION_MAX_LENGTH}
                     />
                 </FormField>
             </FormGrid>

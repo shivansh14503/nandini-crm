@@ -71,7 +71,7 @@ These rules come from SQL Server's constraints and apply across the schema:
     UTC). The exception is `Activity.startAt` / `endAt` (and `remindAt`): **true UTC instants**, with the zone they
     were entered in kept in `Activity.timeZone`; everything else stays wall-clock. Conversions go through
     `backend-crm/src/utils/zonedTime.ts`.
-12. **Column widths** are ≥ the frontend's `FIELD_MAX_LENGTH` (`frontend-crm/src/config/fieldLimits.ts`).
+12. **Column widths** are ≥ the frontend's `FIELD_MAX_LENGTH` (`frontend-crm/src/config/fieldLimits.ts`). Long text columns (descriptions, remarks, notes, terms, reasons, line item description / note, ticket case notes) are `NVARCHAR(MAX)`: long text has no limit (migration `20261227090000_long_text_unlimited`).
 13. **Phones** are stored in E.164 (`+919811234567`), `NVARCHAR(20)`.
 
 ## 3. Entity-relationship diagram

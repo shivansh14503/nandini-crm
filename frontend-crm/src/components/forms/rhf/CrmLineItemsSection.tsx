@@ -643,7 +643,6 @@ export function CrmLineItemsEditor({ value, onChange, error, lineErrors, withCur
                                                 value={item.description || ''}
                                                 onChange={(value) => updateLine(item.id, { description: value })}
                                                 error={errs.description}
-                                                maxLength={FIELD_MAX_LENGTH.longText}
                                             />
                                         </Box>
                                         <Box data-field={`lineItems.${index}.note`}>
@@ -654,7 +653,6 @@ export function CrmLineItemsEditor({ value, onChange, error, lineErrors, withCur
                                                 value={item.note || ''}
                                                 onChange={(value) => updateLine(item.id, { note: value })}
                                                 error={errs.note}
-                                                maxLength={FIELD_MAX_LENGTH.longText}
                                             />
                                         </Box>
                                     </Box>
