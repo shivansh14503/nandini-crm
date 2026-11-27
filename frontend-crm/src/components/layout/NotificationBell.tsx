@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Badge, Box, Button, ButtonBase, ClickAwayListener, Grow, Paper, Popper, Skeleton, Typography } from '@mui/material';
+import { Badge, Box, Button, ButtonBase, ClickAwayListener, Grow, IconButton, Paper, Popper, Skeleton, Tooltip, Typography } from '@mui/material';
 import type { SvgIconComponent } from '@mui/icons-material';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import NotificationsNoneOutlinedIcon from '@mui/icons-material/NotificationsNoneOutlined';
@@ -212,7 +212,7 @@ function NotificationRow({ row, now, timeZone, onOpen }: { row: CrmNotification;
     );
 }
 
-/** Unread | All switch: pill tabs on the header band (active = paper + strong border, inactive hover = soft brand). */
+/** Unread | All switch: pill tabs in the footer (active = paper + strong border, inactive hover = soft brand). */
 function ViewSwitch({ view, unreadCount, onChange }: { view: NotificationView; unreadCount: number; onChange: (view: NotificationView) => void }) {
     const options: { value: NotificationView; label: string }[] = [
         { value: 'unread', label: unreadCount > 0 ? `Unread (${unreadCount > 99 ? '99+' : unreadCount})` : 'Unread' },
@@ -324,9 +324,6 @@ function NotificationPanel({ unreadCount, onOpen, onSettings }: NotificationPane
                     Mark all as read
                 </Button>
             </Box>
-            <Box sx={{ px: 2, py: 1, borderBottom: '1px solid var(--mui-palette-border-main)', backgroundColor: 'var(--mui-palette-background-subtle)' }}>
-                <ViewSwitch view={view} unreadCount={unreadCount} onChange={changeView} />
-            </Box>
 
             {/* List */}
             <Box sx={{ maxHeight: 'min(70vh, 520px)', overflowY: 'auto', overscrollBehavior: 'contain' }}>
@@ -375,11 +372,6 @@ function NotificationPanel({ unreadCount, onOpen, onSettings }: NotificationPane
                                 ? 'You have no unread notifications.'
                                 : 'Activity reminders, invitations, assignments and contract renewals show up here.'}
                         </Typography>
-                        {unreadOnly && (
-                            <Button onClick={() => changeView('all')} sx={{ ...textButtonSx, mt: 0.5 }}>
-                                Show all notifications
-                            </Button>
-                        )}
                     </Box>
                 ) : (
                     <Box component="ul" aria-label="Notifications" sx={{ listStyle: 'none', m: 0, p: 0 }}>
@@ -400,16 +392,41 @@ function NotificationPanel({ unreadCount, onOpen, onSettings }: NotificationPane
             {/* Footer */}
             <Box
                 sx={{
-                    px: 1,
-                    py: 0.5,
+                    px: 1.5,
+                    py: 1,
                     display: 'flex',
-                    justifyContent: 'flex-end',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 1,
                     borderTop: '1px solid var(--mui-palette-border-main)',
+                    backgroundColor: 'var(--mui-palette-background-subtle)',
                 }}
             >
-                <Button onClick={onSettings} startIcon={<SettingsOutlinedIcon sx={{ fontSize: '17px !important' }} />} sx={textButtonSx}>
-                    Notification settings
-                </Button>
+                <ViewSwitch view={view} unreadCount={unreadCount} onChange={changeView} />
+                <Tooltip title="Notification settings">
+                    <IconButton
+                        onClick={onSettings}
+                        aria-label="Notification settings"
+                        sx={{
+                            width: 40,
+                            height: 40,
+                            flexShrink: 0,
+                            borderRadius: '8px',
+                            border: '1px solid var(--mui-palette-border-main)',
+                            color: 'var(--mui-palette-text-secondary)',
+                            backgroundColor: 'var(--mui-palette-background-paper)',
+                            transition: 'all 0.15s ease',
+                            '&:hover': {
+                                borderColor: 'var(--crm-blue-300)',
+                                backgroundColor: 'var(--mui-palette-primary-soft)',
+                                color: 'var(--crm-text-blue-700)',
+                            },
+                            '&.Mui-focusVisible': { boxShadow: '0 0 0 3px rgb(var(--crm-accent-rgb) / 0.22)' },
+                        }}
+                    >
+                        <SettingsOutlinedIcon sx={{ fontSize: 19 }} />
+                    </IconButton>
+                </Tooltip>
             </Box>
         </Box>
     );

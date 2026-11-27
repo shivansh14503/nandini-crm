@@ -1441,11 +1441,10 @@ frontend-crm/src/
   (activities olive, contracts their own colour), title, body, time relative to now in the business timezone (exact
   time on hover), unread dot and tinted background. A click marks the row read (optimistic) and opens `href`
   (activities `/calendar?activity=<id>`, which opens the activity drawer even when the calendar is already open;
-  contracts `/contracts/<id>`). Header "Mark all as read"; below it an **Unread | All** switch (pill tabs, Unread shows
-  its count). Unread is the default and the last choice is remembered per browser (`localStorage`
+  contracts `/contracts/<id>`). Header "Mark all as read"; the footer holds an **Unread | All** switch on the left (pill
+  tabs, Unread shows its count) and a settings icon button on the right. Unread is the default and the last choice is remembered per browser (`localStorage`
   `crm.notifications.view`); Unread asks the API with `unreadOnly=true` and drops rows read in the popover at once
-  (a click, Mark all as read). Empty states: Unread "You're all caught up" with a "Show all notifications" button,
-  All "No notifications yet" (as of 2026-11-27). Badge: unread count on
+  (a click, Mark all as read). Empty states: Unread "You're all caught up", All "No notifications yet" (as of 2026-11-27). Badge: unread count on
   the brand fill, capped at "99+". Phones: the popover is `calc(100vw − 32px)` wide with the list scrolling inside
   (`70vh` at most); rows and buttons are at least 40 px tall.
 - **Cross-tab:** read / read-all call `notifyCrmUpdate('/api/notifications')`; `QueryProvider` invalidates only the
@@ -1457,7 +1456,7 @@ frontend-crm/src/
   off, the user has no address or nothing is due, and when they won't get it (`notSentReason`: turned off, out of
   office, on leave). Admin roles also get "Send me a test"
   (`POST …/morning-summary/test`); the API's message shows in a toast.
-- **Notification settings:** the popover footer's only link, "Notification settings", closes the popover and opens My Profile ›
+- **Notification settings:** the popover footer's settings icon button (tooltip "Notification settings") closes the popover and opens My Profile ›
   Notifications (`/profile?tab=notifications`), where each bell kind can be turned off (Profile Phase 3).
 
 ### 8.5 Admin › API Integrations (P2-1)
