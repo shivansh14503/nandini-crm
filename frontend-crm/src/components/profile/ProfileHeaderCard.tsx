@@ -1,23 +1,23 @@
 'use client';
 
-import React, { useRef, useState } from 'react';
-import { Box, Button, IconButton, Tooltip, Typography } from '@mui/material';
+import React, { useState } from 'react';
+import { Box, IconButton, Tooltip, Typography } from '@mui/material';
 import PhotoCameraOutlinedIcon from '@mui/icons-material/PhotoCameraOutlined';
-import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import { UserAvatar } from '@/components/common/UserAvatar';
 import { ConfirmDeleteDialog, errorMessage, surfaceSx } from '@/components/settings/form-customization/builderUi';
 import { useRemovePhoto, useUploadPhoto } from '@/hooks/queries/useProfile';
 import type { ProfileDto } from '@/types/profile.types';
 import { formatDateTime } from '@/utils/date';
-import { PHOTO_ACCEPT, PhotoCropDialog, photoFileIssue } from './PhotoCropDialog';
+import { PhotoCropDialog } from './PhotoCropDialog';
+import { ProfilePhotoDialog } from './ProfilePhotoDialog';
 import type { Notify } from './ProfileView';
 import { relativeInSentence } from './profileUi';
 
 const AVATAR_SIZE = 88;
 
-/** Top card of My Profile: photo (change / remove), name, role, department, username and last sign-in. */
+/** Top card of My Profile: photo (the camera badge opens the photo dialog: webcam, upload, remove), name, role, department, username and last sign-in. */
 export function ProfileHeaderCard({ profile, notify }: { profile: ProfileDto; notify: Notify }) {
-    const inputRef = useRef<HTMLInputElement | null>(null);
+    const [photoMenuOpen, setPhotoMenuOpen] = useState(false);
     const [cropFile, setCropFile] = useState<File | null>(null);
     const [confirmRemove, setConfirmRemove] = useState(false);
     const uploadPhoto = useUploadPhoto();
@@ -26,24 +26,25 @@ export function ProfileHeaderCard({ profile, notify }: { profile: ProfileDto; no
     const name = profile.fullName.trim() || profile.username;
     const hasPhoto = Boolean(profile.photoUrl);
 
-    const pickPhoto = () => inputRef.current?.click();
-
-    const onFilePicked = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        e.target.value = '';
-        if (!file) return;
-        const issue = photoFileIssue(file);
-        if (issue) {
-            notify(issue, 'error');
-            return;
-        }
+    /** A file picked in the photo dialog moves on to the crop step. */
+    const onFilePicked = (file: File) => {
+        setPhotoMenuOpen(false);
         setCropFile(file);
     };
 
-    const savePhoto = async (blob: Blob) => {
-        await uploadPhoto.mutateAsync({ blob, fileName: cropFile?.name });
-        setCropFile(null);
+    const savePhoto = async (blob: Blob, fileName?: string) => {
+        await uploadPhoto.mutateAsync({ blob, fileName });
         notify('Profile photo updated.');
+    };
+
+    const saveCroppedPhoto = async (blob: Blob) => {
+        await savePhoto(blob, cropFile?.name);
+        setCropFile(null);
+    };
+
+    const saveCapturedPhoto = async (blob: Blob) => {
+        await savePhoto(blob, 'camera-photo');
+        setPhotoMenuOpen(false);
     };
 
     const confirmRemovePhoto = async () => {
@@ -82,8 +83,9 @@ export function ProfileHeaderCard({ profile, notify }: { profile: ProfileDto; no
                 <Tooltip title={hasPhoto ? 'Change photo' : 'Add a photo'} arrow>
                     <IconButton
                         aria-label={hasPhoto ? 'Change profile photo' : 'Add a profile photo'}
-                        onClick={pickPhoto}
-                        disabled={uploadPhoto.isPending}
+                        aria-haspopup="dialog"
+                        onClick={() => setPhotoMenuOpen(true)}
+                        disabled={uploadPhoto.isPending || removePhoto.isPending}
                         sx={{
                             position: 'absolute',
                             right: -6,
@@ -103,7 +105,6 @@ export function ProfileHeaderCard({ profile, notify }: { profile: ProfileDto; no
                         <PhotoCameraOutlinedIcon sx={{ fontSize: 18 }} />
                     </IconButton>
                 </Tooltip>
-                <input ref={inputRef} type="file" accept={PHOTO_ACCEPT} hidden onChange={onFilePicked} />
             </Box>
 
             {/* Identity */}
@@ -130,39 +131,18 @@ export function ProfileHeaderCard({ profile, notify }: { profile: ProfileDto; no
                 </Typography>
             </Box>
 
-            {/* Photo actions (also reachable without the camera button) */}
-            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: 'center', width: { xs: '100%', sm: 'auto' }, flexShrink: 0 }}>
-                <Button
-                    variant="outlined"
-                    startIcon={<PhotoCameraOutlinedIcon />}
-                    onClick={pickPhoto}
-                    disabled={uploadPhoto.isPending}
-                    sx={{ ...outlinedButtonSx, flex: { xs: 1, sm: 'none' } }}
-                >
-                    {hasPhoto ? 'Change photo' : 'Add photo'}
-                </Button>
-                {hasPhoto && (
-                    <Button
-                        variant="outlined"
-                        startIcon={<DeleteOutlineRoundedIcon />}
-                        onClick={() => setConfirmRemove(true)}
-                        disabled={removePhoto.isPending}
-                        sx={{
-                            ...outlinedButtonSx,
-                            flex: { xs: 1, sm: 'none' },
-                            '&:hover': {
-                                color: 'var(--mui-palette-error-main)',
-                                backgroundColor: 'var(--mui-palette-error-soft)',
-                                borderColor: 'var(--mui-palette-error-softBorder)',
-                            },
-                        }}
-                    >
-                        Remove
-                    </Button>
-                )}
-            </Box>
-
-            <PhotoCropDialog open={Boolean(cropFile)} file={cropFile} onClose={() => setCropFile(null)} onSave={savePhoto} />
+            <ProfilePhotoDialog
+                open={photoMenuOpen}
+                hasPhoto={hasPhoto}
+                onClose={() => setPhotoMenuOpen(false)}
+                onPickFile={onFilePicked}
+                onSaveCapture={saveCapturedPhoto}
+                onRemove={() => {
+                    setPhotoMenuOpen(false);
+                    setConfirmRemove(true);
+                }}
+            />
+            <PhotoCropDialog open={Boolean(cropFile)} file={cropFile} onClose={() => setCropFile(null)} onSave={saveCroppedPhoto} />
             <ConfirmDeleteDialog
                 open={confirmRemove}
                 title="Remove your photo?"
@@ -175,21 +155,3 @@ export function ProfileHeaderCard({ profile, notify }: { profile: ProfileDto; no
         </Box>
     );
 }
-
-const outlinedButtonSx = {
-    textTransform: 'none',
-    fontWeight: 600,
-    fontSize: '0.82rem',
-    borderRadius: '8px',
-    minHeight: 40,
-    whiteSpace: 'nowrap',
-    border: '1px solid var(--mui-palette-border-main)',
-    color: 'var(--crm-slate-700)',
-    backgroundColor: 'var(--mui-palette-background-paper)',
-    transition: 'all 0.15s ease',
-    '&:hover': {
-        borderColor: 'var(--crm-blue-300)',
-        backgroundColor: 'var(--mui-palette-primary-soft)',
-        color: 'var(--crm-text-blue-700)',
-    },
-} as const;

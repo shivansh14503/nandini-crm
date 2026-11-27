@@ -25,7 +25,7 @@ const toBlob = (canvas: HTMLCanvasElement, type: string, quality: number) =>
     new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, quality));
 
 /** Encodes the canvas as WebP (JPEG where the browser can't write WebP), lowering quality until it fits 512 KB. */
-async function encodePhoto(canvas: HTMLCanvasElement): Promise<Blob> {
+export async function encodePhoto(canvas: HTMLCanvasElement): Promise<Blob> {
     for (const type of ['image/webp', 'image/jpeg']) {
         for (const quality of [0.9, 0.8, 0.65, 0.5]) {
             const blob = await toBlob(canvas, type, quality);
