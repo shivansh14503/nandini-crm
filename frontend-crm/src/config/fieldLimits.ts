@@ -30,6 +30,8 @@ export const FIELD_MAX_LENGTH = {
     /** Organization "Description & Scope" (shows a live x / 1000 counter). */
     organizationDescription: 1000,
     longText: 2000,
+    /** Reason asked when an organization or product is made Inactive. */
+    inactivityReason: 500,
     /** Option values (stage, source, category, …) and usernames. */
     option: 100,
     username: 50,

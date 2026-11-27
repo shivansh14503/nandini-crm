@@ -80,7 +80,7 @@ const organizationFields = z.object({
     natureOfBusiness: optionalText('Nature of Business', L.option),
     // Admin-customizable (org_account_status / shared_registration_type); the system options keep their meaning.
     accountStatus: textWithDefault('Account Status', 20, 'Active'),
-    inactivityReason: optionalText('Inactivity Reason', 500),
+    inactivityReason: optionalText('Inactivity Reason', L.inactivityReason),
     typeOfEntity: optionalText('Type of Entity', L.option),
     customerType: optionalText('Customer Type', L.option),
     // Required when Customer Type is Partner (assertNatureOfPartner); stored only for partner organizations.
@@ -212,7 +212,7 @@ export const checkOrganizationUniqueQuerySchema = z.object({
 
 export const bulkStatusSchema =bulkIdsSchema.extend({
     status: z.enum(ACCOUNT_STATUSES, { error: 'status must be Active or Inactive.' }),
-    inactivityReason: optionalText('Inactivity Reason', 500),
+    inactivityReason: optionalText('Inactivity Reason', L.inactivityReason),
 });
 
 export const ORGANIZATION_SORT_FIELDS = [

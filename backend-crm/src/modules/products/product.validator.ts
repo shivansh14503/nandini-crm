@@ -21,7 +21,7 @@ export type ProductStatus = (typeof PRODUCT_STATUSES)[number];
 export const ACTIVE_PRODUCT_STATUS: ProductStatus = 'Active';
 export const INACTIVE_PRODUCT_STATUS: ProductStatus = 'Inactive';
 /** Longest Inactivity Reason (the Organizations one has the same limit). */
-export const INACTIVITY_REASON_MAX_LENGTH = 500;
+export const INACTIVITY_REASON_MAX_LENGTH = L.inactivityReason;
 /** Whether a stored status is Active (ignoring case and spaces, as the default SQL Server collation compares). */
 export const isActiveProductStatus = (status: string | null | undefined): boolean =>
     (status ?? '').trim().toLowerCase() === ACTIVE_PRODUCT_STATUS.toLowerCase();
