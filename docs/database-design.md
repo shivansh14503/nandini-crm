@@ -323,8 +323,15 @@ Indexes: `ticketStatus`, `ticketPriority`, `assignedTo`, `dueDate`, `organizatio
 
 `productCode` (UNIQUE), `productName`, `hsnCode`, `category`, `type`, `manufacturer`, `taxType` (default `GST`),
 `taxRate`, `discount` DECIMAL(5,2), `cost`/`mrp`/`msp` DECIMAL(18,2) (returned as strings by the API),
-`contractCreate`, `description`, `termsAndConditions`, `isActive`, `customDataJson`, audit/soft-delete.
-Products are not row-scoped (everyone sees all). Indexes: `productName`, `category`, `(isDeleted, createdAt)`.
+`contractCreate`, `description`, `termsAndConditions`, `status` NVARCHAR(30) (`Active` / `Inactive`, default
+`Active`; fixed dropdown `product_status`), `inactivityReason` NVARCHAR(500), `inactiveSince` DATETIME2 and
+`inactivatedBy` NVARCHAR(50) (username), `customDataJson`, audit/soft-delete. Only Admins (`isAdminAccessRole`) change
+`status`; making a product Inactive needs a reason and stamps `inactiveSince` / `inactivatedBy` (kept while it stays
+Inactive, cleared when it is made Active again; both changes are in the audit diff). Only Active products can be put
+on new opportunity / quotation line items; lines that already hold an inactive product keep it. Migration
+`20261219090000_product_status` replaced the former `isActive` BIT (every existing product became Active; a row with
+`isActive = 0` became Inactive since its last update).
+Products are not row-scoped (everyone sees all). Indexes: `productName`, `category`, `status`, `(isDeleted, createdAt)`.
 
 ### 4.9 `EntityEmail` (shared child table)
 

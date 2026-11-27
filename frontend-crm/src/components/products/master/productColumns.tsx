@@ -6,7 +6,8 @@ import InventoryOutlinedIcon from '@mui/icons-material/InventoryOutlined';
 import { RecordLink } from '../../common/RecordLink';
 import { documentNumberColumn, type DataTableColumn } from '../../common/DataTable';
 import { ROUTES } from '@/config/constants';
-import type { Product } from '@/types/product.types';
+import { ACTIVE_PRODUCT_STATUS, isActiveProduct, PRODUCT_STATUS_CATEGORY, type Product } from '@/types/product.types';
+import { useDropdownPillOptions } from '../../common/filterPills/useDropdownPillOptions';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import { fmtMoney } from '@/utils/formats';
 import { PRODUCT_USAGE_STATUSES, usageStatusOf } from '@/utils/productUsage';
@@ -20,6 +21,26 @@ const TAX_RATE_COLORS: Record<string, { bg: string; color: string; border: strin
     '28%': { bg: 'var(--mui-palette-error-soft)', color: 'var(--crm-red-700)', border: 'var(--mui-palette-error-softBorder)' },
 };
 
+/** Active / Inactive pill (success tint for Active, warning tint for Inactive), labelled as the admin names it. */
+export function ProductStatusChip({ status, label }: { status?: string; label?: string }) {
+    const active = isActiveProduct({ status });
+    const tone = active ? 'success' : 'warning';
+    return (
+        <Chip
+            label={label || status || ACTIVE_PRODUCT_STATUS}
+            size="small"
+            sx={{
+                height: 20,
+                fontSize: '0.68rem',
+                fontWeight: 700,
+                backgroundColor: `var(--mui-palette-${tone}-soft)`,
+                color: active ? 'var(--mui-palette-success-main)' : 'var(--crm-amber-700)',
+                border: `1px solid var(--mui-palette-${tone}-softBorder)`,
+            }}
+        />
+    );
+}
+
 /** A product row's own id (the related-records table passes the catalogue id of a line item instead). */
 const ownId = (p: Product) => p.id;
 
@@ -30,6 +51,7 @@ const ownId = (p: Product) => p.id;
  */
 export function useProductColumns(openRecord: (record: Product) => void, productIdOf: (product: Product) => string = ownId): DataTableColumn<Product>[] {
     const showNumber = useShowRecordNumber();
+    const statuses = useDropdownPillOptions(PRODUCT_STATUS_CATEGORY, 'products');
 
     return useMemo(
         () => [
@@ -159,6 +181,17 @@ export function useProductColumns(openRecord: (record: Product) => void, product
                     ),
             },
             {
+                // Active / Inactive (Admin only). The Filter dialog offers it from the Status form field.
+                id: 'status',
+                label: 'STATUS',
+                sortable: true,
+                minWidth: 100,
+                render: (p) => {
+                    const status = p.status || ACTIVE_PRODUCT_STATUS;
+                    return <ProductStatusChip status={status} label={statuses.find(status)?.label} />;
+                },
+            },
+            {
                 id: 'type',
                 label: 'TYPE',
                 sortable: true,
@@ -170,6 +203,6 @@ export function useProductColumns(openRecord: (record: Product) => void, product
                 ),
             },
         ],
-        [showNumber, openRecord, productIdOf]
+        [showNumber, openRecord, productIdOf, statuses]
     );
 }

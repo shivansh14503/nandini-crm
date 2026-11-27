@@ -3,7 +3,7 @@ import { decimalToString, nullable, parseCustomFields, serializeCustomFields, te
 import type { ProductInput } from './product.validator.js';
 import type { ProductUsage } from './product.usage.js';
 
-/** `Product` from frontend-crm/src/types/product.types.ts (prices are strings there), plus `isActive`. */
+/** `Product` from frontend-crm/src/types/product.types.ts (prices are strings there). */
 export interface ProductDto {
     id: string;
     productCode: string;
@@ -21,7 +21,12 @@ export interface ProductDto {
     contractCreate: string;
     description: string;
     termsAndConditions: string;
-    isActive: boolean;
+    /** Active / Inactive (the fixed `product_status` dropdown). */
+    status: string;
+    /** While Inactive: the reason the admin gave, when (ISO instant) and who (username). Empty while Active. */
+    inactivityReason: string;
+    inactiveSince: string;
+    inactivatedBy: string;
     createdAt: string;
     updatedAt: string;
     createdBy: string;
@@ -51,7 +56,10 @@ export function toProductDto(row: Product): ProductDto {
         contractCreate: row.contractCreate,
         description: text(row.description),
         termsAndConditions: text(row.termsAndConditions),
-        isActive: row.isActive,
+        status: row.status,
+        inactivityReason: text(row.inactivityReason),
+        inactiveSince: row.inactiveSince ? toIso(row.inactiveSince) : '',
+        inactivatedBy: text(row.inactivatedBy),
         createdAt: toIso(row.createdAt),
         updatedAt: toIso(row.updatedAt),
         createdBy: row.createdBy,
@@ -60,8 +68,11 @@ export function toProductDto(row: Product): ProductDto {
     };
 }
 
-/** Writable columns from validated input (codes and audit columns are set by the service). */
-export function toProductData(input: ProductInput): Omit<Prisma.ProductUncheckedCreateInput, 'productCode' | 'createdBy'> {
+/**
+ * Writable columns from validated input (codes and audit columns are set by the service, and so are the Status
+ * columns: see `productStatusData` in product.service.ts).
+ */
+export function toProductData(input: ProductInput): Omit<Prisma.ProductUncheckedCreateInput, 'productCode' | 'createdBy' | 'status' | 'inactivityReason' | 'inactiveSince' | 'inactivatedBy'> {
     return {
         customDataJson: serializeCustomFields(input.customFields),
         productName: input.productName,
@@ -78,6 +89,5 @@ export function toProductData(input: ProductInput): Omit<Prisma.ProductUnchecked
         contractCreate: input.contractCreate,
         description: nullable(input.description),
         termsAndConditions: nullable(input.termsAndConditions),
-        isActive: input.isActive,
     };
 }

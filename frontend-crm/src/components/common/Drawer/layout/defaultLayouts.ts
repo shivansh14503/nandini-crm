@@ -474,6 +474,7 @@ function productsLayout(): DrawerLayoutDocument {
             badges: [
                 { id: 'g-sku', field: 'productCode', prefix: 'SKU: ', style: 'neutral', hideEmpty: true },
                 { id: 'g-tax', field: 'taxRate', prefix: 'Tax: ', style: 'brand', hideEmpty: true },
+                { id: 'g-status', field: 'status', prefix: '', style: 'auto', hideEmpty: true },
             ],
         },
         tabs: {
@@ -493,6 +494,13 @@ function productsLayout(): DrawerLayoutDocument {
                     f('b-taxtype', 'taxType', 'standard'),
                     f('b-taxrate', 'taxRate', 'standard'),
                     f('b-contract', 'contractCreate', 'chip'),
+                ]),
+                // Inactive Since, the reason and who set it are empty while Active, so they hide.
+                sec('s-status', 'STATUS', 'card', 2, [
+                    f('b-status', 'status', 'chip'),
+                    f('b-inactive-since', 'inactiveSince', 'standard'),
+                    f('b-inactivated-by', 'inactivatedBy', 'standard'),
+                    f('b-inactivity-reason', 'inactivityReason', 'standard', full),
                 ]),
                 custom('s-custom'),
                 sec('s-desc', 'DESCRIPTION & COMMERCIAL TERMS', 'card', 1, [f('b-desc', 'description', 'standard', bare), f('b-terms', 'termsAndConditions', 'quote')]),

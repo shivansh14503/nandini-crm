@@ -9,7 +9,7 @@ import { HttpError } from '../../utils/httpError.js';
 import { daysAgo } from '../../utils/mappers.js';
 import { parsePagination } from '../../utils/pagination.js';
 import { CLOSED_SALES_STAGES, QUOTE_SALES_STAGE } from '../opportunities/opportunity.validator.js';
-import { assertTotalsMatch, calculateLineItems, lineItemsInclude, resolveProductIds, toLineItemData } from '../shared/lineItems.js';
+import { assertTotalsMatch, calculateLineItems, lineItemsInclude, linkedProductIds, resolveProductIds, toLineItemData } from '../shared/lineItems.js';
 import { asPayload, checkModulePayload, loadModuleFieldConfig, validateModulePayload } from '../form-configs/customFieldValidator.js';
 import { assertAssigneeValid, assertRecordAccess, buildAccessScopeWhere } from '../shared/accessControl.js';
 import { assertReference } from '../shared/references.js';
@@ -61,8 +61,13 @@ async function resolveLinks(tx: TransactionClient, input: QuotationInput, previo
 }
 
 async function replaceLineItems(tx: TransactionClient, quotationId: string, input: QuotationInput, computed: ReturnType<typeof calculateLineItems>): Promise<void> {
+    // A line may keep an Inactive product it already had, or one on the opportunity the quotation is made from.
+    const saved = await tx.quotationLineItem.findMany({ where: { quotationId }, select: { productId: true } });
+    const fromOpportunity = input.opportunityId
+        ? await tx.opportunityLineItem.findMany({ where: { opportunityId: input.opportunityId }, select: { productId: true } })
+        : [];
     await tx.quotationLineItem.deleteMany({ where: { quotationId } });
-    const knownProducts = await resolveProductIds(tx, input.lineItems);
+    const knownProducts = await resolveProductIds(tx, input.lineItems, linkedProductIds([...saved, ...fromOpportunity]));
     await tx.quotationLineItem.createMany({
         data: computed.items.map((item, index) => ({ ...toLineItemData(item, index, knownProducts), quotationId })),
     });

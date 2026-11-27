@@ -1378,7 +1378,7 @@ frontend-crm/src/
 - **Filter pills follow the dropdowns:** a list's quick-view pills, scorecard cards and Filter dialog options read
   the same admin dropdown configuration as the forms (`useFormConfigs`, refreshed on the `form-configs` sync event
   whenever the Dropdown Manager saves). Pills that filter by an option value come from `useDropdownPillOptions`
-  (`components/common/filterPills`): one pill per active option (Products by Type), or a fixed pill that shows only
+  (`components/common/filterPills`): one pill per active option (Products by Status and by Type), or a fixed pill that shows only
   while its option is active (Activities Calls / Meetings, Organizations Distributor / End User), labelled with the
   option's current label. Removing an option removes its pill and card; records still holding the old value stay in
   "All" and keep showing it in their drawer. Inline lists of option values in a list screen
