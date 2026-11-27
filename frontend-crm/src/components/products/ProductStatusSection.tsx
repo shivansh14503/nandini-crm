@@ -11,7 +11,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useFormMode } from '@/context/FormModeContext';
 import { findCrmUser } from '@/services/masterData.store';
 import { isAdminAccessRole } from '@/utils/roleAccess';
-import { fmtInstantDay } from '@/utils/formats';
+import { fmtInstant } from '@/utils/formats';
 import {
     ACTIVE_PRODUCT_STATUS,
     INACTIVE_PRODUCT_STATUS,
@@ -28,8 +28,8 @@ export interface SavedProductStatus {
     inactivatedBy?: string;
 }
 
-/** "Inactive Since" in the company date format, '' while unknown. */
-export const formatInactiveSince = (iso: string | undefined): string => (iso ? fmtInstantDay(iso) : '');
+/** "Inactive Since" as date + time in the company formats (`24-Oct-2026, 1:07 PM`), '' while unknown. */
+export const formatInactiveSince = (iso: string | undefined): string => (iso ? fmtInstant(iso) : '');
 
 /** The admin who made the product Inactive, by name. */
 export const inactivatedByName = (username: string | undefined): string => (username ? findCrmUser(username)?.name || username : '');
