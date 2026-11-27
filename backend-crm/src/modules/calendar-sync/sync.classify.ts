@@ -3,8 +3,9 @@ import type { CrmWhen, ProviderEvent } from './sync.shapes.js';
 
 /**
  * `classifyInbound` (Calendar Phase 2 spec §8.8, D16, D18, D19, D20; P2-5). Pure: what the pull does with one event
- * from the change stream. Only the organizer's copy is authoritative; unlinked events are never stored (P2-8 imports
- * them, behind its own switches).
+ * from the change stream. Only the organizer's copy is authoritative for the event's fields (D18); an invitation copy
+ * with an attendee link carries its person's reply (P2-8, sync.import.ts); unlinked events are never stored unless
+ * P2-8's import takes them (behind its own switches).
  */
 
 export type InboundAction =
@@ -22,8 +23,10 @@ export type InboundAction =
     | { kind: 'merge'; tooLong: boolean }
     /** No link, but a marker / syncKey match with one of this person's activities (§8.2): link it, then merge. */
     | { kind: 'relink'; activityId: string; tooLong: boolean }
-    /** Not the CRM's (counted as skippedUnlinked; P2-8 decides about imports). */
-    | { kind: 'unlinked' };
+    /** Not the CRM's: P2-8's import decides (sync.import.ts `classifyImport`); else counted as skippedUnlinked. */
+    | { kind: 'unlinked' }
+    /** An invitation copy with an attendee link (P2-8): its person's reply (and the mirror of an outside meeting). */
+    | { kind: 'attendee' };
 
 export type InboundIgnoreReason = 'event_type' | 'link_inactive' | 'activity_deleted' | 'attendee_copy' | 'not_organizer' | 'recurring_unlinked';
 
@@ -74,7 +77,7 @@ export function classifyInbound({ event, link, activity, match }: ClassifyInput)
         if (event.recurring) return { kind: 'ignore', reason: 'recurring_unlinked' };
         return { kind: 'relink', activityId: match.activityId, tooLong: isTooLong(event.shape.when) };
     }
-    if (link.role !== 'organizer') return { kind: 'ignore', reason: 'attendee_copy' };
+    if (link.role !== 'organizer') return link.state === 'detached' ? { kind: 'ignore', reason: 'link_inactive' } : { kind: 'attendee' };
     if (!activity || activity.isDeleted) return { kind: 'ignore', reason: 'activity_deleted' };
     if (INACTIVE_STATES.has(link.state)) return { kind: 'ignore', reason: 'link_inactive' };
     if (link.state === 'cancelled') {
@@ -103,6 +106,9 @@ export interface PullCounts {
     failed: number;
     unreadable: number;
     verified: number;
+    /** P2-8: customer meetings brought in, and invitation copies linked to an activity the CRM holds. */
+    imported: number;
+    attended: number;
 }
 
 export const emptyPullCounts = (): PullCounts => ({
@@ -118,4 +124,6 @@ export const emptyPullCounts = (): PullCounts => ({
     failed: 0,
     unreadable: 0,
     verified: 0,
+    imported: 0,
+    attended: 0,
 });

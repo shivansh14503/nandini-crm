@@ -9,14 +9,12 @@ import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
 import { canEditActivity, canViewActivity } from '../activities/activity.access.js';
 import type { ActivityRow, ActivityView } from '../activities/activity.mapper.js';
-import { EDIT_FORBIDDEN_MESSAGE, loadActivityConfig, toActivityView, WITH_ATTENDEES } from '../activities/activity.service.js';
+import { EDIT_FORBIDDEN_MESSAGE, loadActivityConfig, toOneView, WITH_ATTENDEES } from '../activities/activity.service.js';
 import { lockRecords, runInTransaction } from '../shared/transactions.js';
 import { LIVE_CONNECTION_STATUSES } from './connection.constants.js';
 import { parseHeld } from './sync.attendees.js';
 import { requestedIdFor } from './sync.keys.js';
 import { isCreateEligible, type HeldNotice } from './sync.outbox.js';
-import { loadOwnerCalendarLinks } from './sync.view.js';
-import { loadSeriesViews } from '../activities/activity.seriesView.js';
 import { notifyHeldInvites, wakePushes } from './sync.wake.js';
 
 /**
@@ -89,7 +87,7 @@ const GONE_STATES = new Set(['cancelled', 'removed_remote']);
 async function viewOf(id: string, user: AuthUser): Promise<ActivityView> {
     const row = (await prisma.activity.findFirst({ where: { id, isDeleted: false }, include: WITH_ATTENDEES })) as ActivityRow | null;
     if (!row) throw HttpError.notFound('Activity not found');
-    return toActivityView(row, user, await loadOwnerCalendarLinks([row]), await loadSeriesViews([row]));
+    return toOneView(row, user);
 }
 
 async function afterCommit(id: string, link: { id: string; dirtyAt: Date } | null, user: AuthUser, notice: HeldNotice | null = null): Promise<ActivityView> {

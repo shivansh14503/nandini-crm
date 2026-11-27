@@ -27,6 +27,7 @@ import { useFormMode } from '@/context/FormModeContext';
 import { DynamicModuleCustomFields } from '@/components/forms/DynamicModuleCustomFields';
 import { CUSTOMER_RESPONSE_CATEGORY, CUSTOMER_RESPONSES } from '@/components/forms/FollowUpDecision';
 import { useDropdownOptionMeta, useFormConfigs, useModuleFormConfig } from '@/hooks/queries/useFormConfigs';
+import { isActivityOnlyFollowupType } from '@/utils/followupTypes';
 import { useMyPreferences } from '@/hooks/queries/useProfile';
 import { activityService } from '@/services/activity.service';
 import {
@@ -34,6 +35,7 @@ import {
     ACTIVITY_REMINDERS,
     ACTIVITY_STATUSES,
     ACTIVITY_TYPES,
+    isExternallyOrganized,
     NOTE_TYPE,
     PLANNED_STATUS,
     TASK_TYPE,
@@ -256,7 +258,8 @@ export function useActivityForm({ mode, activityId, prefill }: UseActivityFormOp
 
 /**
  * A field the API won't let anyone change on this activity (`Activity.lockedFields`: a lead / opportunity follow-up
- * activity's type, times, status, owner and related record move with the record). Shown greyed out and `inert`
+ * activity's type, times, status, owner and related record move with the record; a meeting organized outside the CRM
+ * takes its title, times, place, attendees and owner from the organizer's calendar, P2-8). Shown greyed out and `inert`
  * (no focus, no clicks, no typing); the title says why. Keeps `children`, so the Form Builder's field lookup still
  * finds the control inside.
  */
@@ -521,7 +524,12 @@ export function ActivityFormFields({
 
     const defaultTime = (day: string) => (day === nowWall.slice(0, 10) ? nextQuarterHour(clock.now(), tz).slice(11, 16) : '09:00');
     const columns = compact ? 2 : 3;
-    const typeOptions = getOptions(FOLLOWUP_TYPE_CATEGORY_KEY, ACTIVITY_TYPES);
+    // P2-8: a meeting organized outside the CRM can't become a Task / Note (the API answers 409 EXTERNAL_EVENT_LOCKED):
+    // they would drop the times, place and attendees the organizer's calendar owns.
+    const externallyOrganized = isExternallyOrganized(activity);
+    const typeOptions = getOptions(FOLLOWUP_TYPE_CATEGORY_KEY, ACTIVITY_TYPES).filter(
+        (value) => !externallyOrganized || !isActivityOnlyFollowupType(value) || value === activity?.followupType,
+    );
     const showSchedule = !isNote || ['startAt', 'endAt', 'allDay', 'reminder', 'location', 'videoMeeting', 'attendees'].some(shows);
     const showOutcome = shows('customerResponse') || shows('remarks');
     const divider = <Divider sx={{ my: compact ? 2.5 : 3.5, borderColor: 'var(--mui-palette-border-light)' }} />;
@@ -540,13 +548,15 @@ export function ActivityFormFields({
                     <RhfSelect<ActivityFormValues> name="followupType" label="Followup Type" required options={typeOptions} placeholder="Select Followup Type" />
                 </LockedField>
                 {shows('subject') && (
-                    <RhfTextField<ActivityFormValues>
-                        name="subject"
-                        label="Subject"
-                        required
-                        maxLength={FIELD_MAX_LENGTH.title}
-                        placeholder={isNote ? 'e.g. Pricing discussed with the owner' : 'e.g. Demo of TallyPrime Server'}
-                    />
+                    <LockedField locked={isLocked('subject')} reason={lockReason}>
+                        <RhfTextField<ActivityFormValues>
+                            name="subject"
+                            label="Subject"
+                            required
+                            maxLength={FIELD_MAX_LENGTH.title}
+                            placeholder={isNote ? 'e.g. Pricing discussed with the owner' : 'e.g. Demo of TallyPrime Server'}
+                        />
+                    </LockedField>
                 )}
                 {shows('status') && (
                     <LockedField locked={isLocked('status')} reason={lockReason}>
@@ -644,12 +654,14 @@ export function ActivityFormFields({
                             />
                         )}
                         {shows('location') && (
-                            <RhfTextField<ActivityFormValues>
-                                name="location"
-                                label="Location"
-                                maxLength={FIELD_MAX_LENGTH.address}
-                                placeholder="Address, meeting room or video link"
-                            />
+                            <LockedField locked={isLocked('location')} reason={lockReason}>
+                                <RhfTextField<ActivityFormValues>
+                                    name="location"
+                                    label="Location"
+                                    maxLength={FIELD_MAX_LENGTH.address}
+                                    placeholder="Address, meeting room or video link"
+                                />
+                            </LockedField>
                         )}
                         {shows('videoMeeting') && (offersVideo || Boolean(savedVideo)) && (
                             <RhfVideoMeetingField<ActivityFormValues>
@@ -658,6 +670,7 @@ export function ActivityFormFields({
                                 saved={savedVideo}
                                 savedOwner={activity?.assignedTo}
                                 locked={videoMeetingLocked}
+                                lockedReason={isLocked('videoMeeting') ? lockReason || 'This video meeting can only be changed where the meeting was organized.' : undefined}
                                 planned={status === PLANNED_STATUS}
                                 joinUrl={activity?.conferenceJoinUrl || null}
                             />
@@ -665,7 +678,9 @@ export function ActivityFormFields({
                         {repeatSlot && !isNote && <FormGridItem span="full">{repeatSlot}</FormGridItem>}
                         {shows('attendees') && (
                             <FormGridItem span="full">
-                                <RhfAttendeesField name="attendees" label="Attendees" organizationId={organizationId} hint={attendeesHint} />
+                                <LockedField locked={isLocked('attendees')} reason={lockReason}>
+                                    <RhfAttendeesField name="attendees" label="Attendees" organizationId={organizationId} hint={attendeesHint} />
+                                </LockedField>
                             </FormGridItem>
                         )}
                         {/* Busy times of the owner and invited colleagues (timed, planned meetings; not Tasks or Notes). */}

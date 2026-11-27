@@ -1,7 +1,7 @@
 # Nandini CRM — Database Design
 
 > **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (96 migrations,
-> latest `20261216110000_booking_video`, booking links' default video meeting (`BookingLink.videoMeeting`), as of 2026-11-27; before it `20261216100000_email_logging`, Calendar Phase 4 email logging, with its review fixes; before that `20261215110000_recurring_activities`, Calendar Phase 4 recurring activities; before that `20261215100000_activity_conference`, Calendar Phase 3 P3-1 video meetings; before that `20261215090000_calendar_watch_channels`, Calendar Phase 2 P2-7 webhooks; before that `20261128120000_booking_links`, Calendar Phase 4 booking links; before that `20261128100000_activity_calendar_sync`, Calendar Phase 2 P2-3b, whose columns P2-3c (first-sync backfill) and P2-5 (calendar → CRM pull) use without a migration of their own; P2-6 busy times needed no migration: it reads `Activity` through the existing `[isDeleted, startAt]` index and stores nothing). Update it in the same change as any schema migration.
+> latest `20261216110000_booking_video`, booking links' default video meeting (`BookingLink.videoMeeting`), as of 2026-11-27; before it `20261216100000_email_logging`, Calendar Phase 4 email logging, with its review fixes; before that `20261215110000_recurring_activities`, Calendar Phase 4 recurring activities; before that `20261215100000_activity_conference`, Calendar Phase 3 P3-1 video meetings; before that `20261215090000_calendar_watch_channels`, Calendar Phase 2 P2-7 webhooks; before that `20261128120000_booking_links`, Calendar Phase 4 booking links; before that `20261128100000_activity_calendar_sync`, Calendar Phase 2 P2-3b, whose columns P2-3c (first-sync backfill) and P2-5 (calendar → CRM pull) use without a migration of their own; P2-6 busy times needed no migration (it reads `Activity` through the existing `[isDeleted, startAt]` index and stores nothing); P2-8 customer meetings from the calendar and replies both ways needed none either (as of 2026-11-27: it writes imported activities into the existing `Activity` organizer / `syncKey` columns, `attendee` rows of `ActivityExternalLink` (`baseJson` `{ self, mine? }`: the reply last agreed with the calendar, and the CRM reply of the owner of a meeting organized outside the CRM) and reads `CalendarSyncUser.importMeetings`; a meeting organized outside the CRM keeps the organizer's `ready` join link in the P3-1 conference columns, read only, and never gets a `seriesId`). Update it in the same change as any schema migration.
 > Related: [System design](system-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
 ---
@@ -567,7 +567,14 @@ rows): `iCalUid` (NVARCHAR(1024), the event's calendar identity), `syncKey` (NVA
 `iCalUid + '|'`, the indexed key), `organizerEmail` (NVARCHAR(254)), `organizerName` (NVARCHAR(200)),
 `externalOrganizer` (BIT, default 0: a meeting someone outside the CRM organizes; the organizer columns are filled
 from P2-8), `externalUpdatedAt` (DATETIME2, the last calendar-side change applied; set by the P2-5 pull, as of 2026-11-26, without moving `updatedAt`). Set by the sync engine only (system
-write path), never by a form; not in the audited DTO yet.
+write path), never by a form. P2-8 (as of 2026-11-26): a meeting imported from a calendar has `origin = 'calendar'`,
+`createdBy = 'calendar-sync'`, `iCalUid` / `syncKey` of the event and the organizer columns; `externalOrganizer = 1`
+when a customer organized it (then subject, times, all-day, location, attendees, owner and the video meeting are
+locked in the CRM, 409 `EXTERNAL_EVENT_LOCKED`; its conference columns mirror the organizer's `ready` Meet / Teams
+link, written with `updatedAt` kept, and the row never joins an `ActivitySeries`). The three organizer columns are now in the audited DTO. A deleted imported row keeps its
+`syncKey` (and so its `UX_Activity_syncKey` slot), so the meeting is never imported again; a second colleague's copy
+of the same meeting finds the row by `syncKey` and gets an `attendee` link (one activity, two links, D45: the
+`syncKey` holder is pre-read, never a caught unique-index error inside the transaction).
 Video meeting columns (migration `20261215100000_activity_conference`, as of 2026-11-26, Calendar Phase 3 P3-1; NULL /
 0 on existing rows): `conferenceProvider` (NVARCHAR(20): `meet` / `teams` / `zoom` / NULL, the form's Video meeting
 choice; the DTO key is `videoMeeting`), `conferenceState` (NVARCHAR(20): `requested` / `ready` / `failed`),
@@ -659,7 +666,7 @@ sync-made activity changes are audited under route `job:calendar-sync:<provider>
 | `id` | NVARCHAR(50) PK | `uuid()` |
 | `activityId`, `connectionId` | NVARCHAR(50) | Unique together |
 | `provider` | NVARCHAR(30) | The connection's provider |
-| `role` | NVARCHAR(10), default `organizer` | `organizer` \| `attendee` (P2-5) |
+| `role` | NVARCHAR(10), default `organizer` | `organizer` \| `attendee` (P2-5). P2-8 (as of 2026-11-26): an `attendee` link is an invited colleague's own copy of the meeting, made by the import or lazily by the `rsvp` job (found by iCalUID); its `baseJson` is `{ "self": "<reply>" }`, the last reply both sides agreed on; `lastErrorCode` `rsvp_refused` / `rsvp_failed` when the calendar refused a CRM reply. When the activity is handed to that colleague, their attendee link becomes their (fresh, `pending`) organizer link, so there is still one link per calendar |
 | `state` | NVARCHAR(20), default `pending` | `pending` \| `synced` \| `error` \| `cancelled` \| `removed_remote` \| `unsupported` \| `detached`. An error on a link whose event is gone keeps `cancelled` / `removed_remote` (with `lastErrorCode`), so the next try restores rather than patches |
 | `invites` | NVARCHAR(10), default `send` | `send` \| `withhold` (a private copy without attendees: saved by someone other than the owner, D41, or copied by the first-sync backfill with guests, D23; `send` again when the owner presses Send invitations, P2-3c) |
 | `heldAttendeesJson` | NVARCHAR(MAX) NULL | Guests a non-owner added to an event that invites (also while the link is `detached`), or that were not on the event when someone other than the new owner re-assigned the activity: held until the owner sends them (D41). JSON array of keys (as of 2026-11-26, P2-3c): `user:<username>` / `contact:<contactId>` (lower-cased) for CRM people, so a contact who gets an email later stays held, and lower-cased addresses for typed emails and entries written before P2-3c; the push resolves them to today's addresses. Null after Send invitations |
@@ -774,8 +781,9 @@ Migration `20261127090000_calendar_connections` (Calendar Phase 2 P2-2) created 
 Module `backend-crm/src/modules/calendar-sync`. Rows are created and stopped only by the enrolment reconcile
 (`enrolment.ts`), never by the employee. One row per (user, provider, mailbox) identity: an email or provider change
 stops the old row and starts a new one; stopped rows are kept for link history (their `ActivityExternalLink` rows
-become `detached`; re-activation re-attaches the organizer links of activities ending after yesterday, P2-3b). No FK
-to `Users`.
+become `detached`; re-activation re-attaches the organizer links of activities ending after yesterday, P2-3b, and the
+invitation copies (attendee links) of live activities ending after yesterday as `synced` with no etag, which the next
+pull reads back once, P2-8 as of 2026-11-27). No FK to `Users`.
 
 | Column | Type | Notes |
 | --- | --- | --- |
@@ -787,7 +795,7 @@ to `Users`.
 | `statusReason` | NVARCHAR(50) NULL | `error`: `user_not_found`, `user_unavailable`, `calendar_unavailable`, `mailbox_out_of_scope`, `no_mailbox`; `stopped`: `excluded`, `user_inactive`, `email_changed`, `provider_changed`, `provider_removed`, `no_email`, `oauth_retired` (P2-2's OAuth rows; never reactivated) |
 | `source` | NVARCHAR(10), default `domain` | How the provider was chosen: `domain` \| `override` |
 | `calendarId` | NVARCHAR(200), default `primary` | `primary` (Google) / `''` = default calendar (Graph) |
-| `syncCursor`, `syncWindowStart`, `syncWindowEnd`, `fullSyncAt` | | The pull (P2-5, as of 2026-11-26): Google sync token / Graph delta link (never logged; stored only when every change of the run applied; null = the next pull is a full sync), the full sync's window (now − 7 days … now + 400 days; an Outlook window is re-baselined nightly 30 days after its full sync, i.e. once `syncWindowStart` is older than 37 days), the last full sync |
+| `syncCursor`, `syncWindowStart`, `syncWindowEnd`, `fullSyncAt` | | The pull (P2-5, as of 2026-11-26): Google sync token / Graph delta link (never logged; stored only when every change of the run applied, and only over the cursor the pull started from, so a cursor dropped while it ran stays dropped, P2-8 as of 2026-11-27; null = the next pull is a full sync), the full sync's window (now − 7 days … now + 400 days; an Outlook window is re-baselined nightly 30 days after its full sync, i.e. once `syncWindowStart` is older than 37 days), the last full sync |
 | `backfilledAt`, `backfillCount` | | The first-sync backfill (as of 2026-11-26, P2-3c): `backfilledAt` = its run stamp, claimed when the first run starts (`WHERE backfilledAt IS NULL`) and reused by a run started again; `backfillCount` = how many activities it copied (links on the row carrying the stamp), written last (`WHERE backfillCount IS NULL`). `backfillCount` null = not done (the `enrolled` job and the poll re-queue it). Never reset, so it runs once per row |
 | `lastPulledAt`, `lastPushedAt`, `lastSuccessAt`, `lastCheckedAt` | | Sync health |
 | `nextCheckAt` | DATETIME2 NULL | Earliest next health check after a user-level error (backoff 15 min → 1 h → 6 h → 24 h) |
@@ -820,7 +828,7 @@ exists only while something differs from the default (provider by email domain, 
 | `provider` | NVARCHAR(30) NULL | null = by email domain; `google` \| `microsoft` \| `fake` (only while `CALENDAR_FAKE_PROVIDER` is on) |
 | `excluded` | BIT, default 0 | 1 = never synced (live row stopped `excluded`; events already in the calendar stay) |
 | `note` | NVARCHAR(200) NULL | Why; shown on the People table |
-| `importMeetings` | BIT, default 0 | P2-8 (also needs the company switch `allowMeetingImport`) |
+| `importMeetings` | BIT, default 0 | P2-8 (as of 2026-11-26): "Import customer meetings", set by admins only on the People dialog (409 `MEETING_IMPORT_OFF` while the company switch `allowMeetingImport` is off). With both on, the person's calendar pull imports customer meetings and their CRM replies go to their calendar |
 | `updatedBy`, `createdAt`, `updatedAt` | | |
 
 Audited as entity `CalendarSyncUser` (module `admin-integrations`) CREATE / UPDATE / DELETE.
@@ -1055,7 +1063,7 @@ choice rows.
 | User added / edited (Admin › Users) | App locks (username, email address, reports-to chain, admin roster as needed; the per-user lock on edits) → checks → INSERT / UPDATE `Users` → `AuditLog` CREATE / UPDATE; user lookup caches dropped after commit |
 | User deactivated / reset (Admin › Users) | App lock on the user → `isActive = 0, deactivatedAt = now` (or new hash + `mustChangePassword = 1`) → `AuditLog` STATUS_CHANGE / PASSWORD_RESET; after commit every Redis session of the user is deleted |
 | Nightly retention (00:20) | Hard delete of old `Notification` and `EmailLog` rows (see §4.26) |
-| Calendar nightly (00:25, P2-3b, as of 2026-11-26) | Reconcile everyone's `CalendarConnection` enrolment, run due health checks, write the admins' `calendar_sync_issue` digest when someone's calendar went to `error` that day (moved from 00:20), the follow-up activity backfill (moved from 00:20), mark `error` links of activities that haven't ended dirty again (`pending`, attempts 0; `cancelled` / `removed_remote` links whose restore was refused are dirtied keeping their state), `integration_secret_expiring` notifications, clear expired `CalendarConnection` leases; since P2-7 webhook channels: create / renew / retry failed, Graph existence check, stop strays (all of them while webhooks are off), delete `stopped` / `failed` rows older than 30 days |
+| Calendar nightly (00:25, P2-3b, as of 2026-11-26) | Reconcile everyone's `CalendarConnection` enrolment, run due health checks, write the admins' `calendar_sync_issue` digest when someone's calendar went to `error` that day (moved from 00:20), the follow-up activity backfill (moved from 00:20), mark `error` links of activities that haven't ended dirty again (`pending`, attempts 0; `cancelled` / `removed_remote` links whose restore was refused are dirtied keeping their state), `integration_secret_expiring` notifications, clear expired `CalendarConnection` leases; since P2-7 webhook channels: create / renew / retry failed, Graph existence check, stop strays (all of them while webhooks are off), delete `stopped` / `failed` rows older than 30 days; since P2-8 (as of 2026-11-26) imported meetings (`origin = 'calendar'`) with no related record that ended before today (business timezone) and are still Planned are set Completed (`completedBy = 'calendar-sync'`, batches of 200, audited system writes, never pushed, nobody notified) |
 | Activity saved (P2-3b) | Inside its transaction: the owner's `ActivityExternalLink` inserted or `dirtyAt` set (only with a live connection). After commit: pushed; success writes the link's ids, etag, base and clears `dirtyAt` only if it didn't change meanwhile. A deletion in the calendar cancels the activity (system write) unless it is Completed or a follow-up activity (link `removed_remote`) |
 | Calendar enrolment reconcile (P2-2b) | App lock `calendar-connection:user:<username>` → read user, choice, providers → INSERT `pending` / UPDATE to `stopped` → `AuditLog` ENROL / STOP; a new row's first health check runs after commit |
 | Public booking (Phase 4) | Company calendar re-read (no transaction) → transaction: app lock `booking:owner:<username>` → `tokenHash` pre-read → CRM activities re-read → day count → INSERT `Activity` (+ attendee, `AuditLog` CREATE by `system`, route `public:booking`) → INSERT `BookingLinkBooking` → INSERT `Notification` `booking_created`; a P2002 aborts and the booking is retried once (D45) |

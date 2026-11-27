@@ -21,19 +21,24 @@ const CHECK_MESSAGES: Record<CalendarCheckOutcome, { severity: 'success' | 'erro
 
 /**
  * One person's calendar choice (Admin › API Integrations › People): the provider (by email domain, or an override),
- * leaving them out of calendar sync with a note, "Check now", and "Sync now" (their calendar changes come back now,
- * P2-5). Saved at once and audited; the person is re-enrolled right after. Mount with a `key` per person so it starts fresh.
+ * leaving them out of calendar sync with a note, "Import customer meetings" (P2-8: their meetings with CRM contacts
+ * become activities and their replies go both ways; only while the company switch is on), "Check now", and "Sync now"
+ * (their calendar changes come back now, P2-5). Saved at once and audited; the person is re-enrolled right after.
+ * Mount with a `key` per person so it starts fresh.
  */
 export function CalendarChoiceDialog({
     person,
     providers,
     fakeProvider,
+    meetingImport,
     onClose,
     onToast,
 }: {
     person: Person | null;
     providers: ProviderAdmin[];
     fakeProvider: boolean;
+    /** The company switch "Bring in meetings with customers" (`allowMeetingImport`). */
+    meetingImport: boolean;
     onClose: () => void;
     onToast: (message: string, severity?: 'success' | 'error') => void;
 }) {
@@ -41,6 +46,7 @@ export function CalendarChoiceDialog({
     const [provider, setProvider] = useState<string>(choice?.provider ?? BY_DOMAIN);
     const [excluded, setExcluded] = useState(choice?.excluded ?? false);
     const [note, setNote] = useState(choice?.note ?? '');
+    const [importMeetings, setImportMeetings] = useState(choice?.importMeetings ?? false);
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [checked, setChecked] = useState<CalendarCheckOutcome | null>(null);
     const save = useSetPersonCalendar();
@@ -62,6 +68,7 @@ export function CalendarChoiceDialog({
     if (nextProvider !== (choice?.provider ?? null)) payload.provider = nextProvider;
     if (excluded !== (choice?.excluded ?? false)) payload.excluded = excluded;
     if ((note.trim() || null) !== (choice?.note ?? null)) payload.note = note.trim() || null;
+    if (importMeetings !== (choice?.importMeetings ?? false)) payload.importMeetings = importMeetings;
     const dirty = Object.keys(payload).length > 0;
     const busy = save.isPending || check.isPending || pull.isPending;
 
@@ -164,6 +171,32 @@ export function CalendarChoiceDialog({
                         The CRM stops writing to {name}&apos;s calendar. Events already there stay (removing them would send cancellations to customers).
                     </Alert>
                 )}
+
+                <Box sx={{ minWidth: 0 }}>
+                    <FormControlLabel
+                        control={
+                            <Switch
+                                checked={importMeetings}
+                                onChange={(e) => setImportMeetings(e.target.checked)}
+                                // Turning it off always works; turning it on needs the company switch.
+                                disabled={busy || excluded || (!meetingImport && !importMeetings)}
+                                slotProps={{ input: { 'aria-describedby': 'import-meetings-hint' } }}
+                            />
+                        }
+                        label={<Typography sx={{ fontSize: '0.84rem', color: 'var(--crm-slate-900)' }}>Import customer meetings</Typography>}
+                        sx={{ ml: 0, gap: 1, alignItems: 'center' }}
+                    />
+                    <Typography id="import-meetings-hint" sx={{ ...hintSx, mt: 0.25 }}>
+                        {meetingImport
+                            ? `Meetings in ${name}'s calendar with a CRM contact become activities, and replies to invitations go both ways. Private, repeating and all-day events are never brought in.`
+                            : 'Turn on "Bring in meetings with customers" in the calendar sync settings first.'}
+                    </Typography>
+                    {errors.importMeetings && (
+                        <Typography role="alert" sx={{ ...hintSx, mt: 0.5, color: 'var(--mui-palette-error-main)' }}>
+                            {errors.importMeetings}
+                        </Typography>
+                    )}
+                </Box>
 
                 <TextField
                     label="Note (optional)"

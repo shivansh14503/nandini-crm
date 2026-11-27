@@ -77,6 +77,9 @@ export interface ProviderBusyBlock {
     kind: BusyKind;
 }
 
+/** A reply the CRM can send for the connected person on their invitation copy (P2-8). "No reply yet" can't be sent. */
+export type RsvpReply = 'accepted' | 'tentative' | 'declined';
+
 /** Free/busy of one calendar: its blocks, or why the provider wouldn't give them (a fixed code, never provider text). */
 export type FreeBusyResult = { busy: ProviderBusyBlock[] } | { error: string };
 
@@ -146,7 +149,7 @@ export interface WatchChannelRef {
 
 /**
  * The adapter interface: the health probe (P2-2b), the event operations of the push engine (P2-3b) and free/busy
- * (P2-6) and the pull (`listChanges`, P2-5). Watch and RSVP join with P2-7 and P2-8. Graph URLs use `ctx.mailbox` (`/users/{mailbox}`).
+ * (P2-6), the pull (`listChanges`, P2-5), watch (P2-7) and the RSVP lookups / replies (P2-8, optional). Graph URLs use `ctx.mailbox` (`/users/{mailbox}`).
  */
 export interface CalendarProviderAdapter {
     readonly key: CalendarProviderKey;
@@ -193,4 +196,16 @@ export interface CalendarProviderAdapter {
     stopWatch?(ctx: CallCtx, channel: WatchChannelRef): Promise<void>;
     /** Graph `GET /subscriptions/{id}`: false on 404 (the nightly backstop for a lost `subscriptionRemoved`). */
     watchExists?(ctx: CallCtx, channel: WatchChannelRef): Promise<boolean>;
+    /**
+     * P2-8 (spec §13.3): the person's live copy of a meeting by its iCalUID (the lazy attendee link of an RSVP), or
+     * null. Google `GET …/events?iCalUID=`, Graph `GET /users/{mailbox}/events?$filter=iCalUId eq '…'`.
+     */
+    findByICalUid?(ctx: CallCtx, iCalUid: string): Promise<ProviderEvent | null>;
+    /**
+     * P2-8: writes the person's reply on their invitation copy `id`, telling the organizer. Google: `GET` the copy →
+     * set the `self` attendee's `responseStatus` → `PATCH attendees` with `If-Match` and `sendUpdates=all` [U: F3];
+     * Graph: `POST /users/{mailbox}/events/{id}/accept | tentativelyAccept | decline` with `sendResponse: true` [V].
+     * Resolves with the event as it is now when the provider answers with it (Google), else null (Graph's 202).
+     */
+    respond?(ctx: CallCtx, id: string, reply: RsvpReply): Promise<ProviderEvent | null>;
 }

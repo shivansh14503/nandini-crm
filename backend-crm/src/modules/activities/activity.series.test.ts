@@ -13,7 +13,7 @@ import { runInTransaction } from '../shared/transactions.js';
 import { applySystemPatch } from './activity.system.js';
 import { isoWeekday } from './activity.recurrence.js';
 import { SERIES_HORIZON_DAYS, SERIES_SYNC_WINDOW_DAYS } from './activity.series.constants.js';
-import { activitySeriesService, extendSeriesHorizons, markSeriesSyncWindow, SERIES_SCOPE_REQUIRED } from './activity.series.js';
+import { activitySeriesService, extendSeriesHorizons, isRewritable, markSeriesSyncWindow, SERIES_SCOPE_REQUIRED } from './activity.series.js';
 import type { ActivityRow } from './activity.mapper.js';
 import { blankActivity, blankLink, installActivityDouble, restoreActivityDouble, type ActivityDoubleState } from './testing/activityDouble.js';
 
@@ -453,6 +453,46 @@ describe('activitySeriesService.update', () => {
         assert.equal(view.series?.summary, 'Every week on Mon, 3 times');
         assert.deepEqual(live(state, view.seriesId).map(dayOf), [monday, addDays(monday, 7), addDays(monday, 14)]);
         await assert.rejects(activitySeriesService.update('f1', { repeat: { frequency: 'daily' } }, PALAK), rejectsWith(409, 'FOLLOW_UP_ACTIVITY_LOCKED'));
+    });
+});
+
+describe('recurring series and imported meetings (P2-8 merge)', () => {
+    it('an imported meeting (origin calendar, organized outside the CRM) never becomes a series, and stays unchanged', async () => {
+        const monday = nextMonday();
+        const imported = blankActivity({
+            id: 'imp1',
+            subject: 'Customer call',
+            assignedTo: 'palak',
+            createdBy: 'calendar-sync',
+            origin: 'calendar',
+            externalOrganizer: true,
+            organizerEmail: 'buyer@customer.example',
+            startAt: at(monday, '15:00'),
+            endAt: at(monday, '16:00'),
+        });
+        const ownImport = blankActivity({ id: 'imp2', subject: 'My own customer call', assignedTo: 'palak', createdBy: 'calendar-sync', origin: 'calendar', startAt: at(monday, '17:00'), endAt: at(monday, '17:30') });
+        const state = installActivityDouble({ users: USERS, activities: [imported, ownImport] });
+        await assert.rejects(activitySeriesService.update('imp1', { repeat: { frequency: 'weekly' } }, PALAK), rejectsWith(400));
+        await assert.rejects(activitySeriesService.update('imp2', { repeat: { frequency: 'weekly' } }, PALAK), rejectsWith(400));
+        assert.equal(state.series.length, 0);
+        assert.ok(state.activities.every((a) => !a.seriesId));
+    });
+
+    it('an "All events" edit never rewrites a row the calendar owns (externalOrganizer), even inside the series', async () => {
+        const state = installActivityDouble({ users: USERS });
+        const { seriesId } = await createWeekly(state);
+        const rows = live(state, seriesId);
+        // Not a path the CRM takes (imports never join a series): the guard alone keeps the lock.
+        const locked = state.activities.find((a) => a.id === rows[3].id) as Activity;
+        locked.externalOrganizer = true;
+        assert.equal(isRewritable(locked as ActivityRow, new Set(), new Date()), false);
+        assert.equal(isRewritable(state.activities.find((a) => a.id === rows[4].id) as ActivityRow, new Set(), new Date()), true);
+
+        await activitySeriesService.update(rows[0].id, { subject: 'Weekly review (renamed)' }, PALAK, { scope: 'all' });
+        const after = state.activities.find((a) => a.id === rows[3].id) as Activity;
+        assert.equal(after.subject, 'Weekly review');
+        assert.equal(after.isDeleted, false);
+        assert.equal(live(state, seriesId).find((a) => a.id === rows[4].id)?.subject, 'Weekly review (renamed)');
     });
 });
 

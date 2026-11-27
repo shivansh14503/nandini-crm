@@ -3,13 +3,16 @@ import { prisma } from '../../config/prisma.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
 import { reconcileAllQuietly } from '../calendar-sync/enrolment.js';
+import { startImportPulls } from '../calendar-sync/sync.wake.js';
 import { FOLLOWUP_TYPE_CATEGORY_KEY } from '../form-configs/formConfig.defaults.js';
+import { isActivityOnlyFollowupType } from '../shared/followupTypes.js';
 import { formConfigService, type FormConfigsPayload } from '../form-configs/formConfig.service.js';
 import {
     CALENDAR_SYNC_DEFAULTS,
     CALENDAR_SYNC_SETTING_KEY,
     calendarSyncSettingsPatchSchema,
     calendarSyncSettingsSchema,
+    calendarSyncFromMeta,
     readCalendarSyncSettings,
     type CalendarSyncSettings,
 } from './calendarSyncSettings.js';
@@ -20,13 +23,18 @@ import {
  * second cache key; saves go through `formConfigService.updateModuleSetting`, which validates, audits
  * (`ModuleSetting UPDATE`) and drops that cache, so `loadActivityConfig` and calendar sync see the change at once.
  * A company domain a calendar provider still serves can't be removed (409 DOMAIN_IN_USE); a change of the company
- * domains re-runs calendar enrolment (P2-2b).
+ * domains re-runs calendar enrolment (P2-2b). The type of imported meetings (P2-8) must be an active, calendar-able
+ * Followup Type (400 otherwise). Turning "Bring in meetings with customers" on starts one full pull for every person
+ * who imports, so meetings already in their calendars come in (sync.wake.ts `startImportPulls`).
  */
 
-/** Type for imported meetings when none is stored: the active Followup Type whose meta.icon is 'meeting', else 'Meeting'. */
+/**
+ * Type for imported meetings when none is stored: the active, calendar-able Followup Type whose meta.icon is 'meeting',
+ * else 'Meeting'.
+ */
 export function defaultImportType(configs: Pick<FormConfigsPayload, 'categories'>): string {
     const category = configs.categories.find((c) => c.key === FOLLOWUP_TYPE_CATEGORY_KEY);
-    const meeting = category?.options.find((o) => o.isActive && o.meta && (o.meta as Record<string, unknown>).icon === 'meeting');
+    const meeting = category?.options.find((o) => o.isActive && o.meta && (o.meta as Record<string, unknown>).icon === 'meeting' && calendarSyncFromMeta(o.meta, false));
     return meeting?.value ?? CALENDAR_SYNC_DEFAULTS.importFollowupType;
 }
 
@@ -54,6 +62,26 @@ export async function providerDomainsInUse(): Promise<{ provider: string; domain
     });
 }
 
+/**
+ * P2-8: the type of imported meetings must be an active Followup Type that can sit in a calendar: never Task / Note
+ * (activity-only), and ticked under "What goes to calendars" (`meta.calendarSync` not false). An imported meeting the
+ * employee organizes is two-way; a type that doesn't go to calendars would have its first push treat the event as one
+ * to remove. 400 on `importFollowupType` otherwise: checked when the type changes and on every save while import is on.
+ */
+export function assertImportType(configs: Pick<FormConfigsPayload, 'categories'>, value: string): void {
+    const category = configs.categories.find((c) => c.key === FOLLOWUP_TYPE_CATEGORY_KEY);
+    const option = category?.options.find((o) => o.isActive && o.value.trim().toLowerCase() === value.trim().toLowerCase());
+    const activityOnly = isActivityOnlyFollowupType(value);
+    const message = activityOnly
+        ? `${value} activities never go to calendars. Pick another type for imported meetings.`
+        : option && !calendarSyncFromMeta(option.meta, false)
+          ? `${option.value} is not ticked under What goes to calendars. Tick it there first, or pick another type for imported meetings.`
+          : 'Pick an active Followup Type for imported meetings.';
+    if (!option || activityOnly || !calendarSyncFromMeta(option.meta, false)) {
+        throw new HttpError(message, StatusCodes.BAD_REQUEST, { code: 'VALIDATION_ERROR', errors: [{ message, path: ['importFollowupType'] }] });
+    }
+}
+
 const PROVIDER_NAMES: Record<string, string> = { google: 'Google Workspace', microsoft: 'Microsoft 365' };
 
 /**
@@ -63,8 +91,12 @@ const PROVIDER_NAMES: Record<string, string> = { google: 'Google Workspace', mic
  */
 export async function saveCalendarSettings(patch: unknown, user: AuthUser): Promise<CalendarSyncSettings> {
     const changes = calendarSyncSettingsPatchSchema.parse(patch);
-    const before = await loadCalendarSettings();
+    const configs = await formConfigService.getAllConfigs();
+    const before = calendarSettingsFrom(configs);
     const merged = calendarSyncSettingsSchema.parse({ ...before, ...changes });
+    // While import is on, every save checks the type it imports with (turning it on with a type that stopped going to
+    // calendars would otherwise slip through, since only changed keys are sent).
+    if (changes.importFollowupType !== undefined || merged.allowMeetingImport) assertImportType(configs, merged.importFollowupType);
     const domainsChanged = changes.companyDomains !== undefined && JSON.stringify([...before.companyDomains].sort()) !== JSON.stringify([...merged.companyDomains].sort());
     if (domainsChanged) {
         const kept = new Set(merged.companyDomains);
@@ -78,5 +110,7 @@ export async function saveCalendarSettings(patch: unknown, user: AuthUser): Prom
     }
     await formConfigService.updateModuleSetting('activities', CALENDAR_SYNC_SETTING_KEY, { value: merged }, user);
     if (domainsChanged) await reconcileAllQuietly('domains_saved', { actor: user.username });
+    // P2-8: meetings already in the calendars of people who import come in with one full pull each (never throws).
+    if (!before.allowMeetingImport && merged.allowMeetingImport) await startImportPulls(null);
     return merged as CalendarSyncSettings;
 }

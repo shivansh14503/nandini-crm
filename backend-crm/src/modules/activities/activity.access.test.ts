@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { AuthUser } from '../../types/user.types.js';
-import { activityScopeWhere, canEditActivity, canViewActivity, myResponseOf } from './activity.access.js';
+import { activityLocks, activityScopeWhere, canEditActivity, canViewActivity, EXTERNAL_EVENT_LOCKED, lockedFieldsFor, myResponseOf } from './activity.access.js';
 
 const user = (role: string, username = 'palak'): AuthUser => ({ id: 1, username, role });
 const exec = user('Sales Executive');
@@ -53,5 +53,26 @@ describe('myResponseOf', () => {
         assert.equal(myResponseOf(exec, row), 'tentative');
         assert.equal(myResponseOf(user('Sales Executive', 'arjun'), row), null);
         assert.equal(myResponseOf(exec, { assignedTo: 'palak' }), null);
+    });
+});
+
+describe('locks (spec §8.13)', () => {
+    const lockRow = { origin: 'calendar', status: 'Planned', relatedModule: null, relatedCode: null };
+
+    it('P2-8: a meeting organized outside the CRM locks title, time, place, attendees and owner; deleting it is allowed', () => {
+        const lock = activityLocks.lockFor({ ...lockRow, externalOrganizer: true, organizerEmail: 'ravi@acme.com' });
+        assert.equal(lock?.code, EXTERNAL_EVENT_LOCKED);
+        assert.deepEqual(lock?.fields, ['subject', 'startAt', 'endAt', 'allDay', 'location', 'attendees', 'assignedTo', 'videoMeeting']);
+        assert.match(lock?.message ?? '', /Organized by ravi@acme\.com/);
+        assert.equal(lock?.deleteRefusedReason, null);
+    });
+
+    it('an imported meeting the person organizes, and rows read without the column, are not locked', () => {
+        assert.deepEqual(lockedFieldsFor({ ...lockRow, externalOrganizer: false }), []);
+        assert.deepEqual(lockedFieldsFor(lockRow), []);
+    });
+
+    it('a follow-up activity keeps its own lock', () => {
+        assert.equal(activityLocks.lockFor({ ...lockRow, origin: 'followup', relatedModule: 'leads', externalOrganizer: true })?.code, 'FOLLOW_UP_ACTIVITY_LOCKED');
     });
 });

@@ -83,12 +83,14 @@ describe('classifyInbound', () => {
         assert.deepEqual(classifyInbound({ event: long, link: link(), activity: live, match: null }), { kind: 'merge', tooLong: true });
     });
 
-    it('ignored: attendee copies, deleted activities, inactive links, a copy that is not the organizer', () => {
+    it('ignored: deleted activities, inactive links, a copy that is not the organizer; attendee links carry replies (P2-8)', () => {
         const kind = (input: ClassifyInput) => {
             const action = classifyInbound(input);
             return action.kind === 'ignore' ? action.reason : action.kind;
         };
-        assert.equal(kind({ event: event(), link: link({ role: 'attendee' }), activity: live, match: null }), 'attendee_copy');
+        assert.equal(kind({ event: event({ isOrganizerCopy: false }), link: link({ role: 'attendee' }), activity: live, match: null }), 'attendee');
+        assert.equal(kind({ event: event({ isOrganizerCopy: false }), link: link({ role: 'attendee' }), activity: { isDeleted: true, status: 'Planned' }, match: null }), 'attendee');
+        assert.equal(kind({ event: event({ isOrganizerCopy: false }), link: link({ role: 'attendee', state: 'detached' }), activity: live, match: null }), 'link_inactive');
         assert.equal(kind({ event: event(), link: link(), activity: { isDeleted: true, status: 'Planned' }, match: null }), 'activity_deleted');
         for (const state of ['detached', 'unsupported', 'removed_remote']) assert.equal(kind({ event: event(), link: link({ state }), activity: live, match: null }), 'link_inactive');
         assert.equal(kind({ event: event({ isOrganizerCopy: false }), link: link(), activity: live, match: null }), 'not_organizer');

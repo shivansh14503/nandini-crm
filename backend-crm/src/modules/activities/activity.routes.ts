@@ -41,10 +41,17 @@ import { activityController } from './activity.controller.js';
  *                           type, start / end / all-day, status, owner, related record) with 409
  *                           FOLLOW_UP_ACTIVITY_LOCKED; it changes with its record (Record a follow-up). videoMeeting as
  *                           on POST (also checked on an owner change); a ready Teams link can't be removed or changed:
- *                           409 VIDEO_MEETING_LOCKED
- *   DELETE /:id           (soft delete; a follow-up activity: 409 FOLLOW_UP_ACTIVITY_LOCKED)
+ *                           409 VIDEO_MEETING_LOCKED. A meeting organized outside the CRM (externalOrganizer, P2-8)
+ *                           refuses a change to subject, start / end / all-day, location, attendees, owner or
+ *                           videoMeeting with 409 EXTERNAL_EVENT_LOCKED (its pulled join link still shows)
+ *   DELETE /:id           (soft delete; a follow-up activity: 409 FOLLOW_UP_ACTIVITY_LOCKED; an imported meeting is
+ *                           removed from the CRM only: its calendar links detach, syncKey kept, the event stays)
  *   POST   /bulk-delete   { ids } → { deleted, ids, notFound, skipped?: [{ id, reason }] } (follow-up activities skipped)
- *   POST   /:id/response  { responseStatus: accepted | tentative | declined } (invited colleagues only; audited RSVP)
+ *   POST   /:id/response  { responseStatus: accepted | tentative | declined } (invited colleagues, and the owner of an
+ *                           externalOrganizer meeting holding the invitation in their synced calendar, whose Decline
+ *                           cancels it and Accept / Maybe revive it; audited RSVP; 403 otherwise). P2-8:
+ *                           queues an `rsvp` job that sends the reply to the person's calendar copy when both import
+ *                           switches are on for them
  *   POST   /:id/conference/retry → activity view: asks the calendar again for a video link that failed (owner, creator
  *                           or a global role; 409 NOTHING_TO_RETRY unless it failed, 409 VIDEO_PROVIDER_NOT_CONNECTED)
  *   POST   /:id/calendar-sync/retry        (owner or editor; Calendar Phase 2 P2-3c) → activity view. Pushes the copy in

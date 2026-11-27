@@ -251,15 +251,26 @@ export interface Activity extends ActivityFormData {
      * public booking page, /book/<slug>). Read only.
      */
     origin?: ActivityOrigin;
+    /** Organizer of a meeting brought in from a calendar (P2-8); '' when the owner organizes it. Read only. */
+    organizerEmail?: string;
+    organizerName?: string;
+    /**
+     * Organized outside the CRM's connected users (P2-8): title, times, place, attendees, owner and video meeting change
+     * only in the organizer's calendar (`lockedFields`, 409 EXTERNAL_EVENT_LOCKED; its join link still shows). Read only.
+     */
+    externalOrganizer?: boolean;
     /** Sent with every activity the API returns (outside the audited record). */
     viewer?: ActivityViewer;
     /**
      * Fields this activity won't let anyone change (a follow-up activity's type, times, status, owner and related
-     * record: they move with the lead / opportunity). A PUT changing one gets 409 FOLLOW_UP_ACTIVITY_LOCKED.
+     * record: they move with the lead / opportunity; a meeting organized outside the CRM's title, times, place,
+     * attendees, owner and video meeting). A PUT changing one gets 409 FOLLOW_UP_ACTIVITY_LOCKED / EXTERNAL_EVENT_LOCKED.
      */
     lockedFields?: string[];
     /** Sent with every activity the API returns: its copy in the owner's calendar, or null (not synced). */
     calendar?: ActivityCalendarState | null;
+    /** P2-8: the calendar an imported activity (`origin='calendar'`) came from (`google` | `microsoft` | `fake`); null otherwise. */
+    importedFrom?: string | null;
     /** The recurring series this occurrence belongs to (Calendar Phase 4), '' for a single activity. */
     seriesId?: string;
     /** Its series (rule, summary, position), null for a single activity. */
@@ -316,6 +327,14 @@ export type ActivityOrigin = 'crm' | 'followup' | 'calendar' | 'booking' | (stri
 export const FOLLOW_UP_ORIGIN = 'followup';
 /** Error code of a write to a locked field of a follow-up activity (409). */
 export const FOLLOW_UP_ACTIVITY_LOCKED = 'FOLLOW_UP_ACTIVITY_LOCKED';
+
+/** Error code of a write to a locked field of a meeting organized outside the CRM (409, P2-8). */
+export const EXTERNAL_EVENT_LOCKED = 'EXTERNAL_EVENT_LOCKED';
+/** Origin of a meeting brought in from a calendar (P2-8). */
+export const CALENDAR_ORIGIN = 'calendar';
+
+/** Whether this meeting is organized outside the CRM (its title, times, place and attendees change in the calendar). */
+export const isExternallyOrganized = (activity: Pick<Activity, 'externalOrganizer'> | null | undefined): boolean => activity?.externalOrganizer === true;
 
 /** Whether this is a lead / opportunity follow-up activity (it moves with its record). */
 export const isFollowUpActivity = (activity: Pick<Activity, 'origin'> | null | undefined): boolean => activity?.origin === FOLLOW_UP_ORIGIN;

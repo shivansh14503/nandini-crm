@@ -37,6 +37,15 @@ export interface EntityEmailRow {
     sortOrder: number;
 }
 
+/** Admin calendar choices of one employee (P2-8 reads `importMeetings`). */
+export interface CalendarSyncUserRow {
+    username: string;
+    provider: string | null;
+    excluded: boolean;
+    note: string | null;
+    importMeetings: boolean;
+}
+
 export interface ProviderRow {
     provider: string;
     enabled: boolean;
@@ -111,6 +120,7 @@ export interface ActivityDoubleState {
     providers: ProviderRow[];
     entityEmails: EntityEmailRow[];
     notifications: NotificationRowState[];
+    calendarSyncUsers: CalendarSyncUserRow[];
     /** Recurring series (Calendar Phase 4); rolled back with the activity rows. */
     series: ActivitySeries[];
 }
@@ -247,6 +257,7 @@ const DELEGATES = [
     'entityEmail',
     'notification',
     'userPreference',
+    'calendarSyncUser',
     'activitySeries',
     'auditLog',
     '$transaction',
@@ -283,6 +294,7 @@ export function installActivityDouble(
         links?: ActivityExternalLink[];
         providers?: ProviderRow[];
         entityEmails?: EntityEmailRow[];
+        calendarSyncUsers?: Partial<CalendarSyncUserRow>[];
         series?: ActivitySeries[];
     } = {},
 ): ActivityDoubleState {
@@ -304,6 +316,7 @@ export function installActivityDouble(
         providers: (seed.providers ?? []).map((row) => ({ ...row })),
         entityEmails: (seed.entityEmails ?? []).map((row) => ({ ...row })),
         notifications: [],
+        calendarSyncUsers: (seed.calendarSyncUsers ?? []).map((row) => ({ username: '', provider: null, excluded: false, note: null, importMeetings: false, ...row })),
         series: (seed.series ?? []).map((row) => ({ ...row })),
     };
 
@@ -387,6 +400,8 @@ export function installActivityDouble(
         create: async (args: { data: Record<string, unknown> & { attendees?: { create: Omit<ActivityAttendee, 'id' | 'activityId' | 'createdAt'>[] } }; include?: unknown }) => {
             call('activity.create');
             const { attendees, ...data } = args.data;
+            // UX_Activity_syncKey (soft-deleted rows included).
+            if (data.syncKey && state.activities.some((a) => a.syncKey === data.syncKey)) throw Object.assign(new Error('Unique constraint failed'), { code: 'P2002' });
             const stamp = touch();
             const row = blankActivity({ id: randomUUID(), createdAt: stamp, updatedAt: stamp, ...(data as Partial<Activity>) } as Activity);
             // UX_Activity_seriesOccurrence (filtered unique, soft-deleted rows included).
@@ -633,6 +648,13 @@ export function installActivityDouble(
         },
     };
     const userPreference = { findMany: async () => [] };
+    const calendarSyncUser = {
+        findUnique: async (args: { where: { username: string }; select?: Record<string, unknown> }) => {
+            const row = state.calendarSyncUsers.find((u) => same(u.username, args.where.username));
+            return row ? pick(row, args.select) : null;
+        },
+        findMany: async (args: FindArgs = {}) => findAll(state.calendarSyncUsers, args),
+    };
 
     // ── Recurring series (Calendar Phase 4) ──
     const blankSeries = (data: Partial<ActivitySeries>): ActivitySeries => {
@@ -742,6 +764,7 @@ export function installActivityDouble(
             entityEmail,
             notification,
             userPreference,
+            calendarSyncUser,
             activitySeries,
             auditLog,
             $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
@@ -782,6 +805,7 @@ export function installActivityDouble(
     stub('entityEmail', entityEmail);
     stub('notification', notification);
     stub('userPreference', userPreference);
+    stub('calendarSyncUser', calendarSyncUser);
     stub('activitySeries', activitySeries);
     stub('auditLog', auditLog);
 

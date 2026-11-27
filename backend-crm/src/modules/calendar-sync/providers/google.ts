@@ -3,6 +3,7 @@ import { GOOGLE_CALENDAR_API } from '../../integrations/integration.constants.js
 import { BUSY_PROVIDER_TIMEOUT_MS } from '../busy.constants.js';
 import { googleChangeOps } from './googleChanges.js';
 import { googleEventOps } from './googleEvents.js';
+import { googleRsvpOps } from './googleRsvp.js';
 import { googleWatchOps } from './googleWatch.js';
 import { providerFetch } from './http.js';
 import type { CalendarProviderAdapter, CallCtx, FetchImpl, FreeBusyRequest, FreeBusyResult, ProviderBusyBlock } from './types.js';
@@ -80,5 +81,6 @@ export function createGoogleAdapter(options: AdapterOptions = {}): CalendarProvi
         ...googleEventOps(fetchImpl),
         ...googleChangeOps(fetchImpl),
         ...googleWatchOps(fetchImpl),
+        ...googleRsvpOps(fetchImpl),
     };
 }

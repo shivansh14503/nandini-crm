@@ -3,7 +3,7 @@ import { logger } from '../../config/logger.js';
 import { prisma } from '../../config/prisma.js';
 import { calendarSyncQueue, isQueueAvailable, tryEnqueue } from '../../jobs/queues.js';
 import { notify } from '../notifications/notification.producer.js';
-import { CALENDAR_SYNC_JOBS, PUSH_JOB_DELAY_MS, type PullReason } from './sync.constants.js';
+import { CALENDAR_SYNC_JOBS, IMPORT_LOOKUP_CHUNK, PUSH_JOB_DELAY_MS, type PullReason } from './sync.constants.js';
 import { checkJobId, enrolledJobId, freshPullJobId, pendingOnlyPullJobId, pullJobId, pushJobId } from './sync.keys.js';
 import { invitesHeldNotification } from './sync.notifications.js';
 import { takeOutboxResult, type DirtyLink, type HeldNotice } from './sync.outbox.js';
@@ -153,12 +153,15 @@ export function setPullJobQueueForTests(queue: PullJobQueue | null): void {
  * When the state read times out or fails (UNREADABLE_JOB_STATE), an on-demand pull returns null at once instead of
  * also trying the add: Redis isn't answering, and the person waits on the request, so the caller pulls in-process
  * (under the lease) after at most one 3 s timeout, as before the state read existed.
+ *
+ * `pendingOnly` (P2-8) applies the same rule to another reason: the full pulls an admin's switch-on of meeting import
+ * starts (`rebaseline` after a cursor drop), which a poll job of the same bucket that already started must not absorb.
  */
-export async function enqueuePull(connectionId: string, reason: PullReason, now: Date = new Date()): Promise<string | null> {
+export async function enqueuePull(connectionId: string, reason: PullReason, now: Date = new Date(), options: { pendingOnly?: boolean } = {}): Promise<string | null> {
     if (!ENV.INTEGRATIONS.SYNC_ENABLED) return null;
     const data: PullJobData = { connectionId, reason };
     const bucketId = pullJobId(connectionId, now);
-    if (!ON_DEMAND_PULL_REASONS.has(reason)) return pullJobs.add(bucketId, data);
+    if (!ON_DEMAND_PULL_REASONS.has(reason) && !options.pendingOnly) return pullJobs.add(bucketId, data);
     const state = await pullJobs.stateOf(bucketId);
     // Redis didn't answer the state read: don't wait out a second timeout on the add.
     if (state === UNREADABLE_JOB_STATE) return null;
@@ -166,6 +169,48 @@ export async function enqueuePull(connectionId: string, reason: PullReason, now:
     // The pending bucket job hasn't started: it will read the calendar after this request.
     if (jobId === null) return bucketId;
     return pullJobs.add(jobId, data);
+}
+
+/**
+ * P2-8: customer-meeting import was just turned on (the company switch: `usernames` null = everyone who imports; an
+ * admin's per-person switch: that person). Pulls are incremental (a Google sync token / Graph delta only returns events
+ * that changed), so meetings already in the calendar would never reach the importer: each affected live connection
+ * drops its cursor and gets one full pull (`rebaseline`, pending-only so a poll job of the same 10 s that already
+ * started can't absorb it). The cursor drop is durable: without Redis the next poll pulls in full, and a pull already
+ * running when the cursor was dropped doesn't put its cursor back (`finish` in sync.pull.ts saves it only over the
+ * one it started from). One full pull per person per switch-on; never throws. Returns how many connections start over.
+ */
+export async function startImportPulls(usernames: readonly string[] | null, now: Date = new Date()): Promise<number> {
+    try {
+        if (!ENV.INTEGRATIONS.SYNC_ENABLED) return 0;
+        let people: string[];
+        if (usernames) {
+            people = [...usernames];
+        } else {
+            const rows = await prisma.calendarSyncUser.findMany({ where: { importMeetings: true, excluded: false }, select: { username: true } });
+            people = rows.map((r) => r.username);
+        }
+        if (people.length === 0) return 0;
+        // `pending` rows have no cursor yet: their first pull is full anyway.
+        const connections: { id: string }[] = [];
+        for (let i = 0; i < people.length; i += IMPORT_LOOKUP_CHUNK) {
+            connections.push(
+                ...(await prisma.calendarConnection.findMany({
+                    where: { username: { in: people.slice(i, i + IMPORT_LOOKUP_CHUNK) }, status: { in: ['ok', 'error'] }, syncCursor: { not: null } },
+                    select: { id: true },
+                })),
+            );
+        }
+        for (const { id } of connections) {
+            await prisma.calendarConnection.updateMany({ where: { id }, data: { syncCursor: null } });
+            await enqueuePull(id, 'rebaseline', now, { pendingOnly: true }).catch(() => null);
+        }
+        if (connections.length > 0) logger.info({ connections: connections.length }, 'Customer-meeting import turned on; full calendar pulls started');
+        return connections.length;
+    } catch (err) {
+        logger.warn({ err: (err as Error).message }, 'Could not start the full pulls for customer-meeting import; meetings come in as they change');
+        return 0;
+    }
 }
 
 /** `calendar_invites_held` to each owner, naming who added the guests. */
@@ -181,12 +226,17 @@ export async function notifyHeldInvites(notices: readonly HeldNotice[], now: Dat
 export async function runCalendarPostCommit(rows: readonly { after: object }[]): Promise<void> {
     const links: DirtyLink[] = [];
     const notices: HeldNotice[] = [];
+    const pulls = new Set<string>();
     for (const row of rows) {
         const result = takeOutboxResult(row.after);
         if (!result) continue;
         links.push(...result.links);
         notices.push(...result.notices);
+        for (const id of result.pulls ?? []) pulls.add(id);
     }
+    // P2-8: a restored meeting's re-attached invitation copies: one prompt pull of each calendar reads them back (an
+    // admin's action: the on-demand pending-only rule). Without Redis, or if this add is lost, the next poll reads them.
+    for (const id of pulls) await enqueuePull(id, 'admin').catch(() => null);
     try {
         await wakePushes(links);
     } catch (err) {

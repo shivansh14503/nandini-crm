@@ -352,8 +352,10 @@ async function step<T>(name: string, fn: () => Promise<T>, fallback: T): Promise
  * `calendar-nightly` (00:25): the connection steps P2-2b ran from the reminders worker (reconcile everyone, due health
  * checks, the admins' problem digest), the follow-up activity backfill P2-4 ran there too, then P2-3b's own: error
  * links retried, client secrets expiring, expired leases cleared; P2-5's Outlook delta re-baseline; P2-7's webhook
- * channels (renewals, missing ones created, Graph subscriptions checked, stray ones stopped, old rows deleted); and
- * P3-1's video links still `requested` an hour after the last save become `failed conference_timeout` (Retry offered).
+ * channels (renewals, missing ones created, Graph subscriptions checked, stray ones stopped, old rows deleted);
+ * P3-1's video links still `requested` an hour after the last save become `failed conference_timeout` (Retry offered);
+ * P2-8's imported meetings auto-completed; and Calendar Phase 4's logged-email retention. (Recurring series horizons
+ * are extended by the reminders worker.)
  */
 export async function runCalendarNightly(now: Date = new Date()) {
     const connections = await step('connections', () => runCalendarConnectionNightly(now), { changed: 0, checked: 0, problems: 0 });
@@ -364,9 +366,11 @@ export async function runCalendarNightly(now: Date = new Date()) {
     const staleVideoLinks = await step('stale-video-links', () => failStaleConferences(now), 0);
     const rebaselined = await step('graph-rebaseline', () => rebaselineGraphWindows(now), 0);
     const channels = await step('webhook-channels', () => maintainChannels('nightly', now), null);
+    // P2-8 (§10.1 step 6): imported meetings nobody filed under a record stop counting as overdue.
+    const autoCompleted = await step('auto-complete-imported', async () => (await import('./sync.import.js')).autoCompleteImported(now), 0);
     // Calendar Phase 4: logged emails past the retention (and ones left without a copy), bounded.
     const emailRetention = await step('email-retention', () => runEmailLogNightly(now), null);
-    const result = { connections, followUps, retried, secrets, leases, staleVideoLinks, rebaselined, channels, emailRetention };
+    const result = { connections, followUps, retried, secrets, leases, staleVideoLinks, rebaselined, channels, autoCompleted, emailRetention };
     logger.info({ ...result, followUps: followUps ? 'done' : 'failed' }, 'Calendar nightly done');
     return result;
 }

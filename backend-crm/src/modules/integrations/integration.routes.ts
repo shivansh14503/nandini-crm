@@ -62,8 +62,11 @@ import {
  *                                        (users/userEmail.service.ts: lower-cased, unique among active non-group users,
  *                                        company domain unless allowOtherDomain; audited User UPDATE). The person's
  *                                        calendar sync moves to the new mailbox.
- *   PUT    /people/:username/calendar  { provider? (google|microsoft|fake|null = by email domain), excluded?, note? } → person row
- *                                        (CalendarSyncUser, audited; the person is reconciled at once)
+ *   PUT    /people/:username/calendar  { provider? (google|microsoft|fake|null = by email domain), excluded?, note?,
+ *                                        importMeetings? (P2-8 "Import customer meetings") } → person row
+ *                                        (CalendarSyncUser, audited; the person is reconciled at once). importMeetings
+ *                                        true needs the company switch allowMeetingImport (409 MEETING_IMPORT_OFF);
+ *                                        turning it on starts one full pull of the person's calendar
  *   POST   /people/:username/calendar/check → person row + { check: ok|user_error|provider_unhealthy|transient|skipped }
  *                                        ("Check now"; 409 CALENDAR_NOT_SYNCED without a live row; same rate limit as tests)
  *   POST   /people/:username/calendar/sync  → person row + { sync: { status: queued|done|recent|busy|not_ready|failed|off,

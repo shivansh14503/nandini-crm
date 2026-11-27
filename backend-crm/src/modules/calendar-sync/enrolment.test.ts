@@ -154,12 +154,17 @@ describe('reconcileUser / reconcileAll', () => {
                 { id: 'l-dirty', connectionId: 'c1', activityId: 'a-dirty', state: 'pending', dirtyAt: now },
                 { id: 'l-old', connectionId: 'c1', activityId: 'a-old', state: 'synced', dirtyAt: null },
                 { id: 'l-moved', connectionId: 'c1', activityId: 'a-moved', state: 'synced', dirtyAt: null },
+                // P2-8: invitation copies (attendee links): a colleague's live meeting, and one in the bin.
+                { id: 'l-guest', connectionId: 'c1', activityId: 'a-guest', role: 'attendee', state: 'synced', etag: '"e1"', dirtyAt: null },
+                { id: 'l-binned', connectionId: 'c1', activityId: 'a-binned', role: 'attendee', state: 'synced', etag: '"e2"', dirtyAt: null },
             ],
             activities: [
                 { id: 'a-up', assignedTo: 'asha', isDeleted: false, endAt: new Date(now.getTime() + DAY) },
                 { id: 'a-dirty', assignedTo: 'asha', isDeleted: false, endAt: new Date(now.getTime() + 2 * DAY) },
                 { id: 'a-old', assignedTo: 'asha', isDeleted: false, endAt: new Date(now.getTime() - 3 * DAY) },
                 { id: 'a-moved', assignedTo: 'ravi', isDeleted: false, endAt: new Date(now.getTime() + DAY) },
+                { id: 'a-guest', assignedTo: 'ravi', isDeleted: false, endAt: new Date(now.getTime() + DAY) },
+                { id: 'a-binned', assignedTo: 'ravi', isDeleted: true, endAt: new Date(now.getTime() + DAY) },
             ],
         });
         state.syncUsers.push({ username: 'asha', provider: null, excluded: true, note: null, importMeetings: false, updatedBy: 'admin', createdAt: now, updatedAt: now });
@@ -175,6 +180,11 @@ describe('reconcileUser / reconcileAll', () => {
         assert.equal(byId['l-dirty'].state, 'pending');
         assert.equal(byId['l-old'].state, 'detached', 'ended long ago: left alone');
         assert.equal(byId['l-moved'].state, 'detached', 'someone else owns it now');
+        // P2-8: the live invitation copy comes back live with no etag (the first pull reads it back); not dirty.
+        assert.equal(byId['l-guest'].state, 'synced');
+        assert.equal(byId['l-guest'].etag, null);
+        assert.equal(byId['l-guest'].dirtyAt, null);
+        assert.equal(byId['l-binned'].state, 'detached', 'its meeting is in the bin');
     });
 
     it('a changed email replaces the row (email_changed); an override records source=override on the same row', async () => {

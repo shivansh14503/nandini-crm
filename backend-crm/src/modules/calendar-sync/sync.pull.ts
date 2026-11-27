@@ -20,7 +20,7 @@ import { CursorExpiredError, ProviderError, ProviderRateLimitedError } from './p
 import { getAdapter } from './providers/registry.js';
 import type { CalendarProviderAdapter, CallCtx, ChangePage } from './providers/types.js';
 import { attendeeInputsFromProvider, parseHeld } from './sync.attendees.js';
-import { classifyInbound, emptyPullCounts, type InboundAction, type PullCounts } from './sync.classify.js';
+import { classifyInbound, emptyPullCounts, isTooLong, type InboundAction, type PullCounts } from './sync.classify.js';
 import {
     FOLLOW_UP_TIME_KEPT_PREFIX,
     LEASE_CALL_HEADROOM_MS,
@@ -37,6 +37,7 @@ import {
 import { capInboundAttendees, inboundCrmNow, planInbound } from './sync.inbound.js';
 import { recordConference, settleConference } from './sync.conference.js';
 import { eventKeyOf, requestedIdFor, syncKeyOf } from './sync.keys.js';
+import { MeetingImporter, type ImportOutcome } from './sync.import.js';
 import { claimLease, type Lease } from './sync.lease.js';
 import type { DirtyLink } from './sync.outbox.js';
 import { parseBase, type CrmShape, type ProviderEvent, type ProviderShape, type SyncBase } from './sync.shapes.js';
@@ -59,7 +60,9 @@ import { wakePushes } from './sync.wake.js';
  *   by id and counted; the run goes on. The new cursor is stored only after every item was applied (a run with
  *   failures keeps the old cursor and replays, which is harmless; after PULL_HOLD_CURSOR_RUNS such runs it moves on).
  * - Unlinked events (personal appointments, customer meetings made in the calendar) are read in the stream but never
- *   stored or logged (counted only); P2-8 imports customer meetings behind its own switches. Events the CRM wrote
+ *   stored or logged (counted only), unless P2-8's import takes them (sync.import.ts, behind the company switch and the
+ *   person's `importMeetings`): customer meetings become activities, invitation copies of meetings the CRM holds get
+ *   an attendee link, and attendee links bring their person's reply back (spec §13). Events the CRM wrote
  *   whose link was lost are linked again by their private marker (Google) or iCalUID (`syncKey`), for activities this
  *   person owns.
  * - After each page: reminders re-armed and participants notified for the changed activities (no push), the
@@ -146,7 +149,7 @@ interface Applied {
     rows: ActivityCommitRow[];
     wake: DirtyLink[];
     records: FollowUpModule[];
-    outcome: 'applied' | 'unchanged' | 'deleted' | 'relinked' | 'unsupported' | 'ignored';
+    outcome: 'applied' | 'unchanged' | 'deleted' | 'relinked' | 'unsupported' | 'ignored' | 'imported' | 'attended' | 'held';
 }
 
 const NOTHING: Applied = { rows: [], wake: [], records: [], outcome: 'unchanged' };
@@ -154,6 +157,8 @@ const NOTHING: Applied = { rows: [], wake: [], records: [], outcome: 'unchanged'
 class ConnectionPull {
     private settings!: CalendarSyncSettings;
     private config!: ActivityConfig;
+    /** P2-8: customer meetings and invitation copies (sync.import.ts). */
+    private importer!: MeetingImporter;
     private readonly provider: CalendarProvider;
     private readonly adapter: CalendarProviderAdapter;
     private readonly counts = emptyPullCounts();
@@ -175,6 +180,11 @@ class ConnectionPull {
 
     async run(): Promise<PullResult> {
         [this.settings, this.config] = await Promise.all([loadCalendarSettings(), loadActivityConfig()]);
+        this.importer = new MeetingImporter(this.connection, this.settings, this.config, this.clock);
+        await this.importer.init();
+        // P2-8: invitation copies re-attached since the last pull (a restore, a re-activated row) are read back first,
+        // so a copy gone meanwhile is cancelled before this listing could hand its replacement to the attend path.
+        await this.readReattached();
         const startedAt = this.clock();
         const window = pullWindow(startedAt);
         let full = Boolean(this.options.full) || !this.connection.syncCursor || this.reason === 'rebaseline';
@@ -214,7 +224,8 @@ class ConnectionPull {
         if (full && nextCursor) await this.verifyMissing(seen, window);
         await this.finish(full, nextCursor, window);
         const result = { status: 'done', full, counts: { ...this.counts } } as const;
-        const level = this.counts.failed > 0 ? 'warn' : this.counts.applied + this.counts.deleted + this.counts.relinked + this.counts.unsupported > 0 ? 'info' : 'debug';
+        const changed = this.counts.applied + this.counts.deleted + this.counts.relinked + this.counts.unsupported + this.counts.imported + this.counts.attended;
+        const level = this.counts.failed > 0 ? 'warn' : changed > 0 ? 'info' : 'debug';
         logger[level]({ connectionId: this.connection.id, reason: this.reason, full, ...this.counts }, 'Calendar pull done');
         return result;
     }
@@ -245,6 +256,7 @@ class ConnectionPull {
             : [];
         const activityById = new Map(activities.map((a) => [a.id, a as { id: string; isDeleted: boolean; status: string }]));
         const matches = await this.findMatches(page.events.filter((e) => !linkByKey.has(keys.get(e.id) as string)));
+        await this.importer.preparePage(page.events.filter((e) => !linkByKey.has(keys.get(e.id) as string) && !matches.has(e.id)));
 
         const rows: ActivityCommitRow[] = [];
         const wake: DirtyLink[] = [];
@@ -326,6 +338,11 @@ class ConnectionPull {
         else if (outcome === 'relinked') this.counts.relinked += 1;
         else if (outcome === 'unsupported') this.counts.unsupported += 1;
         else if (outcome === 'ignored') this.counts.ignored += 1;
+        else if (outcome === 'imported') this.counts.imported += 1;
+        else if (outcome === 'attended') this.counts.attended += 1;
+        // P2-8: an invitation copy waiting for its person's older copy to be read back (sync.import.ts `attend`): counted
+        // as failed, so the cursor is held and the replay offers the copy again (PULL_HOLD_CURSOR_RUNS bounds it).
+        else if (outcome === 'held') this.counts.failed += 1;
         else this.counts.skipped += 1;
     }
 
@@ -333,9 +350,14 @@ class ConnectionPull {
         switch (action.kind) {
             case 'ignore':
                 return { ...NOTHING, outcome: 'ignored' };
-            case 'unlinked':
-                this.counts.skippedUnlinked += 1;
-                return { ...NOTHING, outcome: 'ignored' };
+            case 'unlinked': {
+                const result = await this.importer.applyUnlinked(event);
+                // P2-8 (D45): this person's own organizer copy of a meeting a colleague's pull brought in meanwhile.
+                if (result.relinkActivityId) return this.merge(event, result.relinkActivityId, null, { tooLong: isTooLong(event.shape.when), relink: true });
+                return this.imported(result);
+            }
+            case 'attendee':
+                return this.imported(await this.importer.applyAttendeeLink(event, link as ActivityExternalLink));
             case 'skip':
                 return NOTHING;
             case 'unsupported':
@@ -349,6 +371,15 @@ class ConnectionPull {
             case 'relink':
                 return this.merge(event, action.activityId, null, { tooLong: action.tooLong, relink: true });
         }
+    }
+
+    /** An import / attendee-link result as the page collects it (P2-8). */
+    private imported(result: ImportOutcome): Applied {
+        if (result.outcome === 'skippedUnlinked') {
+            this.counts.skippedUnlinked += 1;
+            return { ...NOTHING, outcome: 'ignored' };
+        }
+        return { ...NOTHING, rows: result.rows, outcome: result.outcome };
     }
 
     // ── Applying ────────────────────────────────────────────────────────────────────────────────────────────
@@ -498,8 +529,15 @@ class ConnectionPull {
             }
 
             const rows: ActivityCommitRow[] = [];
-            if (Object.keys(patch).length > 0) {
-                const written = await applySystemPatch(tx, activityId, patch, this.connection.username, now, { activityConfig: this.config, markSync: false, notify: true });
+            // P2-8: the organizer's own copy linked at last: the meeting is theirs (two-way, unlocked) from now on.
+            const upgrade = Boolean(mode.relink && activity.externalOrganizer);
+            if (Object.keys(patch).length > 0 || upgrade) {
+                const written = await applySystemPatch(tx, activityId, patch, this.connection.username, now, {
+                    activityConfig: this.config,
+                    markSync: false,
+                    notify: true,
+                    ...(upgrade ? { rowData: { externalOrganizer: false } } : {}),
+                });
                 await this.stampExternal(tx, activityId, written.after.updatedAt, now);
                 rows.push(written);
             }
@@ -512,8 +550,9 @@ class ConnectionPull {
             const joinReady = conference.outcome.columns?.conferenceState === 'ready' && (await recordConference(tx, activity, conference.outcome));
             if (joinReady) {
                 plan.merge.base.crm = conference.crm;
-                // One more push puts the join details into the description (as after a push answer).
-                plan.markDirty = true;
+                // One more push puts the join details into the description (as after a push answer). Not for a meeting
+                // brought in from the calendar (P2-8): its description is the person's own and never written by the CRM.
+                if (activity.origin !== 'calendar') plan.markDirty = true;
             }
 
             const wake: DirtyLink[] = [];
@@ -613,6 +652,8 @@ class ConnectionPull {
         }
         const activity = await prisma.activity.findUnique({ where: { id: link.activityId }, select: { isDeleted: true, status: true } });
         if (!event) {
+            // An invitation copy that's gone is that person's copy only (sync.import.ts), never a deletion of the meeting.
+            if (link.role === 'attendee') return this.applySafely({ ...placeholderEvent(link), isOrganizerCopy: false }, link, { kind: 'attendee' });
             const applied = activity && !activity.isDeleted ? await this.applySafely({ ...placeholderEvent(link), status: 'cancelled' }, link, { kind: 'remoteDelete' }) : NOTHING;
             return applied;
         }
@@ -638,6 +679,39 @@ class ConnectionPull {
             wake.push(...applied.wake);
             for (const r of applied.records) records.add(r);
         }
+        await this.afterCommit(rows, wake, records);
+    }
+
+    /**
+     * P2-8: attendee links re-attached with no etag (a restored meeting, a re-activated connection row,
+     * REATTACHED_COPY): each is read back once, its copy's current state applied (a time or place moved, or a copy
+     * cancelled or deleted while it was detached: a gone copy is the attendee placeholder cancel). Neither a full
+     * listing (which shows no deleted events) nor an incremental cursor would report that. The read stores the etag,
+     * so a link is read once; one indexed query per pull, inside the pull's own database wake.
+     */
+    private async readReattached(): Promise<void> {
+        const links = await prisma.activityExternalLink.findMany({
+            where: { connectionId: this.connection.id, role: 'attendee', state: 'synced', etag: null },
+            take: VERIFY_MISSING_LIMIT,
+        });
+        if (links.length === 0) return;
+        const rows: ActivityCommitRow[] = [];
+        const wake: DirtyLink[] = [];
+        const records = new Set<FollowUpModule>();
+        const failedBefore = this.counts.failed;
+        for (const link of links) {
+            this.counts.verified += 1;
+            const applied = await this.readBack(link);
+            rows.push(...applied.rows);
+            wake.push(...applied.wake);
+            for (const r of applied.records) records.add(r);
+        }
+        // A read that failed is tried again by the next pull (the etag is still empty). It holds the cursor only when
+        // this listing hands the person a replacement copy of that meeting: `attend` (sync.import.ts) answers `held`
+        // for a copy whose link still points at an unread older copy (also one past this `take`), so an unread link
+        // never makes the cursor move past its replacement. A failure with no replacement in the listing (most of them)
+        // never holds the cursor back, so one copy that keeps failing doesn't stall the calendar's pulls.
+        this.counts.failed = failedBefore;
         await this.afterCommit(rows, wake, records);
     }
 
@@ -672,15 +746,23 @@ class ConnectionPull {
         } else if (saveCursor) heldCursorRuns.delete(id);
         if (!nextCursor) logger.warn({ connectionId: id, pages: this.counts.pages }, 'Calendar pull ended without a cursor; the next pull continues from the old one');
 
-        await prisma.calendarConnection.updateMany({
-            where: { id },
-            data: {
-                lastPulledAt: now,
-                lastSuccessAt: now,
-                ...(saveCursor ? { syncCursor: nextCursor } : {}),
-                ...(saveCursor && full ? { syncWindowStart: window.start, syncWindowEnd: window.end, ...(this.connection.fullSyncAt ? {} : { fullSyncAt: now }) } : {}),
-            },
-        });
+        const bookkeeping = { lastPulledAt: now, lastSuccessAt: now };
+        if (saveCursor) {
+            // P2-8: only over the cursor this pull started from. A cursor dropped while it ran (meeting import switched
+            // on, the nightly Graph re-baseline) stays dropped, so the next pull is full. Pulls hold the lease, so no
+            // other pull moves the cursor meanwhile.
+            const { count } = await prisma.calendarConnection.updateMany({
+                where: { id, syncCursor: this.connection.syncCursor },
+                data: {
+                    ...bookkeeping,
+                    syncCursor: nextCursor,
+                    ...(full ? { syncWindowStart: window.start, syncWindowEnd: window.end, ...(this.connection.fullSyncAt ? {} : { fullSyncAt: now }) } : {}),
+                },
+            });
+            if (count === 1) return;
+            logger.info({ connectionId: id }, 'Calendar cursor was dropped during the pull; the next pull is a full one');
+        }
+        await prisma.calendarConnection.updateMany({ where: { id }, data: bookkeeping });
     }
 }
 

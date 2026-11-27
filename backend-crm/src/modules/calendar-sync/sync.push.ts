@@ -240,7 +240,7 @@ class LinkPush {
         // P3-1: a ready video meeting's join details go out too (allowed in external descriptions, spec §16.3).
         const crmNow = crmShapeOf(activity, invited, withJoinDetails(description, activity));
         const plan = planPush({
-            activity: { isDeleted: activity.isDeleted, status: activity.status, hasSchedule: Boolean(activity.startAt), externalOrganizer: activity.externalOrganizer },
+            activity: { isDeleted: activity.isDeleted, status: activity.status, hasSchedule: Boolean(activity.startAt), externalOrganizer: activity.externalOrganizer, origin: activity.origin },
             link: { state: link.state, externalEventId: link.externalEventId, base },
             ownersConnection: this.connection.username.toLowerCase() === owner.toLowerCase(),
             connectionLive: isLiveStatus(this.connection.status),

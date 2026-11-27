@@ -1,7 +1,7 @@
 # Nandini CRM — Build Plan
 
 > **Status:** living document. Part 1 records what has been built (reconstructed from git history, 115 commits
-> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-26, Calendar Phase 2 P2-1, P2-2, P2-2b (admin-managed calendar connections), P2-3a, P2-3b (calendar push engine), P2-3c (backfill, send invitations, sync status), P2-4, P2-5 (calendar → CRM pull), P2-6 (busy times) and P2-7 (calendar webhooks), Calendar Phase 4 booking links, recurring activities and email logging, Profile Phase 1: My Profile, Profile Phase 2: Admin › Users, Profile Phase 3: notifications & preferences, Profile Phase 4: connected accounts and Profile Phase 5 PR5a + PR5b: company formats, which completes Phase 17; Calendar Phase 3 P3-1: Google Meet and Microsoft Teams links; as of 2026-11-27 booking links' default video meeting and the follow-ups below). Part 2
+> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-27, Calendar Phase 2 P2-1, P2-2, P2-2b (admin-managed calendar connections), P2-3a, P2-3b (calendar push engine), P2-3c (backfill, send invitations, sync status), P2-4, P2-5 (calendar → CRM pull), P2-6 (busy times), P2-7 (calendar webhooks) and P2-8 (customer meetings from the calendar, replies both ways), Calendar Phase 4 booking links, recurring activities and email logging, Profile Phase 1: My Profile, Profile Phase 2: Admin › Users, Profile Phase 3: notifications & preferences, Profile Phase 4: connected accounts and Profile Phase 5 PR5a + PR5b: company formats, which completes Phase 17; Calendar Phase 3 P3-1: Google Meet and Microsoft Teams links; as of 2026-11-27 booking links' default video meeting and the follow-ups below). Part 2
 > is the roadmap. Tick
 > items off and add new ones as work lands.
 > Related: [System design](system-design.md) · [Database design](database-design.md) · [API plan](api-plan.md)
@@ -403,8 +403,8 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         always deliver; bell icons). `ActivityView.calendar` (data only). `CALENDAR_SYNC_ENABLED`. Deviations: the
         `enrolled` job (replaces the per-user connect job) pushes dirty links only; the backfill of existing
         activities is P2-3c (done); a follow-up activity moved in the calendar is moved back (the write-back to the record is
-        P2-5); the organizer columns stay out of the audited DTO and deleted `origin = 'calendar'` activities have no
-        push rule yet (both P2-8); activities created while a row was stopped get no link until the P2-3c backfill.
+        P2-5); the organizer columns joined the audited DTO and deleted `origin = 'calendar'` activities detach their
+        links (both in P2-8, as of 2026-11-26); activities created while a row was stopped get no link until the P2-3c backfill.
         Tested against the fake provider, recorded Google / Graph answers and in-memory doubles; not run against a
         real SQL Server, Google or Microsoft.
   - [x] **P2-3c: backfill, send invitations, sync status UI** (2026-11-26, admin-managed model, addendum §8.3) — no
@@ -508,7 +508,53 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         card, a per-person chip on People. Go-live checklist and runbook: system design §9.2.2. Tested with the fake
         provider, hand-written Google / Graph answers and in-memory doubles; no real SQL Server, Google or Microsoft
         call.
-  - [ ] **P2-8: customer meetings from the calendar + replies both ways** (optional, off by default)
+  - [x] **P2-8: customer meetings from the calendar + replies both ways** (2026-11-26; optional, off by default) — no
+        migration (the `Activity` organizer / `syncKey` columns, `ActivityExternalLink.role = 'attendee'` and
+        `CalendarSyncUser.importMeetings` already existed). Pull (`sync.import.ts`): with the company switch
+        `allowMeetingImport` and the admin-set per-person "Import customer meetings" on, a customer meeting (D17:
+        timed, single, not private, not declined, not too long, now − 1 day … now + 180 days, a known contact among
+        the guests) becomes an activity with `origin = 'calendar'`, type `importFollowupType`, `createdBy =
+        'calendar-sync'`. D18: a colleague organizer who imports owns it; an outside organizer → the person owns it,
+        `externalOrganizer`, organizer columns, CRM locks on subject / times / all-day / location / attendees / owner
+        (`409 EXTERNAL_EVENT_LOCKED`; related record, remarks, customer response, Completed and custom fields stay
+        editable; undo / revert refused). D45: two colleagues on one meeting share one activity (pre-read `syncKey`
+        holder) with one link each (the second an `attendee` link); a deleted imported activity keeps its `syncKey`
+        and detaches its links (never imported again). Replies both ways: an attendee copy's own reply comes in
+        three-way against `baseJson { self }`, audited `RSVP` by that person; a CRM reply queues the `rsvp` job
+        (`rsvp-<activityId>-<username>-<respondedAtMs>`): Google GET + PATCH `attendees` with `If-Match` and
+        `sendUpdates=all`, Graph `accept` / `tentativelyAccept` / `decline` with `sendResponse: true` (app-only),
+        the copy found lazily by iCalUID; a refusal (F3) is recorded on the link (`rsvp_refused`) and marks nothing
+        unhealthy. The nightly completes past imported meetings with no related record. Handing a meeting to an
+        invitee turns their attendee link into their organizer link. The owner of a customer's meeting replies too
+        (Decline cancels it, Accept / Maybe revive it; kept on their link as `baseJson.mine`). Turning either switch
+        on starts one full pull per affected calendar (meetings already there come in). Without Redis a reply is
+        retried in-process up to 5 times. Races: this person's own organizer copy is relinked, never attended; an
+        invitation copy of a colleague's CRM meeting whose push hasn't stored its identity yet attends it. A push of
+        an imported organizer link whose type stopped going to calendars detaches instead of deleting the event
+        (review fixes, as of 2026-11-27). Admin › API Integrations: the company switch and the import type (active,
+        ticked under What goes to calendars, not Task / Note); People dialog: "Import customer meetings" (admins only, `409
+        MEETING_IMPORT_OFF` while the company switch is off; no self-service). Drawer: "Imported from …" / "Organized
+        by …" caption, an Organizer field, no Reschedule or time edits for outside meetings; the form shows the
+        locked fields. No new wake-up (imports ride the pulls, the auto-complete the 00:25 nightly). Owner steps:
+        run first-run check F3 (a Google reply to an invitation copy); if refused, decide on the broader
+        `calendar.events` scope (code + Admin console). Tested with the fake provider, hand-written Google / Graph
+        answers and in-memory doubles; no real SQL Server, Google or Microsoft call.
+        Merged with P3-1 and recurring activities (as of 2026-11-27): `videoMeeting` joins the outside-meeting lock
+        (`409 EXTERNAL_EVENT_LOCKED`, checked before the P3-1 video rules); the organizer's `ready` Meet / Teams join
+        link is taken over read only on import and mirrored by the designated attendee link (cleared when the
+        organizer removes it; no audit entry, never pushed); imported meetings never repeat (`assertRepeatable`) and a
+        series edit never rewrites or cancels an `externalOrganizer` row (`isRewritable`).
+        Second review fixes (as of 2026-11-27): an outside meeting can't become Task / Note (`409 EXTERNAL_EVENT_LOCKED`
+        on `followupType`; the form leaves them out) and no join link is mirrored onto a Task / Note; a meeting the
+        employee organized brings its own Meet / Teams link along at import (adopted as on a pull; the CRM never writes
+        an imported meeting's description, so its agenda / Teams block stays); a cancelled copy can't be answered (no reply buttons, `403`); the `rsvp` job keeps an owner's newer
+        reply saved while its call was in flight; when the last copy the CRM follows is cancelled and the owner holds
+        none, the meeting is Cancelled (so the nightly never completes it), and Planned again if the copy returns; a
+        restored activity (imported or CRM-made) and a re-activated connection row re-attach their invitation copies,
+        which the next pull reads back once (a copy cancelled meanwhile cancels as usual); a cursor dropped while a pull
+        runs stays dropped (the cursor is saved only over the one the pull started from) and the import switch-on's full
+        pull is never absorbed by a running poll job; import can't
+        be on with a type that stopped going to calendars (checked on every save while on; the card blocks Save).
 - [ ] **Calendar Phase 3: video meetings** (spec §16, adapted to admin-managed connections)
   - [x] **P3-1: Google Meet + Microsoft Teams links** (2026-11-26) — migration `20261215100000_activity_conference`
         (`Activity.conferenceProvider` / `conferenceState` / `conferenceJoinUrl` / `conferenceId` / `conferenceError` /

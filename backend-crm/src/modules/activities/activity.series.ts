@@ -301,9 +301,19 @@ const templateKeep = (template: SeriesTemplate): NonNullable<ActivityWriter['kee
  */
 const DETACHED = { seriesId: null, originalStartAt: null, seriesIndex: null } as const;
 
-/** A row a series edit may rewrite or remove: live, Planned, not started, not edited alone, not kept. */
-const isRewritable = (row: ActivityRow, keep: ReadonlySet<string>, now: Date) =>
-    !row.isDeleted && row.status === PLANNED_STATUS && !row.seriesException && !keep.has(row.id) && (row.startAt?.getTime() ?? 0) >= now.getTime();
+/**
+ * A row a series edit may rewrite or remove: live, Planned, not started, not edited alone, not kept, and not a meeting
+ * the calendar owns (P2-8 `externalOrganizer`: series writes are system writes, which skip the EXTERNAL_EVENT_LOCKED
+ * check, so such a row is never rewritten here; series rows are CRM-made and imports never join a series, so this is
+ * a guard, not a path).
+ */
+export const isRewritable = (row: ActivityRow, keep: ReadonlySet<string>, now: Date) =>
+    !row.isDeleted &&
+    row.status === PLANNED_STATUS &&
+    !row.seriesException &&
+    !row.externalOrganizer &&
+    !keep.has(row.id) &&
+    (row.startAt?.getTime() ?? 0) >= now.getTime();
 
 async function insertOccurrence(tx: TransactionClient, series: ActivitySeries, template: SeriesTemplate, times: OccurrenceTimes, index: number, ctx: SeriesContext): Promise<void> {
     const { input, schedule } = parseOccurrence(occurrenceFields(template, times), ctx.config);
@@ -420,7 +430,8 @@ export async function rewriteSeries(tx: TransactionClient, series: ActivitySerie
     if (cancelling) {
         // Cancelled from here: every future Planned occurrence goes, exceptions included (as a delete from here would).
         for (const row of rows) {
-            const future = !row.isDeleted && row.status === PLANNED_STATUS && !opts.keep.has(row.id) && (row.startAt?.getTime() ?? 0) >= ctx.now.getTime();
+            const future =
+                !row.isDeleted && row.status === PLANNED_STATUS && !row.externalOrganizer && !opts.keep.has(row.id) && (row.startAt?.getTime() ?? 0) >= ctx.now.getTime();
             if (!future || slotDay(row.originalStartAt) < fromDay) continue;
             const { input, schedule } = parseOccurrence({ ...toActivityDto(row), status: opts.status }, ctx.config);
             const writer: ActivityWriter = { actor: ctx.actor, user: null, config: ctx.config, markSync: true };

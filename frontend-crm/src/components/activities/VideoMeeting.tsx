@@ -55,6 +55,11 @@ export interface RhfVideoMeetingFieldProps<T extends FieldValues> {
     savedOwner?: string;
     /** A ready Teams link: its owner can't remove or change it (a new owner may). */
     locked?: boolean;
+    /**
+     * Locked by the activity itself (P2-8: a meeting organized outside the CRM, `lockedFields` has `videoMeeting`): read
+     * only whatever the owner, with this reason under it. The Join link still shows in view mode.
+     */
+    lockedReason?: string;
     /** Not Planned: a new choice isn't allowed (a logged activity has no event to carry a link). */
     planned: boolean;
     /** The ready join link of the loaded activity (view mode shows Join beside the value). */
@@ -73,6 +78,7 @@ export function RhfVideoMeetingField<T extends FieldValues>({
     saved: savedChoice = '',
     savedOwner,
     locked: savedLocked = false,
+    lockedReason,
     planned,
     joinUrl,
     sx,
@@ -84,7 +90,7 @@ export function RhfVideoMeetingField<T extends FieldValues>({
     // lock no longer applies (the API marks a link the new owner's calendar can't make as failed).
     const ownerChanged = Boolean(savedOwner) && savedOwner?.trim().toLowerCase() !== owner.trim().toLowerCase();
     const saved = ownerChanged && planned ? '' : savedChoice;
-    const locked = savedLocked && !ownerChanged;
+    const locked = Boolean(lockedReason) || (savedLocked && !ownerChanged);
     const { data, isLoading } = useVideoOptions(owner, { enabled: Boolean(owner) && !locked });
 
     const available = useMemo(() => new Set((data?.options ?? []).filter((o) => o.available).map((o) => o.value)), [data]);
@@ -95,7 +101,7 @@ export function RhfVideoMeetingField<T extends FieldValues>({
     // Why the owner can't have Meet / Teams (one line; Zoom's "later" is in its label).
     const reason = available.size === 0 ? data?.options.find((o) => o.value !== 'zoom' && o.reason)?.reason : undefined;
     const hint = locked
-        ? VIDEO_MEETING_LOCKED_MESSAGE
+        ? lockedReason || VIDEO_MEETING_LOCKED_MESSAGE
         : !planned && !value
           ? 'Only planned activities get a video link.'
           : isLoading

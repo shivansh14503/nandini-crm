@@ -36,6 +36,7 @@ import { isFakeProviderEnabled } from '../calendar-sync/providers/fakeSwitch.js'
 import { parseServiceAccountKey, ServiceAccountKeyError, type ServiceAccountKey } from '../calendar-sync/providers/googleServiceAccount.js';
 import type { FetchImpl } from '../calendar-sync/providers/types.js';
 import { ADMIN_ERROR_MESSAGES, type TokenErrorCode } from '../calendar-sync/syncErrors.js';
+import { startImportPulls } from '../calendar-sync/sync.wake.js';
 import { pollMinutes } from '../calendar-sync/syncHours.js';
 import { tokenSource } from '../calendar-sync/tokenSource.js';
 import { isHeartbeatRedisReady, readWorkerHeartbeat, workerStatusOf, type WorkerStatus } from '../calendar-sync/workerHeartbeat.js';
@@ -1024,8 +1025,9 @@ export const integrationService = {
 
     /**
      * PUT /people/:username/calendar: the admin's calendar choice for one person (provider override, exclusion with a
-     * note). Stored in CalendarSyncUser (a row only while something differs from the default; audited
-     * `CalendarSyncUser CREATE / UPDATE / DELETE`), then the person is reconciled at once.
+     * note, P2-8 `importMeetings`). Stored in CalendarSyncUser (a row only while something differs from the default;
+     * audited `CalendarSyncUser CREATE / UPDATE / DELETE`), then the person is reconciled at once. Turning
+     * `importMeetings` on needs the company switch (409 MEETING_IMPORT_OFF) and starts one full pull of their calendar.
      */
     async setPersonCalendar(username: string, body: unknown, admin: AuthUser): Promise<PersonDto> {
         const input = personCalendarBodySchema.parse(body);
@@ -1035,7 +1037,15 @@ export const integrationService = {
         const target = await prisma.user.findUnique({ where: { username }, select: { username: true } });
         if (!target) throw HttpError.notFound(`User '${username}' not found.`);
         const owner = target.username;
+        if (input.importMeetings === true) {
+            // P2-8: the per-person switch needs the company switch (Admin › API Integrations › Calendar sync settings).
+            if (!(await loadCalendarSettings()).allowMeetingImport) {
+                throw conflict('Turn on "Bring in meetings with customers" in the calendar sync settings first.', 'MEETING_IMPORT_OFF', ['importMeetings']);
+            }
+        }
 
+        // P2-8: import turned on for this person (and they aren't excluded) → one full pull after the commit.
+        let importTurnedOn = false;
         await runInTransaction(async (tx) => {
             await acquireLocks(tx, [calendarConnectionUserLockKey(owner)]);
             const before = await tx.calendarSyncUser.findUnique({ where: { username: owner } });
@@ -1043,7 +1053,7 @@ export const integrationService = {
                 provider: input.provider !== undefined ? input.provider : (before?.provider ?? null),
                 excluded: input.excluded ?? before?.excluded ?? false,
                 note: input.note !== undefined ? input.note : (before?.note ?? null),
-                importMeetings: before?.importMeetings ?? false,
+                importMeetings: input.importMeetings ?? before?.importMeetings ?? false,
             };
             const snapshot = (v: typeof next | null) => ({ provider: v?.provider ?? null, excluded: v?.excluded ?? false, note: v?.note ?? null, importMeetings: v?.importMeetings ?? false });
             const from = snapshot(before);
@@ -1051,6 +1061,7 @@ export const integrationService = {
             const changes: Record<string, unknown> = {};
             for (const key of Object.keys(to) as (keyof typeof to)[]) if (from[key] !== to[key]) changes[key] = { from: from[key], to: to[key] };
             if (Object.keys(changes).length === 0) return;
+            importTurnedOn = to.importMeetings && !to.excluded && !(from.importMeetings && !from.excluded);
             const isDefault = !to.provider && !to.excluded && !to.note && !to.importMeetings;
             if (isDefault) {
                 if (before) await tx.calendarSyncUser.delete({ where: { username: owner } });
@@ -1066,6 +1077,8 @@ export const integrationService = {
             });
         });
         await reconcileUser(owner, 'people_choice', { actor: admin.username });
+        // Meetings already in their calendar: incremental pulls only see events that change (sync.wake.ts).
+        if (importTurnedOn) await startImportPulls([owner]);
         return integrationService.getPerson(owner);
     },
 

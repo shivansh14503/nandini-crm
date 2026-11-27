@@ -17,6 +17,7 @@ import { runCalendarNightly, runCalendarPoll, runEnrolled, runFallbackTick, swee
 import { isWatchOp, runWatchJob } from '../../modules/calendar-sync/sync.channels.js';
 import { pullConnection, type PullResult } from '../../modules/calendar-sync/sync.pull.js';
 import { markPushExhausted, pushLink, type PushResult } from '../../modules/calendar-sync/sync.push.js';
+import { rsvpRetryDelay, runRsvp } from '../../modules/calendar-sync/sync.rsvp.js';
 import { checkConference, markConferenceExhausted } from '../../modules/calendar-sync/sync.conference.js';
 import { pollCron } from '../../modules/calendar-sync/syncHours.js';
 import { pullAgainIfNotified } from '../../modules/calendar-sync/webhook.service.js';
@@ -40,13 +41,17 @@ import { throttledLogger } from './throttledLogger.js';
  *             On-demand pulls get `…-<ms>` when the bucket's job already started or finished (pending-only rule)
  *   watch     a webhook channel of one connection (`watch-<connectionId>-<op>-<minute>`, P2-7): ensure | renew |
  *             recreate | stop (Graph lifecycle notifications)
+ *   rsvp      a colleague's CRM reply sent to their calendar copy (`rsvp-<activityId>-<username>-<respondedAtMs>`,
+ *             P2-8, sync.rsvp.ts); transient failures retried by the queue
  *   poll      scheduler 'calendar-poll', every CALENDAR_POLL_MINUTES (5) inside CALENDAR_SYNC_HOURS (07:00–22:00):
  *             a pull per synced person (with webhooks live, every CALENDAR_POLL_MINUTES_WITH_WEBHOOKS for people whose
  *             channel is healthy) + outbox sweep + due checks + up to 20 webhook channels created / renewed
  *   email-log one mailbox's email logging run (`email-log-<user tag>-<bucket>`, Calendar Phase 4), queued by the poll
  *   nightly   scheduler 'calendar-nightly', 00:25: reconcile + due checks + admin digest (from the reminders worker),
  *             the follow-up activity backfill (from the reminders worker), error-link retries, client secrets
- *             expiring, expired leases cleared, Outlook delta windows re-baselined, webhook channels (P2-7)
+ *             expiring, expired leases cleared, stale video links failed (P3-1), Outlook delta windows
+ *             re-baselined, webhook channels (P2-7), imported meetings auto-completed (P2-8), logged-email
+ *             retention (Calendar Phase 4)
  * All in the business timezone. A push that finds the connection's lease taken, or the provider rate-limiting, moves
  * itself back without spending an attempt. Every Redis `ready` upserts the schedulers and runs one outbox sweep. While
  * Redis is down a one-minute tick runs due checks, pushes due links and pulls due people in-process inside the sync
@@ -76,6 +81,9 @@ export function pullRetryDelay(result: PullResult, random: () => number = Math.r
     if (result.status === 'rate_limited') return Math.max(1_000, result.retryAfterMs) + Math.floor(random() * 1_000);
     return null;
 }
+
+/** Re-exported for the worker tests (the in-process reply runner uses the same delays, P2-8). */
+export { rsvpRetryDelay };
 
 const reasonOf = (data: unknown): PullReason => {
     const value = (data as Record<string, unknown> | null)?.reason;
@@ -123,6 +131,19 @@ export async function processCalendarJob(job: Job, token?: string): Promise<unkn
                 const connectionId = idOf(job.data, 'connectionId');
                 const op = (job.data as Record<string, unknown> | null)?.op;
                 return connectionId && isWatchOp(op) ? { outcome: await runWatchJob(connectionId, op) } : null;
+            }
+            case CALENDAR_SYNC_JOBS.rsvp: {
+                const activityId = idOf(job.data, 'activityId');
+                const username = idOf(job.data, 'username');
+                if (!activityId || !username) return null;
+                const result = await runRsvp(activityId, username);
+                const delay = rsvpRetryDelay(result);
+                if (delay !== null) {
+                    // Not an attempt: the lease holder or the provider asked us to wait.
+                    await job.moveToDelayed(Date.now() + delay, token);
+                    throw new DelayedError();
+                }
+                return result;
             }
             case CALENDAR_SYNC_JOBS.check: {
                 const connectionId = idOf(job.data, 'connectionId');

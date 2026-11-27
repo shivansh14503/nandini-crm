@@ -56,6 +56,8 @@ export const CALENDAR_SYNC_JOBS = {
     pull: 'pull',
     /** Webhook channel of one connection (P2-7, sync.channels.ts): ensure | renew | recreate | stop. */
     watch: 'watch',
+    /** A colleague's reply made in the CRM, sent to their calendar (P2-8, sync.rsvp.ts). */
+    rsvp: 'rsvp',
     poll: 'poll',
     nightly: 'nightly',
     /** Read the event again until its video link is ready (Calendar Phase 3 P3-1, spec §16.3; sync.conference.ts). */
@@ -194,3 +196,27 @@ export const FOLLOW_UP_NOTE_DAYS = 7;
 /** Answers of an on-demand pull (Sync now, the page pull, the admin's Sync now); mirrored by the frontend (contract test). */
 export const PULL_REQUEST_STATUSES = ['queued', 'done', 'recent', 'busy', 'not_synced', 'not_ready', 'failed', 'off'] as const;
 export type PullRequestStatus = (typeof PULL_REQUEST_STATUSES)[number];
+
+// ── Customer-meeting import and replies (P2-8, sync.import.ts / sync.rsvp.ts) ──
+
+/** `createdBy` of an imported activity, and the actor of the nightly auto-complete (spec §13.1, §10.1 step 6). */
+export const CALENDAR_SYNC_ACTOR = 'calendar-sync';
+/** An unknown meeting is imported only when it starts inside [now − 1 day, now + 180 days] (D17). */
+export const IMPORT_PAST_MS = 24 * 60 * 60_000;
+export const IMPORT_FUTURE_DAYS = 180;
+/** Subject of an imported meeting without one. */
+export const IMPORT_UNTITLED = '(No title)';
+/** Rows per query chunk of the import's page lookups (SQL Server's 2,100 parameter cap). */
+export const IMPORT_LOOKUP_CHUNK = 500;
+/** Imported activities auto-completed per nightly batch (§10.1 step 6). */
+export const AUTO_COMPLETE_BATCH = 200;
+/** Without Redis, an in-process reply runs at most this many times (busy lease, rate limit, transient failure). */
+export const INLINE_RSVP_ATTEMPTS = 5;
+/** Wait before trying an in-process reply again after a transient failure (× the attempt number). */
+export const INLINE_RSVP_RETRY_MS = 15_000;
+/** Link error of a reply the calendar refused (P2-8; first-run check F3 on Google). */
+export const RSVP_REFUSED_CODE = 'rsvp_refused';
+export const RSVP_REFUSED_MESSAGE = 'The calendar refused this reply. Your reply is saved in the CRM only.';
+/** Link error of a reply that could not be sent for another reason (event gone, not on the guest list). */
+export const RSVP_FAILED_CODE = 'rsvp_failed';
+export const RSVP_FAILED_MESSAGE = 'This reply could not be sent to the calendar (the invitation is gone there). It is saved in the CRM.';

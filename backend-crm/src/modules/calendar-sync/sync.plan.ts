@@ -22,6 +22,8 @@ export interface PlanInput {
         status: string;
         hasSchedule: boolean;
         externalOrganizer: boolean;
+        /** P2-8: `calendar` = brought in from the calendar; deleting it in the CRM never deletes the calendar event. */
+        origin?: string;
     };
     link: {
         state: string;
@@ -55,8 +57,13 @@ export function planPush(input: PlanInput): PushPlan {
 
     if (!input.connectionLive) return { action: 'detach' };
     if (!input.ownersConnection) return cancelOrNothing;
+    // §13.2: an imported meeting removed from the CRM stays in the calendar; the link stops (syncKey kept: never re-imported).
+    if (activity.isDeleted && activity.origin === 'calendar') return { action: 'detach' };
     if (activity.isDeleted) return cancelOrNothing;
     if (activity.status === 'Cancelled') return cancelOrNothing;
+    // An imported meeting whose type stopped going to calendars (or lost its time) is still the employee's real meeting:
+    // the link stops, the event stays (only Cancel / an owner change removes it, §13.2).
+    if ((!input.typeSyncable || !activity.hasSchedule) && activity.origin === 'calendar') return { action: 'detach' };
     if (!input.typeSyncable || !activity.hasSchedule) return cancelOrNothing;
     if (activity.externalOrganizer) return { action: 'noop', state: 'detached' };
 
@@ -73,7 +80,12 @@ export function planPush(input: PlanInput): PushPlan {
         return input.createEligible ? { action: 'create', restore: false, newGeneration: false } : { action: 'noop', state: 'cancelled' };
     }
 
-    const changed = link.base ? crmChangedGroups(crmNow, link.base.crm).filter((g) => g !== 'status') : [...PATCHABLE_GROUPS];
+    // P2-8: the description of a meeting brought in from the calendar is the employee's own text (their agenda, the
+    // Teams join block): the CRM never writes it (a patch replaces the whole description). Google keeps the Meet link
+    // in its conference data, so nothing is lost.
+    const changed = (link.base ? crmChangedGroups(crmNow, link.base.crm).filter((g) => g !== 'status') : [...PATCHABLE_GROUPS]).filter(
+        (g) => activity.origin !== 'calendar' || g !== 'description',
+    );
     const groups = activity.status === 'Completed' ? changed.filter((g) => COMPLETED_GROUPS.has(g)) : changed;
     return groups.length > 0 ? { action: 'patch', groups } : { action: 'noop', state: 'synced' };
 }

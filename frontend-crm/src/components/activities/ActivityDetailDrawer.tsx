@@ -45,7 +45,7 @@ import { useDropdownOptionLabel, useModuleFormConfig } from '@/hooks/queries/use
 import { activityService } from '@/services/activity.service';
 import { ActivityBusyTimes } from './ActivityBusyTimes';
 import { ActivityCalendarNotes } from './ActivityCalendarNotes';
-import { ActivitySyncStatus, calendarRemovalNote, showsSyncStatus } from './ActivitySyncStatus';
+import { ActivitySyncStatus, calendarProviderName, calendarRemovalNote, showsSyncStatus } from './ActivitySyncStatus';
 import { ActivitySeriesInfo } from './ActivitySeriesInfo';
 import { useSeriesScopePrompt } from './SeriesScopeDialog';
 import { useAuth } from '@/context/AuthContext';
@@ -58,7 +58,9 @@ import {
     NOTE_TYPE,
     PLANNED_STATUS,
     TASK_TYPE,
+    CALENDAR_ORIGIN,
     isActivityRelatedModule,
+    isExternallyOrganized,
     isFollowUpActivity,
     type Activity,
     type ActivityRelatedModule,
@@ -467,6 +469,11 @@ export function ActivityDetailDrawer({ activity, activityId, open, onClose, onEd
         if (recordFollowUpHref) router.push(withListOrigin(recordFollowUpHref));
     };
     const followUpColor = followUpModuleColor(a.relatedModule);
+    // P2-8: a meeting brought in from a calendar; organized outside the CRM, its title, time, place and guests change
+    // only in the organizer's calendar (no Reschedule, no time edit, no drag).
+    const external = isExternallyOrganized(a);
+    const importedFrom = a.origin === CALENDAR_ORIGIN ? (a.importedFrom ?? a.calendar?.provider ?? null) : null;
+    const organizer = a.organizerName && a.organizerEmail ? `${a.organizerName} (${a.organizerEmail})` : a.organizerName || a.organizerEmail || '';
 
     const overview = (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -485,6 +492,14 @@ export function ActivityDetailDrawer({ activity, activityId, open, onClose, onEd
                         {planned
                             ? `The next follow-up of ${a.relatedCode || `this ${followUpRecord}`}. Its date, type, owner and status change on the ${followUpRecord}: Record follow-up.`
                             : `Follow-up history of ${a.relatedCode || `this ${followUpRecord}`}: kept with the ${followUpRecord}.`}
+                    </Typography>
+                )}
+                {(importedFrom || external) && (
+                    <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)', mt: 0.6, overflowWrap: 'anywhere' }}>
+                        {importedFrom ? `Imported from ${calendarProviderName(importedFrom)}.` : ''}
+                        {external
+                            ? ` Organized by ${a.organizerEmail || 'someone outside the CRM'} in ${importedFrom ? 'their calendar' : 'a calendar'}. Times, title, place, attendees and the video meeting can only be changed there.`
+                            : ''}
                     </Typography>
                 )}
                 <ActivityCalendarNotes calendar={a.calendar} timeZone={timeZone} besideStatus={showsSyncStatus(a, user?.username)} />
@@ -562,6 +577,15 @@ export function ActivityDetailDrawer({ activity, activityId, open, onClose, onEd
                 <Field label="Assigned to">
                     <PersonBlock username={a.assignedTo} />
                 </Field>
+                {external && organizer && (
+                    <Box sx={{ mt: 2 }}>
+                        <Field label="Organizer">
+                            <Typography component="span" sx={{ fontSize: '0.86rem', fontWeight: 600, color: 'var(--crm-slate-900)', overflowWrap: 'anywhere' }}>
+                                {organizer}
+                            </Typography>
+                        </Field>
+                    </Box>
+                )}
                 {a.attendees.length > 0 && (
                     <Box sx={{ mt: 2 }}>
                         <Typography sx={labelSx}>{`Attendees (${a.attendees.length})`}</Typography>
@@ -628,7 +652,8 @@ export function ActivityDetailDrawer({ activity, activityId, open, onClose, onEd
     );
 
     // Owners act on the activity; anyone invited as a colleague replies, owner or not (a manager invited to a rep's
-    // meeting can also edit it, and still needs to accept or decline). A note has no replies.
+    // meeting can also edit it, and still needs to accept or decline). P2-8: the owner of a meeting organized outside
+    // the CRM replies to their own invitation too (`viewer.myResponse` set by the server). A note has no replies.
     const canReply = myResponse !== null && !isNote;
     const rsvp = canReply ? (
         <Box
@@ -672,7 +697,7 @@ export function ActivityDetailDrawer({ activity, activityId, open, onClose, onEd
     ) : null;
     const ownerActions = canEdit ? (
         <>
-            {planned && !followUp && (
+            {planned && !followUp && !external && (
                 <Button size="small" startIcon={<EventRepeatOutlinedIcon sx={{ fontSize: 16 }} />} onClick={() => setDialog('reschedule')} disabled={busy} sx={outlinedSx}>
                     Reschedule
                 </Button>

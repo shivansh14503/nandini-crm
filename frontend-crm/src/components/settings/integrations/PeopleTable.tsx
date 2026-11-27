@@ -163,18 +163,21 @@ function CalendarCell({ calendar }: { calendar: PersonCalendar }) {
 /**
  * People: company emails and each person's calendar sync (provider, status, last problem). Calendar sync is automatic
  * for every active person with a company email on a provider's domains; per person an admin may pick another provider
- * or exclude them (CalendarChoiceDialog), and run "Check now".
+ * or exclude them, or turn on their customer-meeting import (CalendarChoiceDialog), and run "Check now".
  */
 export function PeopleTable({
     companyDomains,
     providers,
     fakeProvider,
+    meetingImport = false,
     initialFilter = 'all',
     onToast,
 }: {
     companyDomains: string[];
     providers: ProviderAdmin[];
     fakeProvider: boolean;
+    /** The company switch "Bring in meetings with customers" (P2-8): the dialog's import switch needs it. */
+    meetingImport?: boolean;
     initialFilter?: PeopleFilter;
     onToast: (message: string, severity?: 'success' | 'error') => void;
 }) {
@@ -341,6 +344,7 @@ export function PeopleTable({
                 person={choosingPerson}
                 providers={providers}
                 fakeProvider={fakeProvider}
+                meetingImport={meetingImport}
                 onClose={() => setChoosing(null)}
                 onToast={onToast}
             />

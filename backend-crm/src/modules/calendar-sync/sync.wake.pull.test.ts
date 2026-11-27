@@ -116,6 +116,16 @@ describe('enqueuePull', () => {
         assert.equal(q.added.length, 0, 'absorbed by the kept id, as before');
     });
 
+    it('pendingOnly (P2-8: the full pull after meeting import is switched on): a started bucket job never absorbs it', async () => {
+        q.states.set(pullJobId('c1', T0), 'active');
+        assert.equal(await enqueuePull('c1', 'rebaseline', at(1_000), { pendingOnly: true }), freshPullJobId('c1', at(1_000)));
+        assert.deepEqual(q.added, [{ jobId: freshPullJobId('c1', at(1_000)), data: { connectionId: 'c1', reason: 'rebaseline' } }]);
+        // A pull of the bucket that hasn't started yet reads the dropped cursor (a full pull) after this request.
+        q.states.set(pullJobId('c2', T0), 'waiting');
+        assert.equal(await enqueuePull('c2', 'rebaseline', at(2_000), { pendingOnly: true }), pullJobId('c2', T0));
+        assert.equal(q.added.length, 1);
+    });
+
     it('null when Redis does not take it (callers pull in-process) or sync is off', async () => {
         q.refuse = true;
         assert.equal(await enqueuePull('c1', 'manual', T0), null);

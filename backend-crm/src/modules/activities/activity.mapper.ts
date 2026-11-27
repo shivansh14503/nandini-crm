@@ -60,6 +60,14 @@ export interface ActivityDto {
      * `calendar` (imported, P2-8). Read only (set by the system write path).
      */
     origin: string;
+    /** Organizer of an imported meeting (P2-8); '' when the owner organizes it. Read only. */
+    organizerEmail: string;
+    organizerName: string;
+    /**
+     * Organized outside the CRM's connected users (P2-8, D31): subject, time, place, attendees and owner are read-only
+     * here (`lockedFields`, 409 EXTERNAL_EVENT_LOCKED) and the activity is never pushed. Read only.
+     */
+    externalOrganizer: boolean;
     /** The recurring series this occurrence belongs to (Calendar Phase 4), '' for a single activity. Read only. */
     seriesId: string;
     createdBy: string;
@@ -162,6 +170,8 @@ export type ActivityView = ActivityDto & {
      * activity's schedule, type, status, owner and related record. `[]` when nothing is locked.
      */
     lockedFields: string[];
+    /** P2-8: where an imported activity (`origin='calendar'`) came from (`google` | `microsoft` | `fake`); null otherwise. */
+    importedFrom: string | null;
     /** The series this occurrence belongs to (rule, summary, position; Calendar Phase 4); null for a single activity. */
     series: ActivitySeriesView | null;
 };
@@ -219,6 +229,9 @@ export function toActivityDto(row: ActivityRow): ActivityDto {
         completedBy: text(row.completedBy),
         customFields: parseCustomFields(row.customDataJson),
         origin: row.origin,
+        organizerEmail: text(row.organizerEmail),
+        organizerName: text(row.organizerName),
+        externalOrganizer: row.externalOrganizer,
         seriesId: row.seriesId ?? '',
         createdBy: row.createdBy,
         updatedBy: row.updatedBy ?? '',

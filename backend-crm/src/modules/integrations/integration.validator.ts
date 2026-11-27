@@ -154,6 +154,8 @@ export const personCalendarBodySchema = z
         provider: z.enum(CALENDAR_PROVIDERS, { error: `Provider must be one of: ${CALENDAR_PROVIDERS.join(', ')}, or empty for "by email domain".` }).nullable().optional(),
         excluded: z.boolean({ error: 'Exclude must be on or off.' }).optional(),
         note: z.preprocess(blankToNull, z.string().trim().max(PERSON_CALENDAR_NOTE_MAX, { message: `Note cannot exceed ${PERSON_CALENDAR_NOTE_MAX} characters.` }).nullable()).optional(),
+        /** P2-8: bring this person's customer meetings into the CRM (needs the company switch; 409 MEETING_IMPORT_OFF). */
+        importMeetings: z.boolean({ error: 'Import customer meetings must be on or off.' }).optional(),
     })
     .strict()
     .refine((body) => Object.keys(body).length > 0, { message: 'Nothing to update.' });

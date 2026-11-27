@@ -17,13 +17,14 @@ import {
     throwFieldIssues,
     type ModuleFieldConfig,
 } from '../form-configs/customFieldValidator.js';
-import { calendarViewOf, loadOwnerCalendarLinks, NO_CALENDAR_LINKS, type CalendarLinksByActivity } from '../calendar-sync/sync.view.js';
+import { isLiveStatus } from '../calendar-sync/connection.constants.js';
+import { calendarViewOf, loadOwnerCalendarLinks, NO_CALENDAR_LINKS, parseReplyBase, type CalendarLinksByActivity } from '../calendar-sync/sync.view.js';
 import { FOLLOWUP_TYPE_CATEGORY_KEY, NEVER_REQUIRED_FIELDS } from '../form-configs/formConfig.defaults.js';
 import type { DropdownCategoryDto } from '../form-configs/formConfig.service.js';
 import { notifyActivityParticipants, scheduleActivityReminder } from '../notifications/notification.reminders.js';
 import { assertAssigneeValid } from '../shared/accessControl.js';
 import { assertDeletedRow, lockRecords, restoreData, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
-import { activityLocks, activityScopeWhere, canEditActivity, canViewActivity, lockedFieldsFor, myResponseOf, type ActivityAccessRow } from './activity.access.js';
+import { activityLocks, activityScopeWhere, canEditActivity, canViewActivity, externalTypeChangeRefusal, lockedFieldsFor, myResponseOf, type ActivityAccessRow } from './activity.access.js';
 import { assertOwnerCanHaveVideo, assertVideoMeetingAllowed, conferenceColumnsFor, ownerVideoForChange, retryColumnsFor, videoOptionsFor, type VideoOptions } from './activity.conference.js';
 import { normalizeAttendees, planAttendeeSync, syncAttendees, type StoredAttendee } from './activity.attendees.js';
 import { activityRangeWhere, calendarFeed, type CalendarFeed } from './activity.calendar.js';
@@ -86,25 +87,80 @@ export function assertCanEdit(user: AuthUser, row: ActivityAccessRow): void {
  * The DTO plus what the caller may do with it (`viewer`, `lockedFields` and `calendar` sit outside the audited record).
  * `links`: the owners' calendar links (calendar-sync/sync.view.ts); without them `calendar` is null.
  */
-export function toActivityView(row: ActivityRow, user: AuthUser, links: CalendarLinksByActivity = NO_CALENDAR_LINKS, series: SeriesById = NO_SERIES): ActivityView {
+export function toActivityView(
+    row: ActivityRow,
+    user: AuthUser,
+    links: CalendarLinksByActivity = NO_CALENDAR_LINKS,
+    series: SeriesById = NO_SERIES,
+    importedFrom: ReadonlyMap<string, ImportSource> = NO_IMPORT_SOURCES,
+): ActivityView {
     const canEdit = canEditActivity(user, row);
+    const source = row.origin === 'calendar' ? importedFrom.get(row.id) : undefined;
+    // P2-8: the owner of a meeting organized outside the CRM replies on their own invitation (no attendee row).
+    const ownerReply = row.externalOrganizer && nameKey(row.assignedTo) === nameKey(user.username) ? (source?.ownerReply ?? null) : null;
     return {
         ...toActivityDto(row),
-        viewer: { canEdit, myResponse: myResponseOf(user, row) },
+        viewer: { canEdit, myResponse: myResponseOf(user, row) ?? ownerReply },
         lockedFields: lockedFieldsFor(row),
         calendar: calendarViewOf(row, links.get(row.id), user.username, canEdit),
+        importedFrom: source?.provider ?? null,
         series: row.seriesId ? (series.get(row.id) ?? null) : null,
         conference: conferenceViewOf(row, canEdit, links.has(row.id)),
     };
 }
 
+/** P2-8: where an imported activity came from, and its owner's own reply when they hold an invitation copy. */
+export interface ImportSource {
+    provider: string;
+    ownerReply: string | null;
+}
+const NO_IMPORT_SOURCES: ReadonlyMap<string, ImportSource> = new Map();
+/** An attendee link whose calendar copy can still be answered (not detached, not cancelled). */
+const isReplyLink = (link: { role: string; state: string }): boolean => link.role === 'attendee' && link.state !== 'detached' && link.state !== 'cancelled';
+
 /**
- * Views of committed rows with their calendar state (one link read per call, a second only when links exist) and
- * their series (Calendar Phase 4: one ActivitySeries read, only when a row belongs to one).
+ * P2-8: the provider each imported activity came from (its first link, whatever its role or state), and for a meeting
+ * organized outside the CRM the owner's reply: from their live attendee link (`baseJson` `mine`, else `self`; a cancelled
+ * copy has none).
+ */
+export async function loadImportSources(rows: readonly ActivityRow[]): Promise<ReadonlyMap<string, ImportSource>> {
+    const imported = rows.filter((row) => row.origin === 'calendar');
+    if (imported.length === 0) return NO_IMPORT_SOURCES;
+    const links = await prisma.activityExternalLink.findMany({
+        where: { activityId: { in: imported.map((row) => row.id) } },
+        select: { activityId: true, provider: true, role: true, state: true, baseJson: true, connectionId: true },
+        orderBy: { createdAt: 'asc' },
+    });
+    const ownerOf = new Map(imported.map((row) => [row.id, row.externalOrganizer ? nameKey(row.assignedTo) : null]));
+    // Only an outside meeting's attendee links can carry the owner's reply: their connections, one more read when any.
+    // A cancelled copy is gone from the calendar: nothing to answer (sync.rsvp.ts `respondAsOwner` refuses it too).
+    const replyLinks = links.filter((link) => ownerOf.get(link.activityId) && isReplyLink(link));
+    const connections = replyLinks.length
+        ? await prisma.calendarConnection.findMany({ where: { id: { in: [...new Set(replyLinks.map((l) => l.connectionId))] } }, select: { id: true, username: true, status: true } })
+        : [];
+    const liveOwnerOf = new Map(connections.filter((c) => isLiveStatus(c.status)).map((c) => [c.id, nameKey(c.username)]));
+    const out = new Map<string, ImportSource>();
+    for (const link of links) {
+        const entry = out.get(link.activityId) ?? { provider: link.provider, ownerReply: null };
+        const owner = ownerOf.get(link.activityId);
+        const ownersCopy = Boolean(owner) && isReplyLink(link) && liveOwnerOf.get(link.connectionId) === owner;
+        if (ownersCopy) {
+            const base = parseReplyBase(link.baseJson);
+            entry.ownerReply = base.mine ?? base.self ?? 'needsAction';
+        }
+        out.set(link.activityId, entry);
+    }
+    return out;
+}
+
+/**
+ * Views of committed rows with their calendar state (one link read per call, a second only when links exist), their
+ * series (Calendar Phase 4: one ActivitySeries read, only when a row belongs to one) and where an imported one came
+ * from (P2-8: one link read, only when a row is imported).
  */
 export async function toActivityViews(rows: readonly ActivityRow[], user: AuthUser): Promise<ActivityView[]> {
-    const [links, series] = await Promise.all([loadOwnerCalendarLinks(rows), loadSeriesViews(rows)]);
-    return rows.map((row) => toActivityView(row, user, links, series));
+    const [links, series, sources] = await Promise.all([loadOwnerCalendarLinks(rows), loadSeriesViews(rows), loadImportSources(rows)]);
+    return rows.map((row) => toActivityView(row, user, links, series, sources));
 }
 
 export const toOneView = async (row: ActivityRow, user: AuthUser): Promise<ActivityView> => (await toActivityViews([row], user))[0];
@@ -706,9 +762,17 @@ export async function applyCrmUpdate(
     const schedule = scheduleOf(input, config);
     const now = new Date();
     throwFieldIssues(activityPastIssues({ ...input, ...schedule }, before, now, ENV.BUSINESS_TIMEZONE));
+    const requested = requestedChanges(before, patch);
+    // P2-8: Task / Note would drop what the organizer's calendar owns (refused before any of it is derived).
+    const typeRefusal = requested.has('followupType') ? externalTypeChangeRefusal(existing, input.followupType) : null;
+    if (typeRefusal) {
+        throw new HttpError(typeRefusal.message, StatusCodes.CONFLICT, { code: typeRefusal.code, errors: [{ message: typeRefusal.message, path: ['followupType'] }] });
+    }
+    // A locked Video meeting (P2-8: a meeting organized outside the CRM) answers its lock's 409 before the P3-1 rules,
+    // which would otherwise ask the owner's calendar about a link the CRM may not add or remove.
+    assertUnlockedChanges(existing, requested.has('videoMeeting') ? { videoMeeting: input.videoMeeting ?? null } : {}, requested);
     await assertVideoMeetingAllowed(tx, input, existing, config);
 
-    const requested = requestedChanges(before, patch);
     const becomesException = !series && Boolean(existing.seriesId) && !existing.seriesException && [...requested].some((key) => !PER_OCCURRENCE_KEYS.has(key));
     const writer: ActivityWriter = { ...crmWriter(user, config, requested), series: series ?? (becomesException ? { seriesException: true } : undefined) };
     const row = await updateActivityRow(tx, existing, input, schedule, writer, now);
@@ -860,6 +924,16 @@ export const activityService = {
      */
     async respond(id: string, body: unknown, user: AuthUser): Promise<ActivityView> {
         const { responseStatus } = respondSchema.parse(body);
+        const respondedAt = new Date();
+        // P2-8: the owner of a meeting organized outside the CRM replies on their own invitation (dynamic: no import cycle).
+        const { respondAsOwner, enqueueRsvp } = await import('../calendar-sync/sync.rsvp.js');
+        const owned = await respondAsOwner(id, responseStatus, user, respondedAt);
+        if (owned) {
+            await cacheService.invalidateEntityCaches('activities');
+            await runActivityPostCommit(owned.rows, user);
+            await enqueueRsvp(id, user.username, respondedAt);
+            return toOneView(owned.row, user);
+        }
         const { existing, row } = await runInTransaction(async (tx) => {
             await lockRecords(tx, 'activity', [id]);
             const existing = await tx.activity.findFirst({ where: { id, isDeleted: false }, include: WITH_ATTENDEES });
@@ -868,7 +942,7 @@ export const activityService = {
             if (!mine || existing.followupType === NOTE_TYPE) throw HttpError.forbidden(RSVP_FORBIDDEN_MESSAGE);
 
             const before = toActivityDto(existing);
-            await tx.activityAttendee.update({ where: { id: mine.id }, data: { responseStatus, respondedAt: new Date() } });
+            await tx.activityAttendee.update({ where: { id: mine.id }, data: { responseStatus, respondedAt } });
             const row = await tx.activity.findUniqueOrThrow({ where: { id }, include: WITH_ATTENDEES });
             const changes = diffRecords(before, toActivityDto(row));
             if (Object.keys(changes).length > 0) {
@@ -879,6 +953,8 @@ export const activityService = {
         await cacheService.invalidateEntityCaches('activities');
         // A reply changes no owner or invitation; this only re-arms the reminder (a no-op for a pending one).
         await runActivityPostCommit([{ before: existing, after: row }], user);
+        // P2-8: the same reply to their own calendar copy when it syncs replies (never throws).
+        await enqueueRsvp(id, user.username, respondedAt);
         return toOneView(row, user);
     },
 
