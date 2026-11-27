@@ -12,6 +12,7 @@ import { asPayload, checkModulePayload, loadModuleFieldConfig, validateModulePay
 import { shownNumberModules } from '../document-series/documentSeries.service.js';
 import { codeSearchPrefix } from '../shared/searchTerms.js';
 import { acquireLocks, assertDeletedRow, lockRecords, restoreData, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
+import { loadProductUsage, usageOf, usedProductWhere } from './product.usage.js';
 import { toProductData, toProductDto, type ProductDto } from './product.mapper.js';
 import { PRODUCT_SORT_FIELDS, productInputSchema, productListQuerySchema, type ProductInput } from './product.validator.js';
 
@@ -52,7 +53,7 @@ export const productService = {
         return rows.map(toProductDto);
     },
 
-    async list(query: unknown): Promise<PaginatedResult<ProductDto>> {
+    async list(query: unknown, user: AuthUser): Promise<PaginatedResult<ProductDto>> {
         const page = parsePagination(query, PRODUCT_SORT_FIELDS);
         const filters = productListQuerySchema.parse(query ?? {});
 
@@ -61,6 +62,8 @@ export const productService = {
         if (filters.type?.length) where.type = { in: filters.type };
         if (filters.isActive !== undefined) where.isActive = filters.isActive;
         if (filters.createdWithinDays) where.createdAt = { gte: daysAgo(filters.createdWithinDays) };
+        if (filters.usage === 'used') Object.assign(where, usedProductWhere(user));
+        if (filters.usage === 'unused') where.NOT = usedProductWhere(user);
         if (page.search) {
             // SQL Server's default collation makes `contains` case-insensitive.
             const code = codeSearchPrefix(page.search, 'PRD');
@@ -78,13 +81,15 @@ export const productService = {
             prisma.product.count({ where }),
             prisma.product.findMany({ where, orderBy: [page.orderBy, { id: 'asc' }], skip: page.skip, take: page.take }),
         ]);
-        return { data: rows.map(toProductDto), total, page: page.page, limit: page.limit };
+        const usage = await loadProductUsage(rows.map((row) => row.id), user);
+        return { data: rows.map((row) => ({ ...toProductDto(row), usage: usageOf(usage, row.id) })), total, page: page.page, limit: page.limit };
     },
 
-    async getById(id: string): Promise<ProductDto> {
+    async getById(id: string, user: AuthUser): Promise<ProductDto> {
         const row = await prisma.product.findFirst({ where: { id, isDeleted: false } });
         if (!row) throw notFound();
-        return toProductDto(row);
+        const usage = await loadProductUsage([id], user);
+        return { ...toProductDto(row), usage: usageOf(usage, id) };
     },
 
     async create(body: unknown, actor: AuthUser): Promise<ProductDto> {

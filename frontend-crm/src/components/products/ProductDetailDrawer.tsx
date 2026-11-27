@@ -13,6 +13,7 @@ import { EntityDetailDrawer, copyToClipboard } from '@/components/common/Drawer'
 import { useLayoutDrawerProps } from '@/components/common/Drawer/layout';
 import { PRODUCT_FORM_TABS } from './ProductForm';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
+import { ProductUsageChip, ProductUsageLine } from './ProductUsage';
 
 export interface ProductDetailDrawerProps {
     product: Product | null;
@@ -51,6 +52,8 @@ export function ProductDetailDrawer({ product, open, onClose, onEdit }: ProductD
             avatarIcon={view.avatarIcon}
             avatarBg={view.avatarBg}
             verified={true}
+            titleAdornment={<ProductUsageChip usage={p.usage} />}
+            headerNote={<ProductUsageLine productId={p.id} usage={p.usage} />}
             badges={view.badges}
             headerActions={{
                 onEdit: handleEdit,

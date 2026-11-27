@@ -292,7 +292,8 @@ server-side), `customDataJson`, audit/soft-delete.
 `taxAmount`, `total`, `description`, `note`, `sortOrder`.
 
 Indexes: `organizationId`, `contactId`, `salesStage`, `assignedTo`, `nextFollowupDate`, scoped-list composites;
-line items on `opportunityId`, `productId`.
+line items on `opportunityId` and (`productId`, `opportunityId`) (migration `20261218090000_product_usage_index`, which
+replaced the single-column `productId` index: product usage counts read distinct product / opportunity pairs).
 
 ### 4.6 `Quotation` and `QuotationLineItem`
 

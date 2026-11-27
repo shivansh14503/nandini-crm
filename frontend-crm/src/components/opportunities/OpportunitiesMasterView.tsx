@@ -1,7 +1,7 @@
 'use client';
 
 import { CLOSED_STAGES } from '@/utils/opportunityResponseRules';
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { Suspense, useState, useMemo, useCallback } from 'react';
 import { useResetTab } from '@/hooks/useResetTab';
 import { useRouter } from 'next/navigation';
 import TrendingUpOutlinedIcon from '@mui/icons-material/TrendingUpOutlined';
@@ -28,6 +28,7 @@ import type { OpportunityFilterTab, OpportunitySortField } from './master';
 import { OpportunityDetailDrawer } from './OpportunityDetailDrawer';
 import { useSearchScope, useSearchScopedRows } from '../search/SearchScope';
 import { useOpportunityColumns } from './opportunityColumns';
+import { ProductLinkFilter } from './master/ProductLinkFilter';
 
 /** Stable empty list while the first page loads (keeps memoized filters from recomputing). */
 const NO_RECORDS: Opportunity[] = [];
@@ -369,6 +370,12 @@ export function OpportunitiesMasterView() {
                 />
             }
         >
+            {/* A product's usage counts link here (?product=…&outcome=…): open the list with that filter applied. */}
+            {!embeddedInSearch && (
+                <Suspense fallback={null}>
+                    <ProductLinkFilter apply={tableFilter.apply} />
+                </Suspense>
+            )}
             <DataImportModal
                 open={importOpen}
                 entity="opportunities"
