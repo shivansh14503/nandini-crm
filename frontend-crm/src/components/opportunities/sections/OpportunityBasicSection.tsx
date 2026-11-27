@@ -82,7 +82,7 @@ const primaryEmail = (c: Contact) => (c.emailAddress.find((e) => e.isPrimary) ??
  */
 export function OpportunityBasicSection({ notify, onDecisionPendingChange }: OpportunityBasicSectionProps) {
     const getOptions = useDropdownOptionsGetter('opportunities');
-    const { control, getValues, setValue } = useFormContext<F>();
+    const { control, getValues, setValue, formState } = useFormContext<F>();
     const { mode } = useFormMode();
     const isEdit = mode === 'edit';
     const editable = mode !== 'view';
@@ -157,7 +157,6 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
         if (!editable || !typeForAmount || commissionType === typeForAmount) return;
         setValue('commissionType', typeForAmount, { shouldDirty: true, shouldValidate: Boolean(commissionType) });
     }, [editable, typeForAmount, commissionType, setValue]);
-    const organizationNames = useMemo(() => organizations.map((o) => o.organizationName), [organizations]);
     // Contacts who left their job aren't offered (the Contact Search popup's Left Job filter is locked to No).
     const contactNames = useMemo(() => {
         const pickable = contacts.filter(isPickableContact);
@@ -171,19 +170,22 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
 
     const touch = { shouldDirty: true, shouldValidate: true } as const;
 
-    const clearContactFields = () => {
-        setValue('contact', '', { shouldDirty: true });
-        setValue('contactNumber', '', touch);
-        setValue('contactEmail', '', touch);
-    };
-
-    // A contact who belongs to a different organization no longer applies.
-    const handleOrganizationPicked = (org: ExtendedOrganization) => {
+    // A contact who belongs to a different organization no longer applies: once the typed name is an organization
+    // on file, a contact of another organization is cleared. Only once the name is edited: a saved record opens as it is.
+    const savedOrganizationName = formState.defaultValues?.organizationName ?? '';
+    useEffect(() => {
+        if (!editable || sameName(organizationName, savedOrganizationName)) return;
+        const typed = organizationName.trim();
+        if (!typed || !organizations.some((o) => sameName(o.organizationName, typed))) return;
         const currentContact = getValues('contact')?.trim();
         if (!currentContact) return;
         const match = contacts.find((c) => sameName(c.name, currentContact));
-        if (match?.organizationName && !sameName(match.organizationName, org.organizationName)) clearContactFields();
-    };
+        if (match?.organizationName && !sameName(match.organizationName, typed)) {
+            setValue('contact', '', { shouldDirty: true });
+            setValue('contactNumber', '', { shouldDirty: true, shouldValidate: true });
+            setValue('contactEmail', '', { shouldDirty: true, shouldValidate: true });
+        }
+    }, [editable, organizationName, savedOrganizationName, organizations, contacts, getValues, setValue]);
 
     // Picking a contact fills in their number, email and organization. When people at several companies share the
     // name, the one at the organization already chosen wins (the suggestions list that organization's people first),
@@ -215,14 +217,14 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
             <FormGrid columns={3}>
                 {/* ── Customer ── */}
                 <LockedInputs locked={locks.organization}>
-                    <RhfLookup<F, 'organization'>
+                    {/* Plain text, not an organization picker: the API still links the opportunity to the organization
+                        of that name when there is one. */}
+                    <RhfTextField<F>
                         name="organizationName"
                         label="Organization name"
                         required
+                        uppercase
                         hint={locks.organization ? PICKED_CONTACT_HINT : 'Client company name'}
-                        lookupType="organization"
-                        options={organizationNames}
-                        onSelectRecord={handleOrganizationPicked}
                         placeholder="Enter legal / trading organization name"
                         maxLength={FIELD_MAX_LENGTH.organizationName}
                     />
