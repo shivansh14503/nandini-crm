@@ -187,7 +187,9 @@ function FormFieldHeader({ label, required, hint, compact }: { label: string; re
                 <Box
                     ref={hintRef}
                     sx={[
-                        { whiteSpace: 'nowrap', flexShrink: 0, display: 'flex', alignItems: 'center' },
+                        // Caption size + muted colour on the wrapper too, so a JSX hint (e.g. a <span title>) reads as
+                        // small helper text like a string hint; hints that style themselves (chips, buttons) keep theirs.
+                        { whiteSpace: 'nowrap', flexShrink: 0, display: 'flex', alignItems: 'center', fontSize: '0.72rem', lineHeight: 1.66, color: 'var(--crm-gray-400)' },
                         !fits && { position: 'absolute', visibility: 'hidden', pointerEvents: 'none' },
                     ]}
                 >
