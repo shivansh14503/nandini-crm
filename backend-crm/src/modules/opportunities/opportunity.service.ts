@@ -8,7 +8,7 @@ import { generateEntityCode } from '../../utils/codeGenerator.js';
 import { HttpError } from '../../utils/httpError.js';
 import { daysAgo, fromDateOnly } from '../../utils/mappers.js';
 import { parsePagination } from '../../utils/pagination.js';
-import { calculateLineItems, lineItemsInclude, linkedProductIds, prepareLineItems, toLineItemData, type PreparedLineItems } from '../shared/lineItems.js';
+import { assertHasLineItems, calculateLineItems, lineItemsInclude, linkedProductIds, prepareLineItems, toLineItemData, type PreparedLineItems } from '../shared/lineItems.js';
 import { asPayload, checkModulePayload, loadModuleFieldConfig, throwFieldIssues, validateModulePayload } from '../form-configs/customFieldValidator.js';
 import { assertAssigneeValid, assertRecordAccess, buildAccessScopeWhere } from '../shared/accessControl.js';
 import { findOrganizationByName, type PrefetchedLookups } from '../shared/prefetch.js';
@@ -279,6 +279,7 @@ export const opportunityService = {
 
     async create(body: unknown, user: AuthUser): Promise<OpportunityDto> {
         const input = opportunityInputSchema.parse(body);
+        assertHasLineItems(input.lineItems, 'opportunity');
         assertDocumentation(input);
         assertPayeeBank(input);
         assertLeadSourceDetails(input);
@@ -325,6 +326,9 @@ export const opportunityService = {
             const keepLegacyTallySerial = !('tallySerialNo' in patch) && tallySerialIssue(before.tallySerialNo) !== null;
             if (keepLegacyTallySerial) delete merged.tallySerialNo;
             const input = opportunityInputSchema.parse(merged);
+            // An edit that sends line items (the form always does) needs one; other edits (stage changes, follow-ups, …)
+            // still go through on opportunities saved without products (Convert Lead, imports, older records).
+            if ('lineItems' in patch) assertHasLineItems(input.lineItems, 'opportunity');
             // Checked when the stage or the document changes, so records saved at PO before the rule existed still
             // take unrelated edits (follow-ups, …).
             if (['salesStage', 'addDocument', 'documentFile'].some((key) => key in patch)) assertDocumentation(input);

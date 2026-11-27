@@ -20,8 +20,8 @@ import {
 } from './common';
 import { lineItemListSchema } from './lineItem.schema';
 
-/** Same line items as quotations (Jira CRM-111): see lineItem.schema.ts. */
-export const opportunityLineItemsSchema = lineItemListSchema();
+/** Same line items as quotations (Jira CRM-111): see lineItem.schema.ts. An opportunity needs at least one too. */
+export const opportunityLineItemsSchema = lineItemListSchema({ required: true, record: 'opportunity' });
 
 /**
  * Only locked fields are required here (docs/field-locking-policy.md); the rest are required by the form
