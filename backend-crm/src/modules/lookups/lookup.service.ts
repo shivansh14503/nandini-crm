@@ -124,7 +124,7 @@ export interface ProductLookupDto {
     id: string;
     productCode: string;
     productName: string;
-    category: string;
+    productCategory: string;
     type: string;
     hsnCode: string;
     mrp: string;
@@ -132,7 +132,7 @@ export interface ProductLookupDto {
 }
 
 export const contactsLookupQuerySchema = lookupQuerySchema.extend({ organizationId: z.string().trim().max(50).optional() });
-export const productsLookupQuerySchema = lookupQuerySchema.extend({ category: z.string().trim().max(100).optional() });
+export const productsLookupQuerySchema = lookupQuerySchema.extend({ productCategory: z.string().trim().max(100).optional() });
 export const partnerContactsQuerySchema = z.object({ partnerCompany: z.string().trim().max(200).optional() });
 export const addressMasterQuerySchema = z.object({
     country: z.string().trim().toUpperCase().regex(/^[A-Z]{2}$/, { message: 'country must be an ISO 3166-1 alpha-2 code.' }).optional(),
@@ -251,17 +251,17 @@ export const lookupService = {
     },
 
     async products(query: unknown): Promise<ProductLookupDto[]> {
-        const { search, limit, category } = productsLookupQuerySchema.parse(query ?? {});
+        const { search, limit, productCategory } = productsLookupQuerySchema.parse(query ?? {});
         const load = async () => {
             const where: Prisma.ProductWhereInput = {
                 isDeleted: false,
                 // Only Active products can be picked (line items keep an inactive product they already have).
                 status: ACTIVE_PRODUCT_STATUS,
-                ...(category ? { category } : {}),
+                ...(productCategory ? { productCategory } : {}),
                 ...withSearch(search, [
                     { productName: { contains: search } },
                     { productCode: { contains: search } },
-                    { category: { contains: search } },
+                    { productCategory: { contains: search } },
                     { hsnCode: { contains: search } },
                 ]),
             };
@@ -270,14 +270,14 @@ export const lookupService = {
                 id: p.id,
                 productCode: p.productCode,
                 productName: p.productName,
-                category: p.category ?? '',
+                productCategory: p.productCategory ?? '',
                 type: p.type ?? '',
                 hsnCode: p.hsnCode ?? '',
                 mrp: p.mrp?.toString() ?? '',
                 taxRate: p.taxRate ?? '',
             }));
         };
-        return search || category ? load() : cacheService.getOrSetGuarded(CACHE_KEYS.lookups(`products:${limit}`), ENTITY_TTL_SECONDS, load);
+        return search || productCategory ? load() : cacheService.getOrSetGuarded(CACHE_KEYS.lookups(`products:${limit}`), ENTITY_TTL_SECONDS, load);
     },
 
     /** `NatureOfCallItem[]` (active entries). */

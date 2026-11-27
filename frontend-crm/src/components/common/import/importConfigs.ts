@@ -46,7 +46,7 @@ export const IMPORT_CONFIGS: Record<ImportEntityType, ImportEntityConfig> = {
         fields: [
             { key: 'productName', label: 'Product Name', required: true, aliases: ['name', 'product', 'item', 'item name'], sample: ['TallyPrime Silver', 'Tally AMC Annual'] },
             { key: 'hsnCode', label: 'HSN Code', required: false, aliases: ['hsn', 'sac', 'hsn/sac'], sample: ['998431', '998313'] },
-            { key: 'category', label: 'Category', required: false, aliases: ['product category', 'group'], sample: ['TallyPrime', 'Tally AMC'] },
+            { key: 'productCategory', label: 'Product Category', required: false, aliases: ['category', 'product category', 'group'], sample: ['TallyPrime', 'Tally AMC'] },
             { key: 'type', label: 'Type', required: false, aliases: ['product type'], sample: ['Product', 'Service'] },
             { key: 'manufacturer', label: 'Manufacturer', required: false, aliases: ['brand', 'vendor', 'make'], sample: ['Tally Solutions', 'Tally Solutions'] },
             { key: 'taxRate', label: 'Tax Rate', required: false, aliases: ['tax', 'gst rate', 'gst %'], sample: ['18%', '18%'] },

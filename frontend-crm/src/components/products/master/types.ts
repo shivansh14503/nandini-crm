@@ -15,7 +15,7 @@ export const statusOfPill = (tab: ProductFilterTab): string | null => (tab.start
 
 export type ProductSortField =
     | 'productName'
-    | 'category'
+    | 'productCategory'
     | 'manufacturer'
     | 'hsnCode'
     | 'mrp'

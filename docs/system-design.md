@@ -571,7 +571,7 @@ every `cache:dashboard:*` using `SCAN` + `UNLINK` (never `KEYS`, so Redis isn't 
 `cache:lookups:form-configs*` (`invalidateFormConfigCaches`), partner company writes also
 `cache:lookups:partner-contacts*`, city admin writes `cache:address-master:cities:*`. Two form-config writes rewrite
 records too, so they also call `invalidateEntityCaches` for the modules they touched: renaming a dropdown option (its
-stored value follows, e.g. every organization's Customer Type or product's Category; only the modules whose records
+stored value follows, e.g. every organization's Customer Type or product's Product Category; only the modules whose records
 held the old value) and renaming a custom field's key. The one-off `npm run align:backend-names -- --apply` drops the
 same keys; the shared Redis client connects lazily, so the script connects it first (waiting up to 5 s) and, when
 Redis can't be reached, tells the operator to restart the API. PDF cache entries never need invalidation: any change

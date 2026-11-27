@@ -742,7 +742,7 @@ const MODULES: Record<GlobalSearchCategory, (ctx: Context) => Promise<Found>> = 
               ? null
               : nonEmpty<Prisma.ProductWhereInput>([
                     ...(t.text
-                        ? [{ productName: { contains: t.q } }, { manufacturer: { contains: t.q } }, { category: { contains: t.q } }]
+                        ? [{ productName: { contains: t.q } }, { manufacturer: { contains: t.q } }, { productCategory: { contains: t.q } }]
                         : []),
                     ...numbered(ctx, 'product', { productCode: { contains: t.q } }),
                     ...(t.digits ? [{ hsnCode: { contains: t.digits } }] : []),
@@ -754,7 +754,7 @@ const MODULES: Record<GlobalSearchCategory, (ctx: Context) => Promise<Found>> = 
             (w) =>
                 prisma.product.findMany({
                     where: w,
-                    select: { id: true, productCode: true, productName: true, category: true, manufacturer: true, hsnCode: true, isActive: true },
+                    select: { id: true, productCode: true, productName: true, productCategory: true, manufacturer: true, hsnCode: true, isActive: true },
                     orderBy: recent,
                     skip: ctx.skip,
                     take: ctx.take,
@@ -762,7 +762,7 @@ const MODULES: Record<GlobalSearchCategory, (ctx: Context) => Promise<Found>> = 
             (w) => prisma.product.count({ where: w }),
             (w) => prisma.product.findMany({ where: w, select: { id: true }, orderBy: recent, take: MAX_IDS_PER_MODULE }),
             (p) => {
-                const subtitle = joinParts(shown ? p.productCode : '', p.category);
+                const subtitle = joinParts(shown ? p.productCode : '', p.productCategory);
                 return {
                     id: p.id,
                     category: 'products',

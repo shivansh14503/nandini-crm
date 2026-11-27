@@ -9,10 +9,9 @@ export interface ProductDto {
     productCode: string;
     productName: string;
     hsnCode: string;
-    category: string;
+    productCategory: string;
     type: string;
     manufacturer: string;
-    taxType: string;
     taxRate: string;
     discount: string;
     cost: string;
@@ -44,10 +43,9 @@ export function toProductDto(row: Product): ProductDto {
         productCode: row.productCode,
         productName: row.productName,
         hsnCode: text(row.hsnCode),
-        category: text(row.category),
+        productCategory: text(row.productCategory),
         type: text(row.type),
         manufacturer: text(row.manufacturer),
-        taxType: text(row.taxType),
         taxRate: text(row.taxRate),
         discount: decimalToString(row.discount),
         cost: decimalToString(row.cost),
@@ -77,10 +75,9 @@ export function toProductData(input: ProductInput): Omit<Prisma.ProductUnchecked
         customDataJson: serializeCustomFields(input.customFields),
         productName: input.productName,
         hsnCode: nullable(input.hsnCode),
-        category: nullable(input.category),
+        productCategory: nullable(input.productCategory),
         type: input.type ?? null,
         manufacturer: nullable(input.manufacturer),
-        taxType: input.taxType,
         taxRate: input.taxRate ?? null,
         discount: input.discount ?? null,
         cost: input.cost ?? null,

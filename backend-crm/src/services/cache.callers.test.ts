@@ -178,7 +178,7 @@ describe('option renames', () => {
             dropdownCategory: { findUnique: async () => ({ key: 'shared_product_category', label: 'Product Category', module: 'shared' }) },
             formFieldDefinition: {
                 findMany: async () => [
-                    { id: 'f-1', module: 'products', fieldKey: 'category', fieldType: 'select', isSystem: true, defaultValue: null },
+                    { id: 'f-1', module: 'products', fieldKey: 'productCategory', fieldType: 'select', isSystem: true, defaultValue: null },
                     { id: 'f-2', module: 'leads', fieldKey: 'productCategory', fieldType: 'multiselect', isSystem: true, defaultValue: null },
                 ],
                 update: async () => ({}),
