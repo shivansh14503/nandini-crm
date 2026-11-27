@@ -4,6 +4,7 @@ import React from 'react';
 import { Box } from '@mui/material';
 import { StatusChip, type ChipTone } from '@/components/settings/integrations/integrationUi';
 import { relativeTime } from '@/components/settings/audit-log/auditLogUi';
+import { formatDateTime } from '@/utils/date';
 export { phoneDialogPaperSx } from '@/components/profile/profileUi';
 import { ApiClientError } from '@/services/apiClient';
 import type { UserEmailIssue } from '@/types/integration.types';
@@ -53,12 +54,35 @@ export function roleAccessHint(role: string): string {
     return 'Sees only the records they own or created. No admin panel.';
 }
 
-/** Status chips of a user row: Inactive, On leave, Out of office (today), Group, Must change password, an email issue. */
+/**
+ * Status chips of a user row: Invited (or Invite expired), Inactive, On leave, Out of office (today), Group, Reset link
+ * sent, an email issue. "Active" when none apply.
+ */
 export function UserStatusChips({ user }: { user: AdminUserDto }) {
     const today = useBusinessToday();
     const outOfOffice = user.outOfOffice && isOutOfOfficeOn(user.outOfOffice, today) ? user.outOfOffice : null;
     const issue = user.emailIssue && user.isActive && !user.isGroupUser ? EMAIL_ISSUE_CHIP[user.emailIssue] : null;
     const chips: React.ReactNode[] = [];
+    const link = user.invite;
+    if (user.invitePending && user.isActive) {
+        if (link && !link.expired) {
+            chips.push(
+                <StatusChip key="invited" tone="info" title={`Invite emailed ${formatDateTime(link.sentAt)}; the link works until ${formatDateTime(link.expiresAt)}. They can’t sign in until they set a password.`}>
+                    Invited
+                </StatusChip>,
+            );
+        } else {
+            chips.push(
+                <StatusChip
+                    key="invited"
+                    tone="warning"
+                    title={link ? `The invite link expired ${formatDateTime(link.expiresAt)}. Use “Resend invite” in the row menu.` : 'No working invite link. Use “Resend invite” in the row menu.'}
+                >
+                    {link ? 'Invite expired' : 'Invite not sent'}
+                </StatusChip>,
+            );
+        }
+    }
     if (!user.isActive) {
         chips.push(
             <StatusChip key="inactive" tone="neutral" title="Can’t sign in. Their records are kept.">
@@ -87,10 +111,10 @@ export function UserStatusChips({ user }: { user: AdminUserDto }) {
             </StatusChip>,
         );
     }
-    if (user.mustChangePassword && user.isActive) {
+    if (!user.invitePending && user.isActive && link && !link.expired && link.purpose === 'reset') {
         chips.push(
-            <StatusChip key="mcp" tone="info" title="Has a temporary password and must choose a new one at the next sign-in.">
-                Must change password
+            <StatusChip key="reset" tone="neutral" title={`Password reset link emailed ${formatDateTime(link.sentAt)}; it works until ${formatDateTime(link.expiresAt)}.`}>
+                Reset link sent
             </StatusChip>,
         );
     }

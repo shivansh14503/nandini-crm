@@ -81,7 +81,7 @@ export type ApiErrorListener = (error: ApiClientError) => void;
 const errorListeners = new Set<ApiErrorListener>();
 
 /**
- * Watches every failed API request app-wide, e.g. a 403 PASSWORD_CHANGE_REQUIRED (AuthContext). Returns the
+ * Watches every failed API request app-wide, e.g. a 401 that ends the session (AuthContext). Returns the
  * unsubscribe function. A listener that throws is ignored, so it can never change the caller's error.
  */
 export function subscribeApiErrors(listener: ApiErrorListener): () => void {

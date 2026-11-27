@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { passwordPolicyIssue } from '../auth/passwordPolicy.js';
-import { adminGuardIssue, fullNameLengthIssue, generateTemporaryPassword, losesAdminAccess, managerIssue, MAX_MANAGER_DEPTH, superAdminOnly, TEMPORARY_PASSWORD_LENGTH } from './userAdmin.rules.js';
+import { adminGuardIssue, fullNameLengthIssue, losesAdminAccess, managerIssue, MAX_MANAGER_DEPTH, superAdminOnly } from './userAdmin.rules.js';
 
 describe('managerIssue (reports-to cycles)', () => {
     // 2 → 1, 3 → 2, 4 → 3 ; 5 reports to nobody.
@@ -60,38 +59,6 @@ describe('fullNameLengthIssue', () => {
     it('matches My Profile', () => {
         assert.equal(fullNameLengthIssue('a'.repeat(100)), null);
         assert.equal(fullNameLengthIssue('a'.repeat(101)), 'First and last name together cannot exceed 99 characters.');
-    });
-});
-
-describe('generateTemporaryPassword', () => {
-    it('is 12 letters and digits, with both, and passes the password rules', () => {
-        for (let i = 0; i < 200; i++) {
-            const password = generateTemporaryPassword('palak');
-            assert.equal(password.length, TEMPORARY_PASSWORD_LENGTH);
-            assert.match(password, /^[A-Za-z0-9]+$/);
-            assert.match(password, /[A-Za-z]/);
-            assert.match(password, /[0-9]/);
-            assert.doesNotMatch(password, /[0O1lI]/);
-            assert.equal(passwordPolicyIssue(password, { username: 'palak' }), null);
-        }
-    });
-    it('differs each time', () => {
-        const seen = new Set(Array.from({ length: 50 }, () => generateTemporaryPassword('palak')));
-        assert.equal(seen.size, 50);
-    });
-    it('retries when a candidate equals the username', () => {
-        // A seeded sequence: the first candidate it builds is used as the username, so the generator must try again.
-        const seeded = () => {
-            let state = 7;
-            return (max: number) => {
-                state = (state * 1103515245 + 12345) % 2147483648;
-                return state % max;
-            };
-        };
-        const first = generateTemporaryPassword('nobody', seeded());
-        const second = generateTemporaryPassword(first, seeded());
-        assert.notEqual(second, first);
-        assert.equal(passwordPolicyIssue(second, { username: first }), null);
     });
 });
 

@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import { FIELD_MAX_LENGTH as L } from '../../config/fieldLimits.js';
 import { optionalPhone, requiredPersonName } from '../../validators/common.js';
-import { PASSWORD_MAX_LENGTH } from '../auth/passwordPolicy.js';
 import { clearable } from '../profile/profile.validator.js';
 import { normalizeUserEmail, USER_EMAIL_MAX_LENGTH } from '../users/userEmail.service.js';
 import { ROLE_NAME_MAX_LENGTH } from './roles.js';
@@ -52,11 +51,14 @@ const userId = (field: string) => z.number({ error: `${field} must be a user id.
 
 const flag = (field: string) => z.boolean({ error: `${field} must be true or false.` });
 
-/** An initial or reset password the admin typed (rules checked by the service with passwordPolicy.ts). */
-const typedPassword = z
-    .string({ error: 'Password must be text.' })
-    .min(1, { message: 'Enter a password, or leave it out to generate one.' })
-    .max(PASSWORD_MAX_LENGTH, { message: `Password cannot exceed ${PASSWORD_MAX_LENGTH} characters.` });
+/** A new user's work email: required, since their invite link is emailed there. */
+const inviteEmail = z.preprocess(
+    (value) => (value === undefined || value === null ? '' : normalizeUserEmail(value) ?? ''),
+    z
+        .string()
+        .min(1, { message: 'Work email is required: the invite to set a password is sent there.' })
+        .pipe(z.email({ message: 'Enter a valid email address.' }).max(USER_EMAIL_MAX_LENGTH, { message: `Email cannot exceed ${USER_EMAIL_MAX_LENGTH} characters.` })),
+);
 
 /** Fields an admin may set on create and edit. */
 const editable = {
@@ -74,12 +76,14 @@ const editable = {
     isGroupUser: flag('Group user').optional(),
 };
 
-/** POST /api/admin/users. A new user is always active and must change the password at first sign-in. */
+/**
+ * POST /api/admin/users. A new user is active and Invited: no password is set or shown here, they choose one from the
+ * link emailed to `email` (required).
+ */
 export const createUserSchema = z.strictObject({
     username,
     ...editable,
-    /** Left out: a temporary password is generated and returned once. */
-    password: typedPassword.optional(),
+    email: inviteEmail,
 });
 export type CreateUserInput = z.infer<typeof createUserSchema>;
 
@@ -91,10 +95,6 @@ export const updateUserSchema = z.strictObject({
     onLeave: flag('On leave').optional(),
 });
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
-
-/** POST /api/admin/users/:id/reset-password. */
-export const resetPasswordSchema = z.strictObject({ password: typedPassword.optional() });
-export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
 
 export const userIdParamSchema = z.object({ id: z.coerce.number({ error: 'Invalid user id.' }).int().positive({ message: 'Invalid user id.' }) });
 

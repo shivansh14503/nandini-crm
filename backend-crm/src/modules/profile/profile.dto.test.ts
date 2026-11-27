@@ -15,7 +15,6 @@ const row: ProfileRow = {
     jobTitle: 'Inside Sales Lead',
     phone: '+919811234567',
     officePhone: null,
-    mustChangePassword: false,
     lastLoginAt: new Date('2026-11-26T04:30:00.000Z'),
     passwordChangedAt: null,
     createdAt: new Date('2025-04-01T00:00:00.000Z'),
@@ -39,8 +38,7 @@ describe('toProfileDto', () => {
             mobile: '+919811234567',
             officePhone: null,
             photoUrl: '/api/user-photos/a1b2c3d4-0000-4000-8000-000000000001',
-            mustChangePassword: false,
-            lastLoginAt: '2026-11-26T04:30:00.000Z',
+                    lastLoginAt: '2026-11-26T04:30:00.000Z',
             passwordChangedAt: null,
             createdAt: '2025-04-01T00:00:00.000Z',
         });
@@ -56,7 +54,6 @@ describe('toProfileDto', () => {
     it('shows the manager by name (username when the name is blank) and null without one', () => {
         assert.deepEqual(toProfileDto({ ...row, reportsTo: { id: 3, fullName: '  ', username: 'rahul' } }).reportsTo, { id: 3, name: 'rahul' });
         assert.equal(toProfileDto({ ...row, reportsTo: null }).reportsTo, null);
-        assert.equal(toProfileDto({ ...row, mustChangePassword: true }).mustChangePassword, true);
     });
 
     it('never exposes the password hash, even if a row carries one', () => {
@@ -67,7 +64,7 @@ describe('toProfileDto', () => {
 
 describe('toAuthMeDto', () => {
     it('adds photoUrl and keeps the names', () => {
-        const base = { id: 7, username: 'palak', role: 'Admin', fullName: 'Palak Sharma', firstName: 'Palak', lastName: 'Sharma', mustChangePassword: false };
+        const base = { id: 7, username: 'palak', role: 'Admin', fullName: 'Palak Sharma', firstName: 'Palak', lastName: 'Sharma' };
         assert.deepEqual(toAuthMeDto({ ...base, photo: { id: 'p1' } }), { ...base, photoUrl: '/api/user-photos/p1' });
         assert.deepEqual(toAuthMeDto({ ...base, photo: null }), { ...base, photoUrl: null });
     });
@@ -161,7 +158,7 @@ describe('resolveNameParts', () => {
 
     it('is applied by toProfileDto and toAuthMeDto', () => {
         assert.equal(toProfileDto({ ...row, firstName: null, lastName: null }).lastName, 'Sharma');
-        const me = toAuthMeDto({ id: 7, username: 'palak', role: 'Admin', fullName: 'Palak Sharma', firstName: null, lastName: null, mustChangePassword: false, photo: null });
+        const me = toAuthMeDto({ id: 7, username: 'palak', role: 'Admin', fullName: 'Palak Sharma', firstName: null, lastName: null, photo: null });
         assert.equal(me.firstName, 'Palak');
     });
 });

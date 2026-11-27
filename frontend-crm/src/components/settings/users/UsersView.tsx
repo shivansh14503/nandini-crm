@@ -30,6 +30,7 @@ import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import MoreVertRoundedIcon from '@mui/icons-material/MoreVertRounded';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import LockResetRoundedIcon from '@mui/icons-material/LockResetRounded';
+import ForwardToInboxOutlinedIcon from '@mui/icons-material/ForwardToInboxOutlined';
 import PersonOffOutlinedIcon from '@mui/icons-material/PersonOffOutlined';
 import HowToRegOutlinedIcon from '@mui/icons-material/HowToRegOutlined';
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded';
@@ -41,9 +42,8 @@ import { formatDateTime } from '@/utils/date';
 import { isSuperAdminRole } from '@/utils/roleAccess';
 import { useAuth } from '@/context/AuthContext';
 import { useAdminUsers, useAdminUsersMeta, useDeactivateAdminUser } from '@/hooks/queries/useUserAdmin';
-import type { AdminUserDto, AdminUserListParams, UserStatusFilter } from '@/types/userAdmin.types';
-import { ResetPasswordDialog } from './ResetPasswordDialog';
-import { TemporaryPasswordDialog, type TemporaryPasswordInfo } from './TemporaryPasswordDialog';
+import type { AdminUserDto, AdminUserListParams, SendInviteResult, UserStatusFilter } from '@/types/userAdmin.types';
+import { SendInviteDialog } from './SendInviteDialog';
 import { UserFormDrawer } from './UserFormDrawer';
 import { UserStatusDialog } from './UserStatusDialog';
 import { RoleAccessBadges, UserStatusChips, lastSignInText, userLabel } from './userAdminUi';
@@ -150,8 +150,9 @@ function ReportsTo({ user }: { user: AdminUserDto }) {
 }
 
 /**
- * Admin › Users: the people who can sign in to the CRM. Search and filter them, add or edit a user (right drawer),
- * reset a password (shown once), and deactivate / activate. Phones get cards instead of the table.
+ * Admin › Users: the people who can sign in to the CRM. Search and filter them, add or edit a user (right drawer; a new
+ * user is emailed an invite link to set their password), resend an invite or send a password reset link, and
+ * deactivate / activate. Phones get cards instead of the table.
  */
 export function UsersView() {
     const theme = useTheme();
@@ -169,8 +170,8 @@ export function UsersView() {
     const [editing, setEditing] = useState<{ open: boolean; user: AdminUserDto | null; key: number }>({ open: false, user: null, key: 0 });
     const [menu, setMenu] = useState<{ anchor: HTMLElement; user: AdminUserDto } | null>(null);
     const [statusTarget, setStatusTarget] = useState<AdminUserDto | null>(null);
-    const [resetTarget, setResetTarget] = useState<AdminUserDto | null>(null);
-    const [tempPassword, setTempPassword] = useState<TemporaryPasswordInfo | null>(null);
+    /** "Resend invite" / "Send password reset link", or the invite email that failed right after Add user. */
+    const [inviteTarget, setInviteTarget] = useState<{ user: AdminUserDto; error: string | null } | null>(null);
     const [toast, setToast] = useState<Toast>({ open: false, message: '', severity: 'success' });
     const showToast = (message: string, severity: Toast['severity'] = 'success') => setToast({ open: true, message, severity });
 
@@ -575,20 +576,26 @@ export function UsersView() {
                     <ListItemText primary="Edit" secondary={menuLocked ? 'Only a Super Admin can manage this user' : undefined} />
                 </MenuItem>
                 <MenuItem
-                    disabled={menuIsSelf || menuLocked || !menuUser?.isActive}
+                    disabled={menuIsSelf || menuLocked || !menuUser?.isActive || !menuUser?.email}
                     onClick={() => {
                         const u = menuUser;
                         setMenu(null);
-                        setResetTarget(u);
+                        if (u) setInviteTarget({ user: u, error: null });
                     }}
                     sx={menuItemSx}
                 >
-                    <ListItemIcon>
-                        <LockResetRoundedIcon fontSize="small" />
-                    </ListItemIcon>
+                    <ListItemIcon>{menuUser?.invitePending ? <ForwardToInboxOutlinedIcon fontSize="small" /> : <LockResetRoundedIcon fontSize="small" />}</ListItemIcon>
                     <ListItemText
-                        primary="Reset password"
-                        secondary={menuIsSelf ? 'Use My Profile for your own' : !menuUser?.isActive ? 'Activate them first' : undefined}
+                        primary={menuUser?.invitePending ? 'Resend invite' : 'Send password reset link'}
+                        secondary={
+                            menuIsSelf
+                                ? 'Use My Profile for your own'
+                                : !menuUser?.isActive
+                                  ? 'Activate them first'
+                                  : !menuUser?.email
+                                    ? 'Add a work email first'
+                                    : undefined
+                        }
                     />
                 </MenuItem>
                 {menuUser?.isActive ? (
@@ -652,10 +659,11 @@ export function UsersView() {
                     onCreated={(result) => {
                         closeEditor();
                         const name = userLabel(result.user);
-                        if (result.temporaryPassword) {
-                            setTempPassword({ name, username: result.user.username, password: result.temporaryPassword, reason: 'created' });
+                        if (result.invite.status === 'sent') {
+                            showToast(`${name} added. An invite to set their password was emailed to ${result.invite.sentTo}.`);
                         } else {
-                            showToast(`${name} added. They must change the password at first sign-in.`);
+                            // Added (Invited), but the email didn't go out: say why at once and offer to try again.
+                            setInviteTarget({ user: result.user, error: result.invite.error });
                         }
                     }}
                     onSaved={(saved) => {
@@ -690,27 +698,21 @@ export function UsersView() {
                 }}
             />
 
-            <ResetPasswordDialog
-                key={`reset-${resetTarget?.id ?? 'none'}`}
-                user={resetTarget}
-                onClose={() => setResetTarget(null)}
-                onDone={(result) => {
-                    const target = resetTarget;
-                    setResetTarget(null);
-                    if (!target) return;
-                    const name = userLabel(target);
-                    if (result.temporaryPassword) {
-                        setTempPassword({ name, username: target.username, password: result.temporaryPassword, reason: 'reset' });
-                    }
-                    if (result.signedOutSessions === null) {
-                        showToast(`Password reset for ${name}, but their sessions could not be signed out right now.`, 'warning');
-                    } else if (!result.temporaryPassword) {
-                        showToast(`Password reset for ${name}.${sessionsText(result.signedOutSessions)} They must change it at their next sign-in.`);
-                    }
+            <SendInviteDialog
+                key={`invite-${inviteTarget?.user.id ?? 'none'}-${inviteTarget?.error ? 'failed' : 'menu'}`}
+                user={inviteTarget?.user ?? null}
+                initialError={inviteTarget?.error ?? null}
+                onClose={() => setInviteTarget(null)}
+                onSent={(result: SendInviteResult) => {
+                    setInviteTarget(null);
+                    const name = userLabel(result.user);
+                    showToast(
+                        result.purpose === 'invite'
+                            ? `Invite emailed to ${result.sentTo}. ${name} can set a password from it within 72 hours.`
+                            : `Password reset link emailed to ${result.sentTo}. It works once, within 72 hours.`,
+                    );
                 }}
             />
-
-            <TemporaryPasswordDialog info={tempPassword} onClose={() => setTempPassword(null)} />
 
             <AppToast
                 open={toast.open}

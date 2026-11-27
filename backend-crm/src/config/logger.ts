@@ -11,6 +11,13 @@ export const LOG_REDACT_PATHS: readonly string[] = [
     '*.password',
     'passwordHash',
     '*.passwordHash',
+    'currentPassword',
+    '*.currentPassword',
+    'newPassword',
+    '*.newPassword',
+    // Emailed set-password links (auth/invite.service.ts): the token is a credential until it is used.
+    'token',
+    '*.token',
     'req.headers.authorization',
     'req.headers.cookie',
     'res.headers["set-cookie"]',

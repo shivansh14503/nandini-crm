@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { createUserSchema, listUsersQuerySchema, resetPasswordSchema, updateUserSchema, userIdParamSchema } from './userAdmin.validator.js';
+import { createUserSchema, listUsersQuerySchema, updateUserSchema, userIdParamSchema } from './userAdmin.validator.js';
 import { normalizeUsername, usernameIssue, USERNAME_MAX_LENGTH } from './username.js';
 
-const base = { username: 'palak.sharma', firstName: 'palak', role: 'Sales Executive' };
+const base = { username: 'palak.sharma', firstName: 'palak', role: 'Sales Executive', email: 'palak@nandiniinfosys.com' };
 const firstIssue = (result: { success: boolean; error?: { issues: { path: PropertyKey[]; message: string }[] } }) => result.error?.issues[0];
 
 describe('username rules', () => {
@@ -59,7 +59,14 @@ describe('createUserSchema', () => {
         assert.equal(parsed.email, 'palak@nandiniinfosys.com');
         assert.equal(parsed.mobile, '+919811234567');
         assert.equal(parsed.officePhone, null);
-        assert.equal(parsed.password, undefined);
+        assert.equal('password' in parsed, false);
+    });
+    it('requires a work email (the invite is sent there)', () => {
+        for (const email of [undefined, null, '', '   ']) {
+            const issue = firstIssue(createUserSchema.safeParse({ ...base, email }));
+            assert.deepEqual(issue?.path, ['email'], String(email));
+            assert.match(issue?.message ?? '', /Work email is required/);
+        }
     });
     it('requires a first name and a role', () => {
         assert.deepEqual(firstIssue(createUserSchema.safeParse({ ...base, firstName: ' ' }))?.path, ['firstName']);
@@ -68,17 +75,15 @@ describe('createUserSchema', () => {
         assert.equal(firstIssue(createUserSchema.safeParse({ ...base, department: 'x'.repeat(51) }))?.message, 'Department cannot exceed 50 characters.');
         assert.equal(firstIssue(createUserSchema.safeParse({ ...base, jobTitle: 'x'.repeat(101) }))?.message, 'Job title cannot exceed 100 characters.');
     });
-    it('checks email, phone, manager id and password shapes', () => {
+    it('checks email, phone and manager id shapes', () => {
         assert.deepEqual(firstIssue(createUserSchema.safeParse({ ...base, email: 'nope' }))?.path, ['email']);
         assert.deepEqual(firstIssue(createUserSchema.safeParse({ ...base, mobile: '123' }))?.path, ['mobile']);
         assert.deepEqual(firstIssue(createUserSchema.safeParse({ ...base, reportsToId: 'abc' }))?.path, ['reportsToId']);
         assert.deepEqual(firstIssue(createUserSchema.safeParse({ ...base, reportsToId: 0 }))?.path, ['reportsToId']);
         assert.equal(createUserSchema.parse({ ...base, reportsToId: '' }).reportsToId, null);
-        assert.deepEqual(firstIssue(createUserSchema.safeParse({ ...base, password: '' }))?.path, ['password']);
-        assert.deepEqual(firstIssue(createUserSchema.safeParse({ ...base, password: 'a1'.repeat(65) }))?.path, ['password']);
     });
-    it('refuses unknown keys (no setting isActive, mustChangePassword or a hash directly)', () => {
-        for (const key of ['isActive', 'mustChangePassword', 'passwordHash', 'createdBy', 'id']) {
+    it('refuses unknown keys (no password, isActive, invitePending or a hash set directly)', () => {
+        for (const key of ['password', 'isActive', 'invitePending', 'mustChangePassword', 'passwordHash', 'createdBy', 'id']) {
             const result = createUserSchema.safeParse({ ...base, [key]: true });
             assert.equal(result.success, false, key);
             assert.equal(result.error?.issues[0]?.code, 'unrecognized_keys', key);
@@ -98,7 +103,7 @@ describe('updateUserSchema', () => {
         assert.deepEqual(firstIssue(updateUserSchema.safeParse({ role: '' }))?.path, ['role']);
     });
     it('never changes the username or other server-owned columns', () => {
-        for (const key of ['username', 'password', 'isActive', 'mustChangePassword', 'deactivatedAt']) {
+        for (const key of ['username', 'password', 'isActive', 'invitePending', 'deactivatedAt']) {
             assert.equal(updateUserSchema.safeParse({ [key]: 'x' }).success, false, key);
         }
         assert.equal(updateUserSchema.safeParse({ onLeave: 'yes' }).success, false);
@@ -106,11 +111,6 @@ describe('updateUserSchema', () => {
 });
 
 describe('other schemas', () => {
-    it('reset password: optional password, strict', () => {
-        assert.deepEqual(resetPasswordSchema.parse({}), {});
-        assert.deepEqual(resetPasswordSchema.parse({ password: 'Temp1234' }), { password: 'Temp1234' });
-        assert.equal(resetPasswordSchema.safeParse({ password: 'Temp1234', notify: true }).success, false);
-    });
     it('id param', () => {
         assert.deepEqual(userIdParamSchema.parse({ id: '12' }), { id: 12 });
         assert.equal(userIdParamSchema.safeParse({ id: 'x' }).success, false);

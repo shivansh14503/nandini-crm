@@ -158,6 +158,8 @@ const ACTION_LABELS: Record<string, string> = {
     LEDGER_VERIFY: 'Integrity check',
     PASSWORD_CHANGE: 'Password changed',
     PASSWORD_RESET: 'Password reset',
+    INVITE_SENT: 'Set-password link sent',
+    PASSWORD_SET: 'Password set from link',
     SESSION_REVOKE: 'Session signed out',
     ENROL: 'Calendar sync started',
     STOP: 'Calendar sync stopped',
@@ -459,6 +461,14 @@ export function summarize(action: string, module: string, changes: unknown, labe
             return 'Changed their password';
         case 'PASSWORD_RESET':
             return `Reset the password${c.generated === true ? ' (temporary password)' : ''}`;
+        case 'INVITE_SENT': {
+            const what = c.purpose === 'reset' ? 'password reset link' : 'invite link';
+            if (c.email === 'failed') return `Tried to email a ${what} (the email could not be sent)`;
+            if (c.email === 'skipped') return `Tried to email a ${what} (email is turned off)`;
+            return `Emailed a ${what}`;
+        }
+        case 'PASSWORD_SET':
+            return c.purpose === 'reset' ? 'Set a new password from a reset link' : 'Set their password from the invite link';
         case 'SESSION_REVOKE': {
             if (c.scope !== 'others') return 'Signed out one of their other sessions';
             const signedOut = count(c.signedOutSessions);

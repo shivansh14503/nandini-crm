@@ -77,27 +77,24 @@ export function passwordPolicyIssue(newPassword: string, ctx: PasswordPolicyCont
 
 // ── Who sets the password (frontend only) ────────────────────────────────────────────────────────────────────────
 
-/** `self`: people changing their own password (My Profile). `admin`: an admin setting someone's (Admin › Users). */
-export type PasswordAudience = 'self' | 'admin';
-
 /**
- * The rules that apply when an admin sets someone's password: worded for the person being set up, and without
- * "different from your current password" (the admin doesn't know it; the API doesn't check it there).
+ * `self`: people changing their own password (My Profile), every rule. `link`: setting a password from an emailed
+ * invite / reset link (/set-password): no "different from your current password" (nothing current is typed there; the
+ * API still checks it for a reset link and answers on the field).
  */
-export const ADMIN_PASSWORD_RULES: readonly PasswordRule[] = PASSWORD_RULES.filter((rule) => rule.key !== 'notCurrent').map((rule) =>
-    rule.key === 'notUsername'
-        ? { ...rule, label: 'Not the username', message: 'Password cannot be the same as the username.' }
-        : rule,
-);
+export type PasswordAudience = 'self' | 'link';
 
-/** The checklist rules for who is setting the password. */
+/** The rules of the set-password page (no current password is typed there). */
+export const LINK_PASSWORD_RULES: readonly PasswordRule[] = PASSWORD_RULES.filter((rule) => rule.key !== 'notCurrent');
+
+/** The checklist rules for where the password is being set. */
 export function passwordRulesFor(audience: PasswordAudience): readonly PasswordRule[] {
-    return audience === 'admin' ? ADMIN_PASSWORD_RULES : PASSWORD_RULES;
+    return audience === 'link' ? LINK_PASSWORD_RULES : PASSWORD_RULES;
 }
 
-/** The first rule a password set by an admin breaks, or null. */
-export function adminPasswordIssue(password: string, username: string): string | null {
-    return firstIssue(ADMIN_PASSWORD_RULES, password, { username });
+/** The first rule a password set from an emailed link breaks, or null. */
+export function linkPasswordIssue(password: string, username: string): string | null {
+    return firstIssue(LINK_PASSWORD_RULES, password, { username });
 }
 
 // ── Strength hint (frontend only; the API enforces just the rules above) ─────────────────────────────────────────

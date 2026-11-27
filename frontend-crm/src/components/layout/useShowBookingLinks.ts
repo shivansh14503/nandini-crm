@@ -9,6 +9,6 @@ import { useBookingAccess } from '@/hooks/queries/useBookingLinks';
  */
 export function useShowBookingLinks(): boolean {
     const { user } = useAuth();
-    const { data } = useBookingAccess({ enabled: Boolean(user) && !user?.mustChangePassword });
+    const { data } = useBookingAccess({ enabled: Boolean(user) });
     return Boolean(data && ((data.enabled && (data.canCreate || data.isAdmin)) || data.ownsLinks));
 }

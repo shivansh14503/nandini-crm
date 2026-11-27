@@ -50,8 +50,6 @@ export interface LoginResult {
 
 export interface ChangePasswordResult {
     passwordChangedAt: string;
-    /** Always false after a change: a temporary password (new user, admin reset) has now been replaced. */
-    mustChangePassword: false;
     /**
      * How many of the user's other sessions were signed out, or null when they could not be (Redis unavailable or
      * failing): the password is changed, but the user should sign out other sessions again from My Profile.
@@ -59,24 +57,21 @@ export interface ChangePasswordResult {
     signedOutSessions: number | null;
 }
 
-export interface ChangePasswordOutcome {
-    result: ChangePasswordResult;
-    /**
-     * A re-issued token for the same session (same jti) without the `mcp` claim, when the session or the account was
-     * flagged to change its password; the controller sets it as the auth cookie. Undefined otherwise.
-     */
-    token?: string;
-}
-
 const SESSION_ENDED = 'Your account was not found. Please sign in again.';
 
 const accountInactive = () =>
     new HttpError('This account has been deactivated. Contact your administrator.', StatusCodes.FORBIDDEN, { code: 'ACCOUNT_INACTIVE' });
 
-const currentPasswordRequired = () => {
-    const message = 'Current password is required.';
-    return new HttpError(message, StatusCodes.BAD_REQUEST, { code: 'VALIDATION_ERROR', errors: [{ message, path: ['currentPassword'] }] });
-};
+/**
+ * The password typed was right, but the account is still Invited (it never set a password from its link: a user who
+ * still had a temporary password when those were retired). Only said after a correct password, like ACCOUNT_INACTIVE.
+ */
+const invitePending = () =>
+    new HttpError(
+        'Your account isn’t set up yet. Use the link in your invite email to set your password, or ask your administrator to send a new invite.',
+        StatusCodes.FORBIDDEN,
+        { code: 'INVITE_PENDING' },
+    );
 
 const wrongPassword = () => {
     const message = 'Current password is incorrect.';
@@ -121,6 +116,18 @@ export const authService = {
             throw accountInactive();
         }
 
+        if (user.invitePending) {
+            void auditService.enqueue({
+                entityType: 'User',
+                entityId: String(user.id),
+                action: 'LOGIN_FAILED',
+                changedBy: user.username,
+                actor: { id: user.id, role: user.role },
+                changes: { ip: context.ip, reason: 'Invite not accepted yet' },
+            });
+            throw invitePending();
+        }
+
         const rehashed = needsRehash ? await hashPassword(credentials.password) : null;
         await prisma.user.update({
             where: { id: user.id },
@@ -133,17 +140,15 @@ export const authService = {
         const authUser: AuthUser = { id: user.id, username: user.username, role: user.role };
         const jti = randomUUID();
         const tracked = await sessionService.create(user.id, jti, context);
-        // Read again after the session exists: an admin deactivation or password reset that committed while the password
-        // was being checked ran its revokeAll before this session was recorded, so it is caught here instead. One that
-        // commits after this read revokes the session itself (its revokeAll runs after its commit).
-        const fresh = await prisma.user.findUnique({ where: { id: user.id }, select: { isActive: true, mustChangePassword: true, passwordHash: true } });
+        // Read again after the session exists: a deactivation or a password set from a link that committed while the
+        // password was being checked ran its revokeAll before this session was recorded, so it is caught here instead.
+        // One that commits after this read revokes the session itself (its revokeAll runs after its commit).
+        const fresh = await prisma.user.findUnique({ where: { id: user.id }, select: { isActive: true, passwordHash: true } });
         if (!fresh || !fresh.isActive || fresh.passwordHash !== (rehashed ?? user.passwordHash)) {
             if (tracked) await sessionService.revoke(user.id, jti);
             if (fresh && !fresh.isActive) throw accountInactive();
             throw new HttpError(INVALID_CREDENTIALS, StatusCodes.UNAUTHORIZED, { code: 'INVALID_CREDENTIALS' });
         }
-        // A new user or one an admin reset: the token carries `mcp`, so only the change-password screen works.
-        const mustChangePassword = fresh.mustChangePassword;
         void auditService.enqueue({
             entityType: 'User',
             entityId: String(user.id),
@@ -154,7 +159,7 @@ export const authService = {
         });
 
         // The token carries only { id, username, role }; the response user also has the name and photo (as /me).
-        return { user: toAuthMeDto({ ...user, mustChangePassword }), token: tokenService.generateToken(authUser, { jti, tracked, mustChangePassword }) };
+        return { user: toAuthMeDto(user), token: tokenService.generateToken(authUser, { jti, tracked }) };
     },
 
     /** GET /api/auth/me: the signed-in user read from the database (name and photo for the navbar). */
@@ -165,40 +170,23 @@ export const authService = {
     },
 
     /**
-     * POST /api/auth/change-password (My Profile › Security). Checks the current password (not asked for on the
-     * first-login / forced change, when the session's `mcp` claim and the stored flag are both set) (bcrypt or a legacy
-     * plain-text row) and the password rules, stores the new bcrypt hash with `passwordChangedAt`, audits
-     * PASSWORD_CHANGE (no password in the entry), then signs out every other session of the user, keeping this one.
-     * Also clears `mustChangePassword` (same transaction); when it or the session's `mcp` claim was set, a token for the
-     * same session without the claim is returned for the cookie, and the session's Redis expiry restarts with it.
-     * 403 ACCOUNT_INACTIVE for a deactivated user (nothing is changed and no token is issued).
+     * POST /api/auth/change-password (My Profile › Security). Checks the current password (bcrypt or a legacy plain-text
+     * row) and the password rules, stores the new bcrypt hash with `passwordChangedAt`, audits PASSWORD_CHANGE (no
+     * password in the entry), then signs out every other session of the user, keeping this one.
+     * 403 ACCOUNT_INACTIVE for a deactivated user (nothing is changed).
      */
-    async changePassword(user: AuthUser, session: AuthSession, input: ChangePasswordInput): Promise<ChangePasswordOutcome> {
+    async changePassword(user: AuthUser, session: AuthSession, input: ChangePasswordInput): Promise<ChangePasswordResult> {
         const row = await prisma.user.findUnique({
             where: { id: user.id },
-            select: { id: true, username: true, role: true, isActive: true, passwordHash: true, passwordChangedAt: true, mustChangePassword: true },
+            select: { id: true, username: true, isActive: true, passwordHash: true, passwordChangedAt: true },
         });
         if (!row) throw HttpError.unauthorized(SESSION_ENDED);
-        // A deactivated user whose session outlived the deactivation (Redis down, an untracked token) must not change the
-        // password, nor get the fresh token below.
+        // A deactivated user whose session outlived the deactivation (Redis down, an untracked token) must not change it.
         if (!row.isActive) throw accountInactive();
 
-        // First login / forced change: this session was opened moments ago with the temporary password (its token carries
-        // `mcp`) and the account is still flagged, so the temporary password isn't asked for again. Anywhere else the
-        // current password is required.
-        const forced = session.mustChangePassword && row.mustChangePassword;
-        const currentPassword = input.currentPassword ?? '';
-        if (!forced || currentPassword !== '') {
-            if (currentPassword === '') throw currentPasswordRequired();
-            const { valid } = await verifyPassword(currentPassword, row.passwordHash);
-            if (!valid) throw wrongPassword();
-        }
-        const issue =
-            passwordPolicyIssue(input.newPassword, { username: row.username, currentPassword }) ??
-            // Without a typed current password, "different from the current one" is checked against the stored hash.
-            (currentPassword === '' && (await verifyPassword(input.newPassword, row.passwordHash)).valid
-                ? 'New password must be different from your temporary password.'
-                : null);
+        const { valid } = await verifyPassword(input.currentPassword, row.passwordHash);
+        if (!valid) throw wrongPassword();
+        const issue = passwordPolicyIssue(input.newPassword, { username: row.username, currentPassword: input.currentPassword });
         if (issue) {
             throw new HttpError(issue, StatusCodes.BAD_REQUEST, { code: 'WEAK_PASSWORD', errors: [{ message: issue, path: ['newPassword'] }] });
         }
@@ -206,45 +194,31 @@ export const authService = {
         // Hashed before the transaction: bcrypt takes ~a quarter second and needs no row lock.
         const passwordHash = await hashPassword(input.newPassword);
         const passwordChangedAt = new Date();
-        const wasRequired = await runInTransaction(async (tx) => {
+        await runInTransaction(async (tx) => {
             // The same per-user lock as profile writes: two concurrent changes from the old password must not both win.
             await acquireLocks(tx, [`user:id:${row.id}`]);
-            const current = await tx.user.findUnique({
-                where: { id: row.id },
-                select: { isActive: true, passwordHash: true, passwordChangedAt: true, mustChangePassword: true },
-            });
+            const current = await tx.user.findUnique({ where: { id: row.id }, select: { isActive: true, passwordHash: true, passwordChangedAt: true } });
             if (!current) throw HttpError.unauthorized(SESSION_ENDED);
             if (!current.isActive) throw accountInactive();
             // Changed since it was checked above (another change, or a legacy row rehashed at sign-in): check again.
-            if (current.passwordHash !== row.passwordHash && (currentPassword === '' || !(await verifyPassword(currentPassword, current.passwordHash)).valid)) {
+            if (current.passwordHash !== row.passwordHash && !(await verifyPassword(input.currentPassword, current.passwordHash)).valid) {
                 throw wrongPassword();
             }
-            await tx.user.update({ where: { id: row.id }, data: { passwordHash, passwordChangedAt, mustChangePassword: false } });
+            await tx.user.update({ where: { id: row.id }, data: { passwordHash, passwordChangedAt } });
             await auditService.record(tx, {
                 entityType: 'User',
                 entityId: String(row.id),
                 action: 'PASSWORD_CHANGE',
                 changedBy: row.username,
-                changes: {
-                    passwordChangedAt: { from: current.passwordChangedAt?.toISOString() ?? null, to: passwordChangedAt.toISOString() },
-                    // Not `mustChangePassword`: keys ending in "Password" are redacted from audit entries.
-                    ...(current.mustChangePassword ? { passwordChangeRequired: { from: true, to: false } } : {}),
-                },
+                changes: { passwordChangedAt: { from: current.passwordChangedAt?.toISOString() ?? null, to: passwordChangedAt.toISOString() } },
             });
-            return current.mustChangePassword;
         });
 
         // After the commit: a stolen session must not outlive the password it was opened with. The request's own
         // session stays signed in (untracked sessions aren't in Redis, so there is nothing to keep). null tells the
         // user the others could not be signed out, rather than reporting 0 as if there were none.
         const signedOutSessions = await sessionService.revokeAllExcept(row.id, session.jti);
-        const result: ChangePasswordResult = { passwordChangedAt: passwordChangedAt.toISOString(), mustChangePassword: false, signedOutSessions };
-        if (!wasRequired && !session.mustChangePassword) return { result };
-
-        // Same jti (so the Redis session and My Profile's "this device" stay the same), no `mcp`, the current role.
-        if (session.tracked) await sessionService.refresh(row.id, session.jti);
-        const token = tokenService.generateToken({ id: row.id, username: row.username, role: row.role }, { jti: session.jti, tracked: session.tracked });
-        return { result, token };
+        return { passwordChangedAt: passwordChangedAt.toISOString(), signedOutSessions };
     },
 
     async logout(user: AuthUser, session: AuthSession): Promise<void> {

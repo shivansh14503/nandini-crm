@@ -18,7 +18,7 @@
 | **3. PDF generation** | Nov 6 – Nov 12 | PDF templates and assets, Puppeteer renderer with semaphore + Redis cache; then the drag-and-drop block builder (`documentJson`), saved library items; scoped list indexes; assignee clean-up |
 | **4. Numbering, filters, data quality** | Nov 13 – Nov 15 | Document series (company prefix, financial year, per-module rules, gap-free counters); table filters (recent/saved); trade name, shared registration type, field locking policy |
 | **5. Masters & naming** | Nov 16 – Nov 18 | City master (seeded from ISO data, admin-managed, city ids on addresses with name write-through); uppercase organization/trade names; dropdown labels = stored values; UI-name alignment script; master view and table polish |
-| **17. User profile** | Nov 26 | My Profile (profile, photo, password, signed-in sessions, notifications and preferences, connected calendars); Admin › Users (add / edit / deactivate, temporary passwords with must-change-password); Admin › Company formats (company-wide date, time and number display formats on every screen, PDFs, the morning email, bell texts and the audit log; legacy styles until the first save) |
+| **17. User profile** | Nov 26 | My Profile (profile, photo, password, signed-in sessions, notifications and preferences, connected calendars); Admin › Users (add / edit / deactivate, emailed invite and password reset links, Invited / Active status); Admin › Company formats (company-wide date, time and number display formats on every screen, PDFs, the morning email, bell texts and the audit log; legacy styles until the first save) |
 
 ### Current capability snapshot
 
@@ -705,6 +705,22 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
       gains `jobTitle`, `reportsToId`, `mustChangePassword`, `createdBy`, `deactivatedAt`. Audited as the acting admin:
       User `CREATE` / `UPDATE` / `STATUS_CHANGE` and the new `PASSWORD_RESET` (SECURITY, NOTICE). Other screens'
       avatars are unchanged in this PR. Out-of-office dates are Phase 3 (only the on-leave switch here).
+      *Temporary passwords and must-change-password were replaced on 2026-11-27 by emailed set-password links (next
+      item).*
+- [x] **Invite links instead of temporary passwords** (2026-11-27) — adding a user emails their work address (now
+      required) a one-time link `${APP_PUBLIC_URL}/set-password?token=…` (256-bit token, only its SHA-256 stored in the
+      new `UserInvites` table, 72 h, single use). The public `/set-password` page asks for the new password twice with
+      the app's rules (no current password, no sign-in), then signs the user in and opens the dashboard. Admin › Users
+      shows **Invited** / Active (plus "Invite expired" / "Invite not sent" / "Reset link sent"), and a row action
+      **Resend invite** (an Invited user; also renews an expired link) or **Send password reset link** (an active
+      account; the current password works until the link is used, which signs them out everywhere), each revoking older
+      links. A failed email is shown to the admin with the mail server's reason (also right after Add user). Public
+      routes `POST /api/auth/invite/verify` and `/invite/accept`: one generic `INVALID_INVITE` for every bad link,
+      constant-time hash compare, 30 / 15 min per IP, tokens never logged. Removed: temporary passwords, the
+      `mustChangePassword` column (users who still had one become Invited and need an invite), the `mcp` claim and
+      `403 PASSWORD_CHANGE_REQUIRED`, `POST /admin/users/:id/reset-password` (now `/send-invite`). New audit actions
+      `INVITE_SENT`, `PASSWORD_SET`. Deploy: `npm run db:deploy`; email must be on (`MAIL_ENABLED`, `SMTP_*`) and
+      `APP_PUBLIC_URL` set to the CRM's public address.
 - [x] **Profile Phase 3: Notifications & preferences** (2026-11-26) — a **Notifications** tab on My Profile
       (`/profile?tab=notifications`, not in Form Builder; `GET` / `PATCH /api/me/preferences`), stored in a new 1:1
       `UserPreference` table (no row = defaults, so nothing is backfilled). A user can turn off each bell kind

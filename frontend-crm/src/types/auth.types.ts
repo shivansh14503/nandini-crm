@@ -8,12 +8,6 @@ export interface User {
     lastName?: string | null;
     /** Relative URL of the profile photo (`/api/user-photos/<id>`), or null when there is none. */
     photoUrl?: string | null;
-    /**
-     * Set by an admin (new user, password reset): until the password is changed, the API refuses everything but
-     * sign-out, /auth/me, My Profile and the password change (403 PASSWORD_CHANGE_REQUIRED), and the app keeps the
-     * user on My Profile › Security.
-     */
-    mustChangePassword?: boolean;
 }
 
 export interface LoginPayload {
@@ -22,8 +16,7 @@ export interface LoginPayload {
 }
 
 export interface ChangePasswordPayload {
-    /** Left out on the first-login / forced change (the temporary password was just used to sign in). */
-    currentPassword?: string;
+    currentPassword: string;
     newPassword: string;
 }
 
@@ -31,8 +24,23 @@ export interface ChangePasswordResult {
     passwordChangedAt: string;
     /** How many of the user's other sessions were signed out; null when they could not be (sign them out again). */
     signedOutSessions: number | null;
-    /** Always false after a change (the session's cookie is re-issued without the must-change claim). */
-    mustChangePassword?: boolean;
+}
+
+/** What an emailed set-password link is for: a new user's invite, or an admin-sent password reset. */
+export type SetPasswordLinkPurpose = 'invite' | 'reset';
+
+/** POST /api/auth/invite/verify: who the link is for. */
+export interface SetPasswordLinkInfo {
+    username: string;
+    /** First name, else the username. */
+    name: string;
+    purpose: SetPasswordLinkPurpose;
+    expiresAt: string;
+}
+
+export interface AcceptSetPasswordLinkPayload {
+    token: string;
+    newPassword: string;
 }
 
 export interface AuthState {

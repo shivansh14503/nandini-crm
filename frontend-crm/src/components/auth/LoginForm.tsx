@@ -69,9 +69,8 @@ export function LoginForm() {
 
         setLoading(true);
         try {
-            const signedIn = await login({ username: trimmedUsername, password });
-            // A temporary password (new user, admin reset) must be changed before anything else; otherwise the dashboard.
-            router.push(signedIn.mustChangePassword ? ROUTES.PROFILE_SECURITY : ROUTES.DASHBOARD);
+            await login({ username: trimmedUsername, password });
+            router.push(ROUTES.DASHBOARD);
         } catch (err: unknown) {
             const message = err instanceof Error ? err.message : 'Login failed. Please try again.';
             setError(message);

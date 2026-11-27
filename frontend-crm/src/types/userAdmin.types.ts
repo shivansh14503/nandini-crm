@@ -1,3 +1,5 @@
+import type { SetPasswordLinkPurpose } from './auth.types';
+
 /**
  * Admin › Users (`/api/admin/users`, admin roles only). Mirrors backend-crm/src/modules/user-admin (route header
  * comment = source of truth).
@@ -49,7 +51,10 @@ export interface AdminUserDto {
     onLeave: boolean;
     /** The user's own out-of-office range (My Profile, inclusive `YYYY-MM-DD` days); null when unset or ended. Admins only see it. */
     outOfOffice: { from: string; to: string; message: string | null } | null;
-    mustChangePassword: boolean;
+    /** "Invited": added, but hasn't set a password from the emailed link yet (can't sign in until then). */
+    invitePending: boolean;
+    /** The newest emailed set-password link still outstanding (it may have expired); null when none. */
+    invite: AdminUserInvite | null;
     lastLoginAt: string | null;
     passwordChangedAt: string | null;
     createdAt: string;
@@ -114,7 +119,8 @@ export interface CreateAdminUserPayload {
     username: string;
     firstName: string;
     lastName?: string;
-    email?: string;
+    /** Required: the invite to set a password is emailed here. */
+    email: string;
     allowOtherDomain?: boolean;
     role: string;
     department?: string;
@@ -123,7 +129,6 @@ export interface CreateAdminUserPayload {
     mobile?: string;
     officePhone?: string;
     isGroupUser?: boolean;
-    password?: string;
 }
 
 /** PATCH /api/admin/users/:id: only the keys that changed; '' (or null) clears an optional field. */
@@ -147,10 +152,22 @@ export type AdminUserUpdateResult = AdminUserDto & {
     signedOutSessions?: number | null;
 };
 
+export interface AdminUserInvite {
+    purpose: SetPasswordLinkPurpose;
+    sentAt: string;
+    expiresAt: string;
+    /** Past `expiresAt`: the link no longer works. */
+    expired: boolean;
+}
+
+/** The invite email sent when a user is added. The user is added even when it failed (`error` says why). */
+export type InviteEmailOutcome =
+    | { status: 'sent'; purpose: SetPasswordLinkPurpose; sentTo: string; expiresAt: string }
+    | { status: 'failed' | 'mail_disabled'; purpose: SetPasswordLinkPurpose; sentTo: string; error: string };
+
 export interface CreateAdminUserResult {
     user: AdminUserDto;
-    /** Only when the API generated the password; shown once, never stored or logged. */
-    temporaryPassword: string | null;
+    invite: InviteEmailOutcome;
 }
 
 /** POST /:id/deactivate and /:id/activate. */
@@ -159,7 +176,10 @@ export type AdminUserStatusResult = AdminUserDto & {
     signedOutSessions?: number | null;
 };
 
-export interface ResetPasswordResult {
-    temporaryPassword: string | null;
-    signedOutSessions: number | null;
+/** POST /:id/send-invite: the invite again (Invited user) or a password reset link (active account). */
+export interface SendInviteResult {
+    user: AdminUserDto;
+    purpose: SetPasswordLinkPurpose;
+    sentTo: string;
+    expiresAt: string;
 }

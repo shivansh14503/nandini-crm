@@ -86,7 +86,7 @@ async function fetchBinary(endpoint: string, init: RequestInit & { accept: strin
         throw new ApiClientError('Could not reach the server. Check your connection and try again.', undefined, { message: 'Network error' });
     }
     if (!response.ok) {
-        // Same app-wide handling as apiClient (a 401 ends the session, a 403 PASSWORD_CHANGE_REQUIRED locks the app).
+        // Same app-wide handling as apiClient (a 401 ends the session).
         const error = await parseError(response);
         notifyApiError(error);
         throw error;

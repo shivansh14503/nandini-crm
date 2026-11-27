@@ -2,6 +2,7 @@ import { OUT_OF_OFFICE_SELECT, outOfOfficeOf, type OutOfOfficeColumns, type OutO
 import { isoOrNull, photoUrlOf, resolveNameParts, USER_REF_SELECT } from '../profile/profile.dto.js';
 import { emailIssueFor, holdsAddress, type UserEmailIssue } from '../users/userEmail.service.js';
 import { roleAccess, type RoleAccess } from './roles.js';
+import type { InvitePurpose } from '../auth/invite.token.js';
 
 /**
  * What /api/admin/users returns about a user. No database access here, so pure code and tests can use it. Mirrored by
@@ -25,7 +26,7 @@ export const ADMIN_USER_SELECT = {
     isActive: true,
     isGroupUser: true,
     onLeave: true,
-    mustChangePassword: true,
+    invitePending: true,
     lastLoginAt: true,
     passwordChangedAt: true,
     createdAt: true,
@@ -35,6 +36,8 @@ export const ADMIN_USER_SELECT = {
     // Shown, never edited, here: the user sets it in My Profile › Notifications.
     preference: { select: OUT_OF_OFFICE_SELECT },
     reportsTo: { select: { ...USER_REF_SELECT, isActive: true } },
+    // The newest set-password link not used or revoked (it may have expired): the "Invited" / "Reset link sent" chip.
+    invites: { where: { usedAt: null, revokedAt: null }, orderBy: { id: 'desc' }, take: 1, select: { purpose: true, createdAt: true, expiresAt: true } },
     // Active direct reports (an inactive one no longer reports to anybody in practice).
     _count: { select: { directReports: { where: { isActive: true } } } },
 } as const;
@@ -55,7 +58,7 @@ export interface AdminUserRow {
     isActive: boolean;
     isGroupUser: boolean;
     onLeave: boolean;
-    mustChangePassword: boolean;
+    invitePending: boolean;
     lastLoginAt: Date | null;
     passwordChangedAt: Date | null;
     createdAt: Date;
@@ -64,7 +67,17 @@ export interface AdminUserRow {
     photo: { id: string } | null;
     preference: OutOfOfficeColumns | null;
     reportsTo: { id: number; fullName: string; username: string; isActive: boolean } | null;
+    invites: { purpose: string; createdAt: Date; expiresAt: Date }[];
     _count: { directReports: number };
+}
+
+/** The user's newest set-password link that is neither used nor revoked. */
+export interface AdminUserInviteDto {
+    purpose: InvitePurpose;
+    sentAt: string;
+    expiresAt: string;
+    /** Past `expiresAt`: the link no longer works (Resend invite sends a new one). */
+    expired: boolean;
 }
 
 export interface AdminUserRefDto {
@@ -96,7 +109,10 @@ export interface AdminUserDto {
     onLeave: boolean;
     /** Set by the user in My Profile (read-only here); null when unset or ended before today (business timezone). */
     outOfOffice: OutOfOfficeDto | null;
-    mustChangePassword: boolean;
+    /** "Invited": added, but hasn't set a password from the emailed link yet (can't sign in until then). */
+    invitePending: boolean;
+    /** The newest link still outstanding (an invite, or a password reset link for an active user); null when none. */
+    invite: AdminUserInviteDto | null;
     lastLoginAt: string | null;
     passwordChangedAt: string | null;
     createdAt: string;
@@ -115,8 +131,9 @@ export interface EmailRuleContext {
     companyDomains: readonly string[];
 }
 
-/** `today`: the business day (`YYYY-MM-DD`), for `outOfOffice`. */
-export function toAdminUserDto(row: AdminUserRow, emailRule: EmailRuleContext, today: string): AdminUserDto {
+/** `today`: the business day (`YYYY-MM-DD`), for `outOfOffice`; `now` decides whether the link has expired. */
+export function toAdminUserDto(row: AdminUserRow, emailRule: EmailRuleContext, today: string, now: Date = new Date()): AdminUserDto {
+    const link = row.invites[0];
     return {
         id: row.id,
         username: row.username,
@@ -138,7 +155,15 @@ export function toAdminUserDto(row: AdminUserRow, emailRule: EmailRuleContext, t
         isGroupUser: row.isGroupUser,
         onLeave: row.onLeave,
         outOfOffice: outOfOfficeOf(row.preference, today),
-        mustChangePassword: row.mustChangePassword,
+        invitePending: row.invitePending,
+        invite: link
+            ? {
+                  purpose: link.purpose === 'reset' ? 'reset' : 'invite',
+                  sentAt: link.createdAt.toISOString(),
+                  expiresAt: link.expiresAt.toISOString(),
+                  expired: link.expiresAt.getTime() <= now.getTime(),
+              }
+            : null,
         lastLoginAt: isoOrNull(row.lastLoginAt),
         passwordChangedAt: isoOrNull(row.passwordChangedAt),
         createdAt: row.createdAt.toISOString(),
@@ -150,8 +175,7 @@ export function toAdminUserDto(row: AdminUserRow, emailRule: EmailRuleContext, t
 
 /**
  * The fields an admin edit can change, as compared for the audit diff and stored as the CREATE snapshot. No password
- * or hash, and no key ending in "Password" (the audit log redacts those): `passwordChangeRequired` is
- * `mustChangePassword`.
+ * or hash, and no key ending in "Password" (the audit log redacts those).
  */
 export function adminUserAuditSnapshot(row: {
     username: string;
@@ -168,7 +192,7 @@ export function adminUserAuditSnapshot(row: {
     isGroupUser: boolean;
     onLeave: boolean;
     isActive: boolean;
-    mustChangePassword: boolean;
+    invitePending: boolean;
 }) {
     return {
         username: row.username,
@@ -185,7 +209,7 @@ export function adminUserAuditSnapshot(row: {
         isGroupUser: row.isGroupUser,
         onLeave: row.onLeave,
         isActive: row.isActive,
-        passwordChangeRequired: row.mustChangePassword,
+        invitePending: row.invitePending,
     };
 }
 

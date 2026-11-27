@@ -23,13 +23,10 @@ const discardButtonSx = {
  * expiry starts blank and the dialog keeps its body while it fades out.
  */
 function ReauthForm({ username }: { username: string }) {
-    const { reauthenticate, continueToPasswordChange, endExpiredSession } = useAuth();
+    const { reauthenticate, endExpiredSession } = useAuth();
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [busy, setBusy] = useState(false);
-    // Signed in, but an admin reset the password: the page can't be saved until it is changed (the API refuses with
-    // 403), and the password-change gate replaces the page, so say so before the draft goes.
-    const [mustChange, setMustChange] = useState(false);
 
     const submit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -42,42 +39,19 @@ function ReauthForm({ username }: { username: string }) {
         setError('');
         try {
             // Same account only (the username is fixed, and AuthContext checks the id): the draft belongs to this user.
-            const outcome = await reauthenticate(password);
-            if (outcome === 'mustChangePassword') {
-                setMustChange(true);
-                setBusy(false);
-            }
+            await reauthenticate(password);
         } catch (err) {
             setError(errorMessage(err, 'Sign-in failed. Please try again.'));
             setBusy(false);
         }
     };
 
-    if (mustChange) {
-        return (
-            <>
-                <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                    <Alert severity="warning" sx={{ borderRadius: '10px', fontSize: '0.82rem' }}>
-                        An administrator reset your password. You must change it before you can keep working, and{' '}
-                        <strong>the unsaved changes on this page can&apos;t be saved</strong>: they are lost when you continue.
-                    </Alert>
-                </DialogContent>
-                <DialogActions sx={{ px: 3, pb: 2, gap: 1, flexWrap: 'wrap' }}>
-                    <Button variant="contained" onClick={continueToPasswordChange} sx={{ ...solidButtonSx, flex: { xs: 1, sm: 'none' } }}>
-                        Change password
-                    </Button>
-                </DialogActions>
-            </>
-        );
-    }
-
     return (
         <Box component="form" noValidate onSubmit={submit} sx={{ display: 'contents' }}>
             <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
                 <Typography sx={{ fontSize: '0.84rem', color: 'var(--crm-slate-700)', lineHeight: 1.55 }}>
                     You were signed out (the session expired or was ended). <strong>Your unsaved changes are still on this page.</strong>{' '}
-                    Sign in again to keep working, then save. (If an administrator reset your password, the changes can&apos;t
-                    be saved until it is changed.)
+                    Sign in again to keep working, then save.
                 </Typography>
                 <Box sx={{ minWidth: 0 }}>
                     <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--crm-slate-700)', mb: 0.5 }}>User name</Typography>
