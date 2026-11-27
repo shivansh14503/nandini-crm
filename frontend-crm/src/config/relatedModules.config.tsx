@@ -37,7 +37,7 @@ import type { Contact } from '@/types/contact.types';
 import type { Lead } from '@/types/lead.types';
 import type { Opportunity } from '@/types/opportunity.types';
 import type { ExtendedOrganization } from '@/types/organization.types';
-import type { Product } from '@/types/product.types';
+import { ACTIVE_PRODUCT_STATUS, INACTIVE_PRODUCT_STATUS, isActiveProduct, type Product } from '@/types/product.types';
 import type { Quotation } from '@/types/quotation.types';
 import type { Ticket } from '@/types/ticket.types';
 import { fmtInstantDay, getDisplayFormats } from '@/utils/formats';
@@ -393,7 +393,7 @@ export function resolveRelatedRecordsForModule(
                         id: String(li.id || matchedProduct?.id || `li-${idx}`),
                         productName: String(li.productName || matchedProduct?.productName || '-'),
                         serialNumber: String(matchedProduct?.productCode || '-'),
-                        status: matchedProduct?.isActive === false ? 'Inactive' : 'Active',
+                        status: isActiveProduct(matchedProduct) ? ACTIVE_PRODUCT_STATUS : INACTIVE_PRODUCT_STATUS,
                     };
                 });
             }
@@ -425,7 +425,7 @@ export function resolveRelatedRecordsForModule(
                                 id: String(matchedProduct?.id || li.id || key),
                                 productName: String(li.productName || matchedProduct?.productName || '-'),
                                 serialNumber: String(matchedProduct?.productCode || '-'),
-                                status: matchedProduct?.isActive === false ? 'Inactive' : 'Active',
+                                status: isActiveProduct(matchedProduct) ? ACTIVE_PRODUCT_STATUS : INACTIVE_PRODUCT_STATUS,
                             });
                         }
                     });

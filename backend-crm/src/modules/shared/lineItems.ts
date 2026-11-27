@@ -5,6 +5,7 @@ import type { OpportunityLineItem, QuotationLineItem } from '../../generated/pri
 import { HttpError } from '../../utils/httpError.js';
 import { decimalToNumber } from '../../utils/mappers.js';
 import { optionalText, requiredText } from '../../validators/common.js';
+import { isActiveProductStatus } from '../products/product.validator.js';
 
 /**
  * Line items shared by opportunities and quotations. Totals are always computed here, with the exact
@@ -125,13 +126,29 @@ export function assertTotalsMatch(sent: Record<string, unknown>, computed: LineI
     }
 }
 
-/** Keeps a line's productId only when that product exists (deleted products stay linked for history). */
-export async function resolveProductIds(tx: TransactionClient, items: readonly LineItemInput[]): Promise<Set<string>> {
+export const inactiveProductMessage = (name: string) => `${name} is Inactive in the Product Catalog and can't be added to a line item.`;
+
+/**
+ * Keeps a line's productId only when that product exists (deleted products stay linked for history). An Inactive
+ * product can't be newly added: only lines whose product is in `alreadyLinked` (the record's own saved lines, or the
+ * opportunity a quotation is made from) may keep one.
+ */
+export async function resolveProductIds(tx: TransactionClient, items: readonly LineItemInput[], alreadyLinked: ReadonlySet<string> = new Set()): Promise<Set<string>> {
     const ids = [...new Set(items.map((item) => item.productId).filter((id): id is string => Boolean(id)))];
     if (ids.length === 0) return new Set();
-    const found = await tx.product.findMany({ where: { id: { in: ids } }, select: { id: true } });
+    const found = await tx.product.findMany({ where: { id: { in: ids } }, select: { id: true, status: true, isDeleted: true, productName: true } });
+    const inactive = new Map(found.filter((row) => !row.isDeleted && !isActiveProductStatus(row.status) && !alreadyLinked.has(row.id)).map((row) => [row.id, row.productName]));
+    const issues = items.flatMap((item, index) => {
+        const name = item.productId ? inactive.get(item.productId) : undefined;
+        return name ? [{ message: inactiveProductMessage(name), path: ['lineItems', String(index), 'productName'] }] : [];
+    });
+    if (issues.length > 0) throw HttpError.badRequest(issues[0].message, issues);
     return new Set(found.map((row) => row.id));
 }
+
+/** Product ids already on saved line items (kept by `resolveProductIds` even when the product is now Inactive). */
+export const linkedProductIds = (rows: readonly { productId: string | null }[]): Set<string> =>
+    new Set(rows.map((row) => row.productId).filter((id): id is string => Boolean(id)));
 
 /** Column values for a line item row (parent FK added by the caller). */
 export function toLineItemData(item: ComputedLineItem, index: number, knownProductIds: Set<string>) {

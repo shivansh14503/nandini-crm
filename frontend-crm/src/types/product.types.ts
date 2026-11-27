@@ -38,6 +38,22 @@ export type TaxRate =
     | '18%'
     | '28%';
 
+/** Options of the fixed `product_status` dropdown. Only Admins change a product's Status. */
+export const PRODUCT_STATUSES = ['Active', 'Inactive'] as const;
+export type ProductStatus = (typeof PRODUCT_STATUSES)[number];
+export const ACTIVE_PRODUCT_STATUS: ProductStatus = 'Active';
+export const INACTIVE_PRODUCT_STATUS: ProductStatus = 'Inactive';
+/** Dropdown category of the product Status. */
+export const PRODUCT_STATUS_CATEGORY = 'product_status';
+/** Longest Inactivity Reason (same as the backend's INACTIVITY_REASON_MAX_LENGTH). */
+export const INACTIVITY_REASON_MAX_LENGTH = 500;
+/**
+ * Whether a product is Active (ignoring case and spaces). Only Active products are offered in line item pickers;
+ * a product read without a Status (an older cached copy) counts as Active.
+ */
+export const isActiveProduct = (p: { status?: string | null } | null | undefined): boolean =>
+    !p?.status || p.status.trim().toLowerCase() === ACTIVE_PRODUCT_STATUS.toLowerCase();
+
 export interface ProductFormData {
     /** Admin-defined custom field values, keyed by FormFieldDefinition.fieldKey. */
     customFields?: Record<string, unknown>;
@@ -56,6 +72,10 @@ export interface ProductFormData {
     contractCreate: string;
     description: string;
     termsAndConditions: string;
+    /** Active / Inactive. Admin only; Inactive needs `inactivityReason`. */
+    status: ProductStatus;
+    /** Asked by the deactivation dialog; set by the system (not a form input). */
+    inactivityReason: string;
 }
 
 /**
@@ -72,7 +92,9 @@ export interface ProductUsage {
 export interface Product extends ProductFormData {
     id: string;
     productCode: string;
-    isActive?: boolean;
+    /** While Inactive: when (ISO instant) and by whom (username) it was made Inactive. Empty while Active. */
+    inactiveSince?: string;
+    inactivatedBy?: string;
     createdAt: string;
     updatedAt: string;
     createdBy: string;

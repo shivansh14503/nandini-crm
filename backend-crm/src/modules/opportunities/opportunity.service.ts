@@ -8,7 +8,7 @@ import { generateEntityCode } from '../../utils/codeGenerator.js';
 import { HttpError } from '../../utils/httpError.js';
 import { daysAgo, fromDateOnly } from '../../utils/mappers.js';
 import { parsePagination } from '../../utils/pagination.js';
-import { calculateLineItems, lineItemsInclude, resolveProductIds, toLineItemData } from '../shared/lineItems.js';
+import { calculateLineItems, lineItemsInclude, linkedProductIds, resolveProductIds, toLineItemData } from '../shared/lineItems.js';
 import { asPayload, checkModulePayload, loadModuleFieldConfig, throwFieldIssues, validateModulePayload } from '../form-configs/customFieldValidator.js';
 import { assertAssigneeValid, assertRecordAccess, buildAccessScopeWhere } from '../shared/accessControl.js';
 import { findOrganizationByName, type PrefetchedLookups } from '../shared/prefetch.js';
@@ -116,9 +116,10 @@ async function resolveLinks(
 }
 
 async function replaceLineItems(tx: TransactionClient, opportunityId: string, input: OpportunityInput, computed: ReturnType<typeof calculateLineItems>): Promise<void> {
+    const saved = await tx.opportunityLineItem.findMany({ where: { opportunityId }, select: { productId: true } });
     await tx.opportunityLineItem.deleteMany({ where: { opportunityId } });
     if (computed.items.length === 0) return;
-    const knownProducts = await resolveProductIds(tx, input.lineItems);
+    const knownProducts = await resolveProductIds(tx, input.lineItems, linkedProductIds(saved));
     await tx.opportunityLineItem.createMany({
         data: computed.items.map((item, index) => ({ ...toLineItemData(item, index, knownProducts), opportunityId })),
     });

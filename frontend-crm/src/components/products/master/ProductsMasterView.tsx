@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 import InventoryOutlinedIcon from '@mui/icons-material/InventoryOutlined';
 import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
 import NewReleasesOutlinedIcon from '@mui/icons-material/NewReleasesOutlined';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlineOutlined';
+import PauseCircleOutlineIcon from '@mui/icons-material/PauseCircleOutlineOutlined';
 import { CommonMasterView } from '../../common/CommonMasterView';
 import { useTableFilter } from '../../common/TableFilter';
 import { MasterHeaderActions } from '../../common/MasterHeaderActions';
@@ -15,10 +17,10 @@ import { useSaveFlash } from '@/utils/saveFlash';
 import { DataImportModal } from '../../common/import';
 import { type DataTableFilterItem } from '../../common/DataTable';
 import { ROUTES } from '@/config/constants';
-import type { Product } from '@/types/product.types';
+import { ACTIVE_PRODUCT_STATUS, PRODUCT_STATUS_CATEGORY, type Product } from '@/types/product.types';
 import { useProducts, useBulkDeleteProducts } from '@/hooks/queries';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
-import { productTypePill, typeOfPill, type ProductFilterTab } from './types';
+import { productStatusPill, productTypePill, statusOfPill, typeOfPill, type ProductFilterTab } from './types';
 import { ProductDetailDrawer } from '../ProductDetailDrawer';
 import { useSearchScope, useSearchScopedRows } from '../../search/SearchScope';
 import { useProductColumns } from './productColumns';
@@ -87,20 +89,25 @@ export function ProductsMasterView() {
     // One pill per active Product Type option (Admin › Dropdown Manager), so removing or renaming a type there
     // removes or relabels its pill. A pill whose option was removed while selected falls back to All Products.
     const productTypes = useDropdownPillOptions('product_type', 'products');
+    // One pill per Status option (Active / Inactive, fixed), labelled as the admin names them.
+    const productStatuses = useDropdownPillOptions(PRODUCT_STATUS_CATEGORY, 'products');
     const selectedType = typeOfPill(activeTab);
     const tabType = selectedType ? productTypes.find(selectedType) : undefined;
-    const effectiveTab: ProductFilterTab = selectedType && !tabType ? 'all' : activeTab;
+    const selectedStatus = statusOfPill(activeTab);
+    const tabStatus = selectedStatus ? productStatuses.find(selectedStatus) : undefined;
+    const effectiveTab: ProductFilterTab = (selectedType && !tabType) || (selectedStatus && !tabStatus) ? 'all' : activeTab;
     const tabProducts = useMemo(() => {
         const now = new Date().getTime();
         return products.filter((p) => {
             if (tabType && !sameOption(p.type, tabType.value)) return false;
+            if (tabStatus && !sameOption(p.status || ACTIVE_PRODUCT_STATUS, tabStatus.value)) return false;
             if (effectiveTab === 'recently_added') {
                 const created = new Date(p.createdAt).getTime();
                 if (now - created > RECENTLY_ADDED_DAYS * 86400000) return false;
             }
             return true;
         });
-    }, [products, tabType, effectiveTab]);
+    }, [products, tabType, tabStatus, effectiveTab]);
 
     // Summary cards, once an admin switches them on under Admin › List Scorecards.
     const goToFirstPage = useCallback(() => setPage(0), []);
@@ -194,6 +201,12 @@ export function ProductsMasterView() {
                 icon: <InventoryOutlinedIcon sx={{ fontSize: 16 }} />,
                 count: products.length,
             },
+            ...productStatuses.options.map((option) => ({
+                id: productStatusPill(option.value),
+                label: option.label,
+                icon: sameOption(ACTIVE_PRODUCT_STATUS, option.value) ? <CheckCircleOutlineIcon sx={{ fontSize: 16 }} /> : <PauseCircleOutlineIcon sx={{ fontSize: 16 }} />,
+                count: products.filter((p) => sameOption(p.status || ACTIVE_PRODUCT_STATUS, option.value)).length,
+            })),
             ...productTypes.options.map((option) => ({
                 id: productTypePill(option.value),
                 label: option.label,
@@ -207,7 +220,7 @@ export function ProductsMasterView() {
                 count: products.filter((p) => now - new Date(p.createdAt).getTime() <= RECENTLY_ADDED_DAYS * 86400000).length,
             },
         ];
-    }, [products, productTypes]);
+    }, [products, productTypes, productStatuses]);
 
 
     return (

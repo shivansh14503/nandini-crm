@@ -18,6 +18,11 @@ export const CUSTOM_FIELD_PREFIX = `${CUSTOM_FIELDS_KEY}.`;
 
 /** Field types a spreadsheet can't carry. */
 const NOT_IMPORTABLE_TYPES = new Set(['file']);
+/**
+ * Built-in fields a spreadsheet can't set, per module: a product's Status (Admin only, Inactive needs a reason), so
+ * imported products start Active. Mirrors NOT_IMPORTABLE_FIELDS of backend-crm/src/modules/imports/importValues.ts.
+ */
+const NOT_IMPORTABLE_FIELDS: Partial<Record<CrmModuleKey, ReadonlySet<string>>> = { products: new Set(['status']) };
 
 /** The form module each import writes. */
 const ENTITY_MODULE: Record<ImportEntityType, CrmModuleKey> = {
@@ -313,7 +318,10 @@ function rowRulesFor(entity: ImportEntityType, keys: ReadonlySet<string>): Impor
 export function buildImportConfig(entity: ImportEntityType, configs: FormConfigsPayload | null | undefined): ImportEntityConfig {
     const base = IMPORT_CONFIGS[entity];
     const formModule = ENTITY_MODULE[entity];
-    const formFields = moduleFields(configs, formModule).filter((f) => f.isActive && f.isVisibleInForm && !NOT_IMPORTABLE_TYPES.has(f.fieldType));
+    const skipped = NOT_IMPORTABLE_FIELDS[formModule];
+    const formFields = moduleFields(configs, formModule).filter(
+        (f) => f.isActive && f.isVisibleInForm && !NOT_IMPORTABLE_TYPES.has(f.fieldType) && !(f.isSystem && skipped?.has(f.fieldKey)),
+    );
     if (!configs || formFields.length === 0) return base;
 
     const defaults = IMPORT_DEFAULTS[entity];
