@@ -709,7 +709,8 @@ model OpportunityLineItem {
   product     Product?    @relation(fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([opportunityId])
-  @@index([productId])
+  // Product usage counts (product.usage.ts) read distinct (productId, opportunityId) pairs; also serves lookups by productId.
+  @@index([productId, opportunityId])
 }
 
 // â”€â”€ Quotations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

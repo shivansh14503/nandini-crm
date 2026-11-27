@@ -9,6 +9,8 @@ import { ROUTES } from '@/config/constants';
 import type { Product } from '@/types/product.types';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import { fmtMoney } from '@/utils/formats';
+import { PRODUCT_USAGE_STATUSES, usageStatusOf } from '@/utils/productUsage';
+import { ProductUsageChip } from '../ProductUsage';
 
 const TAX_RATE_COLORS: Record<string, { bg: string; color: string; border: string }> = {
     '0%': { bg: 'var(--crm-green-50)', color: 'var(--crm-green-700)', border: 'var(--crm-green-200)' },
@@ -136,6 +138,25 @@ export function useProductColumns(openRecord: (record: Product) => void, product
                         <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-muted)' }}>-</Typography>
                     );
                 },
+            },
+            {
+                // Used / Unused: on any opportunity line item the viewer can see (computed by the API).
+                id: 'usage',
+                label: 'USAGE',
+                sortable: false,
+                minWidth: 100,
+                filter: {
+                    kind: 'options',
+                    label: 'Usage',
+                    options: PRODUCT_USAGE_STATUSES.map((value) => ({ value, label: value })),
+                    getValue: (p) => usageStatusOf(p.usage) ?? undefined,
+                },
+                render: (p) =>
+                    p.usage ? (
+                        <ProductUsageChip usage={p.usage} />
+                    ) : (
+                        <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-muted)' }}>-</Typography>
+                    ),
             },
             {
                 id: 'type',

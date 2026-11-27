@@ -19,6 +19,7 @@ import {
     optionsForModule,
 } from '@/utils/formConfig';
 import type { ColumnFilterSpec, FilterFieldDef, FilterOption } from './types';
+import { OPPORTUNITY_OUTCOME_FILTER_KEY, OPPORTUNITY_OUTCOMES, outcomeOfStage } from '@/utils/productUsage';
 
 /**
  * Fields shown on the Advanced tab before the user adds any (the old CRM's search form, per module). Keys are form
@@ -31,7 +32,7 @@ export const DEFAULT_FILTER_KEYS: Record<CrmModuleKey, string[]> = {
     quotations: ['quotationDate', 'validUntil', 'assignedTo', 'quoteStage', 'company', 'organizationName', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
     organizations: ['assignedTo', 'accountStatus', 'customerType', 'typeOfEntity', 'natureOfBusiness', 'leadSource', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
     contacts: ['assignedTo', 'organizationName', 'designation', 'department', 'anyNumber', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
-    products: ['category', 'type', 'taxType', 'taxRate', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
+    products: ['category', 'type', 'usage', 'taxType', 'taxRate', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
     tickets: ['dueDate', 'assignedTo', 'ticketStatus', 'ticketPriority', 'source', 'supportType', 'supportMode', 'organizationName', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
     contracts: ['status', 'assignedTo', 'contractTitle', 'contractPeriod', 'organizationName', 'startDate', 'endDate', 'renewalReminderDate', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
     activities: ['followupType', 'status', 'assignedTo', 'startAt', 'relatedTo', 'organizationName', 'createdAt', 'createdBy', 'ageDays', 'unmodifiedDays'],
@@ -104,6 +105,16 @@ function pseudoFields(module: CrmModuleKey, users: FilterOption[]): FilterFieldD
     ];
     if (module === 'leads') {
         fields.push({ key: 'converted', label: 'Converted', kind: 'boolean', getValue: (r) => record(r).status === 'Converted' });
+    }
+    if (module === 'opportunities') {
+        // Won (Closed Won) / Lost (Closed Lost) / Open (any other stage): also what a product's usage counts link to.
+        fields.push({
+            key: OPPORTUNITY_OUTCOME_FILTER_KEY,
+            label: 'Outcome',
+            kind: 'options',
+            options: OPPORTUNITY_OUTCOMES.map((value) => ({ value, label: value })),
+            getValue: (r) => outcomeOfStage(record(r).salesStage as string | undefined),
+        });
     }
     return fields;
 }

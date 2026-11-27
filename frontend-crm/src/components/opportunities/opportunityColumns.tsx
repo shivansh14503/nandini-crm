@@ -10,7 +10,9 @@ import { RecordLink } from '../common/RecordLink';
 import { documentNumberColumn, type DataTableColumn } from '../common/DataTable';
 import { ROUTES } from '@/config/constants';
 import type { Opportunity } from '@/types/opportunity.types';
-import { useQuotations } from '@/hooks/queries';
+import { useProducts, useQuotations } from '@/hooks/queries';
+import type { Product } from '@/types/product.types';
+import { OPPORTUNITY_PRODUCTS_FILTER_KEY } from '@/utils/productUsage';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import type { Quotation } from '@/types/quotation.types';
 import { formatDateTime } from '@/utils/date';
@@ -31,6 +33,7 @@ function YesNo({ value }: { value: boolean }) {
 }
 
 const NO_QUOTES: Quotation[] = [];
+const NO_PRODUCTS: Product[] = [];
 
 /**
  * The Opportunity table's columns (built-in ones; form-field columns are added by the table). Shared by the
@@ -50,6 +53,12 @@ export function useOpportunityColumns(openRecord: (record: Opportunity) => void,
         return map;
     }, [quotations]);
     const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+    // Catalogue products, for the Products filter (a product's usage counts link here filtered by its id).
+    const { data: products = NO_PRODUCTS } = useProducts(undefined, { enabled });
+    const productOptions = useMemo(
+        () => [...products].sort((a, b) => a.productName.localeCompare(b.productName)).map((p) => ({ value: p.id, label: p.productName })),
+        [products]
+    );
 
     return useMemo(
         () => [
@@ -153,6 +162,19 @@ export function useOpportunityColumns(openRecord: (record: Opportunity) => void,
                         )}
                     </Box>
                 ),
+            },
+            {
+                // The catalogue products on the deal's line items (filtered by product id).
+                id: OPPORTUNITY_PRODUCTS_FILTER_KEY,
+                label: 'PRODUCTS',
+                sortable: false,
+                defaultHidden: true,
+                minWidth: 200,
+                filter: { kind: 'options', label: 'Product', options: productOptions, getValue: (o) => (o.lineItems ?? []).map((li) => li.productId).filter(Boolean) },
+                render: (o) => {
+                    const names = [...new Set((o.lineItems ?? []).map((li) => li.productName).filter(Boolean))];
+                    return <Typography sx={plainCellSx}>{names.length ? names.join(', ') : '-'}</Typography>;
+                },
             },
             {
                 id: 'type',
@@ -305,6 +327,6 @@ export function useOpportunityColumns(openRecord: (record: Opportunity) => void,
                 render: (o) => <Typography sx={plainCellSx}>{formatDateTime(o.createdAt) || '-'}</Typography>,
             },
         ],
-        [todayStr, quotesByOpp, showNumber, openRecord]
+        [todayStr, quotesByOpp, productOptions, showNumber, openRecord]
     );
 }

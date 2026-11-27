@@ -96,6 +96,8 @@ export function EntityDetailDrawer({
     badges = [],
     headerActions,
     headerAside,
+    titleAdornment,
+    headerNote,
     tabs = [],
     formTabs,
     tabContents,
@@ -425,12 +427,14 @@ export function EntityDetailDrawer({
                                     <DoubleClickCopyText>{title}</DoubleClickCopyText>
                                 </Typography>
                                 {verified && <VerifiedIcon sx={{ fontSize: 18, color: 'var(--crm-text-blue-600)', flexShrink: 0 }} />}
+                                {titleAdornment}
                             </Box>
                             {subtitle && (
                                 <Typography noWrap sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)', fontWeight: 500, mt: 0.3 }}>
                                     {subtitle}
                                 </Typography>
                             )}
+                            {headerNote}
                         </Box>
                     </Box>
 

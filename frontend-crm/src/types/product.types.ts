@@ -58,6 +58,17 @@ export interface ProductFormData {
     termsAndConditions: string;
 }
 
+/**
+ * Opportunities whose line items carry the product (quotations don't count), each counted once, among those the
+ * viewer can see. won + lost + open = total; open is every stage but Closed Won / Closed Lost.
+ */
+export interface ProductUsage {
+    total: number;
+    won: number;
+    lost: number;
+    open: number;
+}
+
 export interface Product extends ProductFormData {
     id: string;
     productCode: string;
@@ -66,4 +77,6 @@ export interface Product extends ProductFormData {
     updatedAt: string;
     createdBy: string;
     updatedBy?: string;
+    /** Sent with list and detail reads (not with global search results). */
+    usage?: ProductUsage;
 }

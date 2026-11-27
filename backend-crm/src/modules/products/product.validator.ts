@@ -55,6 +55,8 @@ export const productListQuerySchema = z.object({
     type: csvQuery,
     isActive: booleanQuery,
     createdWithinDays: createdWithinDaysQuery,
+    /** `used`: on at least one opportunity line item the viewer can see; `unused`: on none (product.usage.ts). */
+    usage: z.enum(['used', 'unused']).optional(),
 });
 
 export const PRODUCT_SORT_FIELDS = [

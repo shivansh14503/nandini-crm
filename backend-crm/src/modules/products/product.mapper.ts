@@ -1,6 +1,7 @@
 import type { Prisma, Product } from '../../generated/prisma/client.js';
 import { decimalToString, nullable, parseCustomFields, serializeCustomFields, text, toIso } from '../../utils/mappers.js';
 import type { ProductInput } from './product.validator.js';
+import type { ProductUsage } from './product.usage.js';
 
 /** `Product` from frontend-crm/src/types/product.types.ts (prices are strings there), plus `isActive`. */
 export interface ProductDto {
@@ -28,6 +29,8 @@ export interface ProductDto {
     updatedBy: string;
     /** Admin-defined custom field values keyed by FormFieldDefinition.fieldKey. */
     customFields: Record<string, unknown>;
+    /** Opportunities using the product (list and detail reads only; see product.usage.ts). */
+    usage?: ProductUsage;
 }
 
 export function toProductDto(row: Product): ProductDto {

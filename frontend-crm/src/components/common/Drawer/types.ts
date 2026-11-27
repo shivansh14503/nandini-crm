@@ -112,6 +112,10 @@ export interface EntityDetailDrawerProps {
     defaultTabIndex?: number;
     /** Shown at the right end of the badge row (e.g. a lead's Rating box). */
     headerAside?: React.ReactNode;
+    /** Shown right after the title (e.g. a product's Used / Unused chip). */
+    titleAdornment?: React.ReactNode;
+    /** One line under the subtitle (e.g. a product's usage counts). */
+    headerNote?: React.ReactNode;
     primaryAction?: DrawerActionButtonProps;
     secondaryAction?: DrawerActionButtonProps;
     footerActions?: React.ReactNode;

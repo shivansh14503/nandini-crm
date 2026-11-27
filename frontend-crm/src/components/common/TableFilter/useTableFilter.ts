@@ -64,8 +64,11 @@ export interface TableFilterController<T = unknown> {
     lists: TableFilterLists;
     listsLoading: boolean;
     canSort: boolean;
-    /** Applies (and records as recent) a filter; one with no complete condition clears instead. */
-    apply: (criteria: FilterCriteria) => void;
+    /**
+     * Applies (and records as recent) a filter; one with no complete condition clears instead. `remember: false`
+     * skips the recent list (a filter opened from a link, not picked by the user).
+     */
+    apply: (criteria: FilterCriteria, options?: { remember?: boolean }) => void;
     clear: () => void;
     removeCondition: (key: string) => void;
     save: (name: string, criteria: FilterCriteria) => Promise<void>;
@@ -160,7 +163,7 @@ export function useFilterController<T>({ module, title, fields, rows, onSortChan
     const clean = useCallback((c: FilterCriteria) => cleanCriteria(c, fields.byKey), [fields.byKey]);
 
     const apply = useCallback(
-        (next: FilterCriteria) => {
+        (next: FilterCriteria, { remember = true }: { remember?: boolean } = {}) => {
             const cleaned = clean(next);
             const hasConditions = activeConditionCount(cleaned) > 0;
             if (cleaned.sort) onSortRef.current?.(cleaned.sort);
@@ -170,7 +173,7 @@ export function useFilterController<T>({ module, title, fields, rows, onSortChan
             }
             setCriteria(cleaned);
             // Remembering it is best-effort: the filter is already applied.
-            recordRecent.mutate(cleaned);
+            if (remember) recordRecent.mutate(cleaned);
         },
         [clean, setCriteria, recordRecent]
     );

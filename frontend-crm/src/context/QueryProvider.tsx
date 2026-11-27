@@ -64,6 +64,8 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
                 if (key) queryClient.invalidateQueries({ queryKey: auditLogKeys.all });
                 // Opportunities write their document (Documentation section): the Documents list follows them.
                 if (key === 'opportunities') queryClient.invalidateQueries({ queryKey: queryKeys.documents.all });
+                // Products show how many opportunities carry them (Usage): line item and stage changes move the counts.
+                if (key === 'opportunities') queryClient.invalidateQueries({ queryKey: queryKeys.products.all });
                 // Lead / opportunity saves write their follow-up activity (Calendar Phase 2 P2-4): every activity
                 // query (lists, Activities tabs, calendar) follows them. The calendar also shows contract renewals.
                 if (key === 'leads' || key === 'opportunities') {
