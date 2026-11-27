@@ -173,7 +173,7 @@ export function ProductLookupModal({ open, onClose, onSelect, selectedValue }: E
     const products = React.useMemo(() => (data ?? NO_PRODUCTS).filter(isActiveProduct), [data]);
     const filterFields = React.useMemo(() => {
         const categories = [...new Set(products.map((p) => p.productCategory).filter(Boolean))].sort((a, b) => a.localeCompare(b));
-        return PRODUCT_LOOKUP_PRESET.filterFields.map((f) => (f.key === 'productCategory' ? { ...f, options: categories.map((c) => ({ value: c, label: c })) } : f));
+        return PRODUCT_LOOKUP_PRESET.filterFields.map((f) => (f.key === 'productCategory' ? { ...f, options: [{ value: '', label: 'All' }, ...categories.map((c) => ({ value: c, label: c }))] } : f));
     }, [products]);
 
     const selected = selectedValue?.trim().toLowerCase();

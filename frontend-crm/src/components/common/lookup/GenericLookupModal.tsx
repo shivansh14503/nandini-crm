@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useDeferredValue, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Box,
     Button,
@@ -17,7 +17,6 @@ import {
     TableCell,
     TableContainer,
     TableHead,
-    TablePagination,
     TableRow,
     TableSortLabel,
     TextField,
@@ -54,7 +53,6 @@ export interface GenericLookupModalProps<T extends { id: string }> {
     searchPredicate?: LookupSearchPredicate<T>;
     selectedId?: string;
     searchPlaceholder?: string;
-    rowsPerPage?: number;
     /** Show the main free-text Search box (default true). Presets with a full field form can hide it. */
     showSearchBox?: boolean;
     /** Shows a spinner instead of the empty state while data is being fetched. */
@@ -120,8 +118,12 @@ const cellText = <T,>(row: T, col: LookupColumn<T>): string =>
 const initialFilters = (fields: LookupFilterField[]): LookupFilterValues =>
     Object.fromEntries(fields.map((f) => [f.key, f.defaultValue ?? '']));
 
+/** Rows rendered at first and added each time the list is scrolled near its end. */
+const SCROLL_BATCH = 30;
+
 /**
- * Universal record picker dialog: filter bar, results table and pagination.
+ * Universal record picker dialog: filter bar and an infinitely scrolling results table, at one fixed size for every
+ * picker (the Product Catalog's), so the dialog does not grow or shrink with the rows a filter leaves.
  * Clicking a row (or pressing Enter on it) calls `onSelect` and closes the dialog.
  */
 export function GenericLookupModal<T extends { id: string }>(props: GenericLookupModalProps<T>) {
@@ -142,7 +144,6 @@ function LookupDialog<T extends { id: string }>({
     searchPredicate,
     selectedId,
     searchPlaceholder = 'Search…',
-    rowsPerPage = 25,
     showSearchBox = true,
     loading = false,
     emptyMessage,
@@ -156,8 +157,15 @@ function LookupDialog<T extends { id: string }>({
         ...lockedFilterValues,
     }));
     const isLocked = (key: string) => lockedFilterValues?.[key] !== undefined;
-    const [page, setPage] = useState(0);
+    const [visibleCount, setVisibleCount] = useState(SCROLL_BATCH);
     const firstRowRef = useRef<HTMLTableRowElement>(null);
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const sentinelRef = useRef<HTMLDivElement>(null);
+    /** Back to the first batch at the top of the list, after the filters, search or sort change. */
+    const restartList = () => {
+        setVisibleCount(SCROLL_BATCH);
+        if (scrollRef.current) scrollRef.current.scrollTop = 0;
+    };
     const [sort, setSort] = useState<{ id: string; dir: 'asc' | 'desc' } | null>(null);
     const deferredQuery = useDeferredValue(query);
 
@@ -193,27 +201,40 @@ function LookupDialog<T extends { id: string }>({
         );
     }, [data, deferredQuery, filters, columns, matches, sort]);
 
-    const pageCount = Math.max(1, Math.ceil(filtered.length / rowsPerPage));
-    const safePage = Math.min(page, pageCount - 1);
-    const pageRows = filtered.slice(safePage * rowsPerPage, safePage * rowsPerPage + rowsPerPage);
-    const rangeStart = filtered.length === 0 ? 0 : safePage * rowsPerPage + 1;
-    const rangeEnd = safePage * rowsPerPage + pageRows.length;
+    const visibleRows = filtered.slice(0, visibleCount);
+    const hasMore = visibleRows.length < filtered.length;
+
+    // Infinite scroll: when the marker under the last row comes into view (scrolled near the end, or the rows don't
+    // fill the dialog yet), render the next batch.
+    useEffect(() => {
+        const root = scrollRef.current;
+        const sentinel = sentinelRef.current;
+        if (!hasMore || !root || !sentinel || typeof IntersectionObserver === 'undefined') return;
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries.some((e) => e.isIntersecting)) setVisibleCount((n) => n + SCROLL_BATCH);
+            },
+            { root, rootMargin: '0px 0px 160px 0px' }
+        );
+        observer.observe(sentinel);
+        return () => observer.disconnect();
+    }, [hasMore, visibleCount]);
 
     const updateFilter = (key: string, value: string) => {
         if (isLocked(key)) return;
         setFilters((prev) => ({ ...prev, [key]: value }));
-        setPage(0);
+        restartList();
     };
 
     const toggleSort = (id: string) => {
         setSort((prev) => (prev?.id === id ? { id, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { id, dir: 'asc' }));
-        setPage(0);
+        restartList();
     };
 
     const handleReset = () => {
         setQuery('');
         setFilters({ ...initialFilters(filterFields), ...lockedFilterValues });
-        setPage(0);
+        restartList();
     };
 
     const choose = (row: T) => {
@@ -229,7 +250,8 @@ function LookupDialog<T extends { id: string }>({
             maxWidth="lg"
             aria-labelledby="lookup-dialog-title"
             slotProps={{
-                paper: { sx: { borderRadius: '14px', boxShadow: '0 20px 50px rgba(15,23,42,0.18)', maxHeight: '88vh' } },
+                // One fixed size for every picker: the width of maxWidth="lg" and a set height, capped to the screen.
+                paper: { sx: { borderRadius: '14px', boxShadow: '0 20px 50px rgba(15,23,42,0.18)', height: 'min(680px, calc(100% - 64px))', maxHeight: 'none' } },
             }}
         >
             <DialogTitle id="lookup-dialog-title" sx={{ display: 'flex', alignItems: 'center', gap: 1.5, pb: 1.5, borderBottom: '1px solid var(--mui-palette-border-main)' }}>
@@ -283,7 +305,7 @@ function LookupDialog<T extends { id: string }>({
                                 value={query}
                                 onChange={(e) => {
                                     setQuery(e.target.value);
-                                    setPage(0);
+                                    restartList();
                                 }}
                                 sx={inputSx}
                                 slotProps={{
@@ -423,7 +445,7 @@ function LookupDialog<T extends { id: string }>({
                 </Box>
 
                 {/* Results */}
-                <TableContainer sx={{ flex: 1, minHeight: 240 }}>
+                <TableContainer ref={scrollRef} sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
                     <Table size="small" stickyHeader>
                         <TableHead>
                             <TableRow>
@@ -445,7 +467,7 @@ function LookupDialog<T extends { id: string }>({
                             </TableRow>
                         </TableHead>
                         <TableBody>
-                            {pageRows.map((row, idx) => {
+                            {visibleRows.map((row, idx) => {
                                 const isSelected = row.id === selectedId;
                                 return (
                                     <TableRow
@@ -480,6 +502,12 @@ function LookupDialog<T extends { id: string }>({
                         </TableBody>
                     </Table>
 
+                    {hasMore && (
+                        <Box ref={sentinelRef} sx={{ py: 1.5, display: 'flex', justifyContent: 'center' }}>
+                            <CircularProgress size={18} />
+                        </Box>
+                    )}
+
                     {loading && (
                         <Box sx={{ py: 6, display: 'flex', justifyContent: 'center' }}>
                             <CircularProgress size={28} />
@@ -504,27 +532,16 @@ function LookupDialog<T extends { id: string }>({
                     sx={{
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: 'space-between',
                         px: 3,
+                        py: 1.25,
                         borderTop: '1px solid var(--mui-palette-border-main)',
                         backgroundColor: 'var(--mui-palette-background-paper)',
                     }}
                 >
                     <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)' }}>
-                        ({rangeStart} - {rangeEnd} of {filtered.length})
+                        Showing {visibleRows.length} of {filtered.length}
+                        {hasMore ? ' · scroll for more' : ''}
                     </Typography>
-                    <TablePagination
-                        component="div"
-                        count={filtered.length}
-                        page={safePage}
-                        rowsPerPage={rowsPerPage}
-                        rowsPerPageOptions={[]}
-                        showFirstButton
-                        showLastButton
-                        onPageChange={(_, p) => setPage(p)}
-                        labelDisplayedRows={() => `Page ${safePage + 1} of ${pageCount}`}
-                        sx={{ '& .MuiTablePagination-displayedRows': { fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)' } }}
-                    />
                 </Box>
             </DialogContent>
         </Dialog>

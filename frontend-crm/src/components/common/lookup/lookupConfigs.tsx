@@ -33,7 +33,6 @@ export interface LookupPreset<T> {
     filterFields: LookupFilterField[];
     searchPredicate: LookupSearchPredicate<T>;
     showSearchBox?: boolean;
-    rowsPerPage?: number;
     emptyMessage?: string;
     recordLabel?: { one: string; other: string };
 }
@@ -188,7 +187,6 @@ export const ORGANIZATION_LOOKUP_PRESET: LookupPreset<ExtendedOrganization> = {
     subtitle: 'Select an organization. Click a row to choose it.',
     searchPlaceholder: '',
     showSearchBox: false,
-    rowsPerPage: 10,
     emptyMessage: 'No organizations found matching search criteria',
     columns: [
         { id: 'organizationName', label: 'Name', minWidth: 240, sortable: true, render: (o) => <PrimaryText>{o.organizationName}</PrimaryText> },
@@ -305,7 +303,6 @@ export const CONTACT_LOOKUP_PRESET: LookupPreset<ContactLookupRow> = {
     subtitle: 'Select a contact. Click a row to choose it.',
     searchPlaceholder: '',
     showSearchBox: false,
-    rowsPerPage: 10,
     emptyMessage: 'No contacts found matching search criteria',
     columns: [
         { id: 'name', label: 'Name', minWidth: 160, sortable: true, render: (c) => <PrimaryText>{c.name}</PrimaryText> },
@@ -360,7 +357,6 @@ export const OPPORTUNITY_LOOKUP_PRESET: LookupPreset<Opportunity> = {
     title: 'Opportunity Search',
     subtitle: 'Select an opportunity. Click a row to choose it.',
     searchPlaceholder: 'Name, organization, contact or number',
-    rowsPerPage: 10,
     emptyMessage: 'No opportunities found matching search criteria',
     columns: [
         // Only while opportunity numbers are shown (OpportunityLookupModal drops it otherwise).
@@ -445,7 +441,6 @@ export const PARTNER_COMPANY_LOOKUP_PRESET: LookupPreset<PartnerCompany> = {
     subtitle: 'Select a partner company. Click a row to choose it.',
     searchPlaceholder: '',
     showSearchBox: false,
-    rowsPerPage: 10,
     columns: [
         { id: 'partnerName', label: 'Partner Name', minWidth: 180, sortable: true, render: (p) => <PrimaryText>{p.partnerName}</PrimaryText> },
         { id: 'natureOfPartner', label: 'Nature of Partner', minWidth: 170, sortable: true },
@@ -514,7 +509,6 @@ export const REFERRAL_LOOKUP_PRESET: LookupPreset<Referral> = {
     searchPlaceholder: '',
     // Searched by its filters only: Name, Any Number, Any Email.
     showSearchBox: false,
-    rowsPerPage: 10,
     emptyMessage: 'No referrals found matching search criteria',
     columns: [
         { id: 'name', label: 'Name', minWidth: 170, sortable: true, render: (r) => <PrimaryText>{r.name}</PrimaryText> },
@@ -549,7 +543,6 @@ export const PRODUCT_LOOKUP_PRESET: LookupPreset<Product> = {
     subtitle: 'Search by product category or product name. Click a row to add it to the line.',
     searchPlaceholder: '',
     showSearchBox: false,
-    rowsPerPage: 10,
     emptyMessage: 'No products found matching search criteria',
     columns: [
         { id: 'productName', label: 'Name', minWidth: 240, sortable: true, render: (p) => <PrimaryText>{p.productName}</PrimaryText> },
@@ -569,12 +562,12 @@ export const PRODUCT_LOOKUP_PRESET: LookupPreset<Product> = {
     ],
     filterFields: [
         // Options are the categories of the loaded products; ProductLookupModal fills them in.
-        { key: 'productCategory', label: 'Product Category', type: 'multiselect', width: 6, options: [] },
+        // One category at a time ("All" shows every category).
+        { key: 'productCategory', label: 'Product Category', type: 'select', width: 6, defaultValue: '', options: [] },
         { key: 'productName', label: 'Product Name', type: 'text', width: 6, placeholder: 'Type product name...' },
     ],
     searchPredicate: (p, f) => {
-        const categories = splitMulti(f.productCategory);
-        if (categories.length && !categories.includes(p.productCategory)) return false;
+        if (f.productCategory && p.productCategory !== f.productCategory) return false;
         return containsText(p.productName, f.productName?.trim());
     },
 };
