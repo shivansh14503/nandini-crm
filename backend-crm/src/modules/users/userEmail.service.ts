@@ -151,6 +151,8 @@ export const userEmailService = {
             if (user.email === email) return { row: user, changed: false };
             if (email && holdsAddress(user)) await assertUserEmailFree(tx, email, user.id);
             const updated = await tx.user.update({ where: { id: user.id }, data: { email }, select: USER_EMAIL_SELECT });
+            // A set-password link already emailed went to the old address: it stops working (as Admin › Users does).
+            await tx.userInvite.updateMany({ where: { userId: user.id, usedAt: null, revokedAt: null }, data: { revokedAt: new Date() } });
             await auditService.record(tx, {
                 entityType: 'User',
                 entityId: String(user.id),

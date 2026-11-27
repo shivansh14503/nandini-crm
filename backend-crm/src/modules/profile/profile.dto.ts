@@ -68,7 +68,6 @@ export const PROFILE_SELECT = {
     jobTitle: true,
     phone: true,
     officePhone: true,
-    mustChangePassword: true,
     lastLoginAt: true,
     passwordChangedAt: true,
     createdAt: true,
@@ -88,7 +87,6 @@ export interface ProfileRow {
     jobTitle: string | null;
     phone: string | null;
     officePhone: string | null;
-    mustChangePassword: boolean;
     lastLoginAt: Date | null;
     passwordChangedAt: Date | null;
     createdAt: Date;
@@ -113,8 +111,6 @@ export interface ProfileDto {
     mobile: string | null;
     officePhone: string | null;
     photoUrl: string | null;
-    /** True until the user replaces a temporary password (a new user, or after an admin reset). */
-    mustChangePassword: boolean;
     lastLoginAt: string | null;
     passwordChangedAt: string | null;
     createdAt: string;
@@ -134,7 +130,6 @@ export function toProfileDto(row: ProfileRow): ProfileDto {
         mobile: row.phone,
         officePhone: row.officePhone,
         photoUrl: photoUrlOf(row.photo?.id),
-        mustChangePassword: row.mustChangePassword,
         lastLoginAt: isoOrNull(row.lastLoginAt),
         passwordChangedAt: isoOrNull(row.passwordChangedAt),
         createdAt: row.createdAt.toISOString(),
@@ -160,7 +155,6 @@ export const AUTH_ME_SELECT = {
     fullName: true,
     firstName: true,
     lastName: true,
-    mustChangePassword: true,
     photo: { select: { id: true } },
 } as const;
 
@@ -173,8 +167,6 @@ export interface AuthMeDto {
     firstName: string | null;
     lastName: string | null;
     photoUrl: string | null;
-    /** The user must choose a new password before using the app (the frontend sends them to My Profile › Security). */
-    mustChangePassword: boolean;
 }
 
 export const toAuthMeDto = (row: Omit<AuthMeDto, 'photoUrl'> & { photo: { id: string } | null }): AuthMeDto => ({
@@ -184,7 +176,6 @@ export const toAuthMeDto = (row: Omit<AuthMeDto, 'photoUrl'> & { photo: { id: st
     fullName: row.fullName,
     ...resolveNameParts(row),
     photoUrl: photoUrlOf(row.photo?.id),
-    mustChangePassword: row.mustChangePassword,
 });
 
 // ── Sessions ─────────────────────────────────────────────────────────────────

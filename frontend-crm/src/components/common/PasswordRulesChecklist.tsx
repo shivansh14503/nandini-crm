@@ -35,7 +35,7 @@ const STRENGTH_COLOR: Record<PasswordStrengthLevel, string> = {
 
 const HEADING: Record<PasswordAudience, string> = {
     self: 'Your new password needs',
-    admin: 'The password needs',
+    link: 'Your password needs',
 };
 
 /** 4-segment strength meter with its label ("Weak" … "Strong"); advisory only. */
@@ -65,9 +65,8 @@ function StrengthMeter({ password, context }: { password: string; context: Passw
 /**
  * Live checklist of the password rules (met / not yet), driven by `utils/passwordPolicy.ts`, the frontend mirror of
  * the API's policy. `audience="self"` (My Profile › Change password) lists every rule, including "Different from your
- * current password" when `context.currentPassword` is given; `audience="admin"` (Admin › Users › set / reset a
- * password) leaves that rule out and words "Not the username" for the person being set up. Link the password input to
- * it with `aria-describedby={id}`.
+ * current password" when `context.currentPassword` is given; `audience="link"` (the set-password page an emailed
+ * invite / reset link opens) leaves that rule out. Link the password input to it with `aria-describedby={id}`.
  */
 export function PasswordRulesChecklist({
     password,

@@ -21,7 +21,7 @@
 
 | Domain | Tables |
 | --- | --- |
-| Identity | `Users` (model `User`), `UserPhoto` (profile photos), `UserPreference` (My Profile › Notifications) |
+| Identity | `Users` (model `User`), `UserPhoto` (profile photos), `UserPreference` (My Profile › Notifications), `UserInvites` (set-password links) |
 | CRM core | `Organization`, `Contact`, `Lead`, `Opportunity`, `Quotation`, `Ticket`, `Contract`, `Document`, `Product` |
 | Activities & calendar | `Activity`, `ActivityAttendee`, `ActivityExternalLink` (an activity's copy in a connected calendar + push outbox, P2-3b), `ActivitySeries` (a recurring activity's rule; its occurrences are `Activity` rows, Calendar Phase 4) |
 | Owned children | `EntityEmail`, `OpportunityLineItem`, `QuotationLineItem` |
@@ -160,10 +160,10 @@ Pre-existing table kept for compatibility (columns `Id`, `Username`, `Password`,
 | `firstName`, `lastName` | NVARCHAR(100) NULL | Edited on My Profile (name-cased like other person names; together ≤ 99 characters so `fullName` fits). NULL or stale for users created or renamed outside the app: the API then shows them split from `fullName` (`resolveNameParts`) |
 | `phone` | NVARCHAR(20) NULL | The **mobile** number (E.164); My Profile calls it Mobile, quotation PDFs print it as the sales person's phone |
 | `officePhone` | NVARCHAR(20) NULL | Desk / landline number (E.164), My Profile |
-| `passwordChangedAt` | DATETIME2 NULL | Set by `POST /api/auth/change-password`; NULL = never changed in this CRM. An admin reset leaves it as it is |
+| `passwordChangedAt` | DATETIME2 NULL | Set by `POST /api/auth/change-password` and by using a set-password link; NULL = never changed in this CRM. Sending a reset link leaves it as it is |
 | `jobTitle` | NVARCHAR(100) NULL | Free text set in Admin › Users (read-only on My Profile). Not an access rule |
 | `reportsToId` | INT NULL, FK → `Users.Id` (NO ACTION / NO ACTION), indexed | The user's manager (Admin › Users "Reports to"). The API refuses the user themselves, anyone below them (no cycles; chain walked up to 50 levels, writers serialise on an application lock), an inactive or group login. Kept when the manager is deactivated. NO ACTION: a user with direct reports can't be deleted |
-| `mustChangePassword` | BIT NOT NULL, default 0 | Set for a user added in Admin › Users and after an admin password reset; cleared by `POST /api/auth/change-password`. While set, the sign-in token carries `mcp` and the API answers only the change-password routes |
+| `invitePending` | BIT NOT NULL, default 0 | **Invited**: added in Admin › Users and hasn't set a password from the emailed link yet (the stored hash is of a random value nobody knows; sign-in answers `403 INVITE_PENDING`). Cleared when a set-password link is used (`POST /api/auth/invite/accept`). Replaced `mustChangePassword` (2026-11-27) |
 | `createdBy` | NVARCHAR(50) NULL | Username of the admin who added the user in Admin › Users; NULL for older users (seed, SQL) |
 | `deactivatedAt` | DATETIME2 NULL | When an admin last deactivated the user; NULL again on activation |
 | `isActive`, `isGroupUser`, `onLeave`, `lastLoginAt` | | Inactive users can't sign in or be assigned. Set in Admin › Users (`onLeave` is a plain switch). Out-of-office dates live in `UserPreference` (§4.30, set by the user in My Profile); a user is **effectively on leave** when `onLeave` is set or today (business timezone) is in their out-of-office range |
@@ -178,7 +178,13 @@ Migration `20261126235000_user_admin` (Profile Phase 2) adds `jobTitle`, `report
 and the self foreign key `Users_reportsToId_fkey`), `mustChangePassword` (NOT NULL, default 0), `createdBy` and
 `deactivatedAt`. Nothing is backfilled: existing users keep `mustChangePassword = 0` and NULL elsewhere. Writes from
 Admin › Users are audited as the acting admin: `CREATE` (a snapshot without any password), `UPDATE` (diff),
-`STATUS_CHANGE` (`isActive`) and `PASSWORD_RESET`.
+`STATUS_CHANGE` (`isActive`) and `PASSWORD_RESET` (retired with temporary passwords; old entries stay readable).
+
+Migration `20261217090000_user_invites` (2026-11-27) replaces `mustChangePassword` with `invitePending` (NOT NULL,
+default 0, constraint `Users_invitePending_df`): users who still had `mustChangePassword = 1` (a temporary password
+they never changed) become Invited (`invitePending = 1`), so their temporary password stops working and an admin
+sends them an invite from Admin › Users; then the old column and its default constraint are dropped. It also
+creates `UserInvites` (§4.1b).
 
 Migration `20261126230000_user_profile` adds `firstName`, `lastName`, `officePhone` and `passwordChangedAt` (all NULL)
 and splits every existing name once: `firstName` = the text before the first space of `LTRIM(RTRIM(fullName))`,
@@ -187,6 +193,26 @@ rewritten (`npm run seed` splits the same way, `splitFullName` in `modules/profi
 user's own profile edit (My Profile, audited as a User `UPDATE` with a diff of first / last / full name, mobile and
 office phone), sign-in (`lastLoginAt`, legacy password re-hash) and the password change (`passwordHash`,
 `passwordChangedAt`, audited as `PASSWORD_CHANGE` with only the timestamp).
+
+### 4.1b `UserInvites` (set-password links)
+
+Migration `20261217090000_user_invites` (model `UserInvite`). Module `backend-crm/src/modules/auth` (`invite.token.ts`,
+`invite.service.ts`). One row per emailed set-password link: a new user's invite or an admin-sent password reset.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | INT IDENTITY PK | Also orders a user's links (newest wins) |
+| `userId` | INT, FK → `Users.Id` **ON DELETE CASCADE** | |
+| `tokenHash` | CHAR(64) **UNIQUE** | Hex SHA-256 of the 256-bit token; the token itself is only in the email, never stored or logged |
+| `purpose` | NVARCHAR(20) | `invite` (user still Invited) or `reset` |
+| `expiresAt` | DATETIME2 | Sent + 72 h |
+| `usedAt` | DATETIME2 NULL | Set once, by a conditional update, when the link sets the password: single use |
+| `revokedAt` | DATETIME2 NULL | A newer link was sent, another link was used, the email changed or the user was deactivated |
+| `createdAt`, `createdBy` | DATETIME2, NVARCHAR(50) NULL | The admin who sent it |
+
+Index `UserInvites_userId_createdAt_idx`. A link works while `usedAt` and `revokedAt` are NULL and `expiresAt` is in
+the future. A row whose email couldn't be sent is deleted again. Rows are kept after use (no retention job yet; they
+hold no secret).
 
 ### 4.1a `UserPhoto` (profile photos)
 
@@ -711,7 +737,7 @@ list, keyset-paged on `createdAt`, `id`), `createdAt` (purge). Inserts read the 
 150 rows (SQL Server has no `skipDuplicates` and a 2,100-parameter limit); a P2002 race counts as already sent.
 
 `EmailLog`: one row per outgoing email, the idempotency claim and audit trail of what the CRM mailed whom (the
-morning summary today, quotation emails later). `id` (uuid), `kind` (`morning_summary` | `morning_summary_test` | …),
+morning summary today, quotation emails later). `id` (uuid), `kind` (`morning_summary` | `morning_summary_test` | `user_invite` | `password_reset_link` | …),
 `toUsername` (nullable, when the recipient is a CRM user), `toEmail` (≤ 120), `subject` (≤ 200), `dedupeKey`
 (**UNIQUE**, ≤ 200, e.g. `morning_summary:<YYYY-MM-DD>:<username>`; one-off sends get a unique key), `status`
 (`sending` | `sent` | `failed` | `skipped`, the last when mail was turned off), `error` (≤ 500, the SMTP / connection
@@ -1062,7 +1088,9 @@ choice rows.
 | Company formats saved / reset (Admin › Company formats) | App lock `company-formats` → upsert (or delete) the `CompanyFormatSettings` row → `AuditLog` CompanyFormats UPDATE; `cache:lookups:company-formats` dropped after commit. Nothing else is rewritten: stored notification texts, lead rating reasons and saved PDFs keep the format they were written in |
 | Notification preferences (My Profile › Notifications) | App lock on the user → upsert the `UserPreference` row → `AuditLog` User UPDATE; user lookup caches dropped after commit when the out-of-office changed |
 | User added / edited (Admin › Users) | App locks (username, email address, reports-to chain, admin roster as needed; the per-user lock on edits) → checks → INSERT / UPDATE `Users` → `AuditLog` CREATE / UPDATE; user lookup caches dropped after commit |
-| User deactivated / reset (Admin › Users) | App lock on the user → `isActive = 0, deactivatedAt = now` (or new hash + `mustChangePassword = 1`) → `AuditLog` STATUS_CHANGE / PASSWORD_RESET; after commit every Redis session of the user is deleted |
+| User deactivated (Admin › Users) | App lock on the user → `isActive = 0, deactivatedAt = now`, outstanding `UserInvites` revoked → `AuditLog` STATUS_CHANGE; after commit every Redis session of the user is deleted |
+| Set-password link sent (Admin › Users) | INSERT `UserInvites` → email sent → older links of the user revoked + `AuditLog` INVITE_SENT (a failed send deletes the new row instead) |
+| Set-password link used | App lock on the user → `UserInvites.usedAt` (conditional) + the user's other links revoked + `passwordHash`, `passwordChangedAt`, `invitePending = 0` → `AuditLog` PASSWORD_SET; after commit every Redis session of the user is deleted and a new one opened (`LOGIN`) |
 | Nightly retention (00:20) | Hard delete of old `Notification` and `EmailLog` rows (see §4.26) |
 | Calendar nightly (00:25, P2-3b, as of 2026-11-26) | Reconcile everyone's `CalendarConnection` enrolment, run due health checks, write the admins' `calendar_sync_issue` digest when someone's calendar went to `error` that day (moved from 00:20), the follow-up activity backfill (moved from 00:20), mark `error` links of activities that haven't ended dirty again (`pending`, attempts 0; `cancelled` / `removed_remote` links whose restore was refused are dirtied keeping their state), `integration_secret_expiring` notifications, clear expired `CalendarConnection` leases; since P2-7 webhook channels: create / renew / retry failed, Graph existence check, stop strays (all of them while webhooks are off), delete `stopped` / `failed` rows older than 30 days; since P2-8 (as of 2026-11-26) imported meetings (`origin = 'calendar'`) with no related record that ended before today (business timezone) and are still Planned are set Completed (`completedBy = 'calendar-sync'`, batches of 200, audited system writes, never pushed, nobody notified) |
 | Activity saved (P2-3b) | Inside its transaction: the owner's `ActivityExternalLink` inserted or `dirtyAt` set (only with a live connection). After commit: pushed; success writes the link's ids, etag, base and clears `dirtyAt` only if it didn't change meanwhile. A deletion in the calendar cancels the activity (system write) unless it is Completed or a follow-up activity (link `removed_remote`) |

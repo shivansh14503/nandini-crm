@@ -9,15 +9,11 @@ import { ROUTES } from '@/config/constants';
 
 export default function LoginPage() {
     const router = useRouter();
-    const { user, isAuthenticated, loading } = useAuth();
-    const mustChangePassword = Boolean(user?.mustChangePassword);
+    const { isAuthenticated, loading } = useAuth();
 
     useEffect(() => {
-        if (!loading && isAuthenticated) {
-            // A temporary password must be changed first; otherwise the dashboard.
-            router.push(mustChangePassword ? ROUTES.PROFILE_SECURITY : ROUTES.DASHBOARD);
-        }
-    }, [isAuthenticated, mustChangePassword, loading, router]);
+        if (!loading && isAuthenticated) router.push(ROUTES.DASHBOARD);
+    }, [isAuthenticated, loading, router]);
 
     return (
         <AuthCard>

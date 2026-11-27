@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Alert, AlertTitle, Box, Button, Skeleton } from '@mui/material';
+import { Alert, Box, Button, Skeleton } from '@mui/material';
 import PersonOutlineRoundedIcon from '@mui/icons-material/PersonOutlineRounded';
 import ShieldOutlinedIcon from '@mui/icons-material/ShieldOutlined';
 import NotificationsNoneRoundedIcon from '@mui/icons-material/NotificationsNoneRounded';
@@ -10,7 +10,6 @@ import LinkRoundedIcon from '@mui/icons-material/LinkRounded';
 import { AppToast } from '@/components/common/AppToast';
 import { CalendarConnectionsCard } from '@/components/integrations/CalendarConnectionsCard';
 import { EmailLoggingStatusCard } from '@/components/integrations/EmailLoggingStatusCard';
-import { useAuth } from '@/context/AuthContext';
 import { PillTabs, errorMessage, secondaryButtonSx, surfaceSx, type PillTabItem } from '@/components/settings/form-customization/builderUi';
 import { useMyProfile } from '@/hooks/queries/useProfile';
 import type { ProfileDto } from '@/types/profile.types';
@@ -58,9 +57,7 @@ function ProfileSkeleton() {
 
 /**
  * My Profile: header card, then the Profile, Notifications, Connected accounts and Security tabs
- * (`?tab=notifications|connected-accounts|security`). While an admin-set password must be changed
- * (`mustChangePassword`), only the change-password card shows, under a warning; everything else unlocks as soon as
- * the password is changed.
+ * (`?tab=notifications|connected-accounts|security`).
  *
  * Connected accounts hosts the self-contained CalendarConnectionsCard. The OAuth callback lands on
  * `?tab=connected-accounts&calendar=connected|error&reason=&provider=`: the card reads those params itself and drops
@@ -70,9 +67,7 @@ export function ProfileView() {
     const router = useRouter();
     const pathname = usePathname();
     const searchParams = useSearchParams();
-    const { user } = useAuth();
-    const locked = Boolean(user?.mustChangePassword);
-    const tab: ProfileTab = locked ? 'security' : parseTab(searchParams.get('tab'));
+    const tab: ProfileTab = parseTab(searchParams.get('tab'));
     const { data: profile, isLoading, isError, error, refetch, isFetching } = useMyProfile();
 
     const [toast, setToast] = useState<{ open: boolean; message: string; severity: ToastSeverity }>({ open: false, message: '', severity: 'success' });
@@ -134,21 +129,6 @@ export function ProfileView() {
                 >
                     {errorMessage(error, 'Could not load your profile.')}
                 </Alert>
-            ) : locked ? (
-                <>
-                    <Alert
-                        severity="warning"
-                        sx={{ borderRadius: '10px', fontSize: '0.84rem', alignItems: 'flex-start' }}
-                        aria-live="polite"
-                    >
-                        <AlertTitle sx={{ fontWeight: 700, fontSize: '0.9rem', mb: 0.25 }}>Choose a new password to continue</AlertTitle>
-                        An administrator set a temporary password for your account. Change it here to start using the CRM; the rest of the app opens as soon as
-                        you do. Already changed it on another device? Sign out and sign in again with the new password.
-                    </Alert>
-                    <Box role="tabpanel" aria-label="Security" sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-                        <ChangePasswordCard profile={profile} notify={notify} />
-                    </Box>
-                </>
             ) : (
                 <>
                     <ProfileHeaderCard profile={profile} notify={notify} />

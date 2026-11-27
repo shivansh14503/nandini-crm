@@ -4,7 +4,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import { useQueryClient } from '@tanstack/react-query';
 import { authService } from '../services/auth.service';
 import { ApiClientError, setSessionOnHold, subscribeApiErrors } from '../services/apiClient';
-import type { User, LoginPayload } from '../types/auth.types';
+import type { AcceptSetPasswordLinkPayload, User, LoginPayload } from '../types/auth.types';
 import { hasUnsavedWork, subscribeUnsavedWork } from '../utils/unsavedWork';
 
 interface AuthContextType {
@@ -28,16 +28,14 @@ interface AuthContextType {
     /** Gives up on an expired session's unsaved edits: signs out here, so the page guard goes to /login?next=. */
     endExpiredSession: () => void;
     /**
-     * Signs the expired session's user in again (SessionExpiredDialog). Resolves 'resumed' when the page can carry on
-     * (cached data is refetched), or 'mustChangePassword' when an admin reset the password: the user is then kept on hold
-     * until `continueToPasswordChange`, because the password-change gate unmounts the page (and its draft). Rejects on
-     * a wrong password, or after signing out here when the account that answered is not the expired one.
+     * Signs the expired session's user in again (SessionExpiredDialog); the page carries on (cached data is refetched).
+     * Rejects on a wrong password, or after signing out here when the account that answered is not the expired one.
      */
-    reauthenticate: (password: string) => Promise<'resumed' | 'mustChangePassword'>;
-    /** After `reauthenticate` answered 'mustChangePassword': applies the sign-in, so the app goes to My Profile › Security. */
-    continueToPasswordChange: () => void;
-    /** Signs in and returns the signed-in user (callers check `mustChangePassword` to pick the next page). */
+    reauthenticate: (password: string) => Promise<void>;
+    /** Signs in and returns the signed-in user. */
     login: (credentials: LoginPayload) => Promise<User>;
+    /** Sets the password from an emailed link (/set-password) and signs in, like `login`. */
+    setPasswordFromLink: (payload: AcceptSetPasswordLinkPayload) => Promise<User>;
     logout: () => Promise<void>;
     /** Re-reads the user from GET /api/auth/me; only a 401 signs the user out (other errors keep the current user). */
     refreshUser: () => Promise<void>;
@@ -52,8 +50,6 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 // from a first visit and surfaced as "session expired" on the login page.
 const HAD_SESSION_KEY = 'crm.hadSession';
 export const SESSION_EXPIRED_KEY = 'crm.sessionExpired';
-/** API error code (403) while the signed-in user must change their password first. */
-export const PASSWORD_CHANGE_REQUIRED = 'PASSWORD_CHANGE_REQUIRED';
 /** API error code (401) of a wrong username or password at sign-in: not a session that ended. */
 const INVALID_CREDENTIALS = 'INVALID_CREDENTIALS';
 
@@ -85,15 +81,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Read by the app-wide 401 listener, which is subscribed once.
     const userRef = useRef<User | null>(null);
     const sessionExpiredRef = useRef(false);
-    // A dialog sign-in that answered with a must-change password, held until the user confirms (see reauthenticate).
-    const pendingUserRef = useRef<User | null>(null);
     useEffect(() => {
         userRef.current = user;
     }, [user]);
 
     const setExpired = useCallback((value: boolean) => {
         sessionExpiredRef.current = value;
-        if (!value) pendingUserRef.current = null;
         // Synchronously, so no request slips out (or is still refused) around the state change.
         setSessionOnHold(value);
         setSessionExpired(value);
@@ -159,19 +152,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser((current) => (current ? { ...current, ...patch } : current));
     }, []);
 
-    // An admin reset the password while this session was open (or the flag was missed): the API refuses with 403
-    // PASSWORD_CHANGE_REQUIRED, and PasswordChangeGate then takes the user to My Profile › Security.
-    // Any other request answered 401 means the session ended on its own: see handleSessionEnded. A wrong password at
-    // sign-in (401 INVALID_CREDENTIALS) is not a session ending. After an explicit Sign out the user is already gone, so
-    // a late 401 neither shows the note nor adds `?next=`.
+    // Any request answered 401 means the session ended on its own: see handleSessionEnded. A wrong password at sign-in
+    // (401 INVALID_CREDENTIALS) is not a session ending. After an explicit Sign out the user is already gone, so a late
+    // 401 neither shows the note nor adds `?next=`.
     useEffect(
         () =>
             subscribeApiErrors((err) => {
-                if (err.status === 403 && err.details?.code === PASSWORD_CHANGE_REQUIRED) {
-                    setUser((current) => (current && !current.mustChangePassword ? { ...current, mustChangePassword: true } : current));
-                } else if (err.status === 401 && err.details?.code !== INVALID_CREDENTIALS) {
-                    handleSessionEnded();
-                }
+                if (err.status === 401 && err.details?.code !== INVALID_CREDENTIALS) handleSessionEnded();
             }),
         [handleSessionEnded],
     );
@@ -187,7 +174,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             authService
                 .getMe()
                 .then((res) => {
-                    if (cancelled || !sessionExpiredRef.current || pendingUserRef.current || res.user.id !== userRef.current?.id) return;
+                    if (cancelled || !sessionExpiredRef.current || res.user.id !== userRef.current?.id) return;
                     resumeSession(res.user);
                 })
                 .catch(() => {
@@ -249,17 +236,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, []);
 
     // The login response's user has the /me shape (name and photo included), so the navbar is complete at once.
-    const login = async (credentials: LoginPayload) => {
-        const res = await authService.login(credentials);
-        setUser(res.user);
+    const signedIn = (signedInUser: User) => {
+        setUser(signedInUser);
         setError(null);
         setSignedOutByUser(false);
         setExpired(false);
         markSignedIn();
-        return res.user;
+        return signedInUser;
     };
 
-    const reauthenticate = async (password: string): Promise<'resumed' | 'mustChangePassword'> => {
+    const login = async (credentials: LoginPayload) => signedIn((await authService.login(credentials)).user);
+
+    // A new session for whoever the link was for: whatever was cached for an earlier user in this tab goes.
+    const setPasswordFromLink = async (payload: AcceptSetPasswordLinkPayload) => {
+        const res = await authService.acceptSetPasswordLink(payload);
+        if (userRef.current && userRef.current.id !== res.user.id) queryClient.clear();
+        return signedIn(res.user);
+    };
+
+    const reauthenticate = async (password: string): Promise<void> => {
         const expected = userRef.current;
         if (!expected || !sessionExpiredRef.current) throw new Error('There is no ended session to sign in to.');
         const res = await authService.login({ username: expected.username, password });
@@ -268,17 +263,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             clearSession();
             throw new Error('A different account answered, so the unsaved changes were discarded. Sign in again.');
         }
-        if (res.user.mustChangePassword) {
-            pendingUserRef.current = res.user;
-            return 'mustChangePassword';
-        }
         resumeSession(res.user);
-        return 'resumed';
-    };
-
-    const continueToPasswordChange = () => {
-        const pending = pendingUserRef.current;
-        if (pending) resumeSession(pending);
     };
 
     // An explicit sign-out never comes back to the page: `signedOutByUser` is set before the user is cleared (both land
@@ -308,8 +293,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 sessionExpired,
                 endExpiredSession: clearSession,
                 reauthenticate,
-                continueToPasswordChange,
                 login,
+                setPasswordFromLink,
                 logout,
                 refreshUser,
                 updateUser,

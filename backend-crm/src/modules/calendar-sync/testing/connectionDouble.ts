@@ -520,6 +520,11 @@ export function installConnectionDouble(
         },
     };
 
+    // Set-password links (auth/invite.service.ts): an email change revokes them; nothing here reads them back.
+    const userInvite = {
+        updateMany: async () => ({ count: 0 }),
+    };
+
     const takeSnapshot = () => ({
         users: state.users.map((u) => ({ ...u })),
         connections: state.connections.map((c) => ({ ...c })),
@@ -537,6 +542,7 @@ export function installConnectionDouble(
         activityExternalLink,
         activity,
         calendarWatchChannel,
+        userInvite,
         $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
             void strings;
             // acquireLocks passes its keys as one JSON array of `crm:<key>` resources.

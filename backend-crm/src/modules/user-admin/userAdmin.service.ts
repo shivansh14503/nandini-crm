@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { StatusCodes } from 'http-status-codes';
 import { prisma, type TransactionClient } from '../../config/prisma.js';
 import type { Prisma } from '../../generated/prisma/client.js';
@@ -6,7 +7,8 @@ import type { AuthUser } from '../../types/user.types.js';
 import { HttpError, type ApiFieldError } from '../../utils/httpError.js';
 import { businessToday } from '../../validators/notInPast.js';
 import { hashPassword } from '../auth/auth.service.js';
-import { passwordPolicyIssue } from '../auth/passwordPolicy.js';
+import { inviteService, revokeOutstandingInvites, type InviteSendOutcome } from '../auth/invite.service.js';
+import type { InvitePurpose } from '../auth/invite.token.js';
 import { sessionService } from '../auth/session.service.js';
 import { loadCalendarSettings } from '../integrations/integration.settings.js';
 import { joinFullName, photoUrlOf, resolveNameParts } from '../profile/profile.dto.js';
@@ -37,18 +39,18 @@ import {
     ADMIN_GUARD_MESSAGES,
     adminGuardIssue,
     fullNameLengthIssue,
-    generateTemporaryPassword,
     losesAdminAccess,
     MANAGER_MESSAGES,
     managerIssue,
     SUPER_ADMIN_ONLY_MESSAGE,
     superAdminOnly,
 } from './userAdmin.rules.js';
-import type { CreateUserInput, ListUsersQuery, ResetPasswordInput, UpdateUserInput } from './userAdmin.validator.js';
+import type { CreateUserInput, ListUsersQuery, UpdateUserInput } from './userAdmin.validator.js';
 import { ADMIN_ROLES, canonicalRoleName, GLOBAL_ACCESS_ROLES, isAdminAccessRole, roleOptionsFrom, type RoleOption } from './roles.js';
 
 /**
- * Admin › Users (/api/admin/users): list, add, edit, deactivate / activate and reset the password of CRM users.
+ * Admin › Users (/api/admin/users): list, add (with an emailed invite link), edit, deactivate / activate CRM users and
+ * email them set-password links (auth/invite.service.ts).
  * Access stays decided by the role's name (roles.ts). Every write is audited as the acting admin and drops the user
  * lookup caches. Writes to one user serialize on the same lock as My Profile (`user:id:<id>`).
  */
@@ -137,12 +139,18 @@ async function assertAdminsKept(
     if (issue) throw fieldError(ADMIN_GUARD_MESSAGES[issue], StatusCodes.BAD_REQUEST, issue, path);
 }
 
-/** 400 WEAK_PASSWORD (field `password`) when a typed password breaks a rule; generates one when none was typed. */
-function choosePassword(typed: string | undefined, username: string): { password: string; generated: boolean } {
-    if (typed === undefined) return { password: generateTemporaryPassword(username), generated: true };
-    const issue = passwordPolicyIssue(typed, { username });
-    if (issue) throw fieldError(issue, StatusCodes.BAD_REQUEST, 'WEAK_PASSWORD', 'password');
-    return { password: typed, generated: false };
+/**
+ * The stored hash of a new (Invited) user: of 32 random bytes nobody ever sees, so no password works until they set
+ * one from their link (sign-in also refuses Invited accounts: INVITE_PENDING).
+ */
+const unusablePasswordHash = () => hashPassword(randomBytes(32).toString('base64url'));
+
+/** Why a set-password email couldn't go out, as the admin sees it (the user and anything else saved stay saved). */
+function inviteEmailError(outcome: Extract<InviteSendOutcome, { error: string }>): HttpError {
+    if (outcome.status === 'mail_disabled') {
+        return new HttpError(`The email to ${outcome.sentTo} could not be sent: ${outcome.error}`, StatusCodes.SERVICE_UNAVAILABLE, { code: 'MAIL_DISABLED' });
+    }
+    return new HttpError(`The email to ${outcome.sentTo} could not be sent: ${outcome.error}`, StatusCodes.BAD_GATEWAY, { code: 'INVITE_EMAIL_FAILED' });
 }
 
 function assertFullNameFits(fullName: string, path: string): void {
@@ -150,7 +158,7 @@ function assertFullNameFits(fullName: string, path: string): void {
     if (issue) throw fieldError(issue, StatusCodes.BAD_REQUEST, 'VALIDATION_ERROR', path);
 }
 
-const audit = (tx: TransactionClient, actor: AuthUser, id: number, action: 'CREATE' | 'UPDATE' | 'STATUS_CHANGE' | 'PASSWORD_RESET', changes: unknown) =>
+const audit = (tx: TransactionClient, actor: AuthUser, id: number, action: 'CREATE' | 'UPDATE' | 'STATUS_CHANGE', changes: unknown) =>
     auditService.record(tx, { entityType: 'User', entityId: String(id), action, changedBy: actor.username, changes });
 
 // ── Service ──────────────────────────────────────────────────────────────────
@@ -170,14 +178,19 @@ export interface AdminUsersMeta {
 
 export interface CreateUserResult {
     user: AdminUserDto;
-    /** The generated password, shown once; null when the admin typed one. Never logged or audited. */
-    temporaryPassword: string | null;
+    /**
+     * The invite email: `sent` (with `expiresAt`), or `failed` / `mail_disabled` with the reason to show the admin. The
+     * user is added either way (Invited); "Resend invite" sends a new link once the problem is fixed.
+     */
+    invite: InviteSendOutcome;
 }
 
-export interface ResetPasswordResult {
-    temporaryPassword: string | null;
-    /** Sessions of the user signed out; null when Redis is unavailable (they end when their tokens expire). */
-    signedOutSessions: number | null;
+export interface SendInviteResult {
+    user: AdminUserDto;
+    /** invite (the user is still Invited) or reset (an active account: a password reset link). */
+    purpose: InvitePurpose;
+    sentTo: string;
+    expiresAt: string;
 }
 
 export type StatusChangeResult = AdminUserDto & { signedOutSessions: number | null };
@@ -248,29 +261,29 @@ export const userAdminService = {
     get: loadDto,
 
     /**
-     * Adds a user: active, must change the password at first sign-in. 409 DUPLICATE_RECORD (username, or email held by
-     * another active non-group user); 400 VALIDATION_ERROR (email outside the company domains without allowOtherDomain,
-     * names too long together); 400 INVALID_MANAGER; 400 WEAK_PASSWORD (a typed password).
+     * Adds a user: active and Invited, then emails them a one-time link (72 h) to set their password. No password is
+     * set or shown here. 409 DUPLICATE_RECORD (username, or email held by another active non-group user); 400
+     * VALIDATION_ERROR (email outside the company domains without allowOtherDomain, names too long together); 400
+     * INVALID_MANAGER. A failed email doesn't undo the add: `invite` carries the reason.
      */
     async create(actor: AuthUser, input: CreateUserInput): Promise<CreateUserResult> {
-        const email = input.email ?? null;
+        const email = input.email;
         const isGroupUser = input.isGroupUser ?? false;
         assertCompanyEmailAllowed(email, input.allowOtherDomain ?? false, (await loadCalendarSettings()).companyDomains);
         const lastName = input.lastName ?? null;
         const fullName = joinFullName(input.firstName, lastName);
         assertFullNameFits(fullName, lastName ? 'lastName' : 'firstName');
-        const { password, generated } = choosePassword(input.password, input.username);
         // Hashed before the transaction: bcrypt takes ~a quarter second and needs no lock.
-        const passwordHash = await hashPassword(password);
+        const passwordHash = await unusablePasswordHash();
 
         const row = await runInTransaction(async (tx) => {
-            const checksEmail = Boolean(email) && holdsAddress({ isActive: true, isGroupUser });
-            await acquireLocks(tx, [usernameLock(input.username), checksEmail ? userEmailLockKey(email!) : null, input.reportsToId ? REPORTS_TO_LOCK : null]);
+            const checksEmail = holdsAddress({ isActive: true, isGroupUser });
+            await acquireLocks(tx, [usernameLock(input.username), checksEmail ? userEmailLockKey(email) : null, input.reportsToId ? REPORTS_TO_LOCK : null]);
             // Case-insensitive (SQL Server collation): "Palak" already taken blocks "palak".
             if (await tx.user.findFirst({ where: { username: input.username }, select: { id: true } })) {
                 throw fieldError(`The username "${input.username}" is already taken.`, StatusCodes.CONFLICT, 'DUPLICATE_RECORD', 'username');
             }
-            if (checksEmail) await assertUserEmailFree(tx, email!, null);
+            if (checksEmail) await assertUserEmailFree(tx, email, null);
             if (input.reportsToId) await assertManager(tx, null, input.reportsToId);
             const role = canonicalRoleName(input.role, await knownRoles(tx));
             assertSuperAdminRule(actor, null, role, 'role');
@@ -293,19 +306,20 @@ export const userAdminService = {
                     isActive: true,
                     isGroupUser,
                     onLeave: false,
-                    mustChangePassword: true,
+                    invitePending: true,
                     createdBy: actor.username,
                 },
                 select: ADMIN_USER_SELECT,
             });
-            // A snapshot of the new user: no password, no hash (and the generated password is never logged).
+            // A snapshot of the new user: no password or hash.
             await audit(tx, actor, created.id, 'CREATE', adminUserAuditSnapshot(created));
             return created;
         });
         await invalidateUserCaches();
         // A new person with a company email on a served domain starts syncing their calendar (P2-2b).
         await reconcileUserQuietly(row.username, 'user_created', { actor: actor.username });
-        return { user: toAdminUserDto(row, await emailRuleContext(), businessToday()), temporaryPassword: generated ? password : null };
+        const invite = await inviteService.send(actor, { id: row.id, username: row.username, email, firstName: row.firstName, fullName: row.fullName }, 'invite');
+        return { user: await loadDto(row.id), invite };
     },
 
     /**
@@ -380,6 +394,8 @@ export const userAdminService = {
             // Only the columns that change: one this edit leaves alone is never written back from `before`, so a concurrent
             // write to it (the People screen's email, which doesn't take this user's lock) isn't reverted.
             const data = Object.fromEntries(Object.entries(next).filter(([key, value]) => value !== before[key as keyof typeof next])) as Partial<typeof next>;
+            // A link already emailed went to the old address: it stops working (send a new one to the new address).
+            if ('email' in data) await revokeOutstandingInvites(tx, id);
             const after = await tx.user.update({ where: { id }, data, select: ADMIN_USER_SELECT });
             await audit(tx, actor, id, 'UPDATE', changes);
             return { row: after, changed: true, roleChanged: 'role' in changes };
@@ -413,6 +429,8 @@ export const userAdminService = {
             await assertAdminsKept(tx, actor, before, { role: before.role, isActive: false });
             const deactivatedAt = new Date();
             await tx.user.update({ where: { id }, data: { isActive: false, deactivatedAt } });
+            // Set-password links stop working too (they also check the account is active when used).
+            await revokeOutstandingInvites(tx, id);
             await audit(tx, actor, id, 'STATUS_CHANGE', { isActive: { from: true, to: false } });
             return true;
         });
@@ -452,26 +470,27 @@ export const userAdminService = {
     },
 
     /**
-     * Sets a new password (typed, or generated and returned once), makes the user change it at next sign-in and signs
-     * out all their sessions. `passwordChangedAt` is left as it is (it records the user's own changes). Audited as
-     * PASSWORD_RESET without the password. 400 for the acting admin's own account (use My Profile).
+     * POST /:id/send-invite: emails the user a new one-time set-password link (72 h) and stops their older links. An
+     * Invited user gets the invite again ("Resend invite"); an active account gets a password reset link (their current
+     * password keeps working until they use it). Audited as INVITE_SENT.
+     * 400 for the acting admin's own account (use My Profile) · 400 USER_INACTIVE · 400 NO_EMAIL (field `email`) · 403
+     * SUPER_ADMIN_ONLY · 404 · 502 INVITE_EMAIL_FAILED / 503 MAIL_DISABLED with the reason (nothing changes then).
      */
-    async resetPassword(actor: AuthUser, id: number, input: ResetPasswordInput): Promise<ResetPasswordResult> {
+    async sendInvite(actor: AuthUser, id: number): Promise<SendInviteResult> {
         if (id === actor.id) throw HttpError.badRequest('Change your own password from My Profile › Security.');
-        const target = await prisma.user.findUnique({ where: { id }, select: { username: true, role: true } });
+        const target = await prisma.user.findUnique({
+            where: { id },
+            select: { id: true, username: true, email: true, firstName: true, fullName: true, role: true, isActive: true, invitePending: true },
+        });
         if (!target) throw userNotFound();
         assertSuperAdminRule(actor, target.role, null);
-        const { password, generated } = choosePassword(input.password, target.username);
-        const passwordHash = await hashPassword(password);
+        if (!target.isActive) throw fieldError('Activate this user first: a deactivated account can’t set a password.', StatusCodes.BAD_REQUEST, 'USER_INACTIVE');
+        const email = normalizeUserEmail(target.email);
+        if (!email) throw fieldError('Add a work email first: the link is sent there.', StatusCodes.BAD_REQUEST, 'NO_EMAIL', 'email');
 
-        await runInTransaction(async (tx) => {
-            await acquireLocks(tx, [userLock(id)]);
-            const exists = await tx.user.findUnique({ where: { id }, select: { id: true } });
-            if (!exists) throw userNotFound();
-            await tx.user.update({ where: { id }, data: { passwordHash, mustChangePassword: true } });
-            await audit(tx, actor, id, 'PASSWORD_RESET', { passwordChangeRequired: true, generated });
-        });
-        const signedOutSessions = await sessionService.revokeAll(id);
-        return { temporaryPassword: generated ? password : null, signedOutSessions };
+        const purpose: InvitePurpose = target.invitePending ? 'invite' : 'reset';
+        const outcome = await inviteService.send(actor, { ...target, email }, purpose);
+        if (outcome.status !== 'sent') throw inviteEmailError(outcome);
+        return { user: await loadDto(id), purpose, sentTo: outcome.sentTo, expiresAt: outcome.expiresAt };
     },
 };

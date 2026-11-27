@@ -2,9 +2,9 @@ import type { Request, Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import { authService } from './auth.service.js';
 import { readToken, tryVerifyToken } from '../../middlewares/authMiddleware.js';
-import { effectiveMustChangePassword } from '../../middlewares/passwordChangeGate.js';
 import { setAuthCookie, clearAuthCookie } from './cookie.util.js';
-import type { ChangePasswordInput, LoginInput } from './auth.validator.js';
+import { inviteService } from './invite.service.js';
+import type { AcceptInviteInput, ChangePasswordInput, LoginInput, VerifyInviteInput } from './auth.validator.js';
 import { sendSuccess } from '../../utils/apiResponse.js';
 import { HttpError } from '../../utils/httpError.js';
 import { requireUser } from '../../utils/requestContext.js';
@@ -35,9 +35,7 @@ export async function logout(req: Request, res: Response): Promise<void> {
 
 /**
  * GET /api/auth/me — requires `authenticate`. Read from the database (not the JWT) so a name or photo change shows at
- * once: `{ id, username, role, fullName, firstName, lastName, photoUrl, mustChangePassword }`. 401 when the account no
- * longer exists. `mustChangePassword` is also true while this session's token still carries the `mcp` claim (the API
- * refuses it everything else until then), so the UI and the gate agree.
+ * once: `{ id, username, role, fullName, firstName, lastName, photoUrl }`. 401 when the account no longer exists.
  * When the database can't answer (outage, a paused Azure SQL resuming), it falls back to the verified JWT's claims
  * with no name or photo, so a database blip never signs the user out.
  */
@@ -45,33 +43,34 @@ export async function getMe(req: Request, res: Response): Promise<void> {
     const authUser = requireUser(req);
     let user: AuthMeDto;
     try {
-        const row = await authService.me(authUser.id);
-        // Locked while either the account or this session's token says so, as the API gate is.
-        user = { ...row, mustChangePassword: effectiveMustChangePassword(row.mustChangePassword, req.auth?.mustChangePassword === true) };
+        user = await authService.me(authUser.id);
     } catch (err) {
         if (err instanceof HttpError) throw err;
         logger.warn({ err: (err as Error).message, userId: authUser.id }, 'GET /api/auth/me: database unavailable; answering from the token');
-        user = {
-            id: authUser.id,
-            username: authUser.username,
-            role: authUser.role,
-            fullName: '',
-            firstName: null,
-            lastName: null,
-            photoUrl: null,
-            mustChangePassword: req.auth?.mustChangePassword === true,
-        };
+        user = { id: authUser.id, username: authUser.username, role: authUser.role, fullName: '', firstName: null, lastName: null, photoUrl: null };
     }
     res.status(StatusCodes.OK).json({ status: 'ok', user });
 }
 
-/**
- * POST /api/auth/change-password — requires `authenticate`; body validated by `changePasswordSchema`. After a temporary
- * password is replaced the cookie is re-issued for the same session without the must-change-password claim.
- */
+/** POST /api/auth/change-password — requires `authenticate`; body validated by `changePasswordSchema`. */
 export async function changePassword(req: Request, res: Response): Promise<void> {
     if (!req.auth) throw HttpError.unauthorized();
-    const { result, token } = await authService.changePassword(requireUser(req), req.auth, req.body as ChangePasswordInput);
-    if (token) setAuthCookie(res, token);
+    const result = await authService.changePassword(requireUser(req), req.auth, req.body as ChangePasswordInput);
     sendSuccess(res, result, 'Password changed');
+}
+
+/** POST /api/auth/invite/verify — public; who an emailed set-password link is for (400 INVALID_INVITE otherwise). */
+export async function verifyInvite(req: Request, res: Response): Promise<void> {
+    sendSuccess(res, await inviteService.verify((req.body as VerifyInviteInput).token));
+}
+
+/**
+ * POST /api/auth/invite/accept — public; sets the password from an emailed link and signs the user in (the same
+ * cookie and answer as POST /login), so the app opens on the dashboard.
+ */
+export async function acceptInvite(req: Request, res: Response): Promise<void> {
+    const body = req.body as AcceptInviteInput;
+    const { user, token } = await inviteService.accept(body.token, body.newPassword, { ip: req.ip, userAgent: req.get('user-agent') });
+    setAuthCookie(res, token);
+    res.status(StatusCodes.OK).json({ status: 'ok', message: 'Password set', user });
 }

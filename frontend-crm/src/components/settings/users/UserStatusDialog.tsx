@@ -78,8 +78,9 @@ export function UserStatusDialog({
                     </>
                 ) : (
                     <Typography sx={{ fontSize: '0.85rem', color: 'var(--crm-slate-700)', lineHeight: 1.55 }}>
-                        They can sign in again with their current password and are offered as an assignee again.
-                        {user?.mustChangePassword ? ' They still have to change their temporary password first.' : ''}
+                        {user?.invitePending
+                            ? 'They are offered as an assignee again. They still have to set their password from an invite link: use “Resend invite” afterwards (links sent before the deactivation no longer work).'
+                            : 'They can sign in again with their current password and are offered as an assignee again.'}
                     </Typography>
                 )}
                 {error && (

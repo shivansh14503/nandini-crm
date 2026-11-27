@@ -26,11 +26,9 @@ import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
 import TuneRoundedIcon from '@mui/icons-material/TuneRounded';
 import EventBusyOutlinedIcon from '@mui/icons-material/EventBusyOutlined';
 import { FormField, FormGrid, RhfPhoneField, RhfTextField, ReadOnlyField, fieldSx } from '@/components/forms';
-import { PasswordRulesChecklist } from '@/components/common/PasswordRulesChecklist';
 import { SwitchRow } from '@/components/common/SwitchRow';
 import { UserAvatar } from '@/components/common/UserAvatar';
 import { UnsavedChangesModal } from '@/components/common/UnsavedChangesModal';
-import { PasswordInput } from '@/components/profile/ChangePasswordCard';
 import { solidButtonSx } from '@/components/profile/profileUi';
 import { errorMessage, secondaryButtonSx } from '@/components/settings/form-customization/builderUi';
 import { useLeaveGuard } from '@/components/settings/useLeaveGuard';
@@ -51,14 +49,12 @@ import {
     type UpdateAdminUserPayload,
 } from '@/types/userAdmin.types';
 import { isSuperAdminRole, ROLE_NAME_MAX_LENGTH } from '@/utils/roleAccess';
-import { adminPasswordIssue } from '@/utils/passwordPolicy';
 import { firstFreeUsername, normalizeUsername, suggestUsername, USERNAME_MAX_LENGTH, USERNAME_MIN_LENGTH } from '@/utils/username';
 import { needsOtherDomain, userFormSchema, type UserFormData, type UserFormOutput } from '@/validations/userAdmin.schema';
 import { getFirstErrorMessage } from '@/validations/common';
 import { formatPersonName } from '@/utils/personName';
 import { holdUnsavedWork } from '@/utils/unsavedWork';
 import { formatDayRange } from '@/utils/userAvailability';
-import { PasswordModeChoice } from './ResetPasswordDialog';
 import { RoleAccessBadges, apiErrorCode, apiFieldErrors, roleAccessHint, userLabel } from './userAdminUi';
 
 const FORM_FIELDS = [
@@ -66,7 +62,6 @@ const FORM_FIELDS = [
     'lastName',
     'username',
     'email',
-    'password',
     'role',
     'jobTitle',
     'department',
@@ -154,8 +149,6 @@ const EMPTY_VALUES: UserFormData = {
     username: '',
     email: '',
     allowOtherDomain: false,
-    passwordMode: 'generate',
-    password: '',
     role: '',
     jobTitle: '',
     department: '',
@@ -219,7 +212,7 @@ function toCreatePayload(values: UserFormOutput): CreateAdminUserPayload {
         username: values.username,
         firstName: values.firstName,
         lastName: optional(values.lastName),
-        email: optional(values.email),
+        email: values.email ?? '',
         allowOtherDomain: values.email && values.allowOtherDomain ? true : undefined,
         role: values.role,
         department: optional(values.department),
@@ -228,7 +221,6 @@ function toCreatePayload(values: UserFormOutput): CreateAdminUserPayload {
         mobile: optional(values.mobile),
         officePhone: optional(values.officePhone),
         isGroupUser: values.isGroupUser || undefined,
-        password: values.passwordMode === 'set' ? values.password : undefined,
     };
 }
 
@@ -285,11 +277,9 @@ export function UserFormDrawer({
     const saving = createUser.isPending || updateUser.isPending;
     const [formError, setFormError] = useState<string | null>(null);
     const [confirmDiscard, setConfirmDiscard] = useState(false);
-    const checklistId = useId();
-
     // Fixed for the drawer's life (it is keyed per user); company domains only arrive with the meta.
     const [initialValues] = useState(() => toFormValues(user, meta ? companyDomains : null));
-    const schema = useMemo(() => userFormSchema({ mode, companyDomains, passwordIssue: adminPasswordIssue }), [mode, companyDomains]);
+    const schema = useMemo(() => userFormSchema({ mode, companyDomains }), [mode, companyDomains]);
     const methods = useForm<UserFormData, unknown, UserFormOutput>({
         resolver: zodResolver(schema),
         defaultValues: initialValues,
@@ -301,9 +291,9 @@ export function UserFormDrawer({
         setError,
         formState: { isDirty },
     } = methods;
-    const [email, allowOtherDomain, passwordMode, password, username, role, firstName, lastName] = useWatch({
+    const [email, allowOtherDomain, username, role, firstName, lastName] = useWatch({
         control,
-        name: ['email', 'allowOtherDomain', 'passwordMode', 'password', 'username', 'role', 'firstName', 'lastName'],
+        name: ['email', 'allowOtherDomain', 'username', 'role', 'firstName', 'lastName'],
     });
     const { onUsernameTyped, takenHint } = useUsernameSuggestion({
         enabled: !user,
@@ -427,7 +417,7 @@ export function UserFormDrawer({
                             {title}
                         </Typography>
                         <Typography sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)', overflowWrap: 'anywhere' }}>
-                            {user ? `${user.username}${user.isActive ? '' : ' · Inactive'}` : 'They get a temporary password and choose their own at first sign-in.'}
+                            {user ? `${user.username}${user.isActive ? '' : ' · Inactive'}` : 'They get an email with a link to set their own password.'}
                         </Typography>
                     </Box>
                     <Tooltip title="Close">
@@ -513,9 +503,14 @@ export function UserFormDrawer({
                                             name="email"
                                             label="Work email"
                                             type="email"
+                                            required={!user}
                                             maxLength={L.email}
                                             placeholder={companyDomains[0] ? `e.g. rajesh.kumar@${companyDomains[0]}` : 'e.g. rajesh.kumar@company.com'}
-                                            hint="Unique among active people. Used to connect their calendar."
+                                            hint={
+                                                user
+                                                    ? 'Unique among active people. Used to connect their calendar. Changing it stops any set-password link already sent.'
+                                                    : 'The invite to set a password is sent here (the link works once, for 72 hours). Unique among active people.'
+                                            }
                                             fieldSize="full"
                                             disabled={saving}
                                             slotProps={{ htmlInput: { autoComplete: 'off', spellCheck: false } }}
@@ -549,50 +544,6 @@ export function UserFormDrawer({
                                             />
                                         )}
                                     </Box>
-                                    {!user && (
-                                        <Box data-field-size="full" sx={{ gridColumn: '1 / -1', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
-                                            <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--crm-slate-700)' }}>Initial password</Typography>
-                                            <Controller
-                                                control={control}
-                                                name="passwordMode"
-                                                render={({ field }) => <PasswordModeChoice value={field.value} onChange={field.onChange} disabled={saving} />}
-                                            />
-                                            {passwordMode === 'set' ? (
-                                                <>
-                                                    <Controller
-                                                        control={control}
-                                                        name="password"
-                                                        render={({ field, fieldState }) => (
-                                                            <PasswordInput
-                                                                label="Password"
-                                                                value={field.value}
-                                                                onChange={field.onChange}
-                                                                onBlur={field.onBlur}
-                                                                autoComplete="new-password"
-                                                                disabled={saving}
-                                                                describedBy={checklistId}
-                                                                error={Boolean(fieldState.error)}
-                                                                helperText={fieldState.error?.message}
-                                                            />
-                                                        )}
-                                                    />
-                                                    <PasswordRulesChecklist
-                                                        id={checklistId}
-                                                        audience="admin"
-                                                        password={password ?? ''}
-                                                        context={{ username: (username ?? '').trim().toLowerCase() }}
-                                                    />
-                                                </>
-                                            ) : (
-                                                <Typography sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)', lineHeight: 1.5 }}>
-                                                    A 12-character password is generated and shown to you once after saving.
-                                                </Typography>
-                                            )}
-                                            <Typography sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)', lineHeight: 1.5 }}>
-                                                Either way, they must choose their own password at first sign-in.
-                                            </Typography>
-                                        </Box>
-                                    )}
                                 </FormGrid>
                             </Section>
 

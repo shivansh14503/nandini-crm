@@ -91,17 +91,6 @@ export const sessionService = {
     },
 
     /**
-     * Restarts a tracked session's expiry (its token was re-issued with a fresh expiry, after the user replaced a
-     * temporary password). Best effort: on failure the session simply ends at its old expiry.
-     */
-    async refresh(userId: number, jti: string): Promise<void> {
-        if (!isRedisReady()) return;
-        await redis.expire(sessionKey(userId, jti), ENV.SESSION_TTL_SECONDS).catch((err: Error) => {
-            logger.warn({ err: err.message, userId }, 'Session refresh failed');
-        });
-    },
-
-    /**
      * Ends every tracked session of a user except `keepJti` (the request's own session): after a password change and
      * for "Sign out of all other sessions". Returns how many were ended, or null when Redis can't be asked or failed
      * partway (some sessions may still be signed in, so callers must not report success).

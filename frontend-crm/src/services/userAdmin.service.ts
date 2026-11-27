@@ -9,7 +9,7 @@ import type {
     AdminUserUpdateResult,
     CreateAdminUserPayload,
     CreateAdminUserResult,
-    ResetPasswordResult,
+    SendInviteResult,
     UpdateAdminUserPayload,
 } from '../types/userAdmin.types';
 import { apiClient } from './apiClient';
@@ -62,10 +62,14 @@ export const userAdminService = {
         broadcast();
         return res.data;
     },
-    /** Without `password` the API generates a temporary one. The user must change it at the next sign-in. */
-    async resetPassword(id: number, password?: string): Promise<ResetPasswordResult> {
-        const res = await apiClient.post<ApiResponse<ResetPasswordResult>>(`${BASE}/${enc(id)}/reset-password`, password ? { password } : {});
-        notifyCrmUpdate(BASE);
+    /**
+     * Emails a new one-time set-password link (72 h) and stops the older ones: the invite again for an Invited user,
+     * a password reset link otherwise. Rejects with the reason when the email can't be sent (INVITE_EMAIL_FAILED,
+     * MAIL_DISABLED).
+     */
+    async sendInvite(id: number): Promise<SendInviteResult> {
+        const res = await apiClient.post<ApiResponse<SendInviteResult>>(`${BASE}/${enc(id)}/send-invite`);
+        broadcast();
         return res.data;
     },
 };

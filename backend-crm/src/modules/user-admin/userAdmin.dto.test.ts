@@ -20,7 +20,7 @@ const row: AdminUserRow = {
     isActive: true,
     isGroupUser: false,
     onLeave: false,
-    mustChangePassword: true,
+    invitePending: true,
     lastLoginAt: null,
     passwordChangedAt: new Date('2026-11-01T10:00:00.000Z'),
     createdAt: new Date('2026-11-26T09:00:00.000Z'),
@@ -29,14 +29,16 @@ const row: AdminUserRow = {
     photo: { id: 'p-1' },
     preference: null,
     reportsTo: { id: 3, fullName: 'Rahul Mehta', username: 'rahul', isActive: false },
+    invites: [{ purpose: 'invite', createdAt: new Date('2026-11-26T09:00:00.000Z'), expiresAt: new Date('2026-11-29T09:00:00.000Z') }],
     _count: { directReports: 4 },
 };
+const now = new Date('2026-11-26T12:00:00.000Z');
 const emailRule = { duplicates: new Set<string>(), companyDomains: ['nandiniinfosys.com'] };
 const today = '2026-11-26';
 
 describe('toAdminUserDto', () => {
     it('maps every field, with role access, the manager and ISO dates', () => {
-        assert.deepEqual(toAdminUserDto(row, emailRule, today), {
+        assert.deepEqual(toAdminUserDto(row, emailRule, today, now), {
             id: 12,
             username: 'asha.k',
             fullName: 'Asha Kapoor',
@@ -56,7 +58,8 @@ describe('toAdminUserDto', () => {
             isGroupUser: false,
             onLeave: false,
             outOfOffice: null,
-            mustChangePassword: true,
+            invitePending: true,
+            invite: { purpose: 'invite', sentAt: '2026-11-26T09:00:00.000Z', expiresAt: '2026-11-29T09:00:00.000Z', expired: false },
             lastLoginAt: null,
             passwordChangedAt: '2026-11-01T10:00:00.000Z',
             createdAt: '2026-11-26T09:00:00.000Z',
@@ -64,6 +67,12 @@ describe('toAdminUserDto', () => {
             deactivatedAt: null,
             emailIssue: null,
         });
+    });
+    it('marks a link past its expiry, and shows none when every link is used or revoked', () => {
+        assert.equal(toAdminUserDto(row, emailRule, today, new Date('2026-11-29T09:00:00.000Z')).invite?.expired, true);
+        assert.equal(toAdminUserDto({ ...row, invites: [] }, emailRule, today, now).invite, null);
+        const reset = { purpose: 'reset', createdAt: new Date('2026-11-26T09:00:00.000Z'), expiresAt: new Date('2026-11-29T09:00:00.000Z') };
+        assert.equal(toAdminUserDto({ ...row, invitePending: false, invites: [reset] }, emailRule, today, now).invite?.purpose, 'reset');
     });
     it('never exposes a password hash or the raw reportsToId', () => {
         const dto = toAdminUserDto({ ...row, passwordHash: 'x' } as AdminUserRow, emailRule, today) as unknown as Record<string, unknown>;
@@ -104,7 +113,7 @@ describe('adminUserAuditSnapshot', () => {
     it('has no key the audit log would redact (so diffs stay readable) and no secret', () => {
         const snapshot = adminUserAuditSnapshot(row);
         for (const key of Object.keys(snapshot)) assert.equal(isSensitiveKey(key), false, key);
-        assert.equal(snapshot.passwordChangeRequired, true);
+        assert.equal(snapshot.invitePending, true);
         assert.equal(snapshot.mobile, '+919811234567');
         assert.equal('passwordHash' in snapshot, false);
     });

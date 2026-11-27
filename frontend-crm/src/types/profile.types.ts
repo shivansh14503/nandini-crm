@@ -13,8 +13,6 @@ export interface ProfileDto {
     jobTitle?: string | null;
     /** The user's manager, set by an admin (read-only here). */
     reportsTo?: { id: number; name: string } | null;
-    /** An admin set or reset the password: it must be changed before anything else. */
-    mustChangePassword?: boolean;
     /** Mobile number in E.164 (the user's `phone` column). */
     mobile: string | null;
     officePhone: string | null;

@@ -101,10 +101,17 @@ export type AuditAction =
     /** A user changed their own password (My Profile); `changes` holds only `passwordChangedAt`, never a password. */
     | 'PASSWORD_CHANGE'
     /**
-     * An admin reset a user's password (Admin › Users); `changes` holds only `{ passwordChangeRequired: true,
-     * generated }`, never a password. Written before the user's sessions are signed out, so it holds no session count.
+     * Retired (temporary passwords are gone): an admin reset a user's password (Admin › Users); `changes` held only
+     * `{ passwordChangeRequired: true, generated }`. Kept so older audit entries still type-check and read well.
      */
     | 'PASSWORD_RESET'
+    /**
+     * An admin emailed a user a one-time set-password link (Admin › Users: on add, "Resend invite", "Send password
+     * reset link"): `{ purpose: 'invite' | 'reset', expiresAt, email: 'sent' | 'failed' | 'skipped' }`. Never the token.
+     */
+    | 'INVITE_SENT'
+    /** A user set their password from an emailed link (`{ purpose, passwordChangedAt }`); never the password or token. */
+    | 'PASSWORD_SET'
     /** A user signed out one of their other sessions (`scope: 'one'`, `sessionId`) or all of them (`scope: 'others'`). */
     | 'SESSION_REVOKE'
     /** A person's company calendar started syncing (enrolled or re-enrolled by the admin-managed set-up, P2-2b). */
@@ -196,6 +203,8 @@ const SECURITY_ACTIONS: ReadonlySet<AuditAction> = new Set([
     'LEDGER_VERIFY',
     'PASSWORD_CHANGE',
     'PASSWORD_RESET',
+    'INVITE_SENT',
+    'PASSWORD_SET',
     'SESSION_REVOKE',
     'ENROL',
     'STOP',
@@ -229,12 +238,12 @@ export function categoryFor(entityType: AuditEntityType, action: AuditAction): A
 
 /**
  * INFO: everyday creates, edits, sign-ins. NOTICE: deletes, restores, undo, conversions, imports, any admin setting,
- * password changes and admin resets, and sessions signed out from My Profile.
+ * password changes, set-password links sent and used, and sessions signed out from My Profile.
  * WARNING: failed sign-ins and refused access. CRITICAL is reserved for integrity alarms.
  */
 export function severityFor(action: AuditAction, category: AuditCategory): AuditSeverity {
     if (action === 'LOGIN_FAILED' || action === 'ACCESS_DENIED') return 'WARNING';
-    if (['DELETE', 'RESTORE', 'REVERT', 'CONVERT', 'IMPORT', 'EXPORT', 'PASSWORD_CHANGE', 'PASSWORD_RESET', 'SESSION_REVOKE', 'ENROL', 'STOP', 'CONNECT', 'DISCONNECT', 'TEST_AS_USER', 'PURGE'].includes(action) || category === 'CONFIG') {
+    if (['DELETE', 'RESTORE', 'REVERT', 'CONVERT', 'IMPORT', 'EXPORT', 'PASSWORD_CHANGE', 'PASSWORD_RESET', 'INVITE_SENT', 'PASSWORD_SET', 'SESSION_REVOKE', 'ENROL', 'STOP', 'CONNECT', 'DISCONNECT', 'TEST_AS_USER', 'PURGE'].includes(action) || category === 'CONFIG') {
         return 'NOTICE';
     }
     return 'INFO';

@@ -1,6 +1,4 @@
-import { randomInt } from 'node:crypto';
 import { FIELD_MAX_LENGTH as L } from '../../config/fieldLimits.js';
-import { passwordPolicyIssue } from '../auth/passwordPolicy.js';
 import { isAdminAccessRole, isSuperAdminRole } from './roles.js';
 
 /** Pure rules of Admin › Users (no database), unit tested in userAdmin.rules.test.ts. */
@@ -79,7 +77,7 @@ export const ADMIN_GUARD_MESSAGES: Record<AdminGuardIssue, string> = {
 
 /**
  * Only a Super Admin may create a Super Admin, give or take the Super Admin role, or edit, deactivate, activate or
- * reset the password of a Super Admin. `targetRole` is the user's role before the change (null for a new user),
+ * send a set-password link to a Super Admin. `targetRole` is the user's role before the change (null for a new user),
  * `nextRole` after it. True when the change is refused.
  */
 export function superAdminOnly(actorRole: string, targetRole: string | null, nextRole: string | null): boolean {
@@ -97,32 +95,4 @@ export const SUPER_ADMIN_ONLY_MESSAGE = 'Only a Super Admin can add or manage Su
  */
 export function fullNameLengthIssue(fullName: string): string | null {
     return fullName.length > L.personName ? `First and last name together cannot exceed ${L.personName - 1} characters.` : null;
-}
-
-// ── Temporary passwords ──────────────────────────────────────────────────────
-
-export const TEMPORARY_PASSWORD_LENGTH = 12;
-// No look-alikes (0/O/o, 1/l/I), so a password read out or copied by hand isn't mistyped.
-const LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz';
-const DIGITS = '23456789';
-const ALPHABET = LETTERS + DIGITS;
-
-const pick = (chars: string, random: (max: number) => number) => chars[random(chars.length)];
-
-/**
- * A random 12-character password of letters and digits (at least one of each) that passes the password rules for
- * `username`. Shown to the admin once; never stored in clear, logged or audited. `random` is crypto `randomInt`.
- */
-export function generateTemporaryPassword(username: string, random: (max: number) => number = randomInt): string {
-    for (;;) {
-        const chars = [pick(LETTERS, random), pick(DIGITS, random)];
-        while (chars.length < TEMPORARY_PASSWORD_LENGTH) chars.push(pick(ALPHABET, random));
-        // Fisher–Yates, so the guaranteed letter and digit can sit anywhere.
-        for (let i = chars.length - 1; i > 0; i--) {
-            const j = random(i + 1);
-            [chars[i], chars[j]] = [chars[j], chars[i]];
-        }
-        const password = chars.join('');
-        if (!passwordPolicyIssue(password, { username })) return password;
-    }
 }

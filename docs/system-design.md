@@ -1,6 +1,6 @@
 # Nandini CRM — System Design
 
-> **Status:** living document. Describes the system as built (code as of 2026-11-27; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Referrals module; Documents module; Activities data model and API, Calendar Phase 1 PR1; Activities screens and Calendar, PR2; notifications, reminders and mail workers, navbar bell and the morning summary email, PR3, with its review fixes; guarded cache reads for lookups, form configs and search, with its review fixes; Calendar Phase 2 P2-1, Admin › API Integrations foundation: encrypted provider credentials, connection tests, calendar sync settings, company emails, with its review fixes; My Profile (Profile Phase 1): profile, photo, change password, signed-in sessions; Admin › Users (Profile Phase 2, 2026-11-26): user management, the must-change-password claim, sessions revoked on deactivation / reset / role change; Calendar Phase 2 P2-2, employees connect / disconnect Google or Microsoft 365 calendars (replaced by P2-2b); Calendar Phase 2 P2-2b, admin-managed calendar connections: a Google service account with domain-wide delegation and a Microsoft Entra app with application permissions, automatic enrolment of everyone with a company email, in-memory tokens only, admin problem notifications; My Profile › Notifications (Profile Phase 3): bell kinds a user can turn off, the morning summary opt-out, a personal default reminder and out-of-office dates; Calendar Phase 2 P2-3a: one activity write path (system writes, write hook, lock seam, shared post-commit step), no behaviour change; Admin › Company formats (Profile Phase 5, PR5a): one company-wide date / time / number display setting, a shared formatter core, legacy styles kept until an admin saves; PR5b: the remaining ad-hoc format sites and the audit log's Before / After values follow it too; Calendar Phase 2 P2-4: lead / opportunity follow-ups create activities, locked follow-up fields, the nightly follow-up backfill; Calendar Phase 2 P2-3b: the CRM → calendar push engine (outbox, `crm-calendar-sync` queue and worker, Google / Graph event writes for enrolled people); Calendar Phase 2 P2-6: colleagues' busy times when picking a time, `GET /api/activities/busy`; Calendar Phase 2 P2-3c: the first-sync backfill, Send invitations / Retry / Add again and the sync status in the activity drawer; Calendar Phase 4: booking links, public scheduling pages `/book/<slug>` on free/busy; Calendar Phase 2 P2-5: calendar → CRM pull (Google sync tokens, Graph delta), office-hours polling, Sync now; Calendar Phase 2 P2-7: calendar webhooks (Google push channels, Graph subscriptions, `/api/webhooks/*`), the slower safety-net poll and the HTTPS go-live checklist; Calendar Phase 3 P3-1: Google Meet and Microsoft Teams links on activities from the owner's company calendar; Calendar Phase 4: recurring activities, CRM-authored series stored as one row per occurrence over a rolling 90-day horizon; Calendar Phase 2 P2-8: customer meetings imported from the calendar, two colleagues on one meeting, outside-organizer locks (the video meeting included; the organizer's join link shown read only), replies both ways (`rsvp` job), nightly auto-complete; Calendar Phase 4: email logging from Gmail / Outlook on contacts, leads and opportunities (§5.5, §8.10), with its review fixes (2026-11-27: no catch-up after switching off and on, purge vs running runs, Bcc never shown, sender-bound dedupe, capped times, snippets cleared when off, job ids / priority); booking links' default video meeting and on-demand pulls never absorbed by a finished job; as of 2026-11-27).
+> **Status:** living document. Describes the system as built (code as of 2026-11-27; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Referrals module; Documents module; Activities data model and API, Calendar Phase 1 PR1; Activities screens and Calendar, PR2; notifications, reminders and mail workers, navbar bell and the morning summary email, PR3, with its review fixes; guarded cache reads for lookups, form configs and search, with its review fixes; Calendar Phase 2 P2-1, Admin › API Integrations foundation: encrypted provider credentials, connection tests, calendar sync settings, company emails, with its review fixes; My Profile (Profile Phase 1): profile, photo, change password, signed-in sessions; Admin › Users (Profile Phase 2, 2026-11-26): user management, sessions revoked on deactivation / role change; emailed set-password links for new users and admin-sent resets, replacing temporary passwords (2026-11-27); Calendar Phase 2 P2-2, employees connect / disconnect Google or Microsoft 365 calendars (replaced by P2-2b); Calendar Phase 2 P2-2b, admin-managed calendar connections: a Google service account with domain-wide delegation and a Microsoft Entra app with application permissions, automatic enrolment of everyone with a company email, in-memory tokens only, admin problem notifications; My Profile › Notifications (Profile Phase 3): bell kinds a user can turn off, the morning summary opt-out, a personal default reminder and out-of-office dates; Calendar Phase 2 P2-3a: one activity write path (system writes, write hook, lock seam, shared post-commit step), no behaviour change; Admin › Company formats (Profile Phase 5, PR5a): one company-wide date / time / number display setting, a shared formatter core, legacy styles kept until an admin saves; PR5b: the remaining ad-hoc format sites and the audit log's Before / After values follow it too; Calendar Phase 2 P2-4: lead / opportunity follow-ups create activities, locked follow-up fields, the nightly follow-up backfill; Calendar Phase 2 P2-3b: the CRM → calendar push engine (outbox, `crm-calendar-sync` queue and worker, Google / Graph event writes for enrolled people); Calendar Phase 2 P2-6: colleagues' busy times when picking a time, `GET /api/activities/busy`; Calendar Phase 2 P2-3c: the first-sync backfill, Send invitations / Retry / Add again and the sync status in the activity drawer; Calendar Phase 4: booking links, public scheduling pages `/book/<slug>` on free/busy; Calendar Phase 2 P2-5: calendar → CRM pull (Google sync tokens, Graph delta), office-hours polling, Sync now; Calendar Phase 2 P2-7: calendar webhooks (Google push channels, Graph subscriptions, `/api/webhooks/*`), the slower safety-net poll and the HTTPS go-live checklist; Calendar Phase 3 P3-1: Google Meet and Microsoft Teams links on activities from the owner's company calendar; Calendar Phase 4: recurring activities, CRM-authored series stored as one row per occurrence over a rolling 90-day horizon; Calendar Phase 2 P2-8: customer meetings imported from the calendar, two colleagues on one meeting, outside-organizer locks (the video meeting included; the organizer's join link shown read only), replies both ways (`rsvp` job), nightly auto-complete; Calendar Phase 4: email logging from Gmail / Outlook on contacts, leads and opportunities (§5.5, §8.10), with its review fixes (2026-11-27: no catch-up after switching off and on, purge vs running runs, Bcc never shown, sender-bound dedupe, capped times, snippets cleared when off, job ids / priority); booking links' default video meeting and on-demand pulls never absorbed by a finished job; as of 2026-11-27).
 > Update it in the same change that alters architecture, infrastructure, Redis usage, queues or security.
 > Related: [Database design](database-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
@@ -173,11 +173,13 @@ SQL Server is the only source of truth; Redis only ever holds derived or disposa
 - `POST /api/auth/login` checks the bcrypt hash (12 rounds). Unknown usernames are compared against a dummy hash so
   timing doesn't reveal valid usernames. Legacy plain-text passwords are compared in constant time and
   re-hashed to bcrypt on the next successful login. After the Redis session is recorded the user row is read again:
-  if an admin deactivated the user or reset the password while the password was being checked (their `revokeAll`
+  if an admin deactivated the user while the password was being checked (their `revokeAll`
   ran before this session existed), the new session is deleted and the sign-in refused (403 `ACCOUNT_INACTIVE` / 401
-  `INVALID_CREDENTIALS`); `mcp` comes from that second read.
+  `INVALID_CREDENTIALS`). A user still **Invited** (`Users.invitePending`: never set a password from their link) gets
+  403 `INVITE_PENDING` after a correct password (only a user who still had a temporary password when those were
+  retired can have one).
 - On success the API signs a **JWT** (HS256, `JWT_SECRET`, expiry = `SESSION_TTL_SECONDS`, default 8 h) with
-  `{ id, username, role, tracked, jti }` (plus `mcp: true` when the user must change their password, below) and sets it as an **httpOnly cookie** named `token`
+  `{ id, username, role, tracked, jti }` and sets it as an **httpOnly cookie** named `token`
   (`secure` + `SameSite=None` in production, `Lax` in dev). A `Bearer` header is accepted as a fallback.
 - The session is also written to Redis as `session:{userId}:{jti}` with the same TTL. A *tracked* token whose key
   is missing is treated as revoked (logout, a password change, "Sign out" on My Profile). If Redis is unreachable at
@@ -191,8 +193,7 @@ SQL Server is the only source of truth; Redis only ever holds derived or disposa
 - **Frontend sign-in redirects** (`hooks/useRequireAuth.ts`, `context/AuthContext.tsx`, `utils/safeNextPath.ts`): every
   signed-in page calls `useRequireAuth()`. Signed out, it `replace`s the page with `/login?next=<path+query+hash>`
   (`loginPathWithNext()`; `safeNextPath` still validates it: CRM paths only, no open redirect). Signing in always goes
-  to the **dashboard** (as of 2026-11-27, at the owner's request; `?next=` is no longer followed), or to My Profile ›
-  Security first for a must-change password, which goes on to the dashboard once the new password is saved. Any API 401 other than a wrong
+  to the **dashboard** (as of 2026-11-27, at the owner's request; `?next=` is no longer followed). Any API 401 other than a wrong
   password at sign-in (`INVALID_CREDENTIALS`), including a background poll's, means the session ended on its own
   (expired after the 8 h TTL, revoked, signed out in another tab). What happens depends on whether unsaved edits are on
   screen (`utils/unsavedWork.ts`: `useFormDraftGuard`, `useLeaveGuard` and Document Series hold a claim while dirty):
@@ -205,9 +206,7 @@ SQL Server is the only source of truth; Redis only ever holds derived or disposa
     before it reaches the network, so a cookie from another account signed in elsewhere in the browser can neither
     load data into this tab's cache nor save this draft (e.g. Ctrl+S behind the dialog). File and PDF fetches
     (`fetchWithSession`, `pdfTemplate.service` `fetchBinary`) are held the same way and report their errors to the
-    same listeners (`notifyApiError`), so their 401s end the session too. If the sign-in answers with a must-change
-    password (an admin reset it), the dialog says the draft can't be saved and only continues to My Profile › Security
-    when the user confirms. If the unsaved work goes away while the dialog is up (the browser's Back button), it falls
+    same listeners (`notifyApiError`), so their 401s end the session too. If the unsaved work goes away while the dialog is up (the browser's Back button), it falls
     through to the next case (`subscribeUnsavedWork`). **Discard changes** (`endExpiredSession`) does too.
   - **Nothing unsaved**: `AuthContext` drops the user and sets the "session expired" note, and the guard sends the
     user to `/login?next=<this page>`; signing in again opens the dashboard.
@@ -217,9 +216,7 @@ SQL Server is the only source of truth; Redis only ever holds derived or disposa
   (never `?next=`), matching the navbar's own navigation. `utils/safeNextPath.ts` has no imports (its login path
   mirrors `ROUTES.LOGIN`) because the backend contract test loads it with tsx, which can't resolve the `@/` alias.
 - **Change password** (`POST /api/auth/change-password`, My Profile › Security): the current password is checked like a
-  sign-in (bcrypt, or a legacy plain-text row; on the forced first-login change, when the session carries `mcp` and the
-  account is still flagged, it isn't asked for: the session was just opened with the temporary password, and the new
-  one is checked to differ from it instead), the new one against `modules/auth/passwordPolicy.ts` (8–128
+  sign-in (bcrypt, or a legacy plain-text row; always required), the new one against `modules/auth/passwordPolicy.ts` (8–128
   characters, a letter and a digit, not the username, not the current password; the frontend's live checklist uses a
   contract-tested copy). The bcrypt hash and `passwordChangedAt` are written in one transaction with a
   `PASSWORD_CHANGE` audit entry (no password in it; `currentPassword`, `newPassword` and `confirmPassword` are
@@ -229,30 +226,36 @@ SQL Server is the only source of truth; Redis only ever holds derived or disposa
   signed in. If Redis is down or fails partway the response says `signedOutSessions: null` and the UI tells the user
   to sign out other sessions again from My Profile. Rate limited per user (10 requests / 15 min, every request counts). An untracked session (Redis was down
   at its sign-in) can't be revoked early and keeps working until its JWT expires.
-- **Must change password** (Profile Phase 2): `Users.mustChangePassword` is set for a user added in Admin › Users and
-  after an admin password reset (both with a temporary password the admin sees once). At sign-in the flag becomes the
-  JWT claim `mcp: true`; `authenticate` then lets the request through only when it is on a small allow-list
-  (`middlewares/passwordChangeGate.ts`, unit tested: `GET /api/auth/me`, `POST /api/auth/logout`,
-  `POST /api/auth/change-password`, `GET /api/me/profile`, `GET /api/me/sessions`, `GET /api/user-photos/:id`; method +
-  whole path, case-insensitive, one path segment for the photo id) and answers everything else
-  `403 PASSWORD_CHANGE_REQUIRED` (not audited as `ACCESS_DENIED`). The frontend sends the user to My Profile › Security
-  on that flag or that error. `GET /api/auth/me` reports `mustChangePassword` as the stored flag **or** the session's
-  own `mcp` claim, so a session that still carries the claim after the password was changed elsewhere (it couldn't be
-  signed out: Redis down, or untracked) stays on the change-password screen instead of unlocking and then getting 403s;
-  it gets out by changing the password again or signing in again. A deactivated user gets 403 `ACCOUNT_INACTIVE` from
-  change-password (nothing changed, no token issued). A successful change clears the column in the same transaction and re-issues the cookie
-  for the **same** session (same jti, Redis expiry restarted, current role) without the claim. Tokens without the claim
-  (all tokens issued before it existed) are unaffected. The claim is read from the token, not the database, so a reset
-  relies on revoking the user's sessions (below); an untracked token issued before a reset keeps working until it
-  expires.
-- **Admin › Users** (`/api/admin/users`, admin roles): deactivating a user, resetting their password and changing their
+- **Set-password links** (invites and admin-sent resets; replaced temporary passwords and the must-change-password
+  gate on 2026-11-27): `modules/auth/invite.token.ts`, `invite.service.ts`, `inviteEmail.render.ts`.
+  - *Token*: 32 random bytes as 43 base64url characters, emailed as `${APP_PUBLIC_URL}/set-password?token=…`. Only its
+    SHA-256 (hex) is stored, in `UserInvites` (`purpose` invite | reset, `expiresAt` = 72 h, `usedAt`, `revokedAt`,
+    `createdBy`); a lookup by hash is followed by a constant-time compare (`timingSafeEqual`). Anything that isn't
+    43 base64url characters is refused before any lookup. The token is never logged or audited (`token`,
+    `newPassword` and `currentPassword` are redacted by the logger).
+  - *Sending* (`inviteService.send`, from Admin › Users create and `send-invite`): writes the row, renders the email
+    (the morning email's layout: a button, the username, the expiry in `BUSINESS_TIMEZONE`, a plain-link fallback),
+    sends it through the mail service (`EmailLog` kinds `user_invite` / `password_reset_link`), and only when it was
+    sent revokes the user's older links. A failed send deletes the new row (the older link keeps working) and the
+    admin sees the mail server's reason; with email off (`MAIL_ENABLED`) no link is created. Audited `INVITE_SENT`.
+  - *Using it* (public `POST /api/auth/invite/verify` and `/invite/accept`, 30 requests / 15 min per IP across both,
+    in-process fallback while Redis can't count): every bad link gets the same `400 INVALID_INVITE`. Accept checks the
+    password rules (a reset link also refuses the current password), then under `user:id:<id>` burns the link with a
+    conditional update (single use even with two tabs), revokes the user's other links, stores the hash, clears
+    `invitePending`, audits `PASSWORD_SET`; after commit it revokes every session of the user, opens a new one (cookie,
+    `LOGIN` audited `via: set_password_link`), and the page opens the dashboard.
+  - *Revoked* also by an email change (Admin › Users, People) and a deactivation. A reset link doesn't touch the
+    current password until it is used. Sessions still carrying the retired `mcp` claim are refused by `verifyToken`.
+  - *Page*: `app/set-password` (public, `noindex`, `Referrer-Policy: no-referrer`) reads the token once and drops it
+    from the address bar (`history.replaceState`).
+- **Admin › Users** (`/api/admin/users`, admin roles): deactivating a user and changing their
   role delete every `session:{userId}:*` key after the commit (`sessionService.revokeAll`), so a tracked session ends
   on its next request (`authenticate` finds the key gone → 401). The token carries the role, which is why a role
   change signs the user out (the acting admin's own sessions are left alone; their new role applies at next sign-in).
   Login already refuses an inactive user (403 `ACCOUNT_INACTIVE`). **Gap:** an *untracked* token (Redis was down at its
   sign-in), or any token while Redis is down, isn't checked against the database, so a deactivated or demoted user
   keeps that session until its JWT expires (8 h by default). Nothing records a revocation that failed: if Redis can't
-  be reached at the moment of the deactivation / reset / role change (`signedOutSessions: null`) but keeps its data,
+  be reached at the moment of the deactivation / role change (`signedOutSessions: null`) but keeps its data,
   the user's tracked sessions are **still valid after Redis comes back**, until their JWTs expire. The admin is warned
   and can retry: Reset password again, or **Sign out all sessions** in an inactive user's row menu (it calls
   `/deactivate`, which re-runs `revokeAll` for a user who is already inactive). A role change that couldn't sign the
@@ -512,8 +515,9 @@ commands fail immediately instead of hanging, and reconnects in the background (
 
 | Key pattern | Type | TTL | Written by | Purpose |
 | --- | --- | --- | --- | --- |
-| `session:{userId}:{jti}` | string (JSON: ip, userAgent, createdAt) | `SESSION_TTL_SECONDS` (8 h) | login | Revocable sessions; logout deletes the key; a password change deletes every other key of the user (and restarts this one's TTL when it replaced a temporary password); My Profile lists them (`SCAN` + `GET` + `PTTL`) and signs out one or all others; Admin › Users deletes all of a user's keys on deactivation, a password reset or a role change |
-| `ratelimit:admin-password-reset:user:{id}` | counter | 10 min | `POST /api/admin/users/:id/reset-password` | 20 password resets / 10 min / admin |
+| `session:{userId}:{jti}` | string (JSON: ip, userAgent, createdAt) | `SESSION_TTL_SECONDS` (8 h) | login | Revocable sessions; logout deletes the key; a password change deletes every other key of the user, a set-password link deletes all of them; My Profile lists them (`SCAN` + `GET` + `PTTL`) and signs out one or all others; Admin › Users deletes all of a user's keys on deactivation or a role change |
+| `ratelimit:admin-send-invite:user:{id}` | counter | 10 min | `POST /api/admin/users/:id/send-invite` | 20 invite / reset-link emails / 10 min / admin |
+| `ratelimit:set-password-link:ip:{ip}` | counter | 15 min | `POST /api/auth/invite/verify`, `/invite/accept` | 30 requests / 15 min / IP (every request counts; in-process counter while Redis can't count) |
 | `ratelimit:change-password:user:{id}` | counter | 15 min | `POST /api/auth/change-password` | 10 password changes (right or wrong) / 15 min / user |
 | `ratelimit:session-revoke:user:{id}` | counter | 10 min | `DELETE /api/me/sessions[/:id]` | 30 session sign-outs / 10 min / user |
 | `ratelimit:login:{ip}` | counter | `LOGIN_RATE_LIMIT_WINDOW_SECONDS` (15 min) | failed logins only | Brute-force protection (default 10 failures / window); reset on success |
@@ -1527,8 +1531,7 @@ kept its time (`warning`; the API returns that note for 7 days after the calenda
 - **Profile tab:** "Personal details" (first name, last name, mobile, office phone; `PATCH /api/me/profile`, field
   errors mapped back to the inputs) and read-only "Work details" (username, work email, role, department, member
   since: admin-managed). User fields are not in Form Builder (they are treated like admin settings).
-- **Notifications tab** (Profile Phase 3, as of 2026-11-26; `GET` / `PATCH /api/me/preferences`, hidden while the
-  user must change their password): cards with their own Save — which bell kinds appear (one "In app" switch per
+- **Notifications tab** (Profile Phase 3, as of 2026-11-26; `GET` / `PATCH /api/me/preferences`): cards with their own Save — which bell kinds appear (one "In app" switch per
   kind; an Email column appears only once a kind can email), the morning summary email switch with its preview,
   the **default reminder** for activities the user creates (company default, No reminder or a reminder label; it only
   pre-fills the activity form's Reminder, client side, on top of the admin default and below a prefill), and **out of
@@ -1536,7 +1539,7 @@ kept its time (`warning`; the API returns that note for 7 days after the calenda
   While out of office (or on leave) the user gets no morning summary and pickers, the assigned-user card and Admin ›
   Users show "Out of office until <date>" / "On leave" next to them (labelled, not hidden); bell notifications keep
   arriving. The user list carries the dates and the client compares them with the business day.
-- **Connected accounts tab** (Profile Phase 4, as of 2026-11-26; hidden while the user must change their password):
+- **Connected accounts tab** (Profile Phase 4, as of 2026-11-26):
   `CalendarConnectionsCard` (§8.6), status only since P2-2b (the company calendar is connected by admins; nothing to
   connect or disconnect). Also in the navbar user menu and the mobile drawer.
 - **Security tab:** "Change password" (current / new / confirm, live checklist from `utils/passwordPolicy.ts`, the same
@@ -1557,16 +1560,17 @@ kept its time (`warning`; the API returns that note for 7 days after the calenda
   a "Users" card on the admin landing page. Not registered in Form Builder.
 - **List:** header card with the count and "Add user", a wrapping filter toolbar (search, Active / Inactive / All,
   role, department), a table in its own `overflowX: auto` container on tablets and desktops and cards on phones, row
-  actions (Edit, Reset password, Deactivate / Activate, and Sign out all sessions for an inactive user), pagination. `GET /api/admin/users` + `GET /api/admin/users/meta`
+  actions (Edit, Resend invite / Send password reset link, Deactivate / Activate, and Sign out all sessions for an inactive user), pagination. `GET /api/admin/users` + `GET /api/admin/users/meta`
   (roles with their access, departments, managers, company domains).
-- **Add / edit drawer:** name, sign-in (username read-only after creation; email with "allow another domain" outside
-  the company domains; initial password generated or typed with the `utils/passwordPolicy.ts` checklist), work
+- **Add / edit drawer:** name, sign-in (username read-only after creation; email, required on create because the invite goes there, with "allow another domain" outside
+  the company domains; no password: the user sets their own from the emailed link), work
   (role picker with its access hint from `utils/roleAccess.ts`, job title, department, reports to), contact
-  (mobile, office phone), flags (group login, on leave). API field errors map to the inputs. The temporary password
-  is shown once in a dialog after a create or reset.
-- **Must change password (app-wide):** while the auth user has `mustChangePassword`, every page redirects to
-  `/profile?tab=security`, which shows "Choose a new password to continue"; a `403 PASSWORD_CHANGE_REQUIRED` from any
-  call does the same. After the change the auth user is updated and navigation is allowed again.
+  (mobile, office phone), flags (group login, on leave). API field errors map to the inputs.
+- **Invite status:** the Status column shows **Invited** (with "Invite expired" / "Invite not sent" when the newest
+  link expired or there is none) or Active, and "Reset link sent" while a reset link is outstanding.
+  `SendInviteDialog` sends a new link (Resend invite / Send password reset link); when the email can't be sent the
+  mail server's reason is shown in the dialog (also right after Add user: the user is added, Invited, and the dialog
+  offers Try again).
 
 ### 8.8 Display formats (Admin › Company formats, Profile Phase 5)
 
@@ -1837,7 +1841,9 @@ the credentials it already has.
 
 Email is off until `MAIL_ENABLED=true` and `SMTP_HOST` is set; until then the morning summary can still be previewed
 from the bell. The CRM sends from `MAIL_FROM` (default `Nandini CRM <crm@nandiniinfosys.com>`); links in emails use
-`APP_PUBLIC_URL` (default `CLIENT_ORIGIN`), e.g. `https://crm.nandiniinfosys.com`.
+`APP_PUBLIC_URL` (default `CLIENT_ORIGIN`), e.g. `https://crm.nandiniinfosys.com`. Invites and password reset links
+are emailed this way too (sent by the API itself, not the worker), so a new user can't get in until email works: set
+`APP_PUBLIC_URL` to the address users open the CRM at, or the set-password links point to the wrong place.
 
 **Recommended: the Workspace SMTP relay, allowed by the server's IP (no password stored on the server).** Steps for
 the Google Workspace admin:
@@ -1880,10 +1886,10 @@ Retention: `NOTIFICATION_RETENTION_DAYS` (90), `EMAIL_LOG_RETENTION_DAYS` (180).
 
 | Item | Notes |
 | --- | --- |
-| Deactivation / role changes vs untracked tokens | Admin › Users revokes a user's Redis sessions on deactivation, a password reset or a role change, but an untracked token (Redis down at sign-in) or any token while Redis is down is trusted until it expires (8 h by default): the request path doesn't read `Users.isActive` / `role`. A revocation that failed because Redis was unreachable at that moment isn't recorded, so the tracked sessions survive the outage too (retry from Admin › Users). A per-request database check, or a durable `sessionsValidAfter` timestamp checked against the token's `iat` (or a short token TTL with refresh) would close it. |
+| Deactivation / role changes vs untracked tokens | Admin › Users revokes a user's Redis sessions on deactivation or a role change, but an untracked token (Redis down at sign-in) or any token while Redis is down is trusted until it expires (8 h by default): the request path doesn't read `Users.isActive` / `role`. A revocation that failed because Redis was unreachable at that moment isn't recorded, so the tracked sessions survive the outage too (retry from Admin › Users). A per-request database check, or a durable `sessionsValidAfter` timestamp checked against the token's `iat` (or a short token TTL with refresh) would close it. |
 | Sessions opened while Redis was down | They are untracked: not in the My Profile list and not signed out by a password change; they last until their JWT expires (8 h by default). |
 | Dashboard has no data API | The dashboard page is static; `cache:dashboard:*` is reserved. |
-| No automated frontend tests | Backend has 114 `node:test` files (pure logic: validators, numbering, PDF document, access control, audit, time zones, activities (P2-4: the follow-up planner, write path, locks, feed and backfill check against the in-memory activity double), referrals, documents, notifications, mail, cache, integrations: secret box, URL redaction, probes against recorded provider answers, a fake Prisma for the integrations service; profile, password rules, sessions; Admin › Users: username and role rules, reports-to cycles, admin guards, temporary passwords, the must-change-password allow-list; calendar connections: the connect → callback → refresh → disconnect flow against the fake provider and replayed Google / Microsoft answers, token refresh races, `providerFetch`; My Profile › Notifications: preference validation, out-of-office rules (contract-tested against the frontend mirror), the preferences DTO and service, per-kind muting in the producer, morning-summary skip reasons; user lookups' away fields; P2-3b calendar push: the outbox and push end to end against the fake provider and the in-memory activity double, Google / Graph event writes against recorded answers, the planner, three-way merge, keys, time-zone mapping, lease and worker helpers). The guarded cache read's Redis tests (Lua compare-and-set, `SCAN` + `UNLINK`, placeholder expiry, 2 MB values) run only with `REDIS_TEST_URL` set. No integration/E2E tests. |
+| No automated frontend tests | Backend has 114 `node:test` files (pure logic: validators, numbering, PDF document, access control, audit, time zones, activities (P2-4: the follow-up planner, write path, locks, feed and backfill check against the in-memory activity double), referrals, documents, notifications, mail, cache, integrations: secret box, URL redaction, probes against recorded provider answers, a fake Prisma for the integrations service; profile, password rules, sessions; Admin › Users: username and role rules, reports-to cycles, admin guards; set-password links: tokens, the email, send / verify / accept against Prisma doubles, the link rate limit; calendar connections: the connect → callback → refresh → disconnect flow against the fake provider and replayed Google / Microsoft answers, token refresh races, `providerFetch`; My Profile › Notifications: preference validation, out-of-office rules (contract-tested against the frontend mirror), the preferences DTO and service, per-kind muting in the producer, morning-summary skip reasons; user lookups' away fields; P2-3b calendar push: the outbox and push end to end against the fake provider and the in-memory activity double, Google / Graph event writes against recorded answers, the planner, three-way merge, keys, time-zone mapping, lease and worker helpers). The guarded cache read's Redis tests (Lua compare-and-set, `SCAN` + `UNLINK`, placeholder expiry, 2 MB values) run only with `REDIS_TEST_URL` set. No integration/E2E tests. |
 | Notifications are polled, not pushed | The bell asks every minute (§8.4), so a reminder can show up to a minute late; background tabs don't poll. SSE through Redis pub/sub is the upgrade path. There are no browser / push notifications. |
 | Reminders depend on a worker | No worker running = no reminders, renewals or morning email (§9.1). Off-hours contract renewals wait for the 07:00 sweep. With Redis down the fallback polls the database every minute. |
 | Follow-up activities not yet run against SQL Server (P2-4) | As of 2026-11-26 the `20261127130000_followup_activities` migration (the `origin` column and the hand-written filtered index `UX_Activity_openFollowUp`) was checked with `prisma migrate diff`, and the write path, planner, locks, feed and backfill with unit tests and the in-memory double, but no real SQL Server run was made. Run `npm run db:deploy` on the dev database, then `npm run followups:backfill -- --dry-run` and the real run (or wait for the nightly step) before relying on it. The morning email deliberately leaves follow-up activities out (`origin <> 'followup'` in its activity sections: it lists follow-ups from the records); a parked hook comment (`morningSummary.sections.ts`) marks where they would join. |

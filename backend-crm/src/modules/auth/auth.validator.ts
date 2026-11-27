@@ -8,16 +8,29 @@ export const loginSchema = z.object({
 
 export type LoginInput = z.infer<typeof loginSchema>;
 
-/**
- * POST /api/auth/change-password. The new password's rules are checked by the service (passwordPolicy.ts).
- * `currentPassword` may be left out only on the first-login / forced change (see authService.changePassword).
- */
+const newPassword = z.string({ error: 'New password is required.' }).min(1, 'New password is required.').max(128, 'Password cannot exceed 128 characters.');
+
+/** POST /api/auth/change-password. The new password's rules are checked by the service (passwordPolicy.ts). */
 export const changePasswordSchema = z.object({
-    currentPassword: z.string().max(128, 'Password is too long').optional(),
-    newPassword: z.string({ error: 'New password is required.' }).min(1, 'New password is required.').max(128, 'Password cannot exceed 128 characters.'),
+    currentPassword: z.string({ error: 'Current password is required.' }).min(1, 'Current password is required.').max(128, 'Password is too long'),
+    newPassword,
 });
 
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+
+/**
+ * The token of an emailed set-password link. Only bounded here: a malformed one gets the same 400 INVALID_INVITE as an
+ * unknown one (invite.service.ts), so the answer never says which part was wrong.
+ */
+const inviteToken = z.string({ error: 'The link is incomplete.' }).max(200, 'The link is incomplete.');
+
+/** POST /api/auth/invite/verify. */
+export const verifyInviteSchema = z.strictObject({ token: inviteToken });
+export type VerifyInviteInput = z.infer<typeof verifyInviteSchema>;
+
+/** POST /api/auth/invite/accept. The password rules are checked by the service (the same as everywhere else). */
+export const acceptInviteSchema = z.strictObject({ token: inviteToken, newPassword });
+export type AcceptInviteInput = z.infer<typeof acceptInviteSchema>;
 
 export function validateLoginInput(input: unknown): LoginInput {
     return loginSchema.parse(input);
