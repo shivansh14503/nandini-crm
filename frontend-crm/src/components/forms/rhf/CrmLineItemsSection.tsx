@@ -23,7 +23,7 @@ import { FormField, fieldSx } from '../FormField';
 import { LookupField } from '../LookupField';
 import { ProductLookupModal } from '@/components/common/lookup/PresetLookupModals';
 import { useProducts } from '@/hooks/queries/useProducts';
-import type { Product } from '@/types/product.types';
+import { isActiveProduct, type Product } from '@/types/product.types';
 import { FIELD_MAX_LENGTH, FIELD_SIZE_WIDTH } from '../fieldSizing';
 import { useFormMode } from '@/context/FormModeContext';
 import { CrmLineItemsReadOnly } from './CrmLineItemsReadOnly';
@@ -213,7 +213,7 @@ export function CrmLineItemsEditor({ value, onChange, error }: CrmLineItemsEdito
 
     // ── Select product from the catalog (Product Catalog popup or a typed name) ─
     const { data: productData } = useProducts();
-    const products = useMemo(() => (productData ?? NO_PRODUCTS).filter((p) => p.isActive !== false), [productData]);
+    const products = useMemo(() => (productData ?? NO_PRODUCTS).filter(isActiveProduct), [productData]);
     const productNames = useMemo(() => products.map((p) => p.productName), [products]);
     // Line whose Product Catalog popup is open.
     const [catalogLine, setCatalogLine] = useState<number | null>(null);

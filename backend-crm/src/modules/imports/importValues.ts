@@ -20,6 +20,11 @@ export const CUSTOM_FIELD_PREFIX = 'customFields.';
 
 /** Field types a spreadsheet can't carry. */
 const NOT_IMPORTABLE_TYPES = new Set(['file']);
+/**
+ * Built-in fields a spreadsheet can't set, per module: a product's Status (Admin only, Inactive needs a reason given
+ * in its dialog), so imported products start Active. Mirrored in frontend-crm/src/components/common/import/importFields.ts.
+ */
+export const NOT_IMPORTABLE_FIELDS: Readonly<Record<string, ReadonlySet<string>>> = { products: new Set(['status']) };
 
 /** Built-in fields the form keeps as a list of email rows. */
 const EMAIL_LIST_KEYS = new Set(['emailAddress']);
@@ -140,7 +145,10 @@ export function allowedOptionsText(values: Iterable<string>): string {
 
 /** Fields of the module's creation form a spreadsheet can fill: active, shown on the form, not a file upload. */
 export function importableFields(config: ModuleFieldConfig): FormFieldDefinitionDto[] {
-    return config.fields.filter((f) => f.isActive && f.isVisibleInForm && !f.isDeleted && !NOT_IMPORTABLE_TYPES.has(f.fieldType));
+    const skipped = NOT_IMPORTABLE_FIELDS[config.module];
+    return config.fields.filter(
+        (f) => f.isActive && f.isVisibleInForm && !f.isDeleted && !NOT_IMPORTABLE_TYPES.has(f.fieldType) && !(f.isSystem && skipped?.has(f.fieldKey)),
+    );
 }
 
 /** A row's cell for a field: its form key (custom fields under `customFields.`), else an older template's key. */

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { FIELD_MAX_LENGTH as L } from '../config/fieldLimits';
+import { ACTIVE_PRODUCT_STATUS, INACTIVITY_REASON_MAX_LENGTH, PRODUCT_STATUSES } from '../types/product.types';
 import {
     optionalString,
     requiredText,
@@ -23,6 +24,9 @@ export const productFormSchema = z.object({
     contractCreate: optionalString.default('No'),
     description: optionalText('Description', L.longText),
     termsAndConditions: optionalText('Terms and Conditions', L.longText),
+    /** Admin only; the deactivation dialog collects the reason (required for Inactive by the API). */
+    status: z.enum(PRODUCT_STATUSES).default(ACTIVE_PRODUCT_STATUS),
+    inactivityReason: optionalText('Inactivity Reason', INACTIVITY_REASON_MAX_LENGTH),
 
     /** Admin-defined custom field values (validated against the form configuration by useRhfForm). */
     customFields: customFieldsSchema,

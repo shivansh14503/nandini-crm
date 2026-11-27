@@ -9,7 +9,7 @@ import { useOpportunities } from '@/hooks/queries/useOpportunities';
 import { useProducts } from '@/hooks/queries/useProducts';
 import { useReferrals } from '@/hooks/queries/useReferrals';
 import { ACTIVE_REFERRAL_STATUS, isActiveReferral, type Referral } from '@/types/referral.types';
-import type { Product } from '@/types/product.types';
+import { isActiveProduct, type Product } from '@/types/product.types';
 import { useDropdownOptions } from '@/hooks/queries/useFormConfigs';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import type { NatureOfCallItem } from '@/types/ticket.types';
@@ -170,7 +170,7 @@ const NO_PRODUCTS: Product[] = [];
 export function ProductLookupModal({ open, onClose, onSelect, selectedValue }: EntityLookupModalProps<Product>) {
     // Shared, cache-invalidated query: products added elsewhere show up without reopening.
     const { data, isLoading } = useProducts(undefined, { enabled: open });
-    const products = React.useMemo(() => (data ?? NO_PRODUCTS).filter((p) => p.isActive !== false), [data]);
+    const products = React.useMemo(() => (data ?? NO_PRODUCTS).filter(isActiveProduct), [data]);
     const filterFields = React.useMemo(() => {
         const categories = [...new Set(products.map((p) => p.category).filter(Boolean))].sort((a, b) => a.localeCompare(b));
         return PRODUCT_LOOKUP_PRESET.filterFields.map((f) => (f.key === 'category' ? { ...f, options: categories.map((c) => ({ value: c, label: c })) } : f));
