@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useCallback } from 'react';
-import { isSuperAdminRole } from '@/utils/roleAccess';
+import { isAdminUser } from '@/utils/adminRoles';
 import { useResetTab } from '@/hooks/useResetTab';
 import { useRouter } from 'next/navigation';
 import { Button } from '@mui/material';
@@ -34,8 +34,8 @@ const NO_RECORDS: ExtendedOrganization[] = [];
 export function OrganizationsMasterView() {
     const router = useRouter();
     const { user } = useAuth();
-    // Admin, and Super Admin (full access everywhere), may open and edit an inactive account.
-    const isAdmin = user?.role?.toLowerCase() === 'admin' || isSuperAdminRole(user?.role);
+    // Roles with the admin panel (Admin › Roles) may open and edit an inactive account.
+    const isAdmin = isAdminUser(user);
     // The record totals below follow the company number grouping (Indian until it is changed).
     useDisplayFormats();
 
@@ -382,7 +382,7 @@ export function OrganizationsMasterView() {
             }
             onEdit={(org) => {
                 if (org.accountStatus === 'Inactive' && !isAdmin) {
-                    setToast({ open: true, message: 'This organization is inactive. Only an Admin can edit it.', severity: 'info' });
+                    setToast({ open: true, message: 'This organization is inactive. Only an admin can edit it.', severity: 'info' });
                 }
             }}
             getRowHref={(org) => ROUTES.ORGANIZATION_DETAIL(org.id)}
