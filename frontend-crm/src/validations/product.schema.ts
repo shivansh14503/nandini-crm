@@ -12,10 +12,9 @@ export const productFormSchema = z.object({
     productName: requiredText('Product Name', L.organizationName)
         .min(2, { message: 'Product Name must be at least 2 characters.' }),
     hsnCode: optionalText('HSN Code', L.hsn),
-    category: optionalString,
+    productCategory: optionalString,
     type: optionalString,
     manufacturer: optionalText('Manufacturer', L.personName),
-    taxType: optionalString.default('GST'),
     taxRate: optionalString,
     discount: optionalString,
     cost: optionalString,

@@ -1,7 +1,7 @@
 # Nandini CRM — Database Design
 
 > **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (96 migrations,
-> latest `20261217100000_opportunity_organization_text`, data only: the Opportunities form's built-in `organizationName` field row in `FormFieldDefinition` goes from `lookup` to `text` (the form's Organization name is a plain input now; `Opportunity.organizationName` / `organizationId` unchanged, the API still links by name), as of 2026-11-27; before it `20261216110000_booking_video`, booking links' default video meeting (`BookingLink.videoMeeting`); before that `20261216100000_email_logging`, Calendar Phase 4 email logging, with its review fixes; before that `20261215110000_recurring_activities`, Calendar Phase 4 recurring activities; before that `20261215100000_activity_conference`, Calendar Phase 3 P3-1 video meetings; before that `20261215090000_calendar_watch_channels`, Calendar Phase 2 P2-7 webhooks; before that `20261128120000_booking_links`, Calendar Phase 4 booking links; before that `20261128100000_activity_calendar_sync`, Calendar Phase 2 P2-3b, whose columns P2-3c (first-sync backfill) and P2-5 (calendar → CRM pull) use without a migration of their own; P2-6 busy times needed no migration (it reads `Activity` through the existing `[isDeleted, startAt]` index and stores nothing); P2-8 customer meetings from the calendar and replies both ways needed none either (as of 2026-11-27: it writes imported activities into the existing `Activity` organizer / `syncKey` columns, `attendee` rows of `ActivityExternalLink` (`baseJson` `{ self, mine? }`: the reply last agreed with the calendar, and the CRM reply of the owner of a meeting organized outside the CRM) and reads `CalendarSyncUser.importMeetings`; a meeting organized outside the CRM keeps the organizer's `ready` join link in the P3-1 conference columns, read only, and never gets a `seriesId`). Update it in the same change as any schema migration.
+> latest `20261219100000_product_catalog_fields` (Products: `category` renamed `productCategory`, `taxType` dropped after Tax Type None became Tax Rate 0%, `manufacturer` indexed; the Form Builder's product rows, saved product drawer layouts and table filters follow; the Sale Information section becomes Product Information), as of 2026-11-27; before it `20261217100000_opportunity_organization_text`, data only: the Opportunities form's built-in `organizationName` field row in `FormFieldDefinition` goes from `lookup` to `text` (the form's Organization name is a plain input now; `Opportunity.organizationName` / `organizationId` unchanged, the API still links by name), as of 2026-11-27; before it `20261216110000_booking_video`, booking links' default video meeting (`BookingLink.videoMeeting`); before that `20261216100000_email_logging`, Calendar Phase 4 email logging, with its review fixes; before that `20261215110000_recurring_activities`, Calendar Phase 4 recurring activities; before that `20261215100000_activity_conference`, Calendar Phase 3 P3-1 video meetings; before that `20261215090000_calendar_watch_channels`, Calendar Phase 2 P2-7 webhooks; before that `20261128120000_booking_links`, Calendar Phase 4 booking links; before that `20261128100000_activity_calendar_sync`, Calendar Phase 2 P2-3b, whose columns P2-3c (first-sync backfill) and P2-5 (calendar → CRM pull) use without a migration of their own; P2-6 busy times needed no migration (it reads `Activity` through the existing `[isDeleted, startAt]` index and stores nothing); P2-8 customer meetings from the calendar and replies both ways needed none either (as of 2026-11-27: it writes imported activities into the existing `Activity` organizer / `syncKey` columns, `attendee` rows of `ActivityExternalLink` (`baseJson` `{ self, mine? }`: the reply last agreed with the calendar, and the CRM reply of the owner of a meeting organized outside the CRM) and reads `CalendarSyncUser.importMeetings`; a meeting organized outside the CRM keeps the organizer's `ready` join link in the P3-1 conference columns, read only, and never gets a `seriesId`). Update it in the same change as any schema migration.
 > Related: [System design](system-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
 ---
@@ -321,8 +321,9 @@ Indexes: `ticketStatus`, `ticketPriority`, `assignedTo`, `dueDate`, `organizatio
 
 ### 4.8 `Product`
 
-`productCode` (UNIQUE), `productName`, `hsnCode`, `category`, `type`, `manufacturer`, `taxType` (default `GST`),
-`taxRate`, `discount` DECIMAL(5,2), `cost`/`mrp`/`msp` DECIMAL(18,2) (returned as strings by the API),
+`productCode` (UNIQUE), `productName`, `hsnCode`, `productCategory` (one option of the shared Product Category dropdown;
+`category` until `20261219100000_product_catalog_fields`), `type`, `manufacturer`, `taxRate` (Tax Type was dropped in
+that migration: products with Tax Type None got Tax Rate `0%`), `discount` DECIMAL(5,2), `cost`/`mrp`/`msp` DECIMAL(18,2) (returned as strings by the API),
 `contractCreate`, `description`, `termsAndConditions`, `status` NVARCHAR(30) (`Active` / `Inactive`, default
 `Active`; fixed dropdown `product_status`), `inactivityReason` NVARCHAR(500), `inactiveSince` DATETIME2 and
 `inactivatedBy` NVARCHAR(50) (username), `customDataJson`, audit/soft-delete. Only Admins (`isAdminAccessRole`) change
@@ -331,7 +332,9 @@ Inactive, cleared when it is made Active again; both changes are in the audit di
 on new opportunity / quotation line items; lines that already hold an inactive product keep it. Migration
 `20261219090000_product_status` replaced the former `isActive` BIT (every existing product became Active; a row with
 `isActive = 0` became Inactive since its last update).
-Products are not row-scoped (everyone sees all). Indexes: `productName`, `category`, `status`, `(isDeleted, createdAt)`.
+Products are not row-scoped (everyone sees all). A new or restored product's name must not match a live product's
+(checked in code); renaming one is not checked. Indexes: `productName`, `manufacturer`, `productCategory`, `status`,
+`(isDeleted, createdAt)`.
 
 ### 4.9 `EntityEmail` (shared child table)
 

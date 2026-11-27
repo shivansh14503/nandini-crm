@@ -65,9 +65,8 @@ export interface CrmLineItemsSectionProps {
     error?: string;
 }
 
-/** The line's tax rate for a catalog product (`GST 18%`, or `--None--` when it carries no tax). */
+/** The line's tax rate for a catalog product (`GST 18%` from its Tax Rate; GST 18% when it has none). */
 function productTaxRate(product: Product): string {
-    if (product.taxType === 'None') return '--None--';
     const rate = product.taxRate ? `GST ${product.taxRate}` : '';
     return OPPORTUNITY_TAX_RATES.includes(rate) ? rate : 'GST 18%';
 }

@@ -662,7 +662,6 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
     // ── Products ──
     { key: 'product_contract_create', label: 'Contract Create', module: 'products', description: 'Fixed options: Yes / No.', options: yesNo('Yes') },
     { key: 'product_type', label: 'Product Type', module: 'products', options: ['Product', 'Service', 'Bundle', 'Subscription', 'License', 'Other'] },
-    { key: 'product_tax_type', label: 'Tax Type', module: 'products', options: ['GST', 'IGST', 'None'] },
     { key: 'product_tax_rate', label: 'Tax Rate', module: 'products', options: ['0%', '5%', '12%', '18%', '28%'] },
     {
         key: 'product_status',
@@ -783,7 +782,6 @@ export const DEFAULT_SELECTED_OPTIONS: Readonly<Record<string, readonly string[]
     quote_validation_period: ['30 Days'],
     quote_terms_template: ['Standard Terms & Conditions'],
     quote_payment_terms: ['50% Advance & 50% on Delivery'],
-    product_tax_type: ['GST'],
     ticket_priority: ['Normal'],
     ticket_status: ['New'],
     ticket_source: ['Call'],
@@ -1048,9 +1046,10 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
     ...section('quotations', 'address', 'SHIPPING ADDRESS', addressFields('shipping', 'optional')),
 
     // ── Products ──
-    ...section('products', 'overview', 'Sale Information', [
+    ...section('products', 'overview', 'Product Information', [
         t('productName', 'Product Name', { req: true }),
-        sel('category', 'Category', 'shared_product_category'),
+        // Same field (label, key, dropdown) as on Leads / Opportunities; a product has one category.
+        sel('productCategory', 'Product Category', 'shared_product_category'),
         sel('type', 'Type', 'product_type'),
         t('manufacturer', 'Manufacturer'),
         t('hsnCode', 'HSN Code'),
@@ -1059,7 +1058,6 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         t('cost', 'Cost (₹)', { type: 'amount' }),
         t('mrp', 'MRP (₹)', { type: 'amount' }),
         t('msp', 'MSP (₹)', { type: 'amount' }),
-        sel('taxType', 'Tax Type', 'product_tax_type'),
         sel('taxRate', 'Tax Rate', 'product_tax_rate'),
         t('discount', 'Discount (%)', { type: 'percentage' }),
         sel('contractCreate', 'Contract Create', 'product_contract_create'),

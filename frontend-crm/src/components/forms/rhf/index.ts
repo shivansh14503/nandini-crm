@@ -22,3 +22,4 @@ export * from './RhfAddressSection';
 export * from './CrmLineItemsSection';
 export * from './usePickedContactLocks';
 export * from './RhfFileUpload';
+export * from './RhfSuggestField';
