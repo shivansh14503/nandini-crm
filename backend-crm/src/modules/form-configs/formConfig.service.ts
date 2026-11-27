@@ -22,6 +22,7 @@ import {
     isConvertModule,
     isFieldTombstoned,
     MODULE_TABS,
+    NEVER_REQUIRED_FIELDS,
     sectionKeyFromLabel,
     type ConvertModuleKey,
     type CrmModuleKey,
@@ -1042,6 +1043,9 @@ export const formConfigService = {
             if (before.isCoreLocked) {
                 if (input.isRequired === false && before.isRequired) reject('isRequired', `${before.label} is a core field and must stay required.`);
                 if (input.isVisibleInForm === false) reject('isVisibleInForm', `${before.label} is a core field and cannot be hidden.`);
+            }
+            if (input.isRequired === true && NEVER_REQUIRED_FIELDS[before.module as CrmModuleKey]?.has(before.fieldKey)) {
+                reject('isRequired', `${before.label} can't be required: it depends on the activity's type and the owner's company calendar.`);
             }
             if (input.isVisibleInConvert !== undefined) {
                 if (!isConvertModule(before.module)) reject('isVisibleInConvert', 'Only contact, organization and opportunity fields can be shown on Convert Lead.');

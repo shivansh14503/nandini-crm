@@ -27,6 +27,8 @@ export const queryKeys = {
         meta: () => ['activities', 'meta'] as const,
         /** Colleagues' busy times of a window (GET /api/activities/busy). */
         busy: (params?: PaginationParams) => ['activities', 'busy', params ?? {}] as const,
+        /** Video meeting choices of an owner (GET /api/activities/video-options). */
+        videoOptions: (owner: string) => ['activities', 'video-options', owner] as const,
     },
     documents: createEntityKeys('documents'),
     leads: createEntityKeys('leads'),

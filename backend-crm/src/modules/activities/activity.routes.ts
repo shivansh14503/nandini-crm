@@ -23,17 +23,27 @@ import { activityController } from './activity.controller.js';
  *                           CRM activities plus their company calendar's free/busy, times only (no titles, any
  *                           signed-in user, any active colleague). 60 / min per user (429 RATE_LIMITED)
  *   GET    /link-targets  ?module&search&limit → records of one module the caller can link to
+ *   GET    /video-options ?owner (username; default the caller) → { owner, calendarProvider, options: [{ value: meet |
+ *                           teams | zoom, label, available, reason? }] } — the Video meeting choices the owner's company
+ *                           calendar allows (Calendar Phase 3, P3-1: Google → Meet, Microsoft 365 → Teams, Zoom later)
  *   GET    /              ?page&limit&search&sortBy&sortOrder&followupType&status&excludeStatus&assignedTo&mine
  *                           &attending&relatedModule&relatedId&organizationId&contactId&rollup&from&to&overdue
  *                           &createdWithinDays
- *   GET    /:id           → activity (incl. origin) + viewer { canEdit, myResponse } + lockedFields
- *   POST   /              timed: startAt / endAt instants; all-day: allDay true + startDay / endDay (inclusive days)
+ *   GET    /:id           → activity (incl. origin, videoMeeting, conferenceJoinUrl) + viewer { canEdit, myResponse } +
+ *                           lockedFields + calendar + conference { provider, state, joinUrl, errorCode, errorMessage,
+ *                           canRetry, locked } | null
+ *   POST   /              timed: startAt / endAt instants; all-day: allDay true + startDay / endDay (inclusive days).
+ *                           videoMeeting meet | teams | '' (P3-1): 400 VALIDATION_ERROR when not Planned or the type
+ *                           doesn't offer it; 409 VIDEO_PROVIDER_NOT_CONNECTED when the owner's company calendar can't
+ *                           create that kind of link (zoom: always, until P3-2)
  *   PUT    /:id           (partial; PATCH is an alias; owner, creator or a global role only). A lead / opportunity
  *                           follow-up activity (origin 'followup') refuses a change to a locked field (lockedFields:
  *                           type, start / end / all-day, status, owner, related record) with 409
- *                           FOLLOW_UP_ACTIVITY_LOCKED; it changes with its record (Record a follow-up). A meeting
- *                           organized outside the CRM (externalOrganizer, P2-8) refuses a change to subject, start / end
- *                           / all-day, location, attendees or owner with 409 EXTERNAL_EVENT_LOCKED
+ *                           FOLLOW_UP_ACTIVITY_LOCKED; it changes with its record (Record a follow-up). videoMeeting as
+ *                           on POST (also checked on an owner change); a ready Teams link can't be removed or changed:
+ *                           409 VIDEO_MEETING_LOCKED. A meeting organized outside the CRM (externalOrganizer, P2-8)
+ *                           refuses a change to subject, start / end / all-day, location, attendees, owner or
+ *                           videoMeeting with 409 EXTERNAL_EVENT_LOCKED (its pulled join link still shows)
  *   DELETE /:id           (soft delete; a follow-up activity: 409 FOLLOW_UP_ACTIVITY_LOCKED; an imported meeting is
  *                           removed from the CRM only: its calendar links detach, syncKey kept, the event stays)
  *   POST   /bulk-delete   { ids } → { deleted, ids, notFound, skipped?: [{ id, reason }] } (follow-up activities skipped)
@@ -42,6 +52,8 @@ import { activityController } from './activity.controller.js';
  *                           cancels it and Accept / Maybe revive it; audited RSVP; 403 otherwise). P2-8:
  *                           queues an `rsvp` job that sends the reply to the person's calendar copy when both import
  *                           switches are on for them
+ *   POST   /:id/conference/retry → activity view: asks the calendar again for a video link that failed (owner, creator
+ *                           or a global role; 409 NOTHING_TO_RETRY unless it failed, 409 VIDEO_PROVIDER_NOT_CONNECTED)
  *   POST   /:id/calendar-sync/retry        (owner or editor; Calendar Phase 2 P2-3c) → activity view. Pushes the copy in
  *                           the owner's calendar again now (attempts reset; a refused push goes back to pending). For an
  *                           event deleted in the calendar (`removed_remote`) it is "Add again": a new copy, upcoming
@@ -62,7 +74,9 @@ router.get('/meta', activityController.meta);
 router.get('/calendar', activityController.calendar);
 router.get('/busy', busyLimiter, activityController.busy);
 router.get('/link-targets', activityController.linkTargets);
+router.get('/video-options', activityController.videoOptions);
 router.post('/:id/response', validateRequest({ params: idParamSchema }), activityController.respond);
+router.post('/:id/conference/retry', validateRequest({ params: idParamSchema }), activityController.retryConference);
 router.post('/:id/calendar-sync/retry', validateRequest({ params: idParamSchema }), activityController.retryCalendarSync);
 router.post('/:id/calendar-sync/send-invites', validateRequest({ params: idParamSchema }), activityController.sendCalendarInvites);
 registerCrudRoutes(router, activityController);

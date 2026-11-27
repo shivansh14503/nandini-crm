@@ -1,7 +1,9 @@
 import type { Activity, ActivityAttendee, Prisma } from '../../generated/prisma/client.js';
 import { nullable, parseCustomFields, serializeCustomFields, text, toIso } from '../../utils/mappers.js';
 import { zonedDayOf } from '../../utils/zonedTime.js';
+import { canRetryConference, parseConferenceError } from '../calendar-sync/conference.rules.js';
 import type { ActivityInput } from './activity.validator.js';
+import type { ActivitySeriesView } from './activity.seriesView.js';
 
 /**
  * `Activity` from frontend-crm/src/types/activity.types.ts. Times are true UTC instants (`…Z`); all-day activities
@@ -37,6 +39,13 @@ export interface ActivityDto {
     endDay: string;
     timeZone: string;
     location: string;
+    /**
+     * Video meeting (Calendar Phase 3, P3-1): `meet` | `teams` ('' = none), created with the owner's calendar event
+     * (column `conferenceProvider`; the form's Video meeting field). Audited.
+     */
+    videoMeeting: string;
+    /** Its join link once the calendar created it ('' until then). https on meet.google.com / teams.microsoft.com only. */
+    conferenceJoinUrl: string;
     /** activity_reminder option ('15 minutes before'), '' for none. */
     reminder: string;
     customerResponse: string;
@@ -59,6 +68,8 @@ export interface ActivityDto {
      * here (`lockedFields`, 409 EXTERNAL_EVENT_LOCKED) and the activity is never pushed. Read only.
      */
     externalOrganizer: boolean;
+    /** The recurring series this occurrence belongs to (Calendar Phase 4), '' for a single activity. Read only. */
+    seriesId: string;
     createdBy: string;
     /** Username of the last editor; empty until the record is first modified. */
     updatedBy: string;
@@ -127,8 +138,31 @@ export interface ActivityCalendarView {
     externalUpdatedAt: string | null;
 }
 
+/** The video meeting's progress (Calendar Phase 3, P3-1), outside the audited DTO; null when there is none. */
+export interface ActivityConferenceView {
+    /** meet | teams */
+    provider: string;
+    /** requested (being created) | ready | failed */
+    state: string;
+    joinUrl: string | null;
+    errorCode: string | null;
+    errorMessage: string | null;
+    /** The viewer may ask again (failed on a live Planned row, Retry can help, and they may edit the activity). */
+    canRetry: boolean;
+    /** A Teams link exists: its owner can't remove or change it (409 VIDEO_MEETING_LOCKED); a new owner may. */
+    locked: boolean;
+    /**
+     * Requested, but the activity has no calendar copy yet because it is an occurrence of a recurring activity that
+     * isn't pushed until SERIES_SYNC_WINDOW_DAYS before it starts (Calendar Phase 4): the link is created then, so
+     * screens show a note instead of "Creating…" and don't poll.
+     */
+    waitingForCalendar: boolean;
+}
+
 export type ActivityView = ActivityDto & {
     viewer: ActivityViewer;
+    /** The video meeting's progress (P3-1); null when the activity has none. */
+    conference: ActivityConferenceView | null;
     /** The activity in its owner's calendar; null when not synced. */
     calendar: ActivityCalendarView | null;
     /**
@@ -138,6 +172,8 @@ export type ActivityView = ActivityDto & {
     lockedFields: string[];
     /** P2-8: where an imported activity (`origin='calendar'`) came from (`google` | `microsoft` | `fake`); null otherwise. */
     importedFrom: string | null;
+    /** The series this occurrence belongs to (rule, summary, position; Calendar Phase 4); null for a single activity. */
+    series: ActivitySeriesView | null;
 };
 
 export type ActivityRow = Activity & { attendees: ActivityAttendee[] };
@@ -183,6 +219,8 @@ export function toActivityDto(row: ActivityRow): ActivityDto {
         endDay: days.endDay,
         timeZone: row.timeZone,
         location: text(row.location),
+        videoMeeting: text(row.conferenceProvider),
+        conferenceJoinUrl: row.conferenceState === 'ready' ? text(row.conferenceJoinUrl) : '',
         reminder: text(row.reminder),
         customerResponse: text(row.customerResponse),
         remarks: text(row.remarks),
@@ -194,10 +232,32 @@ export function toActivityDto(row: ActivityRow): ActivityDto {
         organizerEmail: text(row.organizerEmail),
         organizerName: text(row.organizerName),
         externalOrganizer: row.externalOrganizer,
+        seriesId: row.seriesId ?? '',
         createdBy: row.createdBy,
         updatedBy: row.updatedBy ?? '',
         createdAt: toIso(row.createdAt),
         updatedAt: toIso(row.updatedAt),
+    };
+}
+
+/** `ActivityView.conference` (pure). */
+export function conferenceViewOf(
+    row: Pick<Activity, 'conferenceProvider' | 'conferenceState' | 'conferenceJoinUrl' | 'conferenceError' | 'status' | 'isDeleted' | 'seriesId'>,
+    viewerCanEdit: boolean,
+    hasCalendarCopy = false,
+): ActivityConferenceView | null {
+    if (!row.conferenceProvider) return null;
+    const state = row.conferenceState ?? 'requested';
+    const error = state === 'failed' ? parseConferenceError(row.conferenceError) : null;
+    return {
+        provider: row.conferenceProvider,
+        state,
+        joinUrl: state === 'ready' ? row.conferenceJoinUrl : null,
+        errorCode: error?.code ?? null,
+        errorMessage: error?.message ?? null,
+        canRetry: viewerCanEdit && canRetryConference(row),
+        locked: row.conferenceProvider === 'teams' && state === 'ready',
+        waitingForCalendar: state === 'requested' && Boolean(row.seriesId) && !hasCalendarCopy,
     };
 }
 

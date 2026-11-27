@@ -1,7 +1,7 @@
 # Nandini CRM — Database Design
 
-> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (92 migrations,
-> latest `20261215090000_calendar_watch_channels`, Calendar Phase 2 P2-7 webhooks, as of 2026-11-26; before it `20261128120000_booking_links`, Calendar Phase 4 booking links; before that `20261128100000_activity_calendar_sync`, Calendar Phase 2 P2-3b, whose columns P2-3c (first-sync backfill) and P2-5 (calendar → CRM pull) use without a migration of their own; P2-6 busy times needed no migration (it reads `Activity` through the existing `[isDeleted, startAt]` index and stores nothing); P2-8 customer meetings from the calendar and replies both ways needed none either (as of 2026-11-26: it writes imported activities into the existing `Activity` organizer / `syncKey` columns, `attendee` rows of `ActivityExternalLink` (`baseJson` `{ self, mine? }`: the reply last agreed with the calendar, and the CRM reply of the owner of a meeting organized outside the CRM) and reads `CalendarSyncUser.importMeetings`). Update it in the same change as any schema migration.
+> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (94 migrations,
+> latest `20261215110000_recurring_activities`, Calendar Phase 4 recurring activities, as of 2026-11-27; before it `20261215100000_activity_conference`, Calendar Phase 3 P3-1 video meetings; before that `20261215090000_calendar_watch_channels`, Calendar Phase 2 P2-7 webhooks; before that `20261128120000_booking_links`, Calendar Phase 4 booking links; before that `20261128100000_activity_calendar_sync`, Calendar Phase 2 P2-3b, whose columns P2-3c (first-sync backfill) and P2-5 (calendar → CRM pull) use without a migration of their own; P2-6 busy times needed no migration (it reads `Activity` through the existing `[isDeleted, startAt]` index and stores nothing); P2-8 customer meetings from the calendar and replies both ways needed none either (as of 2026-11-27: it writes imported activities into the existing `Activity` organizer / `syncKey` columns, `attendee` rows of `ActivityExternalLink` (`baseJson` `{ self, mine? }`: the reply last agreed with the calendar, and the CRM reply of the owner of a meeting organized outside the CRM) and reads `CalendarSyncUser.importMeetings`; a meeting organized outside the CRM keeps the organizer's `ready` join link in the P3-1 conference columns, read only, and never gets a `seriesId`). Update it in the same change as any schema migration.
 > Related: [System design](system-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
 ---
@@ -12,7 +12,7 @@
 | --- | --- |
 | Engine | Microsoft SQL Server / Azure SQL (schema `dbo`) |
 | Access | Prisma 7 ORM through `@prisma/adapter-mssql`; a few raw SQL statements (`MERGE` for counters, `sp_getapplock` for locks, `OPENJSON`) |
-| Tables | **48** application tables + Prisma's `_prisma_migrations` |
+| Tables | **55** application tables + Prisma's `_prisma_migrations` |
 | Owned child tables ("sub tables") | 8: `EntityEmail`, `OpportunityLineItem`, `QuotationLineItem`, `PartnerCompanyContact`, `DropdownOption`, `ActivityAttendee`, `UserPhoto`, `UserPreference` |
 | Migrations | `backend-crm/prisma/migrations/` (`npm run db:migrate` in dev, `npm run db:deploy` in prod) |
 | Seed | `backend-crm/prisma/seed.ts` (`npm run seed`) |
@@ -23,7 +23,7 @@
 | --- | --- |
 | Identity | `Users` (model `User`), `UserPhoto` (profile photos), `UserPreference` (My Profile › Notifications) |
 | CRM core | `Organization`, `Contact`, `Lead`, `Opportunity`, `Quotation`, `Ticket`, `Contract`, `Document`, `Product` |
-| Activities & calendar | `Activity`, `ActivityAttendee`, `ActivityExternalLink` (an activity's copy in a connected calendar + push outbox, P2-3b) |
+| Activities & calendar | `Activity`, `ActivityAttendee`, `ActivityExternalLink` (an activity's copy in a connected calendar + push outbox, P2-3b), `ActivitySeries` (a recurring activity's rule; its occurrences are `Activity` rows, Calendar Phase 4) |
 | Owned children | `EntityEmail`, `OpportunityLineItem`, `QuotationLineItem` |
 | Partner master | `PartnerCompany`, `PartnerCompanyContact` |
 | Referral master | `Referral` (Referred By of leads and opportunities) |
@@ -95,6 +95,7 @@ erDiagram
     Contact ||--o{ ActivityAttendee : "invited as"
     Activity ||--o{ ActivityAttendee : attendees
     Activity ||--o{ ActivityExternalLink : "calendar copies"
+    ActivitySeries ||--o{ Activity : "occurrences"
     CalendarConnection ||--o{ ActivityExternalLink : "pushes"
     CalendarConnection ||--o{ CalendarWatchChannel : "notifies through"
     Lead ||--o{ EntityEmail : emailAddress
@@ -568,11 +569,26 @@ rows): `iCalUid` (NVARCHAR(1024), the event's calendar identity), `syncKey` (NVA
 from P2-8), `externalUpdatedAt` (DATETIME2, the last calendar-side change applied; set by the P2-5 pull, as of 2026-11-26, without moving `updatedAt`). Set by the sync engine only (system
 write path), never by a form. P2-8 (as of 2026-11-26): a meeting imported from a calendar has `origin = 'calendar'`,
 `createdBy = 'calendar-sync'`, `iCalUid` / `syncKey` of the event and the organizer columns; `externalOrganizer = 1`
-when a customer organized it (then subject, times, all-day, location, attendees and owner are locked in the CRM, 409
-`EXTERNAL_EVENT_LOCKED`). The three organizer columns are now in the audited DTO. A deleted imported row keeps its
+when a customer organized it (then subject, times, all-day, location, attendees, owner and the video meeting are
+locked in the CRM, 409 `EXTERNAL_EVENT_LOCKED`; its conference columns mirror the organizer's `ready` Meet / Teams
+link, written with `updatedAt` kept, and the row never joins an `ActivitySeries`). The three organizer columns are now in the audited DTO. A deleted imported row keeps its
 `syncKey` (and so its `UX_Activity_syncKey` slot), so the meeting is never imported again; a second colleague's copy
 of the same meeting finds the row by `syncKey` and gets an `attendee` link (one activity, two links, D45: the
 `syncKey` holder is pre-read, never a caught unique-index error inside the transaction).
+Video meeting columns (migration `20261215100000_activity_conference`, as of 2026-11-26, Calendar Phase 3 P3-1; NULL /
+0 on existing rows): `conferenceProvider` (NVARCHAR(20): `meet` / `teams` / `zoom` / NULL, the form's Video meeting
+choice; the DTO key is `videoMeeting`), `conferenceState` (NVARCHAR(20): `requested` / `ready` / `failed`),
+`conferenceJoinUrl` (NVARCHAR(1000): https only, host allow-list `meet.google.com`, `teams.microsoft.com`,
+`*.zoom.us`), `conferenceId` (NVARCHAR(200): Meet conference id / Teams online meeting id), `conferenceError`
+(NVARCHAR(300): `<code>: <text>`, codes `conference_failed`, `not_created`, `join_url_rejected`, `conference_timeout`,
+`provider_unavailable`, `no_event`, `event_refused`), `conferenceRequest` (INT NOT NULL, default 0, constraint `Activity_conferenceRequest_df`: the
+request number `n`; a new choice, an owner change or Retry bumps it, and Google's `createRequest.requestId` is
+`<requestedId>-c<n>`). A CRM save writes the provider / `requested` / the counter; the push engine and the `conference`
+job write the outcome with `updatedAt` kept (never a user edit) and compare-and-set on `conferenceProvider` +
+`conferenceRequest`. The same migration sets option meta `videoMeeting: true` on the seeded Followup Types `Meeting`
+and `Demo / Presentation` (`DropdownOption.metaJson` via `JSON_MODIFY`, only where the key is missing; admins switch it
+per type in Admin › API Integrations › What goes to calendars). Index `Activity_conferenceState_updatedAt_idx`
+(`conferenceState`, `updatedAt`): the nightly sweep that fails links still `requested` an hour after the last save.
 
 **Follow-up activities** (P2-4, `activities/activity.followUp.ts`): every open lead / opportunity with a next
 follow-up has exactly one row with `origin = 'followup'`, `status = 'Planned'`, `relatedModule` / `relatedId` = the
@@ -596,7 +612,8 @@ identity: unchanged rows aren't rewritten and replies of attendees who stay are 
 
 Indexes: `Activity` `(isDeleted, startAt)`, `(isDeleted, assignedTo, startAt)` (calendar ranges),
 `(relatedModule, relatedId)` (a record's Activities tab), `organizationId`, `contactId`, `status`,
-`(reminderSentAt, remindAt)` (reminder sweep), `(isDeleted, createdAt)`, `(isDeleted, assignedTo, createdAt)`;
+`(reminderSentAt, remindAt)` (reminder sweep), `(isDeleted, createdAt)`, `(isDeleted, assignedTo, createdAt)`,
+`(conferenceState, updatedAt)` (P3-1 nightly sweep of video links still `requested`);
 `ActivityAttendee` `activityId`, `username`, `contactId`, `email`, plus three hand-written **filtered unique** indexes
 (one row per colleague, contact and outside email of an activity): `UX_ActivityAttendee_user (activityId, username)
 WHERE username IS NOT NULL`, `UX_ActivityAttendee_contact (activityId, contactId) WHERE contactId IS NOT NULL`,
@@ -605,6 +622,38 @@ WHERE username IS NOT NULL`, `UX_ActivityAttendee_contact (activityId, contactId
 soft-deleted rows included, so a meeting removed from the CRM is never imported again; P2-3b) on `Activity` (not in
 `schema.prisma`, as Prisma can't express a filtered index: `prisma migrate diff` from the schema never shows them, so
 don't drop them in a later migration).
+
+**Recurring activities** (migration `20261215110000_recurring_activities`, as of 2026-11-26, Calendar Phase 4;
+`activities/activity.series.ts`). Phase 1 R12 holds: a series is stored as **one `Activity` row per occurrence**, never
+as an RRULE master, so reminders (`remindAt` / `reminderSentAt` claim), the `startAt`-bounded range queries, busy
+times, the 31-day cap and the calendar push keep working on single rows. `Activity` gains `seriesId` (→
+`ActivitySeries`, `NO ACTION`; null on a single activity), `originalStartAt` (the rule slot the row fills, UTC; kept when
+the occurrence alone is moved), `seriesIndex` (1-based position from the series' first day; rows a split or a new
+rule leaves alone are renumbered, null on a day the rule doesn't have) and `seriesException`
+(BIT, default 0: changed on its own, series edits leave it). Index `(seriesId, startAt)` (series edits, the nightly
+sync window) and the hand-written filtered unique `UX_Activity_seriesOccurrence (seriesId, originalStartAt) WHERE
+seriesId IS NOT NULL` (one row per slot, **soft-deleted rows included**, so the nightly extension never re-creates a
+deleted occurrence; created through `sp_executesql` because its columns are added in the same batch). An occurrence a
+series rewrite removes (the rule no longer has its day, or another row fills its slot) is soft-deleted **and detached**
+(`seriesId`, `originalStartAt`, `seriesIndex` set to null), so its slot is free again if the rule returns to that day;
+a user's own delete keeps its series columns (as of 2026-11-26, review fixes). The code pairs
+occurrences by business day of `originalStartAt` (at most one row per series and day).
+
+**`ActivitySeries`**: `id`, `assignedTo` (owner of every occurrence), rule columns `frequency` (`daily` | `weekly` |
+`monthly`, NVARCHAR(10)), `interval` (1–99), `weekdays` (weekly: ISO weekday csv, `"1,3"`), `monthlyMode` (`day` |
+`weekday`), `monthDay` (1–31; months without it are skipped), `setPos` (1–4, -1 = last), `setWeekday` (1–7), end
+`untilDay` (NVARCHAR(10) `YYYY-MM-DD`, inclusive) or `count` (1–366) or neither (no end); anchor `startDay`
+(occurrence 1), `startTime` (NVARCHAR(5) `HH:mm`, null when all-day), `allDay`, `durationMinutes`, `spanDays`
+(all-day length); `timeZone` (BUSINESS_TIMEZONE); `templateJson` (NVARCHAR(MAX): the fields every occurrence copies:
+type, subject, owner, related record, organization, contact, location, reminder, remarks, `videoMeeting` (the P3-1
+choice `meet` / `teams` / null only: never a join URL, conference id, state or request number), attendees, custom fields);
+`materializedThrough` (the last business day occurrences were created through, today + 90 after a run);
+`endedAt` (no more occurrences will be created: ended, split, cancelled, deleted or the count / until reached);
+`splitFromId` (the series a "This and following" edit split it from; no FK); `revision`; `createdBy` / `updatedBy` /
+timestamps; soft delete (`isDeleted`, `deletedAt`). Indexes `(isDeleted, endedAt, materializedThrough)` (the nightly
+extension: live series not ended whose horizon is behind, least recently written first, so a series that fails is
+retried after the others) and `(assignedTo)`. Audited as `ActivitySeries` (module
+`activities`).
 
 **`ActivityExternalLink`** (migration `20261128100000_activity_calendar_sync`, as of 2026-11-26, Calendar Phase 2
 P2-3b; module `backend-crm/src/modules/calendar-sync`): one activity as seen in one connected calendar, and the
@@ -920,6 +969,11 @@ also on the activity as an attendee and in its remarks).
 - **Calendar connections** (as of 2026-11-26): `(username, status)` serves the user's own list and the People table,
   `(provider, status)` the admin counts, `(keyId)` key rotation; the filtered unique indexes enforce one live
   connection per person and per provider account.
+- **Recurring activities** (Calendar Phase 4, as of 2026-11-26): the nightly reads `ActivitySeries (isDeleted,
+  endedAt, materializedThrough)` (an equality pair then a range); series edits read occurrences by `(seriesId,
+  startAt)`; slot pre-reads and the unique guard use `UX_Activity_seriesOccurrence`. The nightly window mark reads the
+  last CRM write of occurrences changed on their own or older than their owner's backfill from `AuditLog (entityType,
+  entityId, id)` (D41 / D23; as of 2026-11-26, review round 2).
 - **Calendar push outbox** (P2-3b, as of 2026-11-26): `ActivityExternalLink (dirtyAt, nextAttemptAt)` answers the
   5-minute sweep (07:00–21:55) with a seek on `dirtyAt` (most rows have it null); `(connectionId, state)` serves the
   `enrolled` job and stopping / re-attaching a connection; `UX_ActivityExternalLink_event` and `UX_Activity_syncKey`
@@ -964,7 +1018,8 @@ also on the activity as an attendee and in its remarks).
   `20261128090000_calendar_admin_connect`, which replaced P2-2's `UX_CalendarConnection_user_kind` /
   `UX_CalendarConnection_account`; `UX_Activity_openFollowUp` of `20261127130000_followup_activities`;
   `UX_ActivityExternalLink_event` and `UX_Activity_syncKey` of `20261128100000_activity_calendar_sync`, the latter
-  created through `sp_executesql` because its column is added in the same batch). `20261127090000_calendar_connections`
+  created through `sp_executesql` because its column is added in the same batch); `UX_Activity_seriesOccurrence` of
+  `20261215110000_recurring_activities` (also through `sp_executesql`). `20261127090000_calendar_connections`
   also lower-cases `Users.email` and stops (THROW 50001, rolled back) when two active non-group users share an
   address: run `npm run calendar:check-emails` before deploying; after a stop, fix the users, run
   `npx prisma migrate resolve --rolled-back 20261127090000_calendar_connections` and deploy again.

@@ -2,6 +2,7 @@ import { ACTIVITY_REMINDER_MINUTES, isActivityReminder } from '../activities/act
 import { zonedDayOf, zonedStartOfDay } from '../../utils/zonedTime.js';
 import { GRAPH_MARKER_PROPERTY_ID } from './sync.constants.js';
 import { graphAllDayDay, graphInstant } from './sync.timezones.js';
+import { crmConferenceOf, readGoogleConference, readGraphConference, sameConference, type CrmConference, type ProviderConference } from './conference.rules.js';
 import type { GoogleEventWire, GraphEventWire } from './providers/wire.js';
 
 /**
@@ -13,8 +14,8 @@ import type { GoogleEventWire, GraphEventWire } from './providers/wire.js';
  *   block for a zero-length activity, a trimmed subject) is then never mistaken for an edit, because each side is only
  *   ever compared with its own earlier value.
  *
- * Field groups: subject, when (one unit), location, status, attendees (per email), reminder and description
- * (push-only).
+ * Field groups: subject, when (one unit), location, status, attendees (per email), reminder, description and
+ * conference (push-only; the video meeting, Calendar Phase 3).
  */
 
 export type AttendeeResponse = 'needsAction' | 'accepted' | 'tentative' | 'declined';
@@ -46,8 +47,13 @@ export interface CrmShape {
     /** Invitable attendees by lower-cased email; the owner (organizer) is never listed. */
     attendees: Record<string, CrmAttendee>;
     reminderMinutes: number | null;
-    /** The internal-only description (D15), '' when any attendee is external. */
+    /** The internal-only description (D15), '' when any attendee is external; plus the join details of a ready video meeting (P3-1). */
     description: string;
+    /**
+     * The video meeting the CRM asks for (P3-1, push-only): provider + request number; null / missing = none. Missing
+     * on bases stored before P3-1 (read as none).
+     */
+    conference?: CrmConference | null;
 }
 
 export interface ProviderAttendee {
@@ -87,7 +93,7 @@ export function parseBase(json: string | null | undefined): SyncBase | null {
     }
 }
 
-export const FIELD_GROUPS = ['subject', 'when', 'location', 'status', 'attendees', 'reminder', 'description'] as const;
+export const FIELD_GROUPS = ['subject', 'when', 'location', 'status', 'attendees', 'reminder', 'description', 'conference'] as const;
 export type FieldGroup = (typeof FIELD_GROUPS)[number];
 
 /** A provider event, normalized (spec §7.2 `ProviderEvent`). */
@@ -114,6 +120,8 @@ export interface ProviderEvent {
      * account's address; Graph: the event's `responseStatus`). Absent on the organizer's copy.
      */
     selfResponse?: AttendeeResponse;
+    /** The event's Meet / Teams meeting as the provider reports it (P3-1, read only). */
+    conference?: ProviderConference;
 }
 
 // ── CRM side ──────────────────────────────────────────────────────────────────────────────────────────────────
@@ -129,6 +137,9 @@ export interface ActivityShapeSource {
     timeZone: string;
     location: string | null;
     reminder: string | null;
+    /** Video meeting (P3-1); missing = none. */
+    conferenceProvider?: string | null;
+    conferenceRequest?: number;
 }
 
 /** Reminder minutes of an activity's `reminder` label; null for none. */
@@ -153,6 +164,7 @@ export function crmShapeOf(row: ActivityShapeSource, attendees: Record<string, C
         attendees,
         reminderMinutes: reminderMinutesOf(row.reminder),
         description,
+        conference: crmConferenceOf({ conferenceProvider: row.conferenceProvider ?? null, conferenceRequest: row.conferenceRequest ?? 0 }),
     };
 }
 
@@ -209,6 +221,7 @@ export function crmChangedGroups(now: CrmShape, base: CrmShape): FieldGroup[] {
     if (!sameKeys(now.attendees, base.attendees)) groups.push('attendees');
     if (now.reminderMinutes !== base.reminderMinutes) groups.push('reminder');
     if (now.description !== base.description) groups.push('description');
+    if (!sameConference(now.conference, base.conference)) groups.push('conference');
     return groups;
 }
 
@@ -312,8 +325,11 @@ export function normalizeGoogle(raw: GoogleEventWire, accountEmail: string): Pro
         isPrivate: raw.visibility === 'private' || raw.visibility === 'confidential',
         ...(raw.htmlLink ? { htmlLink: raw.htmlLink } : {}),
         ...(self ? { selfResponse: googleResponse(self.responseStatus) } : {}),
+        ...withConference(readGoogleConference(raw)),
     };
 }
+
+const withConference = (conference: ProviderConference | undefined) => (conference ? { conference } : {});
 
 /** Plain text of a Graph body (Outlook stores HTML even when text was sent): tags dropped, whitespace collapsed. */
 export function graphBodyText(body: GraphEventWire['body']): string {
@@ -390,6 +406,7 @@ export function normalizeGraph(raw: GraphEventWire, accountEmail = ''): Provider
         isPrivate: Boolean(raw.sensitivity) && lc(raw.sensitivity) !== 'normal',
         ...(raw.webLink ? { htmlLink: raw.webLink } : {}),
         ...(raw.isOrganizer === true ? {} : graphSelfResponse(raw, accountEmail)),
+        ...withConference(readGraphConference(raw)),
     };
 }
 
@@ -415,6 +432,7 @@ export function crmViewOfProvider(provider: ProviderShape, base: CrmShape): CrmS
         // Push-only groups stay as the CRM has them.
         reminderMinutes: base.reminderMinutes,
         description: base.description,
+        conference: base.conference ?? null,
     };
 }
 

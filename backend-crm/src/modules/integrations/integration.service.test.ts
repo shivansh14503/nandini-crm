@@ -473,9 +473,9 @@ describe('settings and sync types', () => {
     it('lists Followup Types with Task / Note locked off; saves real changes through the option update', async () => {
         const { optionUpdates, state } = setup({ configs: followupConfigs([{ value: 'Call', meta: { icon: 'call' } }, { value: 'WhatsApp', meta: { calendarSync: false } }, { value: 'Task' }]) });
         assert.deepEqual(await integrationService.getSyncTypes(), [
-            { value: 'Call', label: 'Call', calendarSync: true, locked: false },
-            { value: 'WhatsApp', label: 'WhatsApp', calendarSync: false, locked: false },
-            { value: 'Task', label: 'Task', calendarSync: false, locked: true, lockReason: 'Tasks and notes never go to calendars.' },
+            { value: 'Call', label: 'Call', calendarSync: true, videoMeeting: false, locked: false },
+            { value: 'WhatsApp', label: 'WhatsApp', calendarSync: false, videoMeeting: false, locked: false },
+            { value: 'Task', label: 'Task', calendarSync: false, videoMeeting: false, locked: true, lockReason: 'Tasks and notes never go to calendars.' },
         ]);
         const types = await integrationService.saveSyncTypes({ Call: false, whatsapp: false, Task: false }, admin);
         assert.deepEqual(optionUpdates, [{ id: 'opt-Call', body: { meta: { icon: 'call', calendarSync: false } } }]);
@@ -483,6 +483,23 @@ describe('settings and sync types', () => {
         assert.ok(state.cacheInvalidations.some((p) => p.includes('form-configs')));
         await expectHttp(integrationService.saveSyncTypes({ Task: true }, admin), 400);
         await expectHttp(integrationService.saveSyncTypes({ Fax: true }, admin), 400);
+    });
+
+    it('switches Video meeting per Followup Type (option meta videoMeeting; Task / Note refused)', async () => {
+        const { optionUpdates } = setup({ configs: followupConfigs([{ value: 'Meeting', meta: { icon: 'meeting', videoMeeting: true } }, { value: 'Call', meta: { icon: 'call' } }, { value: 'Note' }]) });
+        assert.deepEqual(
+            (await integrationService.getSyncTypes()).map((t) => [t.value, t.videoMeeting]),
+            [
+                ['Meeting', true],
+                ['Call', false],
+                ['Note', false],
+            ],
+        );
+        const types = await integrationService.saveVideoTypes({ Meeting: true, call: true, Note: false }, admin);
+        assert.deepEqual(optionUpdates, [{ id: 'opt-Call', body: { meta: { icon: 'call', videoMeeting: true } } }]);
+        assert.equal(types.find((t) => t.value === 'Call')!.videoMeeting, true);
+        await expectHttp(integrationService.saveVideoTypes({ Note: true }, admin), 400);
+        await expectHttp(integrationService.saveVideoTypes({ Fax: false }, admin), 400);
     });
 });
 

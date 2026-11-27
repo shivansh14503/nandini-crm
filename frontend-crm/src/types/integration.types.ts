@@ -161,6 +161,8 @@ export interface SyncType {
     value: string;
     label: string;
     calendarSync: boolean;
+    /** Offers a Video meeting on the activity form (option meta `videoMeeting`; Calendar Phase 3). */
+    videoMeeting: boolean;
     locked: boolean;
     lockReason?: string;
 }

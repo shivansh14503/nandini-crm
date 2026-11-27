@@ -31,6 +31,7 @@ export const useTestProvider = () =>
     useIntegrationsMutation(({ provider, payload }: { provider: IntegrationProviderKey; payload?: TestConnectionPayload }) => integrationsAdminService.testProvider(provider, payload));
 export const useSaveCalendarSettings = () => useIntegrationsMutation((patch: Partial<CalendarSyncSettings>) => integrationsAdminService.saveSettings(patch));
 export const useSaveSyncTypes = () => useIntegrationsMutation((changes: Record<string, boolean>) => integrationsAdminService.saveSyncTypes(changes));
+export const useSaveVideoTypes = () => useIntegrationsMutation((changes: Record<string, boolean>) => integrationsAdminService.saveVideoTypes(changes));
 /** The user directory (master data) carries emails too: the service broadcasts MASTER_DATA_SYNC_ENTITY, so every tab refreshes it. */
 export const useSetPersonEmail = () =>
     useIntegrationsMutation(({ username, payload }: { username: string; payload: PersonEmailPayload }) => integrationsAdminService.setPersonEmail(username, payload));

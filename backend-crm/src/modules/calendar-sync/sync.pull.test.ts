@@ -4,6 +4,7 @@ import { ENV } from '../../config/env.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { toDateOnly } from '../../utils/mappers.js';
 import { addDays, zonedDayOf, zonedWallClockToInstant } from '../../utils/zonedTime.js';
+import { activitySeriesService } from '../activities/activity.series.js';
 import { activityService } from '../activities/activity.service.js';
 import { blankActivity, blankAttendee, blankLink, installActivityDouble, restoreActivityDouble, type ActivityDoubleState, type LeadRow } from '../activities/testing/activityDouble.js';
 import { fakeAddEvent, fakeDeleteEvent, fakeEditEvent, fakeProviderState, resetFakeProvider } from './providers/fake.js';
@@ -262,6 +263,47 @@ describe('pullConnection: merge rules', () => {
         assert.equal(result.counts.unsupported, 1);
         assert.equal(linkOf(id).state, 'unsupported');
         assert.equal(activityOf(id).subject, 'Demo with ACME');
+    });
+});
+
+describe('pullConnection: recurring activities (Calendar Phase 4)', () => {
+    it('an occurrence moved in the calendar becomes an exception; a calendar delete does not; no occurrence is created or brought back', async () => {
+        install();
+        const day = addDays(zonedDayOf(new Date(), TZ), 1);
+        const start = zonedWallClockToInstant(`${day}T10:00`, TZ);
+        await activitySeriesService.create(
+            { ...meeting({ subject: 'Daily stand-up', startAt: start.toISOString(), endAt: new Date(start.getTime() + HOUR).toISOString() }), repeat: { frequency: 'daily', ends: 'after', count: 4 } },
+            PALAK,
+        );
+        const rows = state.activities.filter((a) => a.seriesId && !a.isDeleted).sort((a, b) => (a.startAt?.getTime() ?? 0) - (b.startAt?.getTime() ?? 0));
+        assert.equal(rows.length, 4);
+        for (const row of rows) assert.equal((await pushLink(linkOf(row.id).id)).status, 'done');
+        const [first, moved, cancelled, removed] = rows;
+        const eventOf = (id: string) => linkOf(id).externalEventId as string;
+        // The fourth is deleted in the CRM ("This event"): its event is cancelled by the push.
+        await activitySeriesService.remove(removed.id, PALAK, { scope: 'this' });
+        await pushLink(linkOf(removed.id).id);
+        const total = state.activities.length;
+
+        const newStart = new Date((moved.startAt as Date).getTime() + 2 * HOUR);
+        fakeEditEvent(eventOf(moved.id), { start: { dateTime: rfc(newStart), timeZone: TZ }, end: { dateTime: rfc(new Date(newStart.getTime() + HOUR)), timeZone: TZ } }, new Date(Date.now() + 60_000));
+        fakeDeleteEvent(eventOf(cancelled.id), new Date(Date.now() + 60_000));
+        fakeEditEvent(eventOf(removed.id), { status: 'confirmed', summary: 'Back again' }, new Date(Date.now() + 60_000));
+        done(await pullConnection('c1', 'poll'));
+
+        assert.equal(activityOf(moved.id).startAt?.getTime(), newStart.getTime());
+        assert.equal(activityOf(moved.id).seriesException, true, 'moved alone in the calendar: an exception');
+        assert.equal(activityOf(cancelled.id).status, 'Cancelled');
+        assert.equal(activityOf(cancelled.id).seriesException, false, 'status is per occurrence');
+        assert.equal(activityOf(first.id).seriesException, false);
+        assert.equal(activityOf(removed.id).isDeleted, true, 'a CRM-deleted occurrence stays deleted');
+        assert.equal(state.activities.length, total, 'the pull creates no occurrence');
+
+        // A later "All events" edit leaves the exception alone.
+        await activitySeriesService.update(first.id, { subject: 'Daily sync' }, PALAK, { scope: 'all' });
+        assert.equal(activityOf(first.id).subject, 'Daily sync');
+        assert.equal(activityOf(moved.id).subject, 'Daily stand-up');
+        assert.equal(activityOf(moved.id).startAt?.getTime(), newStart.getTime());
     });
 });
 

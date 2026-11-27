@@ -1,7 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { activityService } from '@/services/activity.service';
 import type { PaginationParams } from '@/types/api.types';
-import type { ActivityMeta, ActivityRelatedModule, BusyTimes, BusyTimesParams, CalendarFeed, CalendarFeedParams } from '@/types/activity.types';
+import type { ActivityMeta, ActivityRelatedModule, BusyTimes, BusyTimesParams, CalendarFeed, CalendarFeedParams, SeriesScope, VideoOptions } from '@/types/activity.types';
 import { createEntityHooks } from './createEntityHooks';
 import { queryKeys } from './queryKeys';
 
@@ -20,6 +20,15 @@ export function useBulkDeleteActivitiesWithResult() {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: (ids: string[]) => activityService.bulkDelete(ids),
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.activities.all }),
+    });
+}
+
+/** Delete of an occurrence of a recurring activity with its scope (this / following / all; Calendar Phase 4). */
+export function useDeleteActivityScoped() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ id, scope }: { id: string; scope: SeriesScope }) => activityService.deleteScoped(id, scope),
         onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.activities.all }),
     });
 }
@@ -65,6 +74,16 @@ export function useBusyTimes(params: Omit<BusyTimesParams, 'suggest'> | undefine
         enabled: Boolean(params && params.users.length > 0) && (options.enabled ?? true),
         staleTime: 60_000,
         placeholderData: keepPreviousData,
+    });
+}
+
+/** Video meeting choices of an owner (the activity form's Video meeting field). Fresh for 5 minutes. */
+export function useVideoOptions(owner: string, options: { enabled?: boolean } = {}) {
+    return useQuery<VideoOptions>({
+        queryKey: queryKeys.activities.videoOptions(owner),
+        queryFn: () => activityService.videoOptions(owner),
+        enabled: Boolean(owner) && (options.enabled ?? true),
+        staleTime: 5 * 60_000,
     });
 }
 

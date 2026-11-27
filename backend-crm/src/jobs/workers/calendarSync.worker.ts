@@ -18,6 +18,7 @@ import { isWatchOp, runWatchJob } from '../../modules/calendar-sync/sync.channel
 import { pullConnection, type PullResult } from '../../modules/calendar-sync/sync.pull.js';
 import { markPushExhausted, pushLink, type PushResult } from '../../modules/calendar-sync/sync.push.js';
 import { rsvpRetryDelay, runRsvp } from '../../modules/calendar-sync/sync.rsvp.js';
+import { checkConference, markConferenceExhausted } from '../../modules/calendar-sync/sync.conference.js';
 import { pollCron } from '../../modules/calendar-sync/syncHours.js';
 import { pullAgainIfNotified } from '../../modules/calendar-sync/webhook.service.js';
 import { writeWorkerHeartbeat } from '../../modules/calendar-sync/workerHeartbeat.js';
@@ -31,6 +32,8 @@ import { throttledLogger } from './throttledLogger.js';
  *   enrolled  a connection row reached `ok`, first time or after an error
  *             (`enrolled-<connectionId>-<enrolledAtMs>-r<readyAtMs>`): push its dirty links
  *   check     a connection health check (`check-<connectionId>-<minute>`): new enrolments and due re-checks
+ *   conference  read an event again until its video link is ready (`conference-<linkId>-<request>-<attempt>`, 5 s
+ *             apart, at most 5 tries; Calendar Phase 3 P3-1)
  *   pull      calendar → CRM changes of one connection (`pull-<connectionId>-<10 s bucket>`, P2-5): poll fan-out,
  *             Sync now, the calendar page, the nightly Outlook re-baseline; one attempt (the next poll retries)
  *   watch     a webhook channel of one connection (`watch-<connectionId>-<op>-<minute>`, P2-7): ensure | renew |
@@ -42,8 +45,8 @@ import { throttledLogger } from './throttledLogger.js';
  *             channel is healthy) + outbox sweep + due checks + up to 20 webhook channels created / renewed
  *   nightly   scheduler 'calendar-nightly', 00:25: reconcile + due checks + admin digest (from the reminders worker),
  *             the follow-up activity backfill (from the reminders worker), error-link retries, client secrets
- *             expiring, expired leases cleared, Outlook delta windows re-baselined, webhook channels (P2-7),
- *             imported meetings auto-completed (P2-8)
+ *             expiring, expired leases cleared, stale video links failed (P3-1), Outlook delta windows
+ *             re-baselined, webhook channels (P2-7), imported meetings auto-completed (P2-8)
  * All in the business timezone. A push that finds the connection's lease taken, or the provider rate-limiting, moves
  * itself back without spending an attempt. Every Redis `ready` upserts the schedulers and runs one outbox sweep. While
  * Redis is down a one-minute tick runs due checks, pushes due links and pulls due people in-process inside the sync
@@ -141,6 +144,12 @@ export async function processCalendarJob(job: Job, token?: string): Promise<unkn
                 const connectionId = idOf(job.data, 'connectionId');
                 return connectionId ? { outcome: await checkConnection(connectionId) } : null;
             }
+            case CALENDAR_SYNC_JOBS.conference: {
+                const linkId = idOf(job.data, 'linkId');
+                const data = job.data as { request?: unknown; attempt?: unknown };
+                if (!linkId || typeof data.request !== 'number' || typeof data.attempt !== 'number') return null;
+                return { outcome: await checkConference({ linkId, request: data.request, attempt: data.attempt }) };
+            }
             case CALENDAR_SYNC_JOBS.poll:
                 return runCalendarPoll();
             case CALENDAR_SYNC_JOBS.nightly:
@@ -206,6 +215,10 @@ export function startCalendarSyncWorker(): Worker {
         logger.error({ job: job?.name, jobId: job?.id, attempts: job?.attemptsMade, err: err.message }, 'Calendar sync job failed');
         if (job?.name === CALENDAR_SYNC_JOBS.push && isLastAttempt(job)) {
             void markPushExhausted(idOf(job.data, 'linkId')).catch((e: Error) => logger.warn({ err: e.message }, 'Could not mark a calendar push as failed'));
+        }
+        // P3-1: a video link check that failed on every attempt (the database, not the provider) gives up for good.
+        if (job?.name === CALENDAR_SYNC_JOBS.conference && isLastAttempt(job)) {
+            void markConferenceExhausted(job.data as { linkId?: string; request?: number }).catch((e: Error) => logger.warn({ err: e.message }, 'Could not mark a video link check as failed'));
         }
     });
     worker.on('error', (err) => warn(err.message, 'Calendar sync worker error'));

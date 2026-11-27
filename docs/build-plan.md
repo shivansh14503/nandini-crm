@@ -1,7 +1,7 @@
 # Nandini CRM — Build Plan
 
 > **Status:** living document. Part 1 records what has been built (reconstructed from git history, 115 commits
-> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-26, Calendar Phase 2 P2-1, P2-2, P2-2b (admin-managed calendar connections), P2-3a, P2-3b (calendar push engine), P2-3c (backfill, send invitations, sync status), P2-4, P2-6 (busy times), P2-8 (customer meetings from the calendar, replies both ways), Calendar Phase 4 booking links, Profile Phase 1: My Profile, Profile Phase 2: Admin › Users, Profile Phase 3: notifications & preferences, Profile Phase 4: connected accounts and Profile Phase 5 PR5a + PR5b: company formats, which completes Phase 17). Part 2
+> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-27, Calendar Phase 2 P2-1, P2-2, P2-2b (admin-managed calendar connections), P2-3a, P2-3b (calendar push engine), P2-3c (backfill, send invitations, sync status), P2-4, P2-5 (calendar → CRM pull), P2-6 (busy times), P2-7 (calendar webhooks) and P2-8 (customer meetings from the calendar, replies both ways), Calendar Phase 4 booking links and recurring activities, Profile Phase 1: My Profile, Profile Phase 2: Admin › Users, Profile Phase 3: notifications & preferences, Profile Phase 4: connected accounts and Profile Phase 5 PR5a + PR5b: company formats, which completes Phase 17; Calendar Phase 3 P3-1: Google Meet and Microsoft Teams links). Part 2
 > is the roadmap. Tick
 > items off and add new ones as work lands.
 > Related: [System design](system-design.md) · [Database design](database-design.md) · [API plan](api-plan.md)
@@ -536,6 +536,36 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         run first-run check F3 (a Google reply to an invitation copy); if refused, decide on the broader
         `calendar.events` scope (code + Admin console). Tested with the fake provider, hand-written Google / Graph
         answers and in-memory doubles; no real SQL Server, Google or Microsoft call.
+        Merged with P3-1 and recurring activities (as of 2026-11-27): `videoMeeting` joins the outside-meeting lock
+        (`409 EXTERNAL_EVENT_LOCKED`, checked before the P3-1 video rules); the organizer's `ready` Meet / Teams join
+        link is taken over read only on import and mirrored by the designated attendee link (cleared when the
+        organizer removes it; no audit entry, never pushed); imported meetings never repeat (`assertRepeatable`) and a
+        series edit never rewrites or cancels an `externalOrganizer` row (`isRewritable`).
+- [ ] **Calendar Phase 3: video meetings** (spec §16, adapted to admin-managed connections)
+  - [x] **P3-1: Google Meet + Microsoft Teams links** (2026-11-26) — migration `20261215100000_activity_conference`
+        (`Activity.conferenceProvider` / `conferenceState` / `conferenceJoinUrl` / `conferenceId` / `conferenceError` /
+        `conferenceRequest`; option meta `videoMeeting: true` on Meeting and Demo / Presentation). Built-in form field
+        `videoMeeting` (Activities › Schedule, after Location; hidden for Task / Note); Admin › API Integrations › What
+        goes to calendars › "Offer a video meeting on" (`PUT /api/integrations/video-types`). The **owner's** company
+        calendar makes the link through `withCalendarAccess` (no per-user OAuth): Meet with Google
+        (`conferenceDataVersion=1`, `createRequest` `<requestedId>-c<n>`, `pending` → `conference` job, 5 s × 5),
+        Teams with Microsoft 365 (`isOnlineMeeting`, `onlineMeeting.joinUrl`; locked once ready, `409
+        VIDEO_MEETING_LOCKED`). `409 VIDEO_PROVIDER_NOT_CONNECTED`, `GET /api/activities/video-options`,
+        `POST /api/activities/:id/conference/retry`; inbound Meet / Teams links on push answers and on P2-5 pulls of organizer copies taken over read only (a pull
+        records `ready` links only, never clears a requested one);
+        join details in the event description (one extra quiet push once ready). Review fixes: every wait ends in
+        `ready` or `failed` (400 refusal → event synced without the link, `not_created` / `no_event` /
+        `event_refused`, worker last attempt, nightly sweep of links `requested` > 1 h); owner changes never blocked
+        (new request, or `failed provider_unavailable`); Teams lock out of `lockedFields`; Video meeting can't be made
+        Required. Frontend: form select (owner's options, Zoom disabled "later"),
+        drawer Join / copy / "Creating Meet link…" / error + Retry, calendar chip icon and agenda Join, record
+        Activities tab icon + Join (agenda clicks on Join / copy no longer open the drawer; 32 px copy target),
+        hidden list column "Video meeting", `newActivityHref` `video=`. Not run against a
+        real SQL Server, Google or Microsoft (fake provider and recorded-shape `fakeFetch` tests only). Owner steps:
+        Meet on for the Workspace org, Teams licences for owners, first-run check that `calendar.events.owned` under
+        domain-wide delegation accepts `createRequest` (else switch the delegated scope to `calendar.events`).
+        Next: booking links' default video meeting (needs a `BookingLink` column and form control).
+  - [ ] **P3-2: Zoom** (per-user OAuth, `CalendarConnection kind='video'`; the option stays disabled until then)
 - [ ] **Phase 4 (later; spec §17)**: booking links, recurring activities, email logging.
   - [x] **Booking links (public scheduling page on free/busy)** (2026-11-26) — migration `20261128120000_booking_links`
         (`BookingLink`, `BookingLinkBooking`; `Activity.origin` gains `booking`, notification kind `booking_created`).
@@ -559,7 +589,7 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         details, hides another duration's times while loading and retries after network errors. Not run against a
         real SQL Server, Google or Microsoft (doubles only). Later: email confirmations and visitor cancel /
         reschedule (mail layer), team / round-robin links, custom questions.
-  - [ ] Recurring activities (CRM-authored series, R12 occurrence rows).
+  - [x] Recurring activities (CRM-authored series, R12 occurrence rows). Done 2026-11-26 (migration `20261215110000_recurring_activities`): an `ActivitySeries` rule (daily / weekly on weekdays / monthly on a day or the nth weekday, every N, ends on a date or after a count, business timezone) with one `Activity` row per occurrence (`seriesId` + `originalStartAt`, filtered unique index) over a rolling 90-day horizon extended by the 00:20 nightly job; a Repeat control on the activity form and quick create (not Notes, not follow-ups); "This event / This and following / All events" for saves, cancels and deletes; occurrences pushed to calendars as single events inside a 14-day window; "Repeats …" in the drawer and a repeat mark on the calendar. Tested with in-memory doubles only, not against a real SQL Server, Google or Microsoft.
   - [ ] Email logging.
 
 ### Phase 15 — Documents (P2, 2026-11-25)

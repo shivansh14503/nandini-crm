@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { FIELD_MAX_LENGTH as L } from '../config/fieldLimits';
-import { ACTIVITY_MAX_ATTENDEES, ACTIVITY_RELATED_MODULES, NOTE_TYPE, type ActivityAttendee, type ActivityRelatedModule } from '../types/activity.types';
+import { ACTIVITY_MAX_ATTENDEES, ACTIVITY_RELATED_MODULES, NOTE_TYPE, VIDEO_PROVIDERS, type ActivityAttendee, type ActivityRelatedModule, type VideoProvider } from '../types/activity.types';
 import {
     NOTE_REMARKS_MESSAGE,
     RELATED_RECORD_MESSAGE,
@@ -35,6 +35,8 @@ export interface ActivityFormValues {
     endAt: string;
     reminder: string;
     location: string;
+    /** Video meeting (P3-1): meet | teams | zoom, '' for none. */
+    videoMeeting: VideoProvider | '';
     attendees: ActivityAttendee[];
     customerResponse: string;
     remarks: string;
@@ -78,6 +80,8 @@ export const activityFormSchema = z
         endAt: optionalString,
         reminder: optionalText('Reminder', L.option),
         location: optionalText('Location', L.address),
+        // '' = none; which providers the owner's calendar can make is checked by the form's options and the API (409).
+        videoMeeting: z.enum(VIDEO_PROVIDERS).or(z.literal('')).default(''),
         attendees: z
             .array(attendeeSchema)
             .max(MAX_ACTIVITY_ATTENDEES, { message: `An activity can have at most ${MAX_ACTIVITY_ATTENDEES} attendees.` })

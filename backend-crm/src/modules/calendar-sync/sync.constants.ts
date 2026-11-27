@@ -60,7 +60,13 @@ export const CALENDAR_SYNC_JOBS = {
     rsvp: 'rsvp',
     poll: 'poll',
     nightly: 'nightly',
+    /** Read the event again until its video link is ready (Calendar Phase 3 P3-1, spec §16.3; sync.conference.ts). */
+    conference: 'conference',
 } as const;
+
+/** `conference` job: first read this long after the push, then again after each pending answer, at most this many times. */
+export const CONFERENCE_CHECK_DELAY_MS = 5_000;
+export const CONFERENCE_CHECK_TRIES = 5;
 
 /** A push job waits this long, so quick successive edits collapse into one provider write (§8.3 step 5). */
 export const PUSH_JOB_DELAY_MS = 2_000;

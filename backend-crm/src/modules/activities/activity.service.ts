@@ -19,16 +19,17 @@ import {
 } from '../form-configs/customFieldValidator.js';
 import { isLiveStatus } from '../calendar-sync/connection.constants.js';
 import { calendarViewOf, loadOwnerCalendarLinks, NO_CALENDAR_LINKS, parseReplyBase, type CalendarLinksByActivity } from '../calendar-sync/sync.view.js';
-import { FOLLOWUP_TYPE_CATEGORY_KEY } from '../form-configs/formConfig.defaults.js';
+import { FOLLOWUP_TYPE_CATEGORY_KEY, NEVER_REQUIRED_FIELDS } from '../form-configs/formConfig.defaults.js';
 import type { DropdownCategoryDto } from '../form-configs/formConfig.service.js';
 import { notifyActivityParticipants, scheduleActivityReminder } from '../notifications/notification.reminders.js';
 import { assertAssigneeValid } from '../shared/accessControl.js';
 import { assertDeletedRow, lockRecords, restoreData, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { activityLocks, activityScopeWhere, canEditActivity, canViewActivity, lockedFieldsFor, myResponseOf, type ActivityAccessRow } from './activity.access.js';
-import { normalizeAttendees, planAttendeeSync, syncAttendees } from './activity.attendees.js';
+import { assertOwnerCanHaveVideo, assertVideoMeetingAllowed, conferenceColumnsFor, ownerVideoForChange, retryColumnsFor, videoOptionsFor, type VideoOptions } from './activity.conference.js';
+import { normalizeAttendees, planAttendeeSync, syncAttendees, type StoredAttendee } from './activity.attendees.js';
 import { activityRangeWhere, calendarFeed, type CalendarFeed } from './activity.calendar.js';
-import { linkTargets, resolveActivityLinks, type LinkTarget } from './activity.links.js';
-import { toActivityData, toActivityDto, type ActivityDto, type ActivityRow, type ActivityView } from './activity.mapper.js';
+import { linkTargets, resolveActivityLinks, type LinkTarget, type PreviousLinks } from './activity.links.js';
+import { conferenceViewOf, toActivityData, toActivityDto, type ActivityDto, type ActivityRow, type ActivityView } from './activity.mapper.js';
 import {
     ACTIVITY_FALLBACK_DURATION_MINUTES,
     ACTIVITY_MAX_DURATION_DAYS,
@@ -59,6 +60,7 @@ import {
     type ActivityInput,
 } from './activity.validator.js';
 import { activityWriteHook } from './activity.writeHook.js';
+import { loadSeriesViews, NO_SERIES, type SeriesById } from './activity.seriesView.js';
 
 export const EDIT_FORBIDDEN_MESSAGE = "Only the activity's owner can change it. Invitees can reply to the invitation.";
 export const RSVP_FORBIDDEN_MESSAGE = 'Only invited colleagues can reply to this activity.';
@@ -68,12 +70,15 @@ export const WITH_ATTENDEES = { attendees: { orderBy: { sortOrder: 'asc' } } } a
 
 const notFound = () => HttpError.notFound('Activity not found');
 
+/** Built-in fields a save never requires (P3-1 Video meeting: depends on the type and the owner's calendar). */
+const ACTIVITY_NEVER_REQUIRED: ReadonlySet<string> = NEVER_REQUIRED_FIELDS.activities ?? new Set<string>();
+
 function assertCanView(user: AuthUser, row: ActivityAccessRow): void {
     if (!canViewActivity(user, row)) throw HttpError.forbidden(VIEW_FORBIDDEN_MESSAGE);
 }
 
 /** 403 for anyone but the owner, the creator or a global role (an invitee may only reply). */
-function assertCanEdit(user: AuthUser, row: ActivityAccessRow): void {
+export function assertCanEdit(user: AuthUser, row: ActivityAccessRow): void {
     assertCanView(user, row);
     if (!canEditActivity(user, row)) throw HttpError.forbidden(EDIT_FORBIDDEN_MESSAGE);
 }
@@ -86,6 +91,7 @@ export function toActivityView(
     row: ActivityRow,
     user: AuthUser,
     links: CalendarLinksByActivity = NO_CALENDAR_LINKS,
+    series: SeriesById = NO_SERIES,
     importedFrom: ReadonlyMap<string, ImportSource> = NO_IMPORT_SOURCES,
 ): ActivityView {
     const canEdit = canEditActivity(user, row);
@@ -98,6 +104,8 @@ export function toActivityView(
         lockedFields: lockedFieldsFor(row),
         calendar: calendarViewOf(row, links.get(row.id), user.username, canEdit),
         importedFrom: source?.provider ?? null,
+        series: row.seriesId ? (series.get(row.id) ?? null) : null,
+        conference: conferenceViewOf(row, canEdit, links.has(row.id)),
     };
 }
 
@@ -141,13 +149,17 @@ export async function loadImportSources(rows: readonly ActivityRow[]): Promise<R
     return out;
 }
 
-/** Views of committed rows with their calendar state (one link read per call, a second only when links exist). */
-async function toActivityViews(rows: readonly ActivityRow[], user: AuthUser): Promise<ActivityView[]> {
-    const [links, sources] = await Promise.all([loadOwnerCalendarLinks(rows), loadImportSources(rows)]);
-    return rows.map((row) => toActivityView(row, user, links, sources));
+/**
+ * Views of committed rows with their calendar state (one link read per call, a second only when links exist), their
+ * series (Calendar Phase 4: one ActivitySeries read, only when a row belongs to one) and where an imported one came
+ * from (P2-8: one link read, only when a row is imported).
+ */
+export async function toActivityViews(rows: readonly ActivityRow[], user: AuthUser): Promise<ActivityView[]> {
+    const [links, series, sources] = await Promise.all([loadOwnerCalendarLinks(rows), loadSeriesViews(rows), loadImportSources(rows)]);
+    return rows.map((row) => toActivityView(row, user, links, series, sources));
 }
 
-const toOneView = async (row: ActivityRow, user: AuthUser): Promise<ActivityView> => (await toActivityViews([row], user))[0];
+export const toOneView = async (row: ActivityRow, user: AuthUser): Promise<ActivityView> => (await toActivityViews([row], user))[0];
 
 // ── Configuration ────────────────────────────────────────────────────────────
 
@@ -219,6 +231,10 @@ const armedReminderSentAt = (writer: ActivityWriter, input: ActivityInput, sched
 
 /** Fields whose change makes the activity a new version for calendars (iCal SEQUENCE in Phase 2). */
 const REVISION_FIELDS = ['subject', 'followupType', 'startAt', 'endAt', 'allDay', 'location', 'assignedTo', 'status'] as const;
+/** Fields whose change by a system write makes a series occurrence an exception (status is per occurrence). */
+const SERIES_OCCURRENCE_FIELDS = ['subject', 'followupType', 'startAt', 'endAt', 'allDay', 'location', 'assignedTo'] as const;
+const sameColumn = (a: unknown, b: unknown) =>
+    a instanceof Date || b instanceof Date ? ((a as Date | null)?.getTime() ?? null) === ((b as Date | null)?.getTime() ?? null) : (a ?? null) === (b ?? null);
 
 const nameKey = (value: unknown) => (typeof value === 'string' ? value.trim().toLowerCase() : '');
 
@@ -443,9 +459,28 @@ export interface ActivityWriter {
     quietPastReminder?: boolean;
     /** Activity configuration loaded before the transaction, passed to the write hook; null when not loaded. */
     config?: ActivityConfig | null;
+    /**
+     * Series columns written with the row (Calendar Phase 4, activity.series.ts): any writer. Unset leaves them as they
+     * are (an update) or null (an insert).
+     */
+    series?: ActivitySeriesColumns;
+    /**
+     * The CREATE audit entry's `changes` instead of the full snapshot (Calendar Phase 4: occurrences a series creates
+     * write `{ subject, seriesId, originalStartAt }`; the series' own entry carries the rest).
+     */
+    auditCreateChanges?: Record<string, unknown>;
+    /**
+     * A system insert that copies links and attendees already accepted elsewhere (Calendar Phase 4: a series occurrence
+     * copies its series' template): the related record, organization / contact and attendees listed here count as
+     * unchanged, so one deleted or deactivated since is kept, as an existing activity keeps it.
+     */
+    keep?: { links: PreviousLinks; attendees: readonly Pick<StoredAttendee, 'kind' | 'username' | 'contactId'>[] };
 }
 
-const crmWriter = (user: AuthUser, config: ActivityConfig | null = null, requested?: ReadonlySet<string>): ActivityWriter => ({
+/** Activity columns of a series occurrence (Calendar Phase 4). */
+export type ActivitySeriesColumns = Partial<Pick<Prisma.ActivityUncheckedCreateInput, 'seriesId' | 'originalStartAt' | 'seriesIndex' | 'seriesException'>>;
+
+export const crmWriter = (user: AuthUser, config: ActivityConfig | null = null, requested?: ReadonlySet<string>): ActivityWriter => ({
     actor: user.username,
     user,
     config,
@@ -470,7 +505,7 @@ function assertUnlockedChanges(existing: ActivityRow, changes: Record<string, un
 }
 
 /** 409 when the activity may not be deleted (`ActivityLock.deleteRefusedReason`). */
-function assertDeletable(existing: ActivityRow): void {
+export function assertDeletable(existing: ActivityRow): void {
     const lock = activityLocks.lockFor(existing);
     if (lock?.deleteRefusedReason) throw new HttpError(lock.message, StatusCodes.CONFLICT, { code: lock.code });
 }
@@ -481,15 +516,19 @@ function assertDeletable(existing: ActivityRow): void {
  */
 export async function insertActivityRow(tx: TransactionClient, input: ActivityInput, schedule: Schedule, writer: ActivityWriter, now: Date): Promise<ActivityRow> {
     const assignedTo = writer.user ? ((await assertAssigneeValid(tx, input.assignedTo)) ?? writer.user.username) : input.assignedTo;
-    const links = await resolveActivityLinks(tx, input, undefined, writer.user);
-    const attendees = await normalizeAttendees(tx, input.attendees, assignedTo);
+    const keep = writer.user ? undefined : writer.keep;
+    const links = await resolveActivityLinks(tx, input, keep?.links, writer.user);
+    const attendees = await normalizeAttendees(tx, input.attendees, assignedTo, (keep?.attendees ?? []) as readonly StoredAttendee[]);
     const plan = planAttendeeSync(attendees, [], writer.actor, now);
     const withOwner = { ...input, assignedTo };
     const remindAt = remindAtOf(withOwner, schedule);
     const row = await tx.activity.create({
         data: {
             ...toActivityData(withOwner, links, schedule),
+            // Video meeting (P3-1): requested with the event when one was picked (activity.conference.ts).
+            ...conferenceColumnsFor(withOwner, null),
             ...(writer.user ? {} : writer.rowData),
+            ...writer.series,
             timeZone: ENV.BUSINESS_TIMEZONE,
             remindAt,
             reminderSentAt: armedReminderSentAt(writer, withOwner, schedule, remindAt, now),
@@ -499,7 +538,8 @@ export async function insertActivityRow(tx: TransactionClient, input: ActivityIn
         },
         include: WITH_ATTENDEES,
     });
-    await auditService.record(tx, { entityType: 'Activity', entityId: row.id, action: 'CREATE', changedBy: writer.actor, changes: toActivityDto(row) });
+    const changes = writer.auditCreateChanges ?? toActivityDto(row);
+    await auditService.record(tx, { entityType: 'Activity', entityId: row.id, action: 'CREATE', changedBy: writer.actor, changes });
     await afterActivityWrite(tx, null, row, writer, now);
     return row;
 }
@@ -522,9 +562,14 @@ export async function updateActivityRow(tx: TransactionClient, existing: Activit
     const remindAt = remindAtOf(withOwner, schedule);
     const rearmed = (existing.remindAt?.getTime() ?? null) !== (remindAt?.getTime() ?? null);
     const system = writer.user === null;
+    // Video meeting (P3-1): what a new owner's calendar creates (read only when a meeting moves to a new owner).
+    const ownerVideo = await ownerVideoForChange(tx, withOwner, existing, writer.config);
     const data = {
         ...toActivityData(withOwner, links, schedule),
+        // Video meeting (P3-1): a new choice or a new owner asks for a new link; none clears it.
+        ...conferenceColumnsFor(withOwner, existing, ownerVideo),
         ...(system ? writer.rowData : {}),
+        ...writer.series,
         ...completionData(input.status, existing, writer.actor, now),
         remindAt,
         // An unchanged remindAt keeps its sent stamp (nextReminderSentAt); a reschedule re-arms it.
@@ -532,6 +577,14 @@ export async function updateActivityRow(tx: TransactionClient, existing: Activit
         ...(system && writer.createdBy ? { createdBy: writer.createdBy } : {}),
         updatedBy: writer.actor,
     };
+    // Calendar Phase 4: a system write (a calendar pull or merge) that moves or changes one occurrence of a series on its
+    // own makes it an exception, so a later "All events" edit leaves it alone (series paths pass `writer.series`).
+    const changedAlone =
+        system &&
+        !writer.series &&
+        Boolean(existing.seriesId) &&
+        !existing.seriesException &&
+        (plan.setChanged || SERIES_OCCURRENCE_FIELDS.some((key) => !sameColumn(existing[key], data[key])));
     const scheduleChanged =
         plan.setChanged ||
         REVISION_FIELDS.some((key) => {
@@ -541,7 +594,7 @@ export async function updateActivityRow(tx: TransactionClient, existing: Activit
         });
     const row = await tx.activity.update({
         where: { id },
-        data: { ...data, ...(scheduleChanged ? { revision: { increment: 1 } } : {}) },
+        data: { ...data, ...(changedAlone ? { seriesException: true } : {}), ...(scheduleChanged ? { revision: { increment: 1 } } : {}) },
         include: WITH_ATTENDEES,
     });
     const changes = diffRecords(before, toActivityDto(row));
@@ -552,6 +605,25 @@ export async function updateActivityRow(tx: TransactionClient, existing: Activit
     }
     await afterActivityWrite(tx, existing, row, writer, now);
     return row;
+}
+
+/**
+ * Soft-deletes a locked, live row inside the caller's transaction (access and locks are the caller's checks): the
+ * reminder is cleared, a DELETE entry is audited and the write hook runs (the calendar push cancels its event).
+ */
+export async function softDeleteActivityRow(
+    tx: TransactionClient,
+    existing: ActivityRow,
+    user: AuthUser,
+    now = new Date(),
+    series?: ActivitySeriesColumns,
+): Promise<ActivityCommitRow> {
+    // A deleted activity leaves the reminder set. `series`: Calendar Phase 4 detaches an occurrence a series rewrite
+    // removed (activity.series.ts), so its slot can come back.
+    const after = await tx.activity.update({ where: { id: existing.id }, data: { ...softDeleteData(user), remindAt: null, ...series }, include: WITH_ATTENDEES });
+    await auditService.record(tx, { entityType: 'Activity', entityId: existing.id, action: 'DELETE', changedBy: user.username });
+    await afterActivityWrite(tx, existing, after, crmWriter(user), now);
+    return { before: existing, after };
 }
 
 /**
@@ -627,6 +699,77 @@ export interface ActivityMeta {
     maxDurationDays: number;
 }
 
+/**
+ * A CRM create request parsed and checked as `POST /` does (form configuration, schedule, past start), before any
+ * transaction. Shared with the series create (activity.series.ts).
+ */
+export function parseCrmCreate(body: unknown, config: ActivityConfig): { input: ActivityInput; schedule: Schedule; now: Date } {
+    const input = activityInputSchema.parse(body);
+    input.customFields = checkModulePayload(config.fields, configPayload(asPayload(body), input), input.customFields, {
+        notApplicableKeys: notApplicableFor(input.followupType),
+        notRequired: ACTIVITY_NEVER_REQUIRED,
+    });
+    const schedule = scheduleOf(input, config);
+    const now = new Date();
+    throwFieldIssues(activityPastIssues({ ...input, ...schedule }, undefined, now, ENV.BUSINESS_TIMEZONE));
+    return { input, schedule, now };
+}
+
+/** What `applyCrmUpdate` hands back: the row before and after, and the parsed input it saved. */
+export interface CrmUpdateResult {
+    existing: ActivityRow;
+    row: ActivityRow;
+    input: ActivityInput;
+    /** ActivityDto keys the request asked to change (`requestedChanges`). */
+    requested: ReadonlySet<string>;
+}
+
+/** Fields of a series occurrence a change to which doesn't make it an exception (they're per occurrence anyway). */
+const PER_OCCURRENCE_KEYS: ReadonlySet<string> = new Set(['status', 'customerResponse']);
+
+/**
+ * A CRM user's update of one activity inside the caller's transaction (`PUT /:id`): record lock, access, patch merge,
+ * validation (form configuration, schedule, past start), the activity's locks and `updateActivityRow`. A series
+ * occurrence changed here on its own (anything but status / customer response) becomes an exception
+ * (`seriesException`) unless `series` says otherwise (Calendar Phase 4: the series paths pass the columns they set).
+ */
+export async function applyCrmUpdate(
+    tx: TransactionClient,
+    id: string,
+    patch: Record<string, unknown>,
+    user: AuthUser,
+    config: ActivityConfig,
+    series?: ActivitySeriesColumns,
+): Promise<CrmUpdateResult> {
+    await lockRecords(tx, 'activity', [id]);
+    const existing = await tx.activity.findFirst({ where: { id, isDeleted: false }, include: WITH_ATTENDEES });
+    if (!existing) throw notFound();
+    assertCanEdit(user, existing);
+
+    const before = toActivityDto(existing);
+    const merged = mergeActivityPatch(before, patch);
+    const input = activityInputSchema.parse(merged);
+    input.customFields = checkModulePayload(config.fields, configPayload(merged, input), input.customFields, {
+        submittedKeys: submittedKeys(patch),
+        previousCustomFields: before.customFields,
+        notApplicableKeys: notApplicableFor(input.followupType),
+        notRequired: ACTIVITY_NEVER_REQUIRED,
+    });
+    const schedule = scheduleOf(input, config);
+    const now = new Date();
+    throwFieldIssues(activityPastIssues({ ...input, ...schedule }, before, now, ENV.BUSINESS_TIMEZONE));
+    const requested = requestedChanges(before, patch);
+    // A locked Video meeting (P2-8: a meeting organized outside the CRM) answers its lock's 409 before the P3-1 rules,
+    // which would otherwise ask the owner's calendar about a link the CRM may not add or remove.
+    assertUnlockedChanges(existing, requested.has('videoMeeting') ? { videoMeeting: input.videoMeeting ?? null } : {}, requested);
+    await assertVideoMeetingAllowed(tx, input, existing, config);
+
+    const becomesException = !series && Boolean(existing.seriesId) && !existing.seriesException && [...requested].some((key) => !PER_OCCURRENCE_KEYS.has(key));
+    const writer: ActivityWriter = { ...crmWriter(user, config, requested), series: series ?? (becomesException ? { seriesException: true } : undefined) };
+    const row = await updateActivityRow(tx, existing, input, schedule, writer, now);
+    return { existing, row, input, requested };
+}
+
 export const activityService = {
     /**
      * Rows (the shape `list` returns, without `viewer`) for the given ids, regardless of row-level access. Kept for
@@ -658,14 +801,11 @@ export const activityService = {
 
     async create(body: unknown, user: AuthUser): Promise<ActivityView> {
         const config = await loadActivityConfig();
-        const input = activityInputSchema.parse(body);
-        input.customFields = checkModulePayload(config.fields, configPayload(asPayload(body), input), input.customFields, {
-            notApplicableKeys: notApplicableFor(input.followupType),
+        const { input, schedule, now } = parseCrmCreate(body, config);
+        const row = await runInTransaction(async (tx) => {
+            await assertVideoMeetingAllowed(tx, { ...input, assignedTo: input.assignedTo || user.username }, null, config);
+            return insertActivityRow(tx, input, schedule, crmWriter(user, config), now);
         });
-        const schedule = scheduleOf(input, config);
-        const now = new Date();
-        throwFieldIssues(activityPastIssues({ ...input, ...schedule }, undefined, now, ENV.BUSINESS_TIMEZONE));
-        const row = await runInTransaction((tx) => insertActivityRow(tx, input, schedule, crmWriter(user, config), now));
         await cacheService.invalidateEntityCaches('activities');
         await runActivityPostCommit([{ before: null, after: row }], user);
         return toOneView(row, user);
@@ -673,27 +813,7 @@ export const activityService = {
 
     async update(id: string, patch: Record<string, unknown>, user: AuthUser): Promise<ActivityView> {
         const config = await loadActivityConfig();
-        const { existing, row } = await runInTransaction(async (tx) => {
-            await lockRecords(tx, 'activity', [id]);
-            const existing = await tx.activity.findFirst({ where: { id, isDeleted: false }, include: WITH_ATTENDEES });
-            if (!existing) throw notFound();
-            assertCanEdit(user, existing);
-
-            const before = toActivityDto(existing);
-            const merged = mergeActivityPatch(before, patch);
-            const input = activityInputSchema.parse(merged);
-            input.customFields = checkModulePayload(config.fields, configPayload(merged, input), input.customFields, {
-                submittedKeys: submittedKeys(patch),
-                previousCustomFields: before.customFields,
-                notApplicableKeys: notApplicableFor(input.followupType),
-            });
-            const schedule = scheduleOf(input, config);
-            const now = new Date();
-            throwFieldIssues(activityPastIssues({ ...input, ...schedule }, before, now, ENV.BUSINESS_TIMEZONE));
-
-            const row = await updateActivityRow(tx, existing, input, schedule, crmWriter(user, config, requestedChanges(before, patch)), now);
-            return { existing, row };
-        });
+        const { existing, row } = await runInTransaction((tx) => applyCrmUpdate(tx, id, patch, user, config));
 
         await cacheService.invalidateEntityCaches('activities');
         await runActivityPostCommit([{ before: existing, after: row }], user);
@@ -707,11 +827,7 @@ export const activityService = {
             if (!existing) throw notFound();
             assertCanEdit(user, existing);
             assertDeletable(existing);
-            // A deleted activity leaves the reminder set.
-            const after = await tx.activity.update({ where: { id }, data: { ...softDeleteData(user), remindAt: null }, include: WITH_ATTENDEES });
-            await auditService.record(tx, { entityType: 'Activity', entityId: id, action: 'DELETE', changedBy: user.username });
-            await afterActivityWrite(tx, existing, after, crmWriter(user), new Date());
-            return { before: existing, after };
+            return softDeleteActivityRow(tx, existing, user);
         });
         await cacheService.invalidateEntityCaches('activities');
         // Nothing to arm or tell for a deleted row; the calendar push (a cancel) is woken here.
@@ -831,6 +947,38 @@ export const activityService = {
         // P2-8: the same reply to their own calendar copy when it syncs replies (never throws).
         await enqueueRsvp(id, user.username, respondedAt);
         return toOneView(row, user);
+    },
+
+    /**
+     * Retry of a video link the calendar couldn't create (Calendar Phase 3 P3-1, `POST /:id/conference/retry`): a new
+     * request of the same provider, pushed to the owner's calendar like any change. 409 NOTHING_TO_RETRY unless the link
+     * failed; 409 VIDEO_PROVIDER_NOT_CONNECTED when the owner's calendar can't create it any more.
+     */
+    async retryConference(id: string, user: AuthUser): Promise<ActivityView> {
+        const config = await loadActivityConfig();
+        const { existing, row } = await runInTransaction(async (tx) => {
+            await lockRecords(tx, 'activity', [id]);
+            const existing = await tx.activity.findFirst({ where: { id, isDeleted: false }, include: WITH_ATTENDEES });
+            if (!existing) throw notFound();
+            assertCanEdit(user, existing);
+            const columns = retryColumnsFor(existing);
+            // Same owner, same provider: only the owner's calendar is checked (a new choice's type rules don't apply).
+            await assertOwnerCanHaveVideo(tx, existing.assignedTo, existing.conferenceProvider);
+            const now = new Date();
+            const row = await tx.activity.update({ where: { id }, data: { ...columns, updatedBy: user.username }, include: WITH_ATTENDEES });
+            await afterActivityWrite(tx, existing, row, crmWriter(user, config), now);
+            return { existing, row };
+        });
+        await cacheService.invalidateEntityCaches('activities');
+        await runActivityPostCommit([{ before: existing, after: row }], user, { notify: false });
+        return toOneView(row, user);
+    },
+
+    /** `GET /video-options?owner=`: the Video meeting choices the owner's company calendar allows (P3-1). */
+    async videoOptions(query: unknown, user: AuthUser): Promise<VideoOptions> {
+        const raw = (query as Record<string, unknown> | null)?.owner;
+        const owner = typeof raw === 'string' && raw.trim() ? raw.trim().slice(0, 50) : user.username;
+        return videoOptionsFor(prisma, owner);
     },
 
     /** `GET /meta`: what the calendar and the form need before any activity is loaded. */

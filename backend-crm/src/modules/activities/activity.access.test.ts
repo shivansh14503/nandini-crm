@@ -62,7 +62,7 @@ describe('locks (spec §8.13)', () => {
     it('P2-8: a meeting organized outside the CRM locks title, time, place, attendees and owner; deleting it is allowed', () => {
         const lock = activityLocks.lockFor({ ...lockRow, externalOrganizer: true, organizerEmail: 'ravi@acme.com' });
         assert.equal(lock?.code, EXTERNAL_EVENT_LOCKED);
-        assert.deepEqual(lock?.fields, ['subject', 'startAt', 'endAt', 'allDay', 'location', 'attendees', 'assignedTo']);
+        assert.deepEqual(lock?.fields, ['subject', 'startAt', 'endAt', 'allDay', 'location', 'attendees', 'assignedTo', 'videoMeeting']);
         assert.match(lock?.message ?? '', /Organized by ravi@acme\.com/);
         assert.equal(lock?.deleteRefusedReason, null);
     });

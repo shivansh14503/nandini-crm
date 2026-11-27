@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import { useActivityMeta } from '@/hooks/queries/useActivities';
 import type { Activity, ActivityFormData, ActivityMeta } from '@/types/activity.types';
-import { NOTE_TYPE } from '@/types/activity.types';
+import { NOTE_TYPE, isVideoProvider } from '@/types/activity.types';
 import type { ActivityFormValues } from '@/validations/activity.schema';
 import { fromApiSchedule, toApiSchedule } from '@/utils/activitySchedule';
 import { instantToZonedWallClock, isDay, isWallClock } from '@/utils/zonedTime';
@@ -173,6 +173,7 @@ export function activityToFormValues(activity: Activity, timeZone: string): Acti
         endAt: schedule.endAt,
         reminder: activity.reminder ?? '',
         location: activity.location ?? '',
+        videoMeeting: isVideoProvider(activity.videoMeeting) ? activity.videoMeeting : '',
         attendees: activity.attendees ?? [],
         customerResponse: activity.customerResponse ?? '',
         remarks: activity.remarks ?? '',

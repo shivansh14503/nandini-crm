@@ -239,10 +239,11 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
         description: 'How the follow-up or activity happens (Leads, Opportunities, Activities). Task and Note are offered on Activities only.',
         // Option meta: the activity's default length in minutes and its icon (kept on the option, so a rename keeps
         // them). Task and Note are system options: activities give them code-level rules (activity.schedule.ts).
+        // `videoMeeting: true` offers the Video meeting field on that type (Calendar Phase 3, P3-1).
         options: [
             { value: 'Call', meta: { durationMinutes: 15, icon: 'call' } },
-            { value: 'Meeting', meta: { durationMinutes: 60, icon: 'meeting' } },
-            { value: 'Demo / Presentation', meta: { durationMinutes: 60, icon: 'presentation' } },
+            { value: 'Meeting', meta: { durationMinutes: 60, icon: 'meeting', videoMeeting: true } },
+            { value: 'Demo / Presentation', meta: { durationMinutes: 60, icon: 'presentation', videoMeeting: true } },
             { value: 'Email', meta: { durationMinutes: 0, icon: 'email' } },
             { value: 'WhatsApp', meta: { durationMinutes: 0, icon: 'whatsapp' } },
             { value: 'Site Visit', meta: { durationMinutes: 120, icon: 'visit' } },
@@ -1081,6 +1082,9 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         t('allDay', 'All Day', { type: 'checkbox' }),
         sel('reminder', 'Reminder', 'activity_reminder'),
         t('location', 'Location'),
+        // Google Meet / Microsoft Teams link made by the owner's calendar (custom control; Calendar Phase 3, P3-1).
+        // Shown only on types whose Followup Type option has meta `videoMeeting`.
+        t('videoMeeting', 'Video meeting', { type: 'lookup' }),
         // Colleagues, contacts and outside emails (custom control).
         t('attendees', 'Attendees', { type: 'lookup' }),
     ]),
@@ -1144,6 +1148,15 @@ export const DEFAULT_FIELDS: DefaultField[] = (() => {
         return { ...field, sortOrder: next };
     });
 })();
+
+/**
+ * Built-in fields an admin can't make Required: whether they can be filled in depends on the record, not the form
+ * (P3-1: Video meeting shows only on types that offer it and needs the owner's company calendar). The Form Builder
+ * refuses Required on them, and the module's save never requires them.
+ */
+export const NEVER_REQUIRED_FIELDS: Readonly<Partial<Record<CrmModuleKey, ReadonlySet<string>>>> = {
+    activities: new Set(['videoMeeting']),
+};
 
 /** The records a lead conversion creates: their fields can be shown on the Convert Lead form. */
 export const CONVERT_MODULES = ['contacts', 'organizations', 'opportunities'] as const;

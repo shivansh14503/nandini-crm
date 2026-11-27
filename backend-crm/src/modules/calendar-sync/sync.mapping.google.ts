@@ -1,6 +1,7 @@
 import { addDays } from '../../utils/zonedTime.js';
 import { ALL_DAY_REMINDER_OFFSET_MINUTES, CRM_SOURCE_MARKER, MAX_REMINDER_MINUTES, ZERO_LENGTH_EVENT_MINUTES } from './sync.constants.js';
 import type { CrmShape, CrmWhen, FieldGroup, ProviderAttendee } from './sync.shapes.js';
+import { googleConferenceBody, type ConferenceWrite } from './conference.rules.js';
 
 /**
  * CRM → Google Calendar v3 request bodies (Calendar Phase 2 spec §9.2, §8.14). Pure.
@@ -10,7 +11,12 @@ import type { CrmShape, CrmWhen, FieldGroup, ProviderAttendee } from './sync.sha
  * - Private by default (D42), `transparency: 'opaque'`, `guestsCanModify: false`, the CRM marker in
  *   `extendedProperties.private` and `source` (creator-only [U]).
  * - Never `iCalUID` (Google takes one of `id` / `iCalUID` [V]), never remarks / customer response / custom fields.
+ * - Video meeting (P3-1): `conferenceData.createRequest` (hangoutsMeet) or `conferenceData: null`, sent only with
+ *   `conferenceDataVersion=1` on the URL (`googleConferenceQuery`); other writes leave the conference untouched.
  */
+
+/** `&conferenceDataVersion=1` when the write carries conference data, else ''. */
+export const googleConferenceQuery = (conference: ConferenceWrite | null | undefined) => (conference && conference.kind !== 'teams' ? '&conferenceDataVersion=1' : '');
 
 /** What the push knows beyond the CrmShape. */
 export interface EventContext {
@@ -87,7 +93,7 @@ export function invitationsOf(crm: CrmShape): Record<string, ProviderAttendee> {
 }
 
 /** `events.insert` body. `attendees` = who is invited (empty on a private copy). */
-export function toGoogleEvent(crm: CrmShape, ctx: EventContext & { requestedId: string; attendees: Record<string, ProviderAttendee> }) {
+export function toGoogleEvent(crm: CrmShape, ctx: EventContext & { requestedId: string; attendees: Record<string, ProviderAttendee>; conference?: ConferenceWrite | null }) {
     const people = googleAttendees(ctx.attendees);
     return {
         id: ctx.requestedId,
@@ -102,6 +108,7 @@ export function toGoogleEvent(crm: CrmShape, ctx: EventContext & { requestedId: 
         ...(ctx.visibility === 'private' ? { visibility: 'private' } : {}),
         extendedProperties: { private: { crmActivityId: ctx.activityId, crmSource: CRM_SOURCE_MARKER } },
         source: { title: ctx.crmLabel, url: ctx.crmUrl },
+        ...googleConferenceBody(ctx.conference),
     };
 }
 
@@ -112,7 +119,7 @@ export function toGoogleEvent(crm: CrmShape, ctx: EventContext & { requestedId: 
 export function toGooglePatch(
     groups: readonly FieldGroup[],
     crm: CrmShape,
-    ctx: Pick<EventContext, 'timeZone'> & { attendees?: Record<string, ProviderAttendee>; description?: string },
+    ctx: Pick<EventContext, 'timeZone'> & { attendees?: Record<string, ProviderAttendee>; description?: string; conference?: ConferenceWrite | null },
 ): Record<string, unknown> {
     const body: Record<string, unknown> = {};
     if (groups.includes('subject')) body.summary = crm.subject;
@@ -122,5 +129,6 @@ export function toGooglePatch(
     // An all-day ↔ timed switch moves the reminder anchor, so it is re-sent with the schedule.
     if (groups.includes('reminder') || groups.includes('when')) body.reminders = googleReminders(crm.reminderMinutes, crm.when.allDay);
     if (ctx.description !== undefined) body.description = ctx.description;
+    if (groups.includes('conference')) Object.assign(body, googleConferenceBody(ctx.conference));
     return body;
 }

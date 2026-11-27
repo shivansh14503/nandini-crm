@@ -44,6 +44,23 @@ export const googleEventSchema = z.object({
     recurringEventId: text,
     eventType: text,
     visibility: text,
+    /** Calendar Phase 3 (P3-1): the Meet link and how its creation went (read only). */
+    hangoutLink: text,
+    conferenceData: z
+        .object({
+            conferenceId: text,
+            conferenceSolution: z.object({ key: z.object({ type: text }).nullish() }).nullish(),
+            entryPoints: z.array(z.object({ entryPointType: text, uri: text })).nullish(),
+            createRequest: z
+                .object({
+                    requestId: text,
+                    conferenceSolutionKey: z.object({ type: text }).nullish(),
+                    /** pending | success | failure */
+                    status: z.object({ statusCode: text }).nullish(),
+                })
+                .nullish(),
+        })
+        .nullish(),
 });
 export type GoogleEventWire = z.infer<typeof googleEventSchema>;
 
@@ -85,5 +102,10 @@ export const graphEventSchema = z.object({
     responseStatus: z.object({ response: text, time: text }).nullish(),
     reminderMinutesBeforeStart: z.number().nullish(),
     singleValueExtendedProperties: z.array(z.object({ id: z.string(), value: text })).nullish(),
+    /** Calendar Phase 3 (P3-1): a Teams meeting and its join URL (never the deprecated `onlineMeetingUrl`). */
+    isOnlineMeeting: flag,
+    /** teamsForBusiness | skypeForBusiness | skypeForConsumer | unknown */
+    onlineMeetingProvider: text,
+    onlineMeeting: z.object({ joinUrl: text, conferenceId: text }).nullish(),
 });
 export type GraphEventWire = z.infer<typeof graphEventSchema>;

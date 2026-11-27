@@ -79,9 +79,11 @@ export const EXTERNAL_EVENT_LOCKED = 'EXTERNAL_EVENT_LOCKED';
 /**
  * What a meeting organized outside the CRM takes from the organizer's calendar (spec §8.13, P2-8): changed there, never
  * here. The related record, remarks, customer response, Completed and custom fields stay editable; it may be deleted
- * (removed from the CRM only, the calendar event stays).
+ * (removed from the CRM only, the calendar event stays). `videoMeeting` (P3-1): the CRM never adds, changes or removes
+ * a Meet / Teams link on someone else's event; a join link the organizer's event carries is still taken over read only
+ * (sync.import.ts) and shown.
  */
-export const EXTERNAL_LOCKED_FIELDS = ['subject', 'startAt', 'endAt', 'allDay', 'location', 'attendees', 'assignedTo'] as const;
+export const EXTERNAL_LOCKED_FIELDS = ['subject', 'startAt', 'endAt', 'allDay', 'location', 'attendees', 'assignedTo', 'videoMeeting'] as const;
 
 /** The lock of an externally organized meeting (`externalOrganizer`), or null for any other row. */
 export function externalOrganizerLockOf(row: ActivityLockRow): ActivityLock | null {
@@ -90,7 +92,7 @@ export function externalOrganizerLockOf(row: ActivityLockRow): ActivityLock | nu
     return {
         fields: EXTERNAL_LOCKED_FIELDS,
         code: EXTERNAL_EVENT_LOCKED,
-        message: `${who} in their calendar. Times, title, place and attendees can only be changed there.`,
+        message: `${who} in their calendar. Times, title, place, attendees and the video meeting can only be changed there.`,
         deleteRefusedReason: null,
     };
 }
@@ -125,6 +127,16 @@ export const activityLocks = {
         return followUpLockOf(row) ?? externalOrganizerLockOf(row);
     },
 };
+
+/**
+ * A Teams link that exists can't be removed or changed by its owner (Calendar Phase 3 P3-1, spec §16.3): the Video
+ * meeting field is locked while `conferenceProvider = 'teams'` and `conferenceState = 'ready'` (activity.conference.ts
+ * answers 409 VIDEO_MEETING_LOCKED; the form reads `ActivityView.conference.locked`). Owner changes stay allowed (the
+ * old event goes; the new owner's calendar gets a new meeting, or the link shows failed). Kept out of `lockedFieldsFor`,
+ * which is the follow-up lock with its own reason.
+ */
+export const isVideoMeetingLocked = (row: Partial<Pick<Activity, 'conferenceProvider' | 'conferenceState'>>): boolean =>
+    row.conferenceProvider === 'teams' && row.conferenceState === 'ready';
 
 /** Fields of the row a CRM update may not change (spec §8.13); `[]` when unlocked. */
 export function lockedFieldsFor(row: ActivityLockRow): string[] {

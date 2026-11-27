@@ -38,6 +38,15 @@ import { MAX_ATTENDEES, NOTE_REMARKS_MESSAGE, PAST_START_MESSAGE, RELATED_RECORD
 import * as zonedTime from '../utils/zonedTime.js';
 import { FOLLOW_UP_ACTIVITY_LOCKED, FOLLOW_UP_ORIGIN } from '../modules/activities/activity.access.js';
 import {
+    CONFERENCE_STATES,
+    VIDEO_MEETING_LOCKED,
+    VIDEO_MEETING_LOCKED_MESSAGE,
+    VIDEO_MEETING_META_KEY,
+    VIDEO_PROVIDER_LABELS,
+    VIDEO_PROVIDER_NOT_CONNECTED,
+    VIDEO_PROVIDERS,
+} from '../modules/calendar-sync/conference.rules.js';
+import {
     BUSY_KINDS,
     BUSY_MAX_RANGE_DAYS,
     BUSY_MAX_USERS,
@@ -156,6 +165,13 @@ interface FrontendActivityContract {
     ACTIVITY_MAX_ATTENDEES: number;
     ACTIVITY_NOT_APPLICABLE: Readonly<Record<string, readonly string[]>>;
     ACTIVITY_RELATED_MODULE_LABELS: Readonly<Record<string, string>>;
+    VIDEO_PROVIDERS: readonly string[];
+    VIDEO_PROVIDER_LABELS: Readonly<Record<string, string>>;
+    CONFERENCE_STATES: readonly string[];
+    VIDEO_MEETING_META_KEY: string;
+    VIDEO_PROVIDER_NOT_CONNECTED: string;
+    VIDEO_MEETING_LOCKED: string;
+    VIDEO_MEETING_LOCKED_MESSAGE: string;
 }
 
 interface FrontendZonedTime {
@@ -392,6 +408,14 @@ describe('backend ↔ frontend contract', { skip }, () => {
         // Calendar sync (P2-3b): ActivityView.calendar's state / invites vocabulary.
         assert.deepEqual([...contract.CALENDAR_LINK_STATES], [...LINK_STATES]);
         assert.deepEqual([...contract.CALENDAR_LINK_INVITES], [...LINK_INVITES]);
+        // Video meetings (P3-1): providers, states, the option meta switch and the 409 codes the form maps.
+        assert.deepEqual([...contract.VIDEO_PROVIDERS], [...VIDEO_PROVIDERS]);
+        assert.deepEqual(contract.VIDEO_PROVIDER_LABELS, VIDEO_PROVIDER_LABELS);
+        assert.deepEqual([...contract.CONFERENCE_STATES], [...CONFERENCE_STATES]);
+        assert.equal(contract.VIDEO_MEETING_META_KEY, VIDEO_MEETING_META_KEY);
+        assert.equal(contract.VIDEO_PROVIDER_NOT_CONNECTED, VIDEO_PROVIDER_NOT_CONNECTED);
+        assert.equal(contract.VIDEO_MEETING_LOCKED, VIDEO_MEETING_LOCKED);
+        assert.equal(contract.VIDEO_MEETING_LOCKED_MESSAGE, VIDEO_MEETING_LOCKED_MESSAGE);
         // The drawer's calendar actions (P2-3c): their 409 codes.
         assert.equal(contract.CALENDAR_NOT_SYNCED, CALENDAR_NOT_SYNCED);
         assert.equal(contract.CALENDAR_SYNC_NOT_RETRYABLE, CALENDAR_SYNC_NOT_RETRYABLE);

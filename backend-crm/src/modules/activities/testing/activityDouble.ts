@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { mock } from 'node:test';
 import { prisma } from '../../../config/prisma.js';
-import type { Activity, ActivityAttendee, ActivityExternalLink } from '../../../generated/prisma/client.js';
+import type { Activity, ActivityAttendee, ActivityExternalLink, ActivitySeries } from '../../../generated/prisma/client.js';
 import { auditService, type AuditEntry } from '../../../services/audit.service.js';
 import { cacheService } from '../../../services/cache.service.js';
 import { matchesWhere, type ConnectionRowState, type NotificationRowState } from '../../calendar-sync/testing/connectionDouble.js';
@@ -121,6 +121,8 @@ export interface ActivityDoubleState {
     entityEmails: EntityEmailRow[];
     notifications: NotificationRowState[];
     calendarSyncUsers: CalendarSyncUserRow[];
+    /** Recurring series (Calendar Phase 4); rolled back with the activity rows. */
+    series: ActivitySeries[];
 }
 
 type Where = Record<string, unknown>;
@@ -176,6 +178,16 @@ export function blankActivity(over: Partial<Activity> & Pick<Activity, 'id' | 's
         organizerName: null,
         externalOrganizer: false,
         externalUpdatedAt: null,
+        seriesId: null,
+        originalStartAt: null,
+        seriesIndex: null,
+        seriesException: false,
+        conferenceProvider: null,
+        conferenceState: null,
+        conferenceJoinUrl: null,
+        conferenceId: null,
+        conferenceError: null,
+        conferenceRequest: 0,
         updatedBy: null,
         createdAt: now,
         updatedAt: now,
@@ -246,6 +258,8 @@ const DELEGATES = [
     'notification',
     'userPreference',
     'calendarSyncUser',
+    'activitySeries',
+    'auditLog',
     '$transaction',
 ] as const;
 const realDelegates = new Map<string, unknown>();
@@ -281,6 +295,7 @@ export function installActivityDouble(
         providers?: ProviderRow[];
         entityEmails?: EntityEmailRow[];
         calendarSyncUsers?: Partial<CalendarSyncUserRow>[];
+        series?: ActivitySeries[];
     } = {},
 ): ActivityDoubleState {
     const state: ActivityDoubleState = {
@@ -302,6 +317,7 @@ export function installActivityDouble(
         entityEmails: (seed.entityEmails ?? []).map((row) => ({ ...row })),
         notifications: [],
         calendarSyncUsers: (seed.calendarSyncUsers ?? []).map((row) => ({ username: '', provider: null, excluded: false, note: null, importMeetings: false, ...row })),
+        series: (seed.series ?? []).map((row) => ({ ...row })),
     };
 
     let clock = 0;
@@ -331,10 +347,34 @@ export function installActivityDouble(
         if (!('updatedAt' in data)) row.updatedAt = touch();
     };
 
+    /** Activity `where` plus the `externalLinks: { none | some }` relation filter (Calendar Phase 4's window queries), also inside OR / AND. */
+    const matchesActivity = (row: Activity, where: Where = {}): boolean => {
+        const { externalLinks, OR, AND, ...rest } = where as Where & { externalLinks?: { none?: Where; some?: Where }; OR?: Where[]; AND?: Where[] };
+        // OR / AND branches may carry the relation filter too (sync.conference.ts's stale sweep).
+        if (OR && !OR.some((branch) => matchesActivity(row, branch))) return false;
+        if (AND && !AND.every((branch) => matchesActivity(row, branch))) return false;
+        if (!matches(row as unknown as Record<string, unknown>, rest)) return false;
+        if (!externalLinks) return true;
+        const own = state.links.filter((l) => l.activityId === row.id);
+        if (externalLinks.none) return !own.some((l) => matchesWhere(rec(l), externalLinks.none));
+        if (externalLinks.some) return own.some((l) => matchesWhere(rec(l), externalLinks.some));
+        return true;
+    };
+    /** UX_Activity_seriesOccurrence: UNIQUE (seriesId, originalStartAt) WHERE seriesId IS NOT NULL, deleted rows included. */
+    const assertSeriesSlotsUnique = () => {
+        const seen = new Set<string>();
+        for (const a of state.activities) {
+            if (!a.seriesId) continue;
+            const key = `${a.seriesId}|${a.originalStartAt?.getTime() ?? 'null'}`;
+            if (seen.has(key)) throw Object.assign(new Error('Unique constraint failed on UX_Activity_seriesOccurrence'), { code: 'P2002' });
+            seen.add(key);
+        }
+    };
+
     const activity = {
         findFirst: async (args: { where: Where; include?: unknown; select?: Record<string, unknown> }) => {
             call('activity.findFirst');
-            const row = state.activities.find((a) => matches(a as unknown as Record<string, unknown>, args.where));
+            const row = state.activities.find((a) => matchesActivity(a, args.where));
             return row ? shape(row, args) : null;
         },
         findUnique: async (args: { where: { id: string }; include?: unknown; select?: Record<string, unknown> }) => {
@@ -348,9 +388,14 @@ export function installActivityDouble(
             if (!row) throw Object.assign(new Error('No record found'), { code: 'P2025' });
             return shape(row, args);
         },
-        findMany: async (args: { where: Where; include?: unknown; select?: Record<string, unknown> }) => {
+        findMany: async (args: { where: Where; include?: unknown; select?: Record<string, unknown>; orderBy?: unknown; take?: number }) => {
             call('activity.findMany');
-            return state.activities.filter((a) => matches(a as unknown as Record<string, unknown>, args.where)).map((row) => shape(row, args));
+            return orderRows(
+                state.activities.filter((a) => matchesActivity(a, args.where)),
+                args.orderBy,
+            )
+                .slice(0, args.take ?? undefined)
+                .map((row) => shape(row, args));
         },
         create: async (args: { data: Record<string, unknown> & { attendees?: { create: Omit<ActivityAttendee, 'id' | 'activityId' | 'createdAt'>[] } }; include?: unknown }) => {
             call('activity.create');
@@ -359,6 +404,10 @@ export function installActivityDouble(
             if (data.syncKey && state.activities.some((a) => a.syncKey === data.syncKey)) throw Object.assign(new Error('Unique constraint failed'), { code: 'P2002' });
             const stamp = touch();
             const row = blankActivity({ id: randomUUID(), createdAt: stamp, updatedAt: stamp, ...(data as Partial<Activity>) } as Activity);
+            // UX_Activity_seriesOccurrence (filtered unique, soft-deleted rows included).
+            if (row.seriesId && state.activities.some((a) => a.seriesId === row.seriesId && a.originalStartAt?.getTime() === row.originalStartAt?.getTime())) {
+                throw Object.assign(new Error('Unique constraint failed on UX_Activity_seriesOccurrence'), { code: 'P2002' });
+            }
             state.activities.push(row);
             for (const attendee of attendees?.create ?? []) state.attendees.push(blankAttendee({ ...attendee, activityId: row.id }));
             return shape(row, args);
@@ -368,12 +417,14 @@ export function installActivityDouble(
             const row = state.activities.find((a) => a.id === args.where.id);
             if (!row) throw Object.assign(new Error('Record to update not found'), { code: 'P2025' });
             applyData(row, args.data);
+            assertSeriesSlotsUnique();
             return shape(row, args);
         },
         updateMany: async (args: { where: Where; data: Record<string, unknown> }) => {
             call('activity.updateMany');
             const rows = state.activities.filter((a) => matches(a as unknown as Record<string, unknown>, args.where));
             for (const row of rows) applyData(row, args.data);
+            assertSeriesSlotsUnique();
             return { count: rows.length };
         },
     };
@@ -577,6 +628,7 @@ export function installActivityDouble(
             const row = state.providers.find((p) => p.provider === args.where.provider);
             return row ? pick(row, args.select) : null;
         },
+        findMany: async (args: FindArgs = {}) => findAll(state.providers, args),
     };
 
     const entityEmail = {
@@ -604,12 +656,95 @@ export function installActivityDouble(
         findMany: async (args: FindArgs = {}) => findAll(state.calendarSyncUsers, args),
     };
 
+    // ── Recurring series (Calendar Phase 4) ──
+    const blankSeries = (data: Partial<ActivitySeries>): ActivitySeries => {
+        const stamp = touch();
+        return {
+            id: randomUUID(),
+            assignedTo: '',
+            frequency: 'weekly',
+            interval: 1,
+            weekdays: null,
+            monthlyMode: null,
+            monthDay: null,
+            setPos: null,
+            setWeekday: null,
+            untilDay: null,
+            count: null,
+            startDay: '2026-12-01',
+            startTime: null,
+            allDay: false,
+            durationMinutes: 30,
+            spanDays: 1,
+            timeZone: 'Asia/Kolkata',
+            templateJson: '{}',
+            materializedThrough: null,
+            endedAt: null,
+            splitFromId: null,
+            revision: 0,
+            createdBy: 'system',
+            updatedBy: null,
+            createdAt: stamp,
+            updatedAt: stamp,
+            isDeleted: false,
+            deletedAt: null,
+            ...data,
+        };
+    };
+    const activitySeries = {
+        create: async (args: { data: Partial<ActivitySeries> }) => {
+            call('activitySeries.create');
+            const row = blankSeries(args.data);
+            state.series.push(row);
+            return { ...row };
+        },
+        update: async (args: { where: { id: string }; data: Record<string, unknown> }) => {
+            call('activitySeries.update');
+            const row = state.series.find((s) => s.id === args.where.id);
+            if (!row) throw Object.assign(new Error('Record to update not found'), { code: 'P2025' });
+            for (const [key, value] of Object.entries(args.data)) {
+                if (value !== null && typeof value === 'object' && !(value instanceof Date) && 'increment' in value) {
+                    (rec(row) as Record<string, number>)[key] += (value as { increment: number }).increment;
+                } else rec(row)[key] = value;
+            }
+            row.updatedAt = touch();
+            return { ...row };
+        },
+        findFirst: async (args: FindArgs = {}) => {
+            call('activitySeries.findFirst');
+            return findAll(state.series, { ...args, take: 1 })[0] ?? null;
+        },
+        findMany: async (args: FindArgs = {}) => {
+            call('activitySeries.findMany');
+            return findAll(state.series, args);
+        },
+    };
+
+    // Audit entries as the AuditLog table holds them (id in write order, createdAt from the double's clock), for the
+    // nightly window mark's "last CRM write" read.
+    const auditStamps = new WeakMap<AuditEntry, { id: number; createdAt: Date }>();
+    let auditId = 0;
+    const stampAudit = (entry: AuditEntry) => auditStamps.set(entry, { id: ++auditId, createdAt: touch() });
+    const auditLog = {
+        findMany: async (args: { where?: Where; orderBy?: unknown; select?: Record<string, unknown>; take?: number } = {}) => {
+            call('auditLog.findMany');
+            const rows = state.audits.map((entry) => ({ ...(entry as unknown as Record<string, unknown>), ...(auditStamps.get(entry) ?? { id: 0, createdAt: new Date(0) }) }));
+            const desc = JSON.stringify(args.orderBy ?? '').includes('desc');
+            return rows
+                .filter((row) => matches(row, args.where))
+                .sort((a, b) => (desc ? b.id - a.id : a.id - b.id))
+                .slice(0, args.take ?? undefined)
+                .map((row) => pick(row, args.select));
+        },
+    };
+
     const snapshot = () => ({
         activities: state.activities.map((row) => ({ ...row })),
         attendees: state.attendees.map((row) => ({ ...row })),
         audits: [...state.audits],
         connections: state.connections.map((row) => ({ ...row })),
         links: state.links.map((row) => ({ ...row })),
+        series: state.series.map((row) => ({ ...row })),
     });
 
     stub('$transaction', async (fn: (tx: unknown) => Promise<unknown>) => {
@@ -630,6 +765,8 @@ export function installActivityDouble(
             notification,
             userPreference,
             calendarSyncUser,
+            activitySeries,
+            auditLog,
             $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
                 void strings;
                 // acquireLocks passes its keys as one JSON array of `crm:<key>` resources.
@@ -649,6 +786,7 @@ export function installActivityDouble(
             state.audits = saved.audits;
             state.connections = saved.connections;
             state.links = saved.links;
+            state.series = saved.series;
             throw err;
         } finally {
             state.openTx = null;
@@ -668,11 +806,15 @@ export function installActivityDouble(
     stub('notification', notification);
     stub('userPreference', userPreference);
     stub('calendarSyncUser', calendarSyncUser);
+    stub('activitySeries', activitySeries);
+    stub('auditLog', auditLog);
 
     mock.method(auditService, 'record', async (_tx: unknown, entry: AuditEntry) => {
+        stampAudit(entry);
         state.audits.push(entry);
     });
     mock.method(auditService, 'recordMany', async (_tx: unknown, entries: AuditEntry[]) => {
+        entries.forEach(stampAudit);
         state.audits.push(...entries);
     });
     mock.method(cacheService, 'invalidateEntityCaches', async (entity: string) => {

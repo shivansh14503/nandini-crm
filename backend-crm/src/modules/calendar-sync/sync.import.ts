@@ -1,6 +1,6 @@
 import { logger } from '../../config/logger.js';
 import { prisma, type TransactionClient } from '../../config/prisma.js';
-import type { ActivityAttendee, ActivityExternalLink, CalendarConnection } from '../../generated/prisma/client.js';
+import type { Activity, ActivityAttendee, ActivityExternalLink, CalendarConnection } from '../../generated/prisma/client.js';
 import { auditService, diffRecords } from '../../services/audit.service.js';
 import { ENV } from '../../config/env.js';
 import { toActivityDto, type ActivityRow } from '../activities/activity.mapper.js';
@@ -326,6 +326,37 @@ const parseInstant = (value: string): Date | null => {
     return Number.isNaN(ms) ? null : new Date(ms);
 };
 
+type PulledConference = Pick<Activity, 'conferenceProvider' | 'conferenceState' | 'conferenceJoinUrl' | 'conferenceId' | 'conferenceError'>;
+
+/**
+ * The Meet / Teams link of a meeting organized outside the CRM (P2-8 × Calendar Phase 3 P3-1) as the organizer's event
+ * carries it, read through the same allow-listed readers as push answers (sync.shapes.ts `conference`). The CRM never
+ * asks for, changes or removes a link on such a meeting (`videoMeeting` is in its lock); it only mirrors one: a `ready`
+ * link is taken over, a link gone from the event is cleared, a pending / failed one changes nothing. Null when the
+ * stored columns already match. Pure.
+ */
+export function pulledConferenceColumns(stored: Partial<PulledConference> | null, event: ProviderEvent): PulledConference | null {
+    const conference = event.conference;
+    if (conference && conference.status !== 'ready') return null;
+    if (!conference || !conference.joinUrl) {
+        if (!stored?.conferenceProvider) return null;
+        return { conferenceProvider: null, conferenceState: null, conferenceJoinUrl: null, conferenceId: null, conferenceError: null };
+    }
+    const next: PulledConference = {
+        conferenceProvider: conference.provider,
+        conferenceState: 'ready',
+        conferenceJoinUrl: conference.joinUrl,
+        conferenceId: conference.conferenceId,
+        conferenceError: null,
+    };
+    const same =
+        stored?.conferenceProvider === next.conferenceProvider &&
+        stored?.conferenceState === next.conferenceState &&
+        stored?.conferenceJoinUrl === next.conferenceJoinUrl &&
+        (stored?.conferenceId ?? null) === next.conferenceId;
+    return same ? null : next;
+}
+
 // ── The importer (one per pull run) ─────────────────────────────────────────────────────────────────────────────
 
 export type ImportOutcomeKind = 'imported' | 'attended' | 'applied' | 'deleted' | 'unchanged' | 'ignored' | 'skippedUnlinked';
@@ -460,6 +491,8 @@ export class MeetingImporter {
                     organizerEmail: lc(event.organizerEmail).slice(0, 254) || null,
                     organizerName: (event.organizerName ?? '').trim().slice(0, 200) || null,
                     externalOrganizer: decision.externalOrganizer,
+                    // P3-1: the organizer's join link, shown read only (the CRM never asks for one on such a meeting).
+                    ...(decision.externalOrganizer ? (pulledConferenceColumns(null, event) ?? {}) : {}),
                 },
                 markSync: false,
                 notify: false,
@@ -608,7 +641,8 @@ export class MeetingImporter {
             }
 
             // Mirror of a meeting organized outside the CRM (one designated link; nobody can change these in the CRM).
-            if (activity.externalOrganizer && event.status === 'active' && !event.recurring && (await this.isDesignated(tx, activity.id, current.id))) {
+            const mirrors = activity.externalOrganizer && event.status === 'active' && !event.recurring && (await this.isDesignated(tx, activity.id, current.id));
+            if (mirrors) {
                 const mirror = await this.mirrorPatch(tx, activity, event, await ownerEmailOf(tx, activity.assignedTo));
                 Object.assign(patch, mirror);
             }
@@ -620,6 +654,9 @@ export class MeetingImporter {
                 after = written.after;
                 await tx.activity.updateMany({ where: { id: activity.id, updatedAt: after.updatedAt }, data: { externalUpdatedAt: now, updatedAt: after.updatedAt } });
             }
+            // P3-1: the organizer's join link, mirrored read only (bookkeeping: no audit entry, updatedAt kept).
+            const conference = mirrors ? pulledConferenceColumns(after, event) : null;
+            if (conference) await tx.activity.updateMany({ where: { id: activity.id, updatedAt: after.updatedAt }, data: { ...conference, updatedAt: after.updatedAt } });
 
             if (!isOwner) {
                 const mine = after.attendees.find((a) => a.kind === 'user' && sameUser(a.username, username));
@@ -640,7 +677,7 @@ export class MeetingImporter {
                     crmSyncedAt: rows.at(-1)?.after.updatedAt ?? activity.updatedAt,
                 },
             });
-            if (rows.length === 0) return UNCHANGED;
+            if (rows.length === 0) return conference ? { rows, outcome: 'applied' } : UNCHANGED;
             return { rows, outcome: event.status === 'cancelled' && patch.status === 'Cancelled' ? 'deleted' : 'applied' };
         });
     }

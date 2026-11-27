@@ -128,7 +128,7 @@ describe('activities defaults', () => {
         assert.deepEqual(MODULE_TABS.activities, [{ key: 'overview', label: 'Overview' }]);
         assert.ok(fields.every((f) => f.tabKey === 'overview'));
         assert.deepEqual([...new Set(fields.map((f) => f.sectionLabel))], ['Activity Details', 'Schedule', 'Outcome & Notes']);
-        assert.equal(fields.length, 15);
+        assert.equal(fields.length, 16);
         assert.equal(byKey('activities', 'followupType').label, 'Followup Type');
         assert.equal(byKey('activities', 'startAt').fieldType, 'datetime');
         assert.equal(byKey('activities', 'remarks').fieldType, 'textarea');
@@ -139,7 +139,7 @@ describe('activities defaults', () => {
             const f = byKey('activities', key);
             assert.ok(f.isCoreLocked && !f.isRequired, `activities:${key} is locked, not required`);
         }
-        for (const key of ['organizationName', 'contact', 'endAt', 'allDay', 'reminder', 'location', 'attendees', 'customerResponse', 'remarks']) {
+        for (const key of ['organizationName', 'contact', 'endAt', 'allDay', 'reminder', 'location', 'videoMeeting', 'attendees', 'customerResponse', 'remarks']) {
             const f = byKey('activities', key);
             assert.ok(!f.isRequired && !f.isCoreLocked, `activities:${key} is free`);
         }

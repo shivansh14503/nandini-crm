@@ -23,9 +23,29 @@ export const CANCELLED_STATUS: ActivityStatus = 'Cancelled';
  * `relaxedFields`, the API's `notApplicableKeys`). Only the system types hide fields; admin-added types show all.
  */
 export const ACTIVITY_NOT_APPLICABLE: Readonly<Record<string, readonly string[]>> = {
-    Note: ['startAt', 'endAt', 'allDay', 'reminder', 'location', 'attendees', 'customerResponse', 'status'],
-    Task: ['endAt', 'location', 'attendees', 'customerResponse'],
+    Note: ['startAt', 'endAt', 'allDay', 'reminder', 'location', 'videoMeeting', 'attendees', 'customerResponse', 'status'],
+    Task: ['endAt', 'location', 'videoMeeting', 'attendees', 'customerResponse'],
 };
+
+/** Video meeting providers (backend calendar-sync/conference.rules.ts; Calendar Phase 3, P3-1). Zoom comes later. */
+export const VIDEO_PROVIDERS = ['meet', 'teams', 'zoom'] as const;
+export type VideoProvider = (typeof VIDEO_PROVIDERS)[number];
+export const VIDEO_PROVIDER_LABELS: Readonly<Record<VideoProvider, string>> = {
+    meet: 'Google Meet',
+    teams: 'Microsoft Teams',
+    zoom: 'Zoom',
+};
+export const isVideoProvider = (value: unknown): value is VideoProvider => typeof value === 'string' && (VIDEO_PROVIDERS as readonly string[]).includes(value);
+/** `requested` (the calendar is creating the link), `ready`, `failed`. */
+export const CONFERENCE_STATES = ['requested', 'ready', 'failed'] as const;
+export type ConferenceState = (typeof CONFERENCE_STATES)[number];
+/** Followup Type option meta that offers the Video meeting field on that type. */
+export const VIDEO_MEETING_META_KEY = 'videoMeeting';
+/** 409: the owner's company calendar can't create the chosen kind of link. */
+export const VIDEO_PROVIDER_NOT_CONNECTED = 'VIDEO_PROVIDER_NOT_CONNECTED';
+/** 409: a ready Teams link can't be removed or changed. */
+export const VIDEO_MEETING_LOCKED = 'VIDEO_MEETING_LOCKED';
+export const VIDEO_MEETING_LOCKED_MESSAGE = 'Cancel and create a new meeting to remove the Teams link.';
 
 /** `activity_reminder` (fixed system options; the stored value is the label). */
 export const ACTIVITY_REMINDERS = [
@@ -115,6 +135,8 @@ export interface ActivityFormData {
     endDay: string;
     reminder: ActivityReminder | '';
     location: string;
+    /** Video meeting the owner's calendar creates (P3-1): meet | teams | zoom, '' for none. */
+    videoMeeting: VideoProvider | '';
     attendees: ActivityAttendee[];
 
     // Outcome & Notes
@@ -173,8 +195,46 @@ export interface ActivityCalendarState {
     externalUpdatedAt: string | null;
 }
 
+/** The activity's video meeting (P3-1): the link, or why it isn't there yet. */
+export interface ActivityConferenceState {
+    provider: VideoProvider;
+    state: ConferenceState;
+    joinUrl: string | null;
+    errorCode: string | null;
+    errorMessage: string | null;
+    /** The viewer may ask again (failed, and they may edit the activity). */
+    canRetry: boolean;
+    /** A Teams link exists: it can't be removed or changed. */
+    locked: boolean;
+    /**
+     * Requested, but this occurrence of a recurring activity isn't in its owner's calendar yet (it goes there about two
+     * weeks before it starts, Calendar Phase 4): the link is created then. Missing from older servers.
+     */
+    waitingForCalendar?: boolean;
+}
+
+/** One Video meeting choice for the form (GET /api/activities/video-options). */
+export interface VideoOption {
+    value: VideoProvider;
+    label: string;
+    available: boolean;
+    /** Why not (shown on the disabled option). */
+    reason?: string;
+}
+
+export interface VideoOptions {
+    owner: string;
+    /** google | microsoft | fake | null (the owner isn't synced). */
+    calendarProvider: string | null;
+    options: VideoOption[];
+}
+
 export interface Activity extends ActivityFormData {
     id: string;
+    /** The ready join link ('' while none). Read only. */
+    conferenceJoinUrl?: string;
+    /** The video meeting's progress; null when the activity has none. */
+    conference?: ActivityConferenceState | null;
     /** Record number of the linked record (LD-0001 …), '' when none. */
     relatedCode: string;
     /** IANA zone the times are entered in (the business timezone). */
@@ -195,8 +255,8 @@ export interface Activity extends ActivityFormData {
     organizerEmail?: string;
     organizerName?: string;
     /**
-     * Organized outside the CRM's connected users (P2-8): title, times, place, attendees and owner change only in the
-     * organizer's calendar (`lockedFields`, 409 EXTERNAL_EVENT_LOCKED). Read only.
+     * Organized outside the CRM's connected users (P2-8): title, times, place, attendees, owner and video meeting change
+     * only in the organizer's calendar (`lockedFields`, 409 EXTERNAL_EVENT_LOCKED; its join link still shows). Read only.
      */
     externalOrganizer?: boolean;
     /** Sent with every activity the API returns (outside the audited record). */
@@ -204,14 +264,62 @@ export interface Activity extends ActivityFormData {
     /**
      * Fields this activity won't let anyone change (a follow-up activity's type, times, status, owner and related
      * record: they move with the lead / opportunity; a meeting organized outside the CRM's title, times, place,
-     * attendees and owner). A PUT changing one gets 409 FOLLOW_UP_ACTIVITY_LOCKED / EXTERNAL_EVENT_LOCKED.
+     * attendees, owner and video meeting). A PUT changing one gets 409 FOLLOW_UP_ACTIVITY_LOCKED / EXTERNAL_EVENT_LOCKED.
      */
     lockedFields?: string[];
     /** Sent with every activity the API returns: its copy in the owner's calendar, or null (not synced). */
     calendar?: ActivityCalendarState | null;
     /** P2-8: the calendar an imported activity (`origin='calendar'`) came from (`google` | `microsoft` | `fake`); null otherwise. */
     importedFrom?: string | null;
+    /** The recurring series this occurrence belongs to (Calendar Phase 4), '' for a single activity. */
+    seriesId?: string;
+    /** Its series (rule, summary, position), null for a single activity. */
+    series?: ActivitySeries | null;
 }
+
+// ─── Recurring activities (Calendar Phase 4) ────────────────────────────────
+
+export type RepeatFrequency = 'daily' | 'weekly' | 'monthly';
+export type RepeatEnds = 'never' | 'on' | 'after';
+
+/** A repeat rule as the API takes and returns it (`repeat` on create / update; backend activity.recurrence.ts). */
+export interface RepeatRule {
+    frequency: RepeatFrequency;
+    /** Every N days / weeks / months (1–99). */
+    interval: number;
+    /** Weekly: ISO weekdays (1 = Monday … 7 = Sunday). */
+    weekdays?: number[];
+    /** Monthly: on a day of the month or on the nth weekday. */
+    monthlyMode?: 'day' | 'weekday';
+    monthDay?: number;
+    /** 1–4, or -1 for the last. */
+    setPos?: number;
+    setWeekday?: number;
+    ends: RepeatEnds;
+    /** ends 'on': last day (YYYY-MM-DD, inclusive). */
+    untilDay?: string;
+    /** ends 'after': number of occurrences. */
+    count?: number;
+}
+
+/** `Activity.series`. */
+export interface ActivitySeries {
+    id: string;
+    rule: RepeatRule;
+    /** "Every week on Mon, Wed until 31 Mar 2027". */
+    summary: string;
+    /** Position of this occurrence (1 = first), null when unknown. */
+    index: number | null;
+    /** Number of occurrences of a counted series, else null. */
+    total: number | null;
+    /** Changed on its own: series edits leave it. */
+    exception: boolean;
+    /** No more occurrences are created. */
+    ended: boolean;
+}
+
+/** Which occurrences an edit or delete of a recurring activity applies to (`?scope=`). */
+export type SeriesScope = 'this' | 'following' | 'all';
 
 /** `Activity.origin` values. */
 export type ActivityOrigin = 'crm' | 'followup' | 'calendar' | 'booking' | (string & {});
@@ -269,6 +377,8 @@ export interface CalendarItem {
     relatedId: string;
     relatedTo: string;
     location: string;
+    /** The ready video meeting link of an activity (P3-1); null / absent when none. */
+    conferenceJoinUrl?: string | null;
     attendeeCount: number;
     myResponse: AttendeeResponse | null;
     editable: boolean;
@@ -282,6 +392,8 @@ export interface CalendarItem {
      * otherwise. The calendar shows an error dot on `error`.
      */
     syncState?: CalendarLinkState | null;
+    /** The recurring series of an activity item (Calendar Phase 4): the calendar shows a repeat icon. */
+    seriesId?: string | null;
 }
 
 /** POST /api/activities/bulk-delete. `skipped`: live activities left alone, with why (lead / opportunity follow-ups). */

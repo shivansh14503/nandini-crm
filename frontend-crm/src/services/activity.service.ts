@@ -11,6 +11,9 @@ import type {
     BusyTimesParams,
     CalendarFeed,
     CalendarFeedParams,
+    RepeatRule,
+    SeriesScope,
+    VideoOptions,
 } from '../types/activity.types';
 import { apiClient } from './apiClient';
 import { createCrudService } from './base.service';
@@ -25,6 +28,23 @@ const csv = (values: readonly string[] | undefined) => (values && values.length 
 
 export const activityService = {
     ...crud,
+
+    /**
+     * Update of an occurrence of a recurring activity (Calendar Phase 4): `scope` = this | following | all; `repeat`
+     * changes how it repeats (null = stops repeating; omitted = unchanged). On a single activity `repeat` makes it the
+     * first occurrence of a series.
+     */
+    updateScoped: async (id: string, data: Partial<ActivityFormData> & { repeat?: RepeatRule | null }, scope: SeriesScope = 'this'): Promise<Activity> => {
+        const res = await apiClient.put<ApiResponse<Activity>>(`${ENDPOINT}/${encodeURIComponent(id)}`, data, { params: { scope } });
+        notifyCrmUpdate(ENDPOINT, id);
+        return res.data;
+    },
+
+    /** Delete of an occurrence: this one, this and following, or all events of its series. */
+    deleteScoped: async (id: string, scope: SeriesScope = 'this'): Promise<void> => {
+        await apiClient.delete<ApiResponse<unknown>>(`${ENDPOINT}/${encodeURIComponent(id)}`, { params: { scope } });
+        notifyCrmUpdate(ENDPOINT, id);
+    },
 
     /** Business timezone, default durations per Followup Type, reminders and statuses (cache it: staleTime Infinity). */
     meta: async (): Promise<ActivityMeta> => (await apiClient.get<ApiResponse<ActivityMeta>>(`${ENDPOINT}/meta`)).data,
@@ -82,6 +102,17 @@ export const activityService = {
     /** An invited colleague's reply. Notifies the entity endpoint itself (a sub-path would refresh every query). */
     respond: async (id: string, responseStatus: Exclude<AttendeeResponse, 'needsAction'>): Promise<Activity> => {
         const res = await apiClient.post<ApiResponse<Activity>>(`${ENDPOINT}/${encodeURIComponent(id)}/response`, { responseStatus });
+        notifyCrmUpdate(ENDPOINT, id);
+        return res.data;
+    },
+
+    /** Video meeting choices for an owner: what their company calendar can create (Meet / Teams; Zoom later). */
+    videoOptions: async (owner: string): Promise<VideoOptions> =>
+        (await apiClient.get<ApiResponse<VideoOptions>>(`${ENDPOINT}/video-options`, { params: { owner } })).data,
+
+    /** Asks the calendar again for a video link that failed (a new request). */
+    retryConference: async (id: string): Promise<Activity> => {
+        const res = await apiClient.post<ApiResponse<Activity>>(`${ENDPOINT}/${encodeURIComponent(id)}/conference/retry`, {});
         notifyCrmUpdate(ENDPOINT, id);
         return res.data;
     },

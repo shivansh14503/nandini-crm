@@ -5,6 +5,7 @@ import type { ActivityWriteEvent } from '../activities/activity.writeHook.js';
 import { attendeeIdentity } from '../activities/activity.validator.js';
 import { calendarSyncFromMeta } from '../integrations/calendarSyncSettings.js';
 import { isActivityOnlyFollowupType } from '../shared/followupTypes.js';
+import { SERIES_SYNC_WINDOW_MS } from '../activities/activity.series.constants.js';
 import { LIVE_CONNECTION_STATUSES } from './connection.constants.js';
 import { isFakeProviderEnabled } from './providers/fakeSwitch.js';
 import { heldKeyOf, isHeldIdentity, parseHeld, resolveAttendeeEmails, serializeHeld } from './sync.attendees.js';
@@ -56,6 +57,8 @@ export interface HeldNotice {
     guests: number;
     /** A new private copy (`withhold`) rather than guests added to an event already sent. */
     newCopy: boolean;
+    /** Calendar Phase 4: the occurrence's recurring series (one notice per series and day, sync.notifications.ts). */
+    seriesId?: string | null;
 }
 
 export interface OutboxResult {
@@ -103,7 +106,10 @@ export function pushableChanged(before: ActivityRow | null, after: ActivityRow):
         (before.relatedCode ?? '') !== (after.relatedCode ?? '') ||
         (before.relatedModule ?? '') !== (after.relatedModule ?? '') ||
         before.isDeleted !== after.isDeleted ||
-        attendeeKeys(before) !== attendeeKeys(after)
+        attendeeKeys(before) !== attendeeKeys(after) ||
+        // Calendar Phase 3 (P3-1): a new video link wanted (choice, owner change, Retry) or the meeting removed.
+        (before.conferenceProvider ?? null) !== (after.conferenceProvider ?? null) ||
+        (before.conferenceRequest ?? 0) !== (after.conferenceRequest ?? 0)
     );
 }
 
@@ -121,17 +127,20 @@ export function isTypeSyncable(followupType: string, config: Pick<ActivityConfig
 
 /**
  * Create-eligible (§8.3 step 3): Planned, live, a syncable type, a schedule, not organized outside the CRM, ends after
- * now − 1 day (old activities are never sent: backfills, restores of old rows).
+ * now − 1 day (old activities are never sent: backfills, restores of old rows). Calendar Phase 4: an occurrence of a
+ * recurring series starting more than SERIES_SYNC_WINDOW_DAYS ahead isn't yet (no invitation flood; the series
+ * nightly marks occurrences as they come inside the window, activity.series.ts `markSeriesSyncWindow`).
  */
 export function isCreateEligible(row: ActivityRow, config: Pick<ActivityConfig, 'followupTypes'> | null, now: Date): boolean {
     if (row.isDeleted || row.status !== 'Planned' || !row.startAt || row.externalOrganizer) return false;
+    if (row.seriesId && row.startAt.getTime() > now.getTime() + SERIES_SYNC_WINDOW_MS) return false;
     if (!isTypeSyncable(row.followupType, config)) return false;
     const end = (row.endAt ?? row.startAt).getTime();
     return end > now.getTime() - CREATE_ELIGIBLE_PAST_MS;
 }
 
 /** The owner's live calendar connection row (§8.3 step 2), read through `tx`; null when the owner isn't synced. */
-export async function ownerConnectionOf(db: OutboxDb, owner: string): Promise<{ id: string; provider: string } | null> {
+export async function ownerConnectionOf(db: Pick<OutboxDb, 'calendarConnection' | 'integrationProvider' | 'user'>, owner: string): Promise<{ id: string; provider: string } | null> {
     const conn = await db.calendarConnection.findFirst({
         where: { username: owner, status: { in: [...LIVE_CONNECTION_STATUSES] } },
         orderBy: { enrolledAt: 'desc' },
@@ -148,6 +157,9 @@ export async function ownerConnectionOf(db: OutboxDb, owner: string): Promise<{ 
     if (!user?.isActive || user.isGroupUser) return null;
     return conn;
 }
+
+/** The notice's series (Calendar Phase 4), only for an occurrence of one. */
+const seriesOf = (row: ActivityRow): Pick<HeldNotice, 'seriesId'> => (row.seriesId ? { seriesId: row.seriesId } : {});
 
 /** Attendees other than the owner (who could get an invitation). */
 const guestCount = (row: ActivityRow) => row.attendees.filter((a) => !(a.kind === 'user' && sameUser(a.username, row.assignedTo))).length;
@@ -210,7 +222,7 @@ export async function markActivityForSync(db: OutboxDb, event: ActivityWriteEven
               });
         result.links.push({ id: created.id, dirtyAt: now });
         const guests = guestCount(after);
-        if (invites === 'withhold' && guests > 0) result.notices.push({ activityId: after.id, owner, actor, subject: after.subject, guests, newCopy: true });
+        if (invites === 'withhold' && guests > 0) result.notices.push({ activityId: after.id, ...seriesOf(after), owner, actor, subject: after.subject, guests, newCopy: true });
     }
 
     const held = await heldChanges(db, links, before, after, actorIsOwner);
@@ -223,7 +235,7 @@ export async function markActivityForSync(db: OutboxDb, event: ActivityWriteEven
             // Inert until its row is re-activated, but who added which guest is still recorded (D41), so the
             // re-attach push never invites people the owner didn't.
             if (change?.changed) await db.activityExternalLink.update({ where: { id: link.id }, data: change.data });
-            if (change?.notice) result.notices.push({ activityId: after.id, owner, actor, subject: after.subject, ...change.notice });
+            if (change?.notice) result.notices.push({ activityId: after.id, ...seriesOf(after), owner, actor, subject: after.subject, ...change.notice });
             continue;
         }
         const keepState = link.state === 'cancelled' || link.state === 'removed_remote';
@@ -238,7 +250,7 @@ export async function markActivityForSync(db: OutboxDb, event: ActivityWriteEven
             },
         });
         result.links.push({ id: link.id, dirtyAt: now });
-        if (change?.notice) result.notices.push({ activityId: after.id, owner, actor, subject: after.subject, ...change.notice });
+        if (change?.notice) result.notices.push({ activityId: after.id, ...seriesOf(after), owner, actor, subject: after.subject, ...change.notice });
     }
 
     // One "invitations held" notice per write (a guest held on the old owner's link too is the same news).

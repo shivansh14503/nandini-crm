@@ -5,7 +5,7 @@ import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
 import { activityService } from '../activities/activity.service.js';
 import { blankActivity, blankLink, EMPTY_CONFIGS, installActivityDouble, restoreActivityDouble, type ActivityDoubleState } from '../activities/testing/activityDouble.js';
-import { fakeAddEvent, fakeEditEvent, fakeProviderState, resetFakeProvider } from './providers/fake.js';
+import { fakeAddEvent, fakeEditEvent, fakeMeetUrl, fakeProviderState, resetFakeProvider } from './providers/fake.js';
 import { resetProviderPauses } from './providers/http.js';
 import { setFakeHealth, setFakeProviderEnabledForTests } from './providers/registry.js';
 import type { GoogleEventWire } from './providers/wire.js';
@@ -328,7 +328,7 @@ describe('pull: customer meetings brought in', () => {
         done(await pullConnection('c1', 'poll'));
         const [row] = imported();
         const view = await activityService.getById(row.id, PALAK);
-        assert.deepEqual(view.lockedFields, ['subject', 'startAt', 'endAt', 'allDay', 'location', 'attendees', 'assignedTo']);
+        assert.deepEqual(view.lockedFields, ['subject', 'startAt', 'endAt', 'allDay', 'location', 'attendees', 'assignedTo', 'videoMeeting']);
         assert.equal(view.importedFrom, 'fake');
         assert.equal(view.organizerEmail, 'ravi@acme.com');
         await assert.rejects(
@@ -339,6 +339,52 @@ describe('pull: customer meetings brought in', () => {
         assert.equal(saved.remarks, 'Bring the price list');
         assert.equal(linksOf(row.id)[0].dirtyAt, null, 'never pushed');
         assert.equal(state.links.filter((l) => l.role === 'organizer').length, 0, 'no copy of it is made in the calendar');
+    });
+
+    it('video meeting of an outside meeting (P3-1): the organizer’s join link shows read only; the CRM can’t add, change or remove one', async () => {
+        install();
+        const meet = (id: string) => ({
+            hangoutLink: fakeMeetUrl(id),
+            conferenceData: { conferenceId: id, conferenceSolution: { key: { type: 'hangoutsMeet' } }, entryPoints: [{ entryPointType: 'video', uri: fakeMeetUrl(id) }] },
+        });
+        fakeAddEvent(calendarMeeting('m1', { organizer: { email: 'ravi@acme.com' }, attendees: [{ email: 'palak@nandiniinfosys.com', responseStatus: 'accepted' }], ...meet('aaa-bbbb-ccc') }));
+        done(await pullConnection('c1', 'poll'));
+        const [row] = imported();
+        assert.equal(row.externalOrganizer, true);
+        const view = await activityService.getById(row.id, PALAK);
+        assert.equal(view.videoMeeting, 'meet');
+        assert.equal(view.conferenceJoinUrl, fakeMeetUrl('aaa-bbbb-ccc'));
+        assert.equal(view.conference?.state, 'ready');
+        assert.equal(view.conference?.canRetry, false);
+        assert.ok(view.lockedFields.includes('videoMeeting'));
+        const locked = (err: unknown) => err instanceof HttpError && err.statusCode === 409 && err.code === 'EXTERNAL_EVENT_LOCKED';
+        await assert.rejects(activityService.update(row.id, { videoMeeting: null }, PALAK), locked);
+        await assert.rejects(activityService.update(row.id, { videoMeeting: 'teams' }, PALAK), locked);
+        // Sending the stored value back (the form does) is fine.
+        const saved = await activityService.update(row.id, { ...view, remarks: 'Agenda sent' }, PALAK);
+        assert.equal(saved.conferenceJoinUrl, fakeMeetUrl('aaa-bbbb-ccc'));
+        assert.equal(linksOf(row.id)[0].dirtyAt, null, 'never pushed');
+
+        // The organizer changes the link, then removes it: the designated link mirrors both (no audit entry, no push).
+        const audits = state.audits.length;
+        fakeEditEvent('m1', meet('ddd-eeee-fff'), new Date(Date.now() + 60_000));
+        done(await pullConnection('c1', 'poll'));
+        assert.equal(imported()[0].conferenceJoinUrl, fakeMeetUrl('ddd-eeee-fff'));
+        fakeEditEvent('m1', { hangoutLink: null, conferenceData: null } as Partial<GoogleEventWire>, new Date(Date.now() + 120_000));
+        done(await pullConnection('c1', 'poll'));
+        assert.equal(imported()[0].conferenceProvider, null);
+        assert.equal(imported()[0].conferenceJoinUrl, null);
+        assert.equal(state.audits.length, audits);
+        assert.equal(linksOf(row.id)[0].dirtyAt, null, 'still never pushed');
+    });
+
+    it('a meeting created in the CRM (not locked) still takes a video meeting change', async () => {
+        install();
+        const created = await activityService.create(
+            { followupType: 'Meeting', subject: 'In-house demo', assignedTo: 'palak', startAt: inDays(3).toISOString(), endAt: new Date(inDays(3).getTime() + HOUR).toISOString() },
+            PALAK,
+        );
+        assert.equal(created.lockedFields.includes('videoMeeting'), false);
     });
 
     it('a colleague organizer without imports: theirs and external until they connect; their pull then makes it theirs (relink upgrade)', async () => {
