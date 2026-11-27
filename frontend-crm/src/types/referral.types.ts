@@ -10,6 +10,9 @@ import type { CorporateEmail } from './organization.types';
 export const REFERRAL_STATUSES = ['Active', 'Inactive'] as const;
 export type ReferralStatus = (typeof REFERRAL_STATUSES)[number];
 export const ACTIVE_REFERRAL_STATUS: ReferralStatus = 'Active';
+/** Whether a referral's status is Active (ignoring case and spaces). Only Active referrals can be Referred By. */
+export const isActiveReferral = (r: { status?: string | null }): boolean =>
+    (r.status ?? '').trim().toLowerCase() === ACTIVE_REFERRAL_STATUS.toLowerCase();
 /** Dropdown category of the referral Status. */
 export const REFERRAL_STATUS_CATEGORY = 'referral_status';
 

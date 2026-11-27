@@ -26,8 +26,15 @@ export interface ReferralDto {
     customFields: Record<string, unknown>;
 }
 
-const toStatus = (value: string): ReferralStatus =>
-    (REFERRAL_STATUSES as readonly string[]).includes(value) ? (value as ReferralStatus) : ACTIVE_REFERRAL_STATUS;
+/**
+ * Stored status → option. Matched ignoring case and spaces ("inactive", "INACTIVE " → Inactive) so a referral
+ * marked inactive is never shown (or offered as Referred By) as Active; only an empty value falls back to Active.
+ */
+export const toStatus = (value: string | null | undefined): ReferralStatus => {
+    const key = (value ?? '').trim().toLowerCase();
+    if (!key) return ACTIVE_REFERRAL_STATUS;
+    return REFERRAL_STATUSES.find((s) => s.toLowerCase() === key) ?? 'Inactive';
+};
 
 export function toReferralDto(row: ReferralRow): ReferralDto {
     return {

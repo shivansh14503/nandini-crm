@@ -8,7 +8,7 @@ import { useMasterData } from '@/hooks/queries/useMasterData';
 import { useOpportunities } from '@/hooks/queries/useOpportunities';
 import { useProducts } from '@/hooks/queries/useProducts';
 import { useReferrals } from '@/hooks/queries/useReferrals';
-import { ACTIVE_REFERRAL_STATUS, type Referral } from '@/types/referral.types';
+import { ACTIVE_REFERRAL_STATUS, isActiveReferral, type Referral } from '@/types/referral.types';
 import type { Product } from '@/types/product.types';
 import { useDropdownOptions } from '@/hooks/queries/useFormConfigs';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
@@ -193,12 +193,14 @@ export function ProductLookupModal({ open, onClose, onSelect, selectedValue }: E
 }
 
 const NO_REFERRALS: Referral[] = [];
+const ACTIVE_REFERRALS_QUERY = { status: ACTIVE_REFERRAL_STATUS };
 
 /** Active referrals of the Referrals module, the values Referred By can take on leads and opportunities. */
 export function useActiveReferrals(enabled = true): { referrals: Referral[]; isLoading: boolean } {
     // Shared, cache-invalidated query: a referral added or deactivated elsewhere is reflected without reopening.
-    const { data, isLoading } = useReferrals(undefined, { enabled });
-    const referrals = React.useMemo(() => (data ?? NO_REFERRALS).filter((r) => r.status === ACTIVE_REFERRAL_STATUS), [data]);
+    // The API lists only the Active ones (`?status=Active`); the client check is a second guard.
+    const { data, isLoading } = useReferrals(ACTIVE_REFERRALS_QUERY, { enabled });
+    const referrals = React.useMemo(() => (data ?? NO_REFERRALS).filter(isActiveReferral), [data]);
     return { referrals, isLoading };
 }
 
@@ -212,7 +214,7 @@ export function ReferralLookupModal({ open, onClose, onSelect, selectedValue, in
     const selected = selectedValue?.trim().toLowerCase();
     const selectedId = selected ? referrals.find((r) => r.name.trim().toLowerCase() === selected)?.id : undefined;
     const handleCreated = (referral: Referral) => {
-        if (referral.status !== ACTIVE_REFERRAL_STATUS) return;
+        if (!isActiveReferral(referral)) return;
         onSelect(referral);
         onClose();
     };
