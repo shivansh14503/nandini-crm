@@ -8,6 +8,7 @@ import ChevronLeftRoundedIcon from '@mui/icons-material/ChevronLeftRounded';
 import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
 import ScheduleRoundedIcon from '@mui/icons-material/ScheduleRounded';
 import PlaceOutlinedIcon from '@mui/icons-material/PlaceOutlined';
+import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
 import EventAvailableOutlinedIcon from '@mui/icons-material/EventAvailableOutlined';
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded';
@@ -146,8 +147,40 @@ function downloadIcs(confirmation: BookingConfirmation) {
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+/**
+ * The meeting's video link on the confirmation: the join link when the organiser's calendar had already made it, else
+ * who sends it. Never polled: the link is made after this answer, when the meeting reaches the organiser's calendar.
+ */
+function ConfirmedVideo({ video, ownerName }: { video: NonNullable<BookingConfirmation['video']>; ownerName: string }) {
+    return (
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5, flexWrap: 'wrap', fontSize: '0.84rem', color: 'var(--crm-slate-700)', minWidth: 0 }}>
+            <VideocamOutlinedIcon sx={{ fontSize: 18, color: 'var(--mui-palette-text-muted)' }} />
+            {video.joinUrl ? (
+                <>
+                    {video.label}:{' '}
+                    <Box
+                        component="a"
+                        href={video.joinUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        sx={{ color: 'var(--crm-text-blue-700)', fontWeight: 600, overflowWrap: 'anywhere', '&:hover': { color: 'var(--crm-text-blue-600)' } }}
+                    >
+                        {video.joinUrl}
+                    </Box>
+                </>
+            ) : (
+                <span>
+                    {video.label} link: sent by {ownerName}
+                </span>
+            )}
+        </Box>
+    );
+}
+
 function Confirmed({ confirmation, timeZone, onAnother }: { confirmation: BookingConfirmation; timeZone: string; onAnother: () => void }) {
     const b = confirmation.booking;
+    // Older servers don't send `video`.
+    const video = confirmation.video ?? null;
     return (
         <Box sx={{ ...cardSx, p: { xs: 2.5, sm: 4 }, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 1.25 }} role="status" aria-live="polite">
             <CheckCircleRoundedIcon sx={{ fontSize: 48, color: 'var(--mui-palette-success-main)' }} />
@@ -163,9 +196,11 @@ function Confirmed({ confirmation, timeZone, onAnother }: { confirmation: Bookin
                     {durationLabel(b.durationMinutes)} · {timeZone}
                 </Typography>
                 {b.location && <Typography sx={{ fontSize: '0.84rem', color: 'var(--crm-slate-700)', overflowWrap: 'anywhere' }}>{b.location}</Typography>}
+                {video && <ConfirmedVideo video={video} ownerName={b.ownerName} />}
             </Box>
             <Typography sx={{ fontSize: '0.82rem', color: 'var(--mui-palette-text-secondary)', maxWidth: 520 }}>
-                No confirmation email is sent from this page, so add the meeting to your calendar now. {b.ownerName} may send a calendar invitation as well.
+                No confirmation email is sent from this page, so add the meeting to your calendar now. {b.ownerName} may send a calendar invitation as well
+                {video && !video.joinUrl ? `, and will share the ${video.label} link before the meeting` : ''}.
             </Typography>
             <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: 'center', mt: 0.5 }}>
                 <Button variant="contained" startIcon={<DownloadRoundedIcon />} onClick={() => downloadIcs(confirmation)} sx={primarySx}>
@@ -398,6 +433,12 @@ export function PublicBookingPage({ slug }: { slug: string }) {
                         <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, minWidth: 0, overflowWrap: 'anywhere' }}>
                             <PlaceOutlinedIcon sx={{ fontSize: 18, color: 'var(--mui-palette-text-muted)' }} />
                             {link.location}
+                        </Box>
+                    )}
+                    {link.videoMeeting && (
+                        <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, minWidth: 0, overflowWrap: 'anywhere' }}>
+                            <VideocamOutlinedIcon sx={{ fontSize: 18, color: 'var(--mui-palette-text-muted)' }} />
+                            {link.videoMeeting.label} link: sent by {link.ownerName}
                         </Box>
                     )}
                 </Box>

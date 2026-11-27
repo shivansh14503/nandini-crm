@@ -7,7 +7,7 @@ import { secretBox } from '../../services/secretBox.js';
 import { loadProviderAccess } from './providers/registry.js';
 import { enqueueWatch, isChannelId, parseClientState, sameToken, webhookHmac, webhooksLive } from './sync.channels.js';
 import { CALENDAR_SYNC_JOBS, type PullReason } from './sync.constants.js';
-import { followUpPullJobId, freshWebhookPullJobId, webhookPullJobId } from './sync.keys.js';
+import { PENDING_JOB_STATES, followUpPullJobId, freshWebhookPullJobId, pendingOnlyPullJobId, webhookPullJobId } from './sync.keys.js';
 import type { PullJobData } from './sync.wake.js';
 import { isInsideSyncHours } from './syncHours.js';
 
@@ -163,9 +163,6 @@ export function setWebhookPullQueueForTests(queue: WebhookPullQueue | null): voi
     pullQueue = queue ?? redisPullQueue;
 }
 
-/** Job states in which a queued pull hasn't started yet, so it will read the change a ping announced. */
-const PENDING_STATES = new Set(['waiting', 'delayed', 'prioritized', 'waiting-children']);
-
 /**
  * A verified change notification for one connection: stamp, then a pull that starts after this ping (see the file
  * header): the bucket's pending job, the bucket's active job plus the D26 stamp, or a new job.
@@ -175,10 +172,11 @@ export async function notePing(connectionId: string, reason: PullReason, now: Da
         const stamped = await pullQueue.writeStamp(connectionId, now.getTime());
         const bucketId = webhookPullJobId(connectionId, now);
         const state = await pullQueue.stateOf(bucketId);
-        if (state !== null && PENDING_STATES.has(state)) return 'queued';
+        if (state !== null && PENDING_JOB_STATES.has(state)) return 'queued';
         // Running: it pulls once more when it ends (D26), as long as the stamp was written.
         if (state === 'active' && stamped) return 'queued';
-        const id = await pullQueue.add(state === null ? bucketId : freshWebhookPullJobId(connectionId, now), { connectionId, reason });
+        const jobId = pendingOnlyPullJobId(state, bucketId, freshWebhookPullJobId(connectionId, now)) ?? bucketId;
+        const id = await pullQueue.add(jobId, { connectionId, reason });
         if (id !== null) return 'queued';
     }
     inlinePull(connectionId);

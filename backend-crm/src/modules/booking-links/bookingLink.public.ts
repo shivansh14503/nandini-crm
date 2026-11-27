@@ -13,7 +13,9 @@ import { insertSystemActivity, type SystemActivityFields } from '../activities/a
 import { RELATED_LOADERS } from '../activities/activity.links.js';
 import type { ActivityRelatedModule } from '../activities/activity.schedule.js';
 import { loadActivityConfig, runActivityPostCommit, type ActivityCommitRow, type ActivityConfig } from '../activities/activity.service.js';
+import { ownerVideoProvider, typeOffersVideo } from '../activities/activity.conference.js';
 import { activityBusyBlock, busyActivityWhere, busyTimes } from '../calendar-sync/busy.service.js';
+import { VIDEO_PROVIDER_LABELS, safeJoinUrl, videoUnavailableMessage, type CalendarVideoProvider } from '../calendar-sync/conference.rules.js';
 import type { Interval } from '../calendar-sync/busy.intervals.js';
 import { holidayService } from '../holidays/holiday.service.js';
 import { loadCalendarSettings } from '../integrations/integration.settings.js';
@@ -26,6 +28,7 @@ import {
     BOOKING_NOTIFICATION_KIND,
     BOOKING_ORIGIN,
     BOOKING_SLOT_PAGE_DAYS,
+    type BookingVideoProvider,
 } from './bookingLink.constants.js';
 import { buildIcs } from './bookingLink.ics.js';
 import { findPublicLink, loadBookingSettings, type LinkConfig, type PublicLink } from './bookingLink.service.js';
@@ -56,7 +59,32 @@ import { bookBodySchema, slotsQuerySchema, type BookBody } from './bookingLink.v
  * the system write path, the booking row and the owner's `booking_created` notification are written. A unique
  * violation (the same token submitted twice at once) aborts the transaction; the booking is retried once from the
  * start and the retry finds the first one (same confirmation for the same visitor).
+ *
+ * Video meeting (the link's `videoMeeting`, P3-1): the page names it from the link and its type only ("Google Meet link:
+ * sent by <owner>"), never from the owner's calendar status. A booking copies it onto the activity (`videoMeeting`, so the
+ * push asks the owner's calendar for the link with the event) when the type still offers video and the owner's calendar
+ * still creates that kind of link (one connection read, outside the transaction); otherwise the meeting is booked without
+ * one and the activity's remarks say why. The confirmation shows the join URL only when it is already ready (in practice
+ * a resubmit after the push ran), else that the organiser sends it; the page never polls for it.
  */
+
+/** A booking as the confirmation needs it. */
+interface StoredBooking {
+    id: string;
+    startAt: Date;
+    endAt: Date;
+    visitorEmail: string;
+    activityId: string;
+}
+
+/** The booked activity's conference columns (what `activityVideo` reads). */
+export interface ActivityVideo {
+    conferenceProvider: string | null;
+    conferenceState: string | null;
+    conferenceJoinUrl: string | null;
+    status: string;
+    isDeleted: boolean;
+}
 
 /** What the public module calls, as an object so tests can replace parts (mock.method). */
 export const bookingDeps = {
@@ -68,10 +96,24 @@ export const bookingDeps = {
     insertSystemActivity,
     runActivityPostCommit,
     chargeLink,
+    /** The provider the owner's live company calendar creates video links for (null = not synced). One read per booking. */
+    async ownerVideo(owner: string): Promise<CalendarVideoProvider | null> {
+        return (await ownerVideoProvider(prisma as unknown as TransactionClient, owner)).video;
+    },
+    /** The booked activity's video meeting now (a resubmitted confirmation shows a link that became ready meanwhile). */
+    async activityVideo(activityId: string): Promise<ActivityVideo | null> {
+        return prisma.activity.findUnique({
+            where: { id: activityId },
+            select: { conferenceProvider: true, conferenceState: true, conferenceJoinUrl: true, status: true, isDeleted: true },
+        });
+    },
     /** The booking of this link that used token hash `tokenHash`, if any (a resubmit). */
-    async bookingByToken(linkId: string, tokenHash: string): Promise<{ id: string; startAt: Date; endAt: Date; visitorEmail: string } | null> {
-        const row = await prisma.bookingLinkBooking.findUnique({ where: { tokenHash }, select: { id: true, startAt: true, endAt: true, visitorEmail: true, bookingLinkId: true } });
-        return row && row.bookingLinkId === linkId ? { id: row.id, startAt: row.startAt, endAt: row.endAt, visitorEmail: row.visitorEmail } : null;
+    async bookingByToken(linkId: string, tokenHash: string): Promise<StoredBooking | null> {
+        const row = await prisma.bookingLinkBooking.findUnique({
+            where: { tokenHash },
+            select: { id: true, startAt: true, endAt: true, visitorEmail: true, bookingLinkId: true, activityId: true },
+        });
+        return row && row.bookingLinkId === linkId ? { id: row.id, startAt: row.startAt, endAt: row.endAt, visitorEmail: row.visitorEmail, activityId: row.activityId } : null;
     },
     /** Active holidays `[from, to]` (inclusive days), cached 10 minutes. */
     async holidays(from: string, to: string): Promise<Set<string>> {
@@ -163,6 +205,11 @@ export interface PublicLinkDto {
     durations: number[];
     defaultDuration: number;
     location: string;
+    /**
+     * The video meeting booked meetings get (from the link and its type's settings only: never the owner's calendar
+     * status). The page says the link is sent by the owner; null = none.
+     */
+    videoMeeting: { provider: BookingVideoProvider; label: string } | null;
     note: string;
     askPhone: boolean;
     askCompany: boolean;
@@ -199,6 +246,12 @@ export interface BookingConfirmationDto {
         timeZone: string;
         location: string;
     };
+    /**
+     * The meeting's video link: `joinUrl` only when the owner's calendar had already made it when this confirmation
+     * was built (in practice a resubmit after the push ran); otherwise null and the page says the organiser sends it.
+     * The public page never polls for it. Null = the meeting has no video meeting.
+     */
+    video: { provider: BookingVideoProvider; label: string; joinUrl: string | null } | null;
     /** The meeting as an iCalendar file (text), for "Add to my calendar". */
     ics: string;
 }
@@ -212,8 +265,35 @@ export interface RequestMeta {
 
 const MINUTE = 60_000;
 
-function confirmation(link: LinkConfig, ownerName: string, booking: { id: string; startAt: Date; endAt: Date }, now: Date, typeLabel: string): BookingConfirmationDto {
+type ConfirmationVideo = BookingConfirmationDto['video'];
+
+/** "Google Meet link: sent by Asha Rao" (page, .ics) or the link itself once it is ready. */
+export function videoLine(video: NonNullable<ConfirmationVideo>, ownerName: string): string {
+    return video.joinUrl ? `${video.label}: ${video.joinUrl}` : `${video.label} link: sent by ${ownerName}`;
+}
+
+/**
+ * The confirmation's video part from the booked activity's conference columns: none when the activity has no Meet /
+ * Teams meeting (or is deleted / cancelled), the join URL only when the link is ready and passes the allow-list again.
+ */
+export function confirmationVideo(row: ActivityVideo | null): ConfirmationVideo {
+    if (!row || row.isDeleted || row.status === 'Cancelled') return null;
+    const provider = row.conferenceProvider;
+    if (provider !== 'meet' && provider !== 'teams') return null;
+    const joinUrl = row.conferenceState === 'ready' ? safeJoinUrl(row.conferenceJoinUrl, provider) : null;
+    return { provider, label: VIDEO_PROVIDER_LABELS[provider], joinUrl };
+}
+
+function confirmation(
+    link: LinkConfig,
+    ownerName: string,
+    booking: { id: string; startAt: Date; endAt: Date },
+    now: Date,
+    typeLabel: string,
+    video: ConfirmationVideo,
+): BookingConfirmationDto {
     const minutes = Math.round((booking.endAt.getTime() - booking.startAt.getTime()) / MINUTE);
+    const description = [link.note, video ? videoLine(video, ownerName) : null].filter(Boolean).join('\n\n');
     return {
         booking: {
             id: booking.id,
@@ -226,21 +306,24 @@ function confirmation(link: LinkConfig, ownerName: string, booking: { id: string
             timeZone: ENV.BUSINESS_TIMEZONE,
             location: link.location ?? '',
         },
+        video,
         ics: buildIcs({
             uid: `booking-${booking.id}@nandini-crm`,
             start: booking.startAt,
             end: booking.endAt,
             summary: `${link.title} with ${ownerName}`,
             location: link.location,
-            description: link.note,
+            description: description || null,
+            url: video?.joinUrl ?? null,
             stamp: now,
         }),
     };
 }
 
 /** The activity's remarks: where it came from and what the visitor told us (never sent to calendars, D15). */
-export function bookingRemarks(link: Pick<LinkConfig, 'title' | 'slug'>, body: Pick<BookBody, 'phone' | 'company' | 'message'>): string {
+export function bookingRemarks(link: Pick<LinkConfig, 'title' | 'slug'>, body: Pick<BookBody, 'phone' | 'company' | 'message'>, videoNote: string | null = null): string {
     const lines = [`Booked online through "${link.title}" (/book/${link.slug}).`];
+    if (videoNote) lines.push(videoNote);
     if (body.phone) lines.push(`Phone: ${body.phone}`);
     if (body.company) lines.push(`Company: ${body.company}`);
     if (body.message) lines.push(`Message: ${body.message}`);
@@ -259,6 +342,26 @@ export const typeLabelOf = (config: ActivityConfig | null, value: string): strin
 
 const awayTypesOf = (config: ActivityConfig) => new Set((config.followupTypes?.options ?? []).filter((o) => o.meta?.icon === 'visit').map((o) => o.value));
 
+/**
+ * The video meeting a booking gives its activity: the link's choice when its type still offers video and the owner's
+ * company calendar still creates that kind of link; otherwise none, with a line for the activity's remarks saying why
+ * (the owner sees it; the visitor's confirmation simply has no video part). Pure.
+ */
+export function bookingVideo(
+    link: Pick<LinkConfig, 'videoMeeting' | 'followupType'>,
+    config: ActivityConfig | null,
+    ownerVideo: CalendarVideoProvider | null,
+): { videoMeeting: BookingVideoProvider | null; note: string | null } {
+    const wanted = link.videoMeeting;
+    if (!wanted) return { videoMeeting: null, note: null };
+    const label = VIDEO_PROVIDER_LABELS[wanted];
+    if (!typeOffersVideo(link.followupType, config)) {
+        return { videoMeeting: null, note: `No ${label} link was requested: ${typeLabelOf(config, link.followupType)} doesn't offer video meetings any more.` };
+    }
+    if (ownerVideo !== wanted) return { videoMeeting: null, note: `No ${label} link was requested: ${videoUnavailableMessage(wanted, ownerVideo)}` };
+    return { videoMeeting: wanted, note: null };
+}
+
 interface Attempt {
     link: LinkConfig;
     ownerName: string;
@@ -268,10 +371,12 @@ interface Attempt {
     tokenHash: string;
     config: ActivityConfig;
     followUpActivities: boolean;
+    video: { videoMeeting: BookingVideoProvider | null; note: string | null };
     now: Date;
 }
 
-type AttemptResult = { kind: 'created'; booking: { id: string; startAt: Date; endAt: Date }; rows: ActivityCommitRow[] } | { kind: 'existing'; booking: { id: string; startAt: Date; endAt: Date } };
+type BookingRef = { id: string; startAt: Date; endAt: Date; activityId: string };
+type AttemptResult = { kind: 'created'; booking: BookingRef; rows: ActivityCommitRow[] } | { kind: 'existing'; booking: BookingRef };
 
 /** One try of the booking transaction (see the module comment). */
 async function bookOnce(a: Attempt): Promise<AttemptResult> {
@@ -281,7 +386,10 @@ async function bookOnce(a: Attempt): Promise<AttemptResult> {
         await acquireLocks(tx, [`booking:owner:${link.ownerUsername.trim().toLowerCase()}`]);
 
         // The same token again, racing the first (two requests in flight at once): one booking.
-        const used = await tx.bookingLinkBooking.findUnique({ where: { tokenHash: a.tokenHash }, select: { id: true, startAt: true, endAt: true, visitorEmail: true } });
+        const used = await tx.bookingLinkBooking.findUnique({
+            where: { tokenHash: a.tokenHash },
+            select: { id: true, startAt: true, endAt: true, visitorEmail: true, activityId: true },
+        });
         if (used) {
             if (used.visitorEmail.toLowerCase() === body.email.toLowerCase()) return { kind: 'existing', booking: used };
             throw slotUnavailable();
@@ -338,8 +446,10 @@ async function bookOnce(a: Attempt): Promise<AttemptResult> {
             endAt: end.toISOString(),
             allDay: false,
             location: link.location,
+            // Video meeting (P3-1): requested with the event the push creates in the owner's calendar.
+            videoMeeting: a.video.videoMeeting,
             reminder: link.reminder,
-            remarks: bookingRemarks(link, body),
+            remarks: bookingRemarks(link, body, a.video.note),
             relatedModule: related?.module ?? null,
             relatedId: related?.id ?? null,
             contactId,
@@ -367,7 +477,7 @@ async function bookOnce(a: Attempt): Promise<AttemptResult> {
                 contactId,
                 tokenHash: a.tokenHash,
             },
-            select: { id: true, startAt: true, endAt: true },
+            select: { id: true, startAt: true, endAt: true, activityId: true },
         });
 
         await insertMissingNotifications(
@@ -391,6 +501,11 @@ async function bookOnce(a: Attempt): Promise<AttemptResult> {
     });
 }
 
+/** The confirmation's video part of a stored booking's activity (a read failure shows none rather than failing). */
+async function videoOfActivity(activityId: string): Promise<ConfirmationVideo> {
+    return confirmationVideo(await bookingDeps.activityVideo(activityId).catch(() => null));
+}
+
 export const bookingPublicService = {
     async view(slug: string): Promise<PublicLinkDto> {
         const { link, ownerName } = await liveLink(slug);
@@ -405,6 +520,10 @@ export const bookingPublicService = {
             durations: link.durations,
             defaultDuration: link.durations[0],
             location: link.location ?? '',
+            videoMeeting:
+                link.videoMeeting && (config === null || typeOffersVideo(link.followupType, config))
+                    ? { provider: link.videoMeeting, label: VIDEO_PROVIDER_LABELS[link.videoMeeting] }
+                    : null,
             note: link.note ?? '',
             askPhone: link.askPhone,
             askCompany: link.askCompany,
@@ -471,8 +590,8 @@ export const bookingPublicService = {
         const used = await bookingDeps.bookingByToken(link.id, tokenHash);
         if (used) {
             if (used.visitorEmail.toLowerCase() !== body.email.toLowerCase()) throw slotUnavailable();
-            const config = await bookingDeps.loadActivityConfig().catch(() => null);
-            return confirmation(link, ownerName, used, now, typeLabelOf(config, link.followupType));
+            const [config, video] = await Promise.all([bookingDeps.loadActivityConfig().catch(() => null), videoOfActivity(used.activityId)]);
+            return confirmation(link, ownerName, used, now, typeLabelOf(config, link.followupType), video);
         }
         if (!verified.ok) throw slotUnavailable('Those times were shown a while ago. Please pick a time again.');
         // Counted per link only now: a valid, unused token this server signed (junk only uses up its own IP's quota).
@@ -487,8 +606,13 @@ export const bookingPublicService = {
         const busy = await ownerBusy(link, { start: start.getTime() - link.rules.bufferBeforeMinutes * MINUTE, end: end.getTime() + link.rules.bufferAfterMinutes * MINUTE }, now, 'book');
         if (clashes(start.getTime(), end.getTime(), link.rules, busy)) throw slotUnavailable('That time was just taken. Please pick another time.');
 
-        const [config, calendarSettings] = await Promise.all([bookingDeps.loadActivityConfig(), bookingDeps.loadCalendarSettings()]);
-        const attempt: Attempt = { link, ownerName, body, start, end, tokenHash, config, followUpActivities: calendarSettings.followUpActivities, now };
+        const [config, calendarSettings, ownerVideo] = await Promise.all([
+            bookingDeps.loadActivityConfig(),
+            bookingDeps.loadCalendarSettings(),
+            link.videoMeeting ? bookingDeps.ownerVideo(link.ownerUsername) : Promise.resolve(null),
+        ]);
+        const video = bookingVideo(link, config, ownerVideo);
+        const attempt: Attempt = { link, ownerName, body, start, end, tokenHash, config, followUpActivities: calendarSettings.followUpActivities, video, now };
 
         // Audit entries carry where this came from: the public page, the visitor's IP and browser.
         const result = await runWithAuditOrigin(
@@ -507,6 +631,14 @@ export const bookingPublicService = {
         if (result.kind === 'created') {
             await bookingDeps.afterCommit(result.rows, link.ownerUsername).catch((err: Error) => logger.warn({ err: err.message, linkId: link.id }, 'Booking: post-commit steps failed'));
         }
-        return confirmation(link, ownerName, result.booking, now, typeLabelOf(config, link.followupType));
+        // A new booking's link is only requested now (the push makes it after this answer): the page says the
+        // organiser sends it. A raced resubmit reads what the first request's activity has.
+        const confirmationVideoPart: ConfirmationVideo =
+            result.kind === 'created'
+                ? video.videoMeeting
+                    ? { provider: video.videoMeeting, label: VIDEO_PROVIDER_LABELS[video.videoMeeting], joinUrl: null }
+                    : null
+                : await videoOfActivity(result.booking.activityId);
+        return confirmation(link, ownerName, result.booking, now, typeLabelOf(config, link.followupType), confirmationVideoPart);
     },
 };

@@ -68,6 +68,28 @@ export function pullJobId(connectionId: string, now: Date): string {
 }
 
 /**
+ * `pull-<connectionId>-<10 s bucket>-<ms>`: an on-demand pull (Sync now, page open, admin) after this bucket's pull
+ * already started, finished or failed. BullMQ keeps a finished job for an hour and silently ignores an add with the
+ * same id, so reusing the bucket id would drop the request (P2-7's pending-only rule, `pendingOnlyPullJobId`).
+ */
+export function freshPullJobId(connectionId: string, now: Date): string {
+    return `${pullJobId(connectionId, now)}-${now.getTime()}`;
+}
+
+/** BullMQ job states in which a queued pull hasn't started yet, so it will still read a change made before now. */
+export const PENDING_JOB_STATES: ReadonlySet<string> = new Set(['waiting', 'delayed', 'prioritized', 'waiting-children']);
+
+/**
+ * P2-7's pending-only rule (webhook pings, P2-5 on-demand pulls): only a **pending** job absorbs a new request. Given
+ * the state of the bucket's job (null = no such job kept), the id to add, or null when the pending bucket job absorbs
+ * it. A started, finished, failed or unknown job (a state read that failed) gets `freshId`, never the bucket id.
+ */
+export function pendingOnlyPullJobId(state: string | null, bucketId: string, freshId: string): string | null {
+    if (state !== null && PENDING_JOB_STATES.has(state)) return null;
+    return state === null ? bucketId : freshId;
+}
+
+/**
  * `pull-<connectionId>-w<10 s bucket>`: a webhook-triggered pull (P2-7). Its own id, apart from the poll's: a burst of
  * pings within 10 s shares one pending job. Only a pending (waiting / delayed) job may absorb a ping; once that id is
  * active or finished (BullMQ keeps completed jobs an hour and silently ignores an add with an id it still holds), the

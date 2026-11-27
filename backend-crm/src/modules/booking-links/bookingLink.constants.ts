@@ -49,6 +49,14 @@ export const BOOKING_DEFAULTS = Object.freeze({
     reminder: '15 minutes before',
 });
 
+/**
+ * Default video meeting of a link's booked meetings (`BookingLink.videoMeeting`): what an admin-managed company
+ * calendar creates with the event (Google Meet with Google, Microsoft Teams with Microsoft 365). Zoom (P3-2) needs a
+ * per-user connection and is never offered on booking links. Same values as `Activity.conferenceProvider`.
+ */
+export const BOOKING_VIDEO_PROVIDERS = ['meet', 'teams'] as const;
+export type BookingVideoProvider = (typeof BOOKING_VIDEO_PROVIDERS)[number];
+
 /** Days the public page asks for at once (a week strip). */
 export const BOOKING_SLOT_PAGE_DAYS = 7;
 

@@ -15,7 +15,8 @@ import { linkIdParamSchema } from './bookingLink.validator.js';
  *                              links" when enabled and (canCreate or isAdmin), or whenever ownsLinks)
  *   GET  /                   ?scope=mine|all (all: admins) → { access, links: BookingLinkDto[] }
  *   POST /                   { title, ownerUsername? (admins: a colleague), followupType?, durations?, slotStepMinutes?,
- *                              location?, note?, availability?, bufferBeforeMinutes?, bufferAfterMinutes?, minNoticeMinutes?,
+ *                              location?, videoMeeting? (meet | teams | null), note?, availability?, bufferBeforeMinutes?,
+ *                              bufferAfterMinutes?, minNoticeMinutes?,
  *                              horizonDays?, maxPerDay?, reminder?, askPhone?, askCompany?, relatedModule?, relatedId?,
  *                              isActive? } → 201 BookingLinkDto (slug generated)
  *   PUT  /:id                any subset of the POST fields but ownerUsername → BookingLinkDto. `{ isActive: false }` works
@@ -26,7 +27,10 @@ import { linkIdParamSchema } from './bookingLink.validator.js';
  *   GET  /settings           (admins) → { enabled, whoCanCreate }
  *   PUT  /settings           (admins) { enabled?, whoCanCreate? } → settings (ModuleSetting activities/bookingLinks, audited)
  * Owner or admin only; another user's link is 404. Errors: 409 BOOKING_LINKS_OFF, 403 BOOKING_LINKS_NOT_ALLOWED,
- * 409 BOOKING_LINK_LIMIT (20 per person), 400 VALIDATION_ERROR.
+ * 409 BOOKING_LINK_LIMIT (20 per person), 400 VALIDATION_ERROR. videoMeeting (default video meeting of booked meetings):
+ * 400 VALIDATION_ERROR when the type doesn't offer video (or Zoom / another value), 409 VIDEO_PROVIDER_NOT_CONNECTED when
+ * the owner's company calendar can't create that kind of link (GET /api/activities/video-options?owner= lists it);
+ * checked on create and when an update changes it or the type.
  */
 const router = Router();
 router.use(authenticate);

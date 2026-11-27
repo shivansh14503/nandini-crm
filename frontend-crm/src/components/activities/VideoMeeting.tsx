@@ -182,7 +182,7 @@ export function JoinMeetingActions({ url, provider, compact = false }: { url: st
             >
                 {compact ? 'Join' : 'Join meeting'}
             </Button>
-            <DrawerCopyButton text={url} title="Copy meeting link" iconColor="var(--mui-palette-text-secondary)" minTarget={32} />
+            <DrawerCopyButton text={url} title="Copy meeting link" iconColor="var(--mui-palette-text-secondary)" boxSize={32} />
         </Box>
     );
 }
