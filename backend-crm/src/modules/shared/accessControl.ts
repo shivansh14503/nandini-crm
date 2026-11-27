@@ -6,12 +6,14 @@ import { HttpError } from '../../utils/httpError.js';
  * Row-level access for the core CRM entities (organizations, contacts, leads, opportunities, quotations, tickets,
  * contracts, activities).
  *
- * Global roles see and change every record. Every other role is scoped to the records it owns (assignee) or
+ * Global roles see and change every record. Super Admin (the developer role) is one of them: it has full access to
+ * every record and every admin page. Every other role is scoped to the records it owns (assignee) or
  * created. Activities extend this rule with their attendees: an invited colleague sees the activity but may only
  * reply to it (see activities/activity.access.ts). Role names are matched case-insensitively with any dash style,
  * so "Director - Operations" typed with a hyphen is the same role as the seeded "Director – Operations" (en dash).
  */
 export const GLOBAL_ACCESS_ROLES = [
+    'Super Admin',
     'Admin',
     'Director – Operations',
     'Regional Sales Head',

@@ -190,8 +190,9 @@ SQL Server is the only source of truth; Redis only ever holds derived or disposa
   frontend's `refreshUser()` treats only a 401 as the session ending (handled as below).
 - **Frontend sign-in redirects** (`hooks/useRequireAuth.ts`, `context/AuthContext.tsx`, `utils/safeNextPath.ts`): every
   signed-in page calls `useRequireAuth()`. Signed out, it `replace`s the page with `/login?next=<path+query+hash>`
-  (`loginPathWithNext()`), and the login page / form go to `safeNextPath(next)` after sign-in (CRM paths only, no open
-  redirect: the normalized path is checked too, so dot segments like `/.//evil.example` can't become `//evil.example`; a must-change password still goes to My Profile › Security first). Any API 401 other than a wrong
+  (`loginPathWithNext()`; `safeNextPath` still validates it: CRM paths only, no open redirect). Signing in always goes
+  to the **dashboard** (as of 2026-11-27, at the owner's request; `?next=` is no longer followed), or to My Profile ›
+  Security first for a must-change password, which goes on to the dashboard once the new password is saved. Any API 401 other than a wrong
   password at sign-in (`INVALID_CREDENTIALS`), including a background poll's, means the session ended on its own
   (expired after the 8 h TTL, revoked, signed out in another tab). What happens depends on whether unsaved edits are on
   screen (`utils/unsavedWork.ts`: `useFormDraftGuard`, `useLeaveGuard` and Document Series hold a claim while dirty):
@@ -209,14 +210,16 @@ SQL Server is the only source of truth; Redis only ever holds derived or disposa
     when the user confirms. If the unsaved work goes away while the dialog is up (the browser's Back button), it falls
     through to the next case (`subscribeUnsavedWork`). **Discard changes** (`endExpiredSession`) does too.
   - **Nothing unsaved**: `AuthContext` drops the user and sets the "session expired" note, and the guard sends the
-    user to `/login?next=<this page>`, returning them to the page after sign-in.
+    user to `/login?next=<this page>`; signing in again opens the dashboard.
 
   A 401 while nobody is signed in (the initial check, the login page, a late answer after Sign out) is ignored. An
   explicit **Sign out** sets `signedOutByUser` in the same render as clearing the user, so guards go to plain `/login`
   (never `?next=`), matching the navbar's own navigation. `utils/safeNextPath.ts` has no imports (its login path
   mirrors `ROUTES.LOGIN`) because the backend contract test loads it with tsx, which can't resolve the `@/` alias.
 - **Change password** (`POST /api/auth/change-password`, My Profile › Security): the current password is checked like a
-  sign-in (bcrypt, or a legacy plain-text row), the new one against `modules/auth/passwordPolicy.ts` (8–128
+  sign-in (bcrypt, or a legacy plain-text row; on the forced first-login change, when the session carries `mcp` and the
+  account is still flagged, it isn't asked for: the session was just opened with the temporary password, and the new
+  one is checked to differ from it instead), the new one against `modules/auth/passwordPolicy.ts` (8–128
   characters, a letter and a digit, not the username, not the current password; the frontend's live checklist uses a
   contract-tested copy). The bcrypt hash and `passwordChangedAt` are written in one transaction with a
   `PASSWORD_CHANGE` audit entry (no password in it; `currentPassword`, `newPassword` and `confirmPassword` are
@@ -269,7 +272,7 @@ SQL Server is the only source of truth; Redis only ever holds derived or disposa
 | Level | Rule |
 | --- | --- |
 | Admin features | `requireRole('Admin', 'Administrator', 'Super Admin')` — form customisation, document series, cities, PDF template management, API Integrations (`/api/admin/integrations`), Users (`/api/admin/users`) |
-| Global data roles | Admin, Director – Operations, Regional Sales Head, Sales Manager, System Administrator, Accounts Manager see **all** records |
+| Global data roles | Super Admin, Admin, Director – Operations, Regional Sales Head, Sales Manager, System Administrator, Accounts Manager see **all** records |
 | Everyone else | Row-level scope: only records where they are the owner (`assignedTo`) **or** the creator (`createdBy`). Lists add this as a Prisma `where`; single-record reads/writes call `assertRecordAccess` (403) |
 | Activities (`modules/activities/activity.access.ts`) | The same rule **plus attendees**: a colleague invited to an activity (`ActivityAttendee.username`) can see it (lists, calendar, record, its audit trail) and reply to it (`POST /api/activities/:id/response`), but only the owner, the creator or a global role can change or delete it. Linking an activity to a record (Related To, and the `link-targets` picker) needs access to that record under its own module's rule (403 otherwise); an unchanged link is kept even if the editor can't see the record. The calendar's lead / opportunity follow-ups and contract renewals follow their modules' rules. Activities are not in global search |
 | Referrals (`modules/referrals`) | Lists and records are **not** row-scoped (everyone picks Referred By from them); changes and deletes need the owner, the creator or a global role (`assertRecordAccess`) |
@@ -277,7 +280,9 @@ SQL Server is the only source of truth; Redis only ever holds derived or disposa
 Role names are compared case-insensitively and with any dash style. Roles are plain names on `Users.role` (no
 permissions table): Admin › Users picks from the roles in use or a new one, and shows which give the admin panel and
 which see every record (`modules/user-admin/roles.ts`, mirrored and contract-tested by `frontend-crm/src/utils/roleAccess.ts`).
-"Administrator" and "Super Admin" open the admin panel but are not global data roles.
+"Administrator" opens the admin panel but is not a global data role. "Super Admin" is the developer role: it opens the
+admin panel **and** sees every record, and only a Super Admin can add, edit, deactivate, activate or reset the password
+of a Super Admin user, or give / take the Super Admin role (`403 SUPER_ADMIN_ONLY`, `userAdmin.rules.ts` `superAdminOnly`).
 
 **Other protections**
 

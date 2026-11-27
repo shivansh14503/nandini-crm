@@ -25,8 +25,10 @@ describe('role access classification', () => {
     it('"sees all records" is the same test as hasGlobalAccess', () => {
         const roles = ['Admin', 'Administrator', 'Super Admin', 'Sales Manager', 'sales  manager', 'Director – Operations', 'Director - Operations', 'DIRECTOR — OPERATIONS', 'Sales Executive', ''];
         for (const role of roles) assert.equal(hasGlobalAccessRole(role), hasGlobalAccess({ role }), role);
-        // Administrator and Super Admin open the admin panel but see only their own records today.
+        // Administrator opens the admin panel but sees only its own records; Super Admin (the developer) sees everything.
         assert.equal(hasGlobalAccessRole('Administrator'), false);
+        assert.equal(hasGlobalAccessRole('Super Admin'), true);
+        assert.equal(hasGlobalAccessRole('super  admin'), true);
     });
 
     it('normalizeRole folds case, dashes and spaces', () => {
@@ -52,7 +54,7 @@ describe('roleOptionsFrom', () => {
         // The stored hyphen spelling stands for the seeded en-dash role; it isn't listed twice.
         assert.equal(byName['Director - Operations']?.access, 'all-records');
         assert.equal(byName['Director – Operations'], undefined);
-        assert.deepEqual(byName['Super Admin'], { name: 'Super Admin', access: 'admin', adminPanel: true, allRecords: false, userCount: 0, inactiveUserCount: 0 });
+        assert.deepEqual(byName['Super Admin'], { name: 'Super Admin', access: 'admin', adminPanel: true, allRecords: true, userCount: 0, inactiveUserCount: 0 });
         assert.deepEqual(byName.Admin, { name: 'Admin', access: 'admin', adminPanel: true, allRecords: true, userCount: 1, inactiveUserCount: 0 });
         // Held only by deactivated users: still listed, so the Inactive / All lists can be filtered by it.
         assert.equal(byName.Intern?.userCount, 0);

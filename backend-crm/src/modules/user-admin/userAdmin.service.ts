@@ -41,6 +41,8 @@ import {
     losesAdminAccess,
     MANAGER_MESSAGES,
     managerIssue,
+    SUPER_ADMIN_ONLY_MESSAGE,
+    superAdminOnly,
 } from './userAdmin.rules.js';
 import type { CreateUserInput, ListUsersQuery, ResetPasswordInput, UpdateUserInput } from './userAdmin.validator.js';
 import { ADMIN_ROLES, canonicalRoleName, GLOBAL_ACCESS_ROLES, isAdminAccessRole, roleOptionsFrom, type RoleOption } from './roles.js';
@@ -66,6 +68,11 @@ const fieldError = (message: string, status: number, code: string, path?: string
     new HttpError(message, status, { code, ...(path ? { errors: [{ message, path: [path] }] satisfies ApiFieldError[] } : {}) });
 
 const userNotFound = () => HttpError.notFound('User not found.');
+/** 403 SUPER_ADMIN_ONLY when a non-Super Admin touches a Super Admin (or the role). */
+function assertSuperAdminRule(actor: AuthUser, targetRole: string | null, nextRole: string | null, path?: string): void {
+    if (superAdminOnly(actor.role, targetRole, nextRole)) throw fieldError(SUPER_ADMIN_ONLY_MESSAGE, StatusCodes.FORBIDDEN, 'SUPER_ADMIN_ONLY', path);
+}
+
 const invalidManager = (message: string) => fieldError(message, StatusCodes.BAD_REQUEST, 'INVALID_MANAGER', 'reportsToId');
 
 // ── Reads ────────────────────────────────────────────────────────────────────
@@ -266,6 +273,7 @@ export const userAdminService = {
             if (checksEmail) await assertUserEmailFree(tx, email!, null);
             if (input.reportsToId) await assertManager(tx, null, input.reportsToId);
             const role = canonicalRoleName(input.role, await knownRoles(tx));
+            assertSuperAdminRule(actor, null, role, 'role');
             const department = input.department ? canonicalDepartment(input.department, await knownDepartments(tx)) : null;
 
             const created = await tx.user.create({
@@ -312,6 +320,7 @@ export const userAdminService = {
             await acquireLocks(tx, [userLock(id), input.role !== undefined ? ADMIN_ROSTER_LOCK : null, input.reportsToId ? REPORTS_TO_LOCK : null]);
             const before = await tx.user.findUnique({ where: { id }, select: ADMIN_USER_SELECT });
             if (!before) throw userNotFound();
+            assertSuperAdminRule(actor, before.role, null);
 
             // Names as shown (split from fullName when the stored parts are stale), so an edit of other fields keeps them.
             const shown = resolveNameParts(before);
@@ -341,7 +350,10 @@ export const userAdminService = {
             if (email && startsHolding) await assertUserEmailFree(tx, email, id);
 
             const role = input.role !== undefined ? canonicalRoleName(input.role, await knownRoles(tx)) : before.role;
-            if (role !== before.role) await assertAdminsKept(tx, actor, before, { role, isActive: before.isActive }, 'role');
+            if (role !== before.role) {
+                assertSuperAdminRule(actor, before.role, role, 'role');
+                await assertAdminsKept(tx, actor, before, { role, isActive: before.isActive }, 'role');
+            }
 
             let department = before.department;
             if (input.department !== undefined) department = input.department ? canonicalDepartment(input.department, await knownDepartments(tx)) : null;
@@ -396,6 +408,7 @@ export const userAdminService = {
             await acquireLocks(tx, [userLock(id), ADMIN_ROSTER_LOCK]);
             const before = await tx.user.findUnique({ where: { id }, select: { id: true, role: true, isActive: true } });
             if (!before) throw userNotFound();
+            assertSuperAdminRule(actor, before.role, null);
             if (!before.isActive) return false;
             await assertAdminsKept(tx, actor, before, { role: before.role, isActive: false });
             const deactivatedAt = new Date();
@@ -419,8 +432,9 @@ export const userAdminService = {
     async activate(actor: AuthUser, id: number): Promise<StatusChangeResult> {
         const changed = await runInTransaction(async (tx) => {
             await acquireLocks(tx, [userLock(id)]);
-            const before = await tx.user.findUnique({ where: { id }, select: { isActive: true, isGroupUser: true, email: true } });
+            const before = await tx.user.findUnique({ where: { id }, select: { isActive: true, isGroupUser: true, email: true, role: true } });
             if (!before) throw userNotFound();
+            assertSuperAdminRule(actor, before.role, null);
             if (before.isActive) return false;
             const email = normalizeUserEmail(before.email);
             if (email && !before.isGroupUser) {
@@ -444,8 +458,9 @@ export const userAdminService = {
      */
     async resetPassword(actor: AuthUser, id: number, input: ResetPasswordInput): Promise<ResetPasswordResult> {
         if (id === actor.id) throw HttpError.badRequest('Change your own password from My Profile › Security.');
-        const target = await prisma.user.findUnique({ where: { id }, select: { username: true } });
+        const target = await prisma.user.findUnique({ where: { id }, select: { username: true, role: true } });
         if (!target) throw userNotFound();
+        assertSuperAdminRule(actor, target.role, null);
         const { password, generated } = choosePassword(input.password, target.username);
         const passwordHash = await hashPassword(password);
 

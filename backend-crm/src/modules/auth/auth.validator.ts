@@ -8,9 +8,12 @@ export const loginSchema = z.object({
 
 export type LoginInput = z.infer<typeof loginSchema>;
 
-/** POST /api/auth/change-password. The new password's rules are checked by the service (passwordPolicy.ts). */
+/**
+ * POST /api/auth/change-password. The new password's rules are checked by the service (passwordPolicy.ts).
+ * `currentPassword` may be left out only on the first-login / forced change (see authService.changePassword).
+ */
 export const changePasswordSchema = z.object({
-    currentPassword: z.string({ error: 'Current password is required.' }).min(1, 'Current password is required.').max(128, 'Password is too long'),
+    currentPassword: z.string().max(128, 'Password is too long').optional(),
     newPassword: z.string({ error: 'New password is required.' }).min(1, 'New password is required.').max(128, 'Password cannot exceed 128 characters.'),
 });
 

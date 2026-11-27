@@ -11,7 +11,8 @@ import { changePasswordSchema, loginSchema } from './auth.validator.js';
  *                             (user as /me; mustChangePassword → the token carries `mcp`, see middlewares/passwordChangeGate.ts)
  *   POST   /logout                                                      clears the cookie, ends the session
  *   GET    /me                → { status, user: { id, username, role, fullName, firstName, lastName, photoUrl, mustChangePassword } }
- *   POST   /change-password   { currentPassword, newPassword }          → { passwordChangedAt, mustChangePassword: false, signedOutSessions }
+ *   POST   /change-password   { currentPassword?, newPassword }         → { passwordChangedAt, mustChangePassword: false, signedOutSessions }
+ *                             currentPassword may be left out only on the forced first-login change (`mcp` session + stored flag)
  *                             clears mustChangePassword and re-issues the cookie (same session) without `mcp`
  *                             400 WRONG_PASSWORD (currentPassword) · 400 WEAK_PASSWORD (newPassword) · 429 after 10 / 15 min
  */

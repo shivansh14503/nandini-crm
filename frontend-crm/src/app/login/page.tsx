@@ -6,7 +6,6 @@ import { AuthCard } from '@/components/auth/AuthCard';
 import { LoginForm } from '@/components/auth/LoginForm';
 import { useAuth } from '@/context/AuthContext';
 import { ROUTES } from '@/config/constants';
-import { nextPathFromLocation } from '@/utils/safeNextPath';
 
 export default function LoginPage() {
     const router = useRouter();
@@ -15,8 +14,8 @@ export default function LoginPage() {
 
     useEffect(() => {
         if (!loading && isAuthenticated) {
-            // A temporary password must be changed first; otherwise back to `?next=` (CRM paths only) or the dashboard.
-            router.push(mustChangePassword ? ROUTES.PROFILE_SECURITY : nextPathFromLocation(ROUTES.DASHBOARD));
+            // A temporary password must be changed first; otherwise the dashboard.
+            router.push(mustChangePassword ? ROUTES.PROFILE_SECURITY : ROUTES.DASHBOARD);
         }
     }, [isAuthenticated, mustChangePassword, loading, router]);
 

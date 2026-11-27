@@ -39,6 +39,8 @@ import {
  *                                400 INVALID_MANAGER · 400 SELF_LOCKOUT · 400 LAST_ADMIN · 409 DUPLICATE_RECORD (email) · 404
  *   POST   /:id/deactivate      → AdminUserDto + { signedOutSessions }   400 SELF_LOCKOUT · 400 LAST_ADMIN · 404
  *   POST   /:id/activate        → AdminUserDto + { signedOutSessions: null }   409 DUPLICATE_RECORD (email) · 404
+ *   Super Admin users (and the Super Admin role) can only be added, edited, deactivated, activated or reset by a Super
+ *   Admin: 403 SUPER_ADMIN_ONLY otherwise.
  *   POST   /:id/reset-password  { password? } → { temporaryPassword: string | null, signedOutSessions }
  *                                400 (own account: use My Profile) · 400 WEAK_PASSWORD · 404 · 429 after 20 / 10 min per admin
  */

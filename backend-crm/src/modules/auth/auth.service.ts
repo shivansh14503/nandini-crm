@@ -73,6 +73,11 @@ const SESSION_ENDED = 'Your account was not found. Please sign in again.';
 const accountInactive = () =>
     new HttpError('This account has been deactivated. Contact your administrator.', StatusCodes.FORBIDDEN, { code: 'ACCOUNT_INACTIVE' });
 
+const currentPasswordRequired = () => {
+    const message = 'Current password is required.';
+    return new HttpError(message, StatusCodes.BAD_REQUEST, { code: 'VALIDATION_ERROR', errors: [{ message, path: ['currentPassword'] }] });
+};
+
 const wrongPassword = () => {
     const message = 'Current password is incorrect.';
     return new HttpError(message, StatusCodes.BAD_REQUEST, { code: 'WRONG_PASSWORD', errors: [{ message, path: ['currentPassword'] }] });
@@ -160,7 +165,8 @@ export const authService = {
     },
 
     /**
-     * POST /api/auth/change-password (My Profile › Security). Checks the current password (bcrypt or a legacy
+     * POST /api/auth/change-password (My Profile › Security). Checks the current password (not asked for on the
+     * first-login / forced change, when the session's `mcp` claim and the stored flag are both set) (bcrypt or a legacy
      * plain-text row) and the password rules, stores the new bcrypt hash with `passwordChangedAt`, audits
      * PASSWORD_CHANGE (no password in the entry), then signs out every other session of the user, keeping this one.
      * Also clears `mustChangePassword` (same transaction); when it or the session's `mcp` claim was set, a token for the
@@ -170,16 +176,29 @@ export const authService = {
     async changePassword(user: AuthUser, session: AuthSession, input: ChangePasswordInput): Promise<ChangePasswordOutcome> {
         const row = await prisma.user.findUnique({
             where: { id: user.id },
-            select: { id: true, username: true, role: true, isActive: true, passwordHash: true, passwordChangedAt: true },
+            select: { id: true, username: true, role: true, isActive: true, passwordHash: true, passwordChangedAt: true, mustChangePassword: true },
         });
         if (!row) throw HttpError.unauthorized(SESSION_ENDED);
         // A deactivated user whose session outlived the deactivation (Redis down, an untracked token) must not change the
         // password, nor get the fresh token below.
         if (!row.isActive) throw accountInactive();
 
-        const { valid } = await verifyPassword(input.currentPassword, row.passwordHash);
-        if (!valid) throw wrongPassword();
-        const issue = passwordPolicyIssue(input.newPassword, { username: row.username, currentPassword: input.currentPassword });
+        // First login / forced change: this session was opened moments ago with the temporary password (its token carries
+        // `mcp`) and the account is still flagged, so the temporary password isn't asked for again. Anywhere else the
+        // current password is required.
+        const forced = session.mustChangePassword && row.mustChangePassword;
+        const currentPassword = input.currentPassword ?? '';
+        if (!forced || currentPassword !== '') {
+            if (currentPassword === '') throw currentPasswordRequired();
+            const { valid } = await verifyPassword(currentPassword, row.passwordHash);
+            if (!valid) throw wrongPassword();
+        }
+        const issue =
+            passwordPolicyIssue(input.newPassword, { username: row.username, currentPassword }) ??
+            // Without a typed current password, "different from the current one" is checked against the stored hash.
+            (currentPassword === '' && (await verifyPassword(input.newPassword, row.passwordHash)).valid
+                ? 'New password must be different from your temporary password.'
+                : null);
         if (issue) {
             throw new HttpError(issue, StatusCodes.BAD_REQUEST, { code: 'WEAK_PASSWORD', errors: [{ message: issue, path: ['newPassword'] }] });
         }
@@ -197,7 +216,7 @@ export const authService = {
             if (!current) throw HttpError.unauthorized(SESSION_ENDED);
             if (!current.isActive) throw accountInactive();
             // Changed since it was checked above (another change, or a legacy row rehashed at sign-in): check again.
-            if (current.passwordHash !== row.passwordHash && !(await verifyPassword(input.currentPassword, current.passwordHash)).valid) {
+            if (current.passwordHash !== row.passwordHash && (currentPassword === '' || !(await verifyPassword(currentPassword, current.passwordHash)).valid)) {
                 throw wrongPassword();
             }
             await tx.user.update({ where: { id: row.id }, data: { passwordHash, passwordChangedAt, mustChangePassword: false } });
