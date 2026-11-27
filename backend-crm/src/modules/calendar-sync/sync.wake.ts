@@ -1,10 +1,10 @@
 import { ENV } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
 import { prisma } from '../../config/prisma.js';
-import { calendarSyncQueue, tryEnqueue } from '../../jobs/queues.js';
+import { calendarSyncQueue, isQueueAvailable, tryEnqueue } from '../../jobs/queues.js';
 import { notify } from '../notifications/notification.producer.js';
 import { CALENDAR_SYNC_JOBS, PUSH_JOB_DELAY_MS, type PullReason } from './sync.constants.js';
-import { checkJobId, enrolledJobId, pullJobId, pushJobId } from './sync.keys.js';
+import { checkJobId, enrolledJobId, freshPullJobId, pendingOnlyPullJobId, pullJobId, pushJobId } from './sync.keys.js';
 import { invitesHeldNotification } from './sync.notifications.js';
 import { takeOutboxResult, type DirtyLink, type HeldNotice } from './sync.outbox.js';
 
@@ -90,17 +90,82 @@ export interface PullJobData {
     reason: PullReason;
 }
 
+/** Pulls a person asked for (Sync now, the calendar page opening, an admin's Sync now): never absorbed by a finished job. */
+export const ON_DEMAND_PULL_REASONS: ReadonlySet<PullReason> = new Set<PullReason>(['manual', 'page', 'admin']);
+
+/** The BullMQ side of on-demand pulls (job state, add), replaceable in tests. */
+export interface PullJobQueue {
+    /**
+     * The state of a kept job (waiting, delayed, active, completed, failed, …), null when none, UNREADABLE_JOB_STATE
+     * when Redis didn't answer in time or the read failed.
+     */
+    stateOf(jobId: string): Promise<string | null>;
+    /** Adds a `pull` job; the id, or null when Redis didn't take it (the caller pulls in-process). */
+    add(jobId: string, data: PullJobData): Promise<string | null>;
+}
+
+const STATE_TIMEOUT_MS = 3_000;
+
+/** `stateOf`'s answer when the state read timed out or failed: Redis isn't answering, so `enqueuePull` doesn't try an add. */
+export const UNREADABLE_JOB_STATE = 'unknown';
+
+const bullPullJobs: PullJobQueue = {
+    async stateOf(jobId) {
+        if (!isQueueAvailable()) return null;
+        let timer: NodeJS.Timeout | undefined;
+        const timeout = new Promise<never>((_, reject) => (timer = setTimeout(() => reject(new Error('Redis timed out')), STATE_TIMEOUT_MS)));
+        try {
+            const job = await Promise.race([calendarSyncQueue().getJob(jobId), timeout]);
+            return job ? await Promise.race([job.getState(), timeout]) : null;
+        } catch {
+            // Timed out or failed: Redis isn't answering. `enqueuePull` returns null so the caller pulls in-process.
+            return UNREADABLE_JOB_STATE;
+        } finally {
+            clearTimeout(timer);
+        }
+    },
+    add: (jobId, data) =>
+        tryEnqueue(calendarSyncQueue, CALENDAR_SYNC_JOBS.pull, data, {
+            jobId,
+            // A failed pull isn't retried: the next poll (every few minutes) pulls again from the same cursor.
+            attempts: 1,
+        }),
+};
+let pullJobs: PullJobQueue = bullPullJobs;
+
+/** Tests: replace the BullMQ side of `enqueuePull` (null = BullMQ). */
+export function setPullJobQueueForTests(queue: PullJobQueue | null): void {
+    pullJobs = queue ?? bullPullJobs;
+}
+
 /**
  * `pull` job of one connection (P2-5): the poll fan-out, Sync now, the calendar page, the nightly re-baseline. Pulls
- * of the same connection within 10 s share one job id. Null without Redis (callers then pull in-process).
+ * of the same connection within 10 s share the bucket id `pull-<connectionId>-<10 s bucket>`. Null without Redis
+ * (callers then pull in-process).
+ *
+ * On-demand pulls (ON_DEMAND_PULL_REASONS) follow P2-7's pending-only rule (`pendingOnlyPullJobId`, as webhook pings
+ * do): only a still-pending bucket job absorbs them; when that job already started, finished or failed (BullMQ keeps
+ * it an hour and would silently ignore the same id) they get `pull-<connectionId>-<bucket>-<ms>`, so the person's
+ * "Sync now" always reads the calendar after the click. A running pull holds the lease; the new job waits for it
+ * (`pullRetryDelay`). The poll fan-out, re-baseline and missed-webhook pulls keep the bucket id (one state read less per
+ * person and tick; a just-finished pull of the same 10 s covered them).
+ *
+ * When the state read times out or fails (UNREADABLE_JOB_STATE), an on-demand pull returns null at once instead of
+ * also trying the add: Redis isn't answering, and the person waits on the request, so the caller pulls in-process
+ * (under the lease) after at most one 3 s timeout, as before the state read existed.
  */
-export function enqueuePull(connectionId: string, reason: PullReason, now: Date = new Date()): Promise<string | null> {
-    if (!ENV.INTEGRATIONS.SYNC_ENABLED) return Promise.resolve(null);
-    return tryEnqueue(calendarSyncQueue, CALENDAR_SYNC_JOBS.pull, { connectionId, reason } satisfies PullJobData, {
-        jobId: pullJobId(connectionId, now),
-        // A failed pull isn't retried: the next poll (every few minutes) pulls again from the same cursor.
-        attempts: 1,
-    });
+export async function enqueuePull(connectionId: string, reason: PullReason, now: Date = new Date()): Promise<string | null> {
+    if (!ENV.INTEGRATIONS.SYNC_ENABLED) return null;
+    const data: PullJobData = { connectionId, reason };
+    const bucketId = pullJobId(connectionId, now);
+    if (!ON_DEMAND_PULL_REASONS.has(reason)) return pullJobs.add(bucketId, data);
+    const state = await pullJobs.stateOf(bucketId);
+    // Redis didn't answer the state read: don't wait out a second timeout on the add.
+    if (state === UNREADABLE_JOB_STATE) return null;
+    const jobId = pendingOnlyPullJobId(state, bucketId, freshPullJobId(connectionId, now));
+    // The pending bucket job hasn't started: it will read the calendar after this request.
+    if (jobId === null) return bucketId;
+    return pullJobs.add(jobId, data);
 }
 
 /** `calendar_invites_held` to each owner, naming who added the guests. */

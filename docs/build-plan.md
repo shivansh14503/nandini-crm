@@ -1,7 +1,7 @@
 # Nandini CRM — Build Plan
 
 > **Status:** living document. Part 1 records what has been built (reconstructed from git history, 115 commits
-> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-26, Calendar Phase 2 P2-1, P2-2, P2-2b (admin-managed calendar connections), P2-3a, P2-3b (calendar push engine), P2-3c (backfill, send invitations, sync status), P2-4, P2-5 (calendar → CRM pull), P2-6 (busy times) and P2-7 (calendar webhooks), Calendar Phase 4 booking links, recurring activities and email logging, Profile Phase 1: My Profile, Profile Phase 2: Admin › Users, Profile Phase 3: notifications & preferences, Profile Phase 4: connected accounts and Profile Phase 5 PR5a + PR5b: company formats, which completes Phase 17; Calendar Phase 3 P3-1: Google Meet and Microsoft Teams links). Part 2
+> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-26, Calendar Phase 2 P2-1, P2-2, P2-2b (admin-managed calendar connections), P2-3a, P2-3b (calendar push engine), P2-3c (backfill, send invitations, sync status), P2-4, P2-5 (calendar → CRM pull), P2-6 (busy times) and P2-7 (calendar webhooks), Calendar Phase 4 booking links, recurring activities and email logging, Profile Phase 1: My Profile, Profile Phase 2: Admin › Users, Profile Phase 3: notifications & preferences, Profile Phase 4: connected accounts and Profile Phase 5 PR5a + PR5b: company formats, which completes Phase 17; Calendar Phase 3 P3-1: Google Meet and Microsoft Teams links; as of 2026-11-27 booking links' default video meeting and the follow-ups below). Part 2
 > is the roadmap. Tick
 > items off and add new ones as work lands.
 > Related: [System design](system-design.md) · [Database design](database-design.md) · [API plan](api-plan.md)
@@ -463,7 +463,10 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         the silent pull on opening the calendar page, "Updated from Google Calendar / Outlook" and unsupported /
         too long / follow-up notes in the activity drawer. Recurring and > 31-day events are skipped with a reason
         (R20, owner decision). Tested with the fake provider and hand-written provider answers; no real SQL Server,
-        Google or Microsoft call.
+        Google or Microsoft call. Follow-up (2026-11-27): Sync now / page / admin pulls follow P2-7's pending-only rule
+        (`pendingOnlyPullJobId`): a finished or running job of the same 10 s bucket no longer silently absorbs them
+        (fresh id `pull-<conn>-<bucket>-<ms>`); the poll fan-out keeps its bucket id. A state read that times out
+        returns null at once (in-process pull after one 3 s wait, not two).
   - [x] **P2-6: busy times** (2026-11-26) — no migration. `GET /api/activities/busy?users&from&to&exclude&suggest`
         (`modules/calendar-sync/busy.*`): up to 20 people, ≤ 31 days, times only (D11). CRM part: Planned activities
         (owner, or invited colleague not declined; Site Visit all-day → `away`), cached 30 s and dropped by activity
@@ -529,7 +532,9 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         real SQL Server, Google or Microsoft (fake provider and recorded-shape `fakeFetch` tests only). Owner steps:
         Meet on for the Workspace org, Teams licences for owners, first-run check that `calendar.events.owned` under
         domain-wide delegation accepts `createRequest` (else switch the delegated scope to `calendar.events`).
-        Next: booking links' default video meeting (needs a `BookingLink` column and form control).
+        Follow-up done (2026-11-27, migration `20261216110000_booking_video`): booking links' default video meeting
+        (see Booking links below). `DrawerCopyButton` now has a 32 px hit area everywhere (default `minTarget` 32 via
+        an invisible `::before`, visual size and layouts unchanged; Join keeps its 32 px box through `boxSize`).
   - [ ] **P3-2: Zoom** (per-user OAuth, `CalendarConnection kind='video'`; the option stays disabled until then)
 - [ ] **Phase 4 (later; spec §17)**: booking links, recurring activities, email logging.
   - [x] **Booking links (public scheduling page on free/busy)** (2026-11-26) — migration `20261128120000_booking_links`
@@ -554,6 +559,15 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         details, hides another duration's times while loading and retries after network errors. Not run against a
         real SQL Server, Google or Microsoft (doubles only). Later: email confirmations and visitor cancel /
         reschedule (mail layer), team / round-robin links, custom questions.
+        Default video meeting (2026-11-27, migration `20261216110000_booking_video`): `BookingLink.videoMeeting`
+        (meet / teams / none; Zoom never) chosen in the dialog from the link owner's calendar (`GET
+        /api/activities/video-options?owner=`, unavailable choices disabled with the reason; all left selectable when
+        that check fails, so the API's 409 decides), validated on save (type
+        offers video, else 400; `409 VIDEO_PROVIDER_NOT_CONNECTED`), copied onto the booked activity so the P3-1 push
+        asks for the link (booked without one, with a note in the remarks, when the type or the owner's calendar no
+        longer allows it). The page and `.ics` say "Google Meet / Microsoft Teams link: sent by <owner>"; the
+        confirmation shows the join URL only if it is already ready (no polling). Doubles and the fake connection
+        reader only; no real SQL Server, Google or Microsoft.
   - [x] Recurring activities (CRM-authored series, R12 occurrence rows). Done 2026-11-26 (migration `20261215110000_recurring_activities`): an `ActivitySeries` rule (daily / weekly on weekdays / monthly on a day or the nth weekday, every N, ends on a date or after a count, business timezone) with one `Activity` row per occurrence (`seriesId` + `originalStartAt`, filtered unique index) over a rolling 90-day horizon extended by the 00:20 nightly job; a Repeat control on the activity form and quick create (not Notes, not follow-ups); "This event / This and following / All events" for saves, cancels and deletes; occurrences pushed to calendars as single events inside a 14-day window; "Repeats …" in the drawer and a repeat mark on the calendar. Tested with in-memory doubles only, not against a real SQL Server, Google or Microsoft.
   - [x] **Email logging** (2026-11-26) — migration `20261216100000_email_logging` (`LoggedEmail` with the filtered
         unique `UX_LoggedEmail_messageIdHash`, `LoggedEmailCopy`, `LoggedEmailLink`, `LoggedEmailMailbox`). Admin-managed

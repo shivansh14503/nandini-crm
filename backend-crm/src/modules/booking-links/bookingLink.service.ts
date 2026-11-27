@@ -9,12 +9,22 @@ import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
 import { RELATED_LOADERS } from '../activities/activity.links.js';
 import { NOTE_TYPE, TASK_TYPE, type ActivityRelatedModule } from '../activities/activity.schedule.js';
+import type { ActivityConfig } from '../activities/activity.service.js';
+import { assertOwnerCanHaveVideo, typeOffersVideo, videoTypeNotOfferedMessage } from '../activities/activity.conference.js';
 import { LIVE_CONNECTION_STATUSES } from '../calendar-sync/connection.constants.js';
 import { formConfigService } from '../form-configs/formConfig.service.js';
 import { canAccessRecord } from '../shared/accessControl.js';
 import { acquireLocks, runInTransaction } from '../shared/transactions.js';
 import { bookingAccessOf, isBookingAdmin, roleMayOwnLinks, type BookingAccess } from './bookingLink.access.js';
-import { BOOKING_DEFAULTS, BOOKING_ERROR_CODES, BOOKING_MAX_LINKS_PER_OWNER, BOOKING_WEEKDAYS, type BookingSlotStep } from './bookingLink.constants.js';
+import {
+    BOOKING_DEFAULTS,
+    BOOKING_ERROR_CODES,
+    BOOKING_MAX_LINKS_PER_OWNER,
+    BOOKING_VIDEO_PROVIDERS,
+    BOOKING_WEEKDAYS,
+    type BookingSlotStep,
+    type BookingVideoProvider,
+} from './bookingLink.constants.js';
 import { BOOKING_SETTING_KEY, bookingSettingsPatchSchema, bookingSettingsSchema, readBookingSettings, type BookingSettings } from './bookingLink.settings.js';
 import type { SlotRules, WeeklyAvailability } from './bookingLink.slots.js';
 import { availabilitySchema, createLinkSchema, linkListQuerySchema, updateLinkSchema, type UpdateLinkInput } from './bookingLink.validator.js';
@@ -56,6 +66,8 @@ export interface LinkConfig {
     followupType: string;
     durations: number[];
     location: string | null;
+    /** Default video meeting of booked meetings (null = none, or a stored value no longer allowed). */
+    videoMeeting: BookingVideoProvider | null;
     note: string | null;
     reminder: string | null;
     askPhone: boolean;
@@ -91,6 +103,10 @@ export function parseAvailability(json: string): WeeklyAvailability {
     }
 }
 
+/** A stored `videoMeeting` read as a booking-link provider (anything else = none). */
+export const linkVideoOf = (value: string | null | undefined): BookingVideoProvider | null =>
+    (BOOKING_VIDEO_PROVIDERS as readonly string[]).includes(value ?? '') ? (value as BookingVideoProvider) : null;
+
 export function toLinkConfig(row: BookingLink): LinkConfig {
     return {
         id: row.id,
@@ -100,6 +116,7 @@ export function toLinkConfig(row: BookingLink): LinkConfig {
         followupType: row.followupType,
         durations: parseDurations(row.durationsJson),
         location: row.location,
+        videoMeeting: linkVideoOf(row.videoMeeting),
         note: row.note,
         reminder: row.reminder,
         askPhone: row.askPhone,
@@ -174,6 +191,8 @@ export interface BookingLinkDto {
     durations: number[];
     slotStepMinutes: number;
     location: string;
+    /** Default video meeting of booked meetings: meet | teams | null (none). */
+    videoMeeting: BookingVideoProvider | null;
     note: string;
     availability: WeeklyAvailability;
     bufferBeforeMinutes: number;
@@ -217,6 +236,7 @@ export function toBookingLinkDto(row: BookingLink, extras: DtoExtras): BookingLi
         durations: link.durations,
         slotStepMinutes: row.slotStepMinutes,
         location: row.location ?? '',
+        videoMeeting: link.videoMeeting,
         note: row.note ?? '',
         availability: link.rules.availability,
         bufferBeforeMinutes: row.bufferBeforeMinutes,
@@ -255,6 +275,7 @@ const auditView = (row: BookingLink) => {
         durations: link.durations,
         slotStepMinutes: row.slotStepMinutes,
         location: row.location,
+        videoMeeting: row.videoMeeting,
         note: row.note,
         availability: link.rules.availability,
         bufferBeforeMinutes: row.bufferBeforeMinutes,
@@ -386,6 +407,46 @@ async function assertRelated(user: AuthUser, module: ActivityRelatedModule | nul
     if (!canAccessRecord(user, found)) throw HttpError.forbidden("You can't link booked meetings to a record you don't have access to.");
 }
 
+/**
+ * The link's video meeting (create, or an update that changes it or the type): the type must offer video (option meta
+ * `videoMeeting` and a type that goes to calendars; 400) and the owner's admin-managed company calendar must create
+ * that kind of link (409 VIDEO_PROVIDER_NOT_CONNECTED), the same rules as an activity's new choice
+ * (activities/activity.conference.ts). Re-saving the stored value with the same type passes, so an admin turning a type
+ * off or a calendar going away doesn't block editing the link's other fields; the booking then books without a video
+ * meeting and says why in the activity's remarks (bookingLink.public.ts).
+ */
+export async function assertLinkVideo(
+    video: BookingVideoProvider | null,
+    followupType: string,
+    owner: string,
+    config: Pick<ActivityConfig, 'followupTypes'> | null,
+    db: Parameters<typeof assertOwnerCanHaveVideo>[0] = prisma as unknown as TransactionClient,
+): Promise<void> {
+    if (!video) return;
+    if (!typeOffersVideo(followupType, config)) {
+        const message = videoTypeNotOfferedMessage(followupType);
+        throw new HttpError(message, StatusCodes.BAD_REQUEST, { code: 'VALIDATION_ERROR', errors: [{ message, path: ['videoMeeting'] }] });
+    }
+    await assertOwnerCanHaveVideo(db, owner, video);
+}
+
+/** The video meeting an update leaves on the link, when it must be checked again (a new value or a new type); else null. */
+export function linkVideoToCheck(
+    input: Pick<UpdateLinkInput, 'videoMeeting' | 'followupType'>,
+    existing: Pick<BookingLink, 'videoMeeting' | 'followupType'>,
+): { video: BookingVideoProvider; followupType: string } | null {
+    const stored = linkVideoOf(existing.videoMeeting);
+    const video = input.videoMeeting === undefined ? stored : input.videoMeeting;
+    const followupType = input.followupType ?? existing.followupType;
+    if (!video || (video === stored && followupType === existing.followupType)) return null;
+    return { video, followupType };
+}
+
+async function activityConfig(): Promise<ActivityConfig> {
+    const { loadActivityConfig } = await import('../activities/activity.service.js');
+    return loadActivityConfig();
+}
+
 async function activeOwner(username: string): Promise<{ username: string; fullName: string }> {
     const owner = await prisma.user.findUnique({ where: { username }, select: { username: true, fullName: true, isActive: true, isGroupUser: true } });
     if (!owner || !owner.isActive || owner.isGroupUser) {
@@ -411,7 +472,7 @@ function columnsOf(input: UpdateLinkInput): Record<string, unknown> {
         if (value === undefined) continue;
         if (key === 'durations') data.durationsJson = JSON.stringify(value);
         else if (key === 'availability') data.availabilityJson = JSON.stringify(value);
-        else if (key === 'location' || key === 'note') data[key] = value ?? null;
+        else if (key === 'location' || key === 'note' || key === 'videoMeeting') data[key] = value ?? null;
         else data[key] = value;
     }
     return data;
@@ -457,6 +518,7 @@ export const bookingLinkService = {
         const followupType = input.followupType ?? BOOKING_DEFAULTS.followupType;
         assertType(followupType, await bookableTypes());
         await assertRelated(user, input.relatedModule, input.relatedId);
+        if (input.videoMeeting) await assertLinkVideo(input.videoMeeting, followupType, owner.username, await activityConfig());
 
         const row = await runInTransaction(async (tx) => {
             await acquireLocks(tx, [ownerLockKey(owner.username)]);
@@ -475,6 +537,7 @@ export const bookingLinkService = {
                     durationsJson: JSON.stringify(input.durations ?? BOOKING_DEFAULTS.durations),
                     slotStepMinutes: (input.slotStepMinutes ?? BOOKING_DEFAULTS.slotStepMinutes) as BookingSlotStep,
                     location: input.location ?? null,
+                    videoMeeting: input.videoMeeting ?? null,
                     note: input.note ?? null,
                     availabilityJson: JSON.stringify(input.availability ?? DEFAULT_AVAILABILITY),
                     bufferBeforeMinutes: input.bufferBeforeMinutes ?? BOOKING_DEFAULTS.bufferBeforeMinutes,
@@ -508,6 +571,8 @@ export const bookingLinkService = {
             if (sameName(existing.ownerUsername, user.username) && !isBookingAdmin(user)) assertMayCreate(user, settings);
             if (input.followupType !== undefined) assertType(input.followupType, await bookableTypes());
             if (input.relatedModule !== undefined || input.relatedId !== undefined) await assertRelated(user, input.relatedModule, input.relatedId);
+            const video = linkVideoToCheck(input, existing);
+            if (video) await assertLinkVideo(video.video, video.followupType, existing.ownerUsername, await activityConfig());
         }
         const { before, after } = await runInTransaction(async (tx) => {
             await acquireLocks(tx, [linkLockKey(id)]);

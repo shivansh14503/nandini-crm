@@ -14,6 +14,7 @@ import {
     BOOKING_NOTE_MAX,
     BOOKING_SLOT_STEPS,
     BOOKING_TITLE_MAX,
+    BOOKING_VIDEO_PROVIDERS,
     BOOKING_VISITOR_COMPANY_MAX,
     BOOKING_VISITOR_MESSAGE_MAX,
     BOOKING_VISITOR_NAME_MAX,
@@ -78,6 +79,12 @@ export const availabilitySchema = z
         if (!any) ctx.addIssue({ code: 'custom', message: 'Add at least one time range.', path: [] });
     });
 
+/** Video meeting of booked meetings: meet | teams; '' / null = none. Zoom is refused (never offered on links). */
+const videoMeetingSchema = z.preprocess(
+    (value) => (value === '' ? null : value),
+    z.enum(BOOKING_VIDEO_PROVIDERS, { error: 'Video meeting must be Google Meet, Microsoft Teams or none.' }).nullable(),
+);
+
 const linkFields = {
     title: requiredText('Title', BOOKING_TITLE_MAX),
     followupType: requiredText('Type', 30),
@@ -87,6 +94,7 @@ const linkFields = {
         { error: `Start times go every ${BOOKING_SLOT_STEPS.join(', ')} minutes.` },
     ),
     location: optionalText('Location', BOOKING_LOCATION_MAX).nullable(),
+    videoMeeting: videoMeetingSchema,
     note: optionalText('Note', BOOKING_NOTE_MAX).nullable(),
     availability: availabilitySchema,
     bufferBeforeMinutes: minutes('Buffer before', 0, BOOKING_MAX_BUFFER_MINUTES),
@@ -117,6 +125,7 @@ export const createLinkSchema = z
         durations: linkFields.durations.optional(),
         slotStepMinutes: linkFields.slotStepMinutes.optional(),
         location: linkFields.location.optional(),
+        videoMeeting: linkFields.videoMeeting.optional(),
         note: linkFields.note.optional(),
         availability: linkFields.availability.optional(),
         bufferBeforeMinutes: linkFields.bufferBeforeMinutes.optional(),

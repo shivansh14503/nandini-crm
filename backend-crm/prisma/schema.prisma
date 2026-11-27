@@ -2113,6 +2113,10 @@ model BookingLink {
   slotStepMinutes     Int      @default(30)
   /// Copied to the activity and shown on the page (an address, "Google Meet link follows", a phone number).
   location            String?  @db.NVarChar(250)
+  /// Default video meeting of the booked activity (meet | teams; null = none). Must be what the owner's admin-managed
+  /// company calendar creates (409 VIDEO_PROVIDER_NOT_CONNECTED on save); copied to the Meeting activity a booking
+  /// creates when its type offers video, so the calendar push asks for the link (P3-1). Zoom is never offered here.
+  videoMeeting        String?  @db.NVarChar(20)
   /// Shown to visitors above the times.
   note                String?  @db.NVarChar(1000)
   /// Weekly hours in BUSINESS_TIMEZONE: { "1": [{ "start": "09:00", "end": "13:00" }], … } (ISO weekday 1 = Monday).

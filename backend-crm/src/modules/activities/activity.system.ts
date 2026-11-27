@@ -81,6 +81,8 @@ export interface SystemActivityFields {
     endDay?: string | null;
     reminder?: string | null;
     location?: string | null;
+    /** Video meeting (P3-1): meet | teams; null = none; missing = keep (patch) / none (insert). Requested by the push. */
+    videoMeeting?: 'meet' | 'teams' | null;
     customerResponse?: string | null;
     remarks?: string | null;
     attendees?: AttendeeInput[];
