@@ -15,26 +15,13 @@ import {
     zodIfscOptional,
     zodPanOptional,
     zodAmount,
-    quantitySchema,
     customFieldsSchema,
     tallySerialNoOptional,
 } from './common';
+import { lineItemListSchema } from './lineItem.schema';
 
-export const opportunityLineItemSchema = z.object({
-    id: z.string(),
-    productId: optionalString,
-    productName: requiredString('Product Name'),
-    quantity: quantitySchema,
-    amount: zodAmount,
-    discount: zodAmount.default(0),
-    discountType: z.enum(['percentage', 'direct']).default('percentage'),
-    salePrice: zodAmount.default(0),
-    taxRate: z.string().default('18%'),
-    taxAmount: zodAmount.default(0),
-    total: zodAmount.default(0),
-    description: optionalText('Line item description', L.longText),
-    note: optionalText('Line item note', L.longText),
-});
+/** Same line items as quotations (Jira CRM-111): see lineItem.schema.ts. */
+export const opportunityLineItemsSchema = lineItemListSchema();
 
 /**
  * Only locked fields are required here (docs/field-locking-policy.md); the rest are required by the form
@@ -89,10 +76,8 @@ export const opportunityFormSchema = z.object({
     // The uploaded file (`{ id, fileName, … }`), or null.
     documentFile: z.custom<{ id: string; fileName: string; mimeType: string; sizeBytes: number; url: string } | null>((v) => v === null || v === undefined || isRecordFile(v)).nullish(),
 
-    // Line Items
-    currency: optionalString.default('Indian Rupee: ₹'),
-    groupName: optionalText('Group Name', L.shortText).default('Products & Services'),
-    lineItems: z.array(opportunityLineItemSchema).default([]),
+    // Line Items (no currency: it is set per quotation)
+    lineItems: opportunityLineItemsSchema.default([]),
     lumpSumDiscount: zodAmount.default(0),
     totalAmount: zodAmount.default(0),
     totalDiscount: zodAmount.default(0),

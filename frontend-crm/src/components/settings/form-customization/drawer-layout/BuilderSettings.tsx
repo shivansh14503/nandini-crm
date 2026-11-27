@@ -650,7 +650,7 @@ function BlockSettings({
             )}
             {block.type === 'totals' && (
                 <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)', lineHeight: 1.5 }}>
-                    Gross total, item and lump-sum discounts, subtotal, tax and the grand total of the record&apos;s line items.
+                    Gross amount, line and lump sum discounts, taxable amount, GST and the grand total of the record&apos;s line items.
                 </Typography>
             )}
             {block.type === 'divider' && <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)' }}>A thin line between the items above and below it.</Typography>}

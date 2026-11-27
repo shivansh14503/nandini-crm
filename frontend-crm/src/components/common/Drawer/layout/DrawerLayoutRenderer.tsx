@@ -10,7 +10,9 @@ import PlaceOutlinedIcon from '@mui/icons-material/PlaceOutlined';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
 import { getCountryNameByCode } from '@/data/addressMaster';
-import { useFormConfigs } from '@/hooks/queries/useFormConfigs';
+import { useDropdownOptionLabel, useFormConfigs } from '@/hooks/queries/useFormConfigs';
+import { currencyCodeOf, LINE_ITEM_LABELS, LINE_ITEM_TAX_RATE_CATEGORY, LINE_ITEM_TOTAL_LABELS, toLineItem } from '@/lib/line-items';
+import type { LineItem } from '@/types/lineItem.types';
 import { useDrawerLayouts } from '@/hooks/queries/useDrawerLayouts';
 import { LINE_ITEM_MODULES, pruneLayout, type DrawerBadge, type DrawerBlock, type DrawerLayoutDocument, type DrawerLayoutModule, type DrawerSection, type SectionStyle } from '@/lib/drawer-layout';
 import type { FormConfigsPayload } from '@/types/formConfig.types';
@@ -26,11 +28,11 @@ import type { TicketPriority, TicketStatus } from '@/types/ticket.types';
 import { DrawerChannelRow, DrawerCopyButton, DrawerSectionCard } from '../DrawerPrimitives';
 import { PrimaryTag } from '@/components/common/PrimaryTag';
 import { formatAddressLine } from '@/utils/address';
-import { fmtNumber, getDisplayFormats, useDisplayFormats } from '@/utils/formats';
+import { fmtMoney, fmtNumber, getDisplayFormats, useDisplayFormats } from '@/utils/formats';
 import type { DrawerBadgeItem } from '../types';
 import { avatarBackground, avatarContent } from './avatar';
 import { defaultLayoutFor } from './defaultLayouts';
-import { drawerAddressesFor, drawerFieldsFor, fieldDisplayEntries, fieldDisplayValues, formatRupees, isOn, rawFieldValue, type AddressDef, type DrawerFieldDef, type FieldDisplayEntry } from './drawerFields';
+import { drawerAddressesFor, drawerFieldsFor, fieldDisplayEntries, fieldDisplayValues, isOn, rawFieldValue, type AddressDef, type DrawerFieldDef, type FieldDisplayEntry } from './drawerFields';
 
 /**
  * Renders a drawer layout for a record: the header (title, subtitle, avatar, badges) and each tab's sections. The
@@ -487,36 +489,32 @@ function CustomFieldsBody({ ctx, columns, placeholder }: { ctx: LayoutCtx; colum
 
 // ─── Line items & totals (opportunities, quotations) ────────────────────────────
 
-interface LineItem {
-    id?: string;
-    productName?: string;
-    description?: string;
-    quantity?: number;
-    amount?: number;
-    discount?: number;
-    discountType?: string;
-    taxRate?: string;
-    taxAmount?: number;
-    total?: number;
-}
-
 const num = (value: unknown): number => (typeof value === 'number' && Number.isFinite(value) ? value : Number(value) || 0);
 
-/** A percentage discount: `12.5%` as stored until the company saves its formats, then in its grouping (≤ 3 decimals, as line items). */
-const formatPercent = (value: number): string => `${getDisplayFormats().customized ? fmtNumber(value, { maxDecimals: 3 }) : value}%`;
+/** A percentage discount: `12.5%` as stored until the company saves its formats, then in its grouping (≤ 2 decimals, as line items). */
+const formatPercent = (value: number): string => `${getDisplayFormats().customized ? fmtNumber(value, { maxDecimals: 2 }) : value}%`;
 
+/** The record's lines in the shared line item shape (Jira CRM-111; lines saved before it read as Rate / % / `18%`). */
 function lineItemsOf(ctx: LayoutCtx): LineItem[] {
     if (!LINE_ITEM_MODULES.includes(ctx.module)) return [];
     const items = ctx.record?.lineItems;
-    return Array.isArray(items) ? (items as LineItem[]) : [];
+    return Array.isArray(items) ? items.map((item) => toLineItem(item as Record<string, unknown>)) : [];
+}
+
+/** Amounts in the record's currency: quotations have one, opportunities are in ₹. */
+function moneyFor(ctx: LayoutCtx): (value: number) => string {
+    const currency = typeof ctx.record?.currency === 'string' ? ctx.record.currency : undefined;
+    const currencyCode = currencyCodeOf(currency);
+    return (value) => fmtMoney(value, { minDecimals: 0, maxDecimals: 2, currencyCode });
 }
 
 const smallLabelSx: SxProps<Theme> = { fontSize: '0.7rem', color: 'var(--mui-palette-text-secondary)' };
 
 function LineItemsBody({ block, ctx }: { block: Extract<DrawerBlock, { type: 'lineItems' }>; ctx: LayoutCtx }) {
     const items = lineItemsOf(ctx);
-    const group = typeof ctx.record?.groupName === 'string' ? ctx.record.groupName.trim() : '';
-    const currency = typeof ctx.record?.currency === 'string' ? ctx.record.currency.trim() : '';
+    const taxLabel = useDropdownOptionLabel(LINE_ITEM_TAX_RATE_CATEGORY);
+    const money = moneyFor(ctx);
+    const currency = ctx.module === 'quotations' && typeof ctx.record?.currency === 'string' ? ctx.record.currency.trim() : '';
     if (items.length === 0) {
         return (
             <Box sx={{ p: 2.5, textAlign: 'center', backgroundColor: 'var(--mui-palette-background-subtle)', borderRadius: '8px', border: '1px dashed var(--mui-palette-border-main)' }}>
@@ -526,11 +524,8 @@ function LineItemsBody({ block, ctx }: { block: Extract<DrawerBlock, { type: 'li
     }
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
-            {(group || currency) && (
-                <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
-                    <Typography sx={{ fontSize: '0.86rem', fontWeight: 700, color: 'var(--mui-palette-text-primary)' }}>{group || 'Products & Services'}</Typography>
-                    {currency && <Typography sx={{ fontSize: '0.74rem', color: 'var(--mui-palette-text-secondary)' }}>Currency: {currency}</Typography>}
-                </Box>
+            {currency && (
+                <Typography sx={{ fontSize: '0.74rem', color: 'var(--mui-palette-text-secondary)', textAlign: 'right' }}>Currency: {currency}</Typography>
             )}
             {items.map((item, idx) => (
                 <Box key={item.id || idx} sx={{ p: 1.5, borderRadius: '8px', border: '1px solid var(--mui-palette-border-main)', backgroundColor: 'var(--mui-palette-background-paper)' }}>
@@ -539,26 +534,33 @@ function LineItemsBody({ block, ctx }: { block: Extract<DrawerBlock, { type: 'li
                             <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--crm-slate-900)', wordBreak: 'break-word' }}>{item.productName || 'Item'}</Typography>
                             {item.description && <Typography sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)', mt: 0.3, lineHeight: 1.4 }}>{item.description}</Typography>}
                         </Box>
-                        <Typography sx={{ fontSize: '0.92rem', fontWeight: 800, color: 'var(--crm-green-700)', whiteSpace: 'nowrap' }}>{formatRupees(num(item.total))}</Typography>
+                        <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
+                            <Typography sx={smallLabelSx}>{LINE_ITEM_LABELS.taxableAmount}</Typography>
+                            <Typography sx={{ fontSize: '0.92rem', fontWeight: 800, color: 'var(--crm-green-700)', whiteSpace: 'nowrap' }}>{money(item.taxableAmount)}</Typography>
+                        </Box>
                     </Box>
-                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', sm: 'repeat(4, minmax(0, 1fr))' }, gap: 1, pt: 1, borderTop: '1px dashed var(--mui-palette-border-main)', fontSize: '0.75rem' }}>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', sm: 'repeat(5, minmax(0, 1fr))' }, gap: 1, pt: 1, borderTop: '1px dashed var(--mui-palette-border-main)', fontSize: '0.75rem' }}>
                         <Box>
-                            <Typography sx={smallLabelSx}>Qty</Typography>
-                            <Typography sx={{ fontSize: '0.78rem', fontWeight: 600 }}>{num(item.quantity)}</Typography>
+                            <Typography sx={smallLabelSx}>{LINE_ITEM_LABELS.quantity}</Typography>
+                            <Typography sx={{ fontSize: '0.78rem', fontWeight: 600 }}>{fmtNumber(item.quantity, { maxDecimals: 2 })}</Typography>
                         </Box>
                         <Box>
-                            <Typography sx={smallLabelSx}>Unit Price</Typography>
-                            <Typography sx={{ fontSize: '0.78rem', fontWeight: 600 }}>{formatRupees(num(item.amount))}</Typography>
+                            <Typography sx={smallLabelSx}>{LINE_ITEM_LABELS.rate}</Typography>
+                            <Typography sx={{ fontSize: '0.78rem', fontWeight: 600 }}>{money(item.rate)}</Typography>
                         </Box>
                         <Box>
-                            <Typography sx={smallLabelSx}>Discount</Typography>
-                            <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: num(item.discount) > 0 ? 'var(--mui-palette-error-main)' : undefined }}>
-                                {num(item.discount) > 0 ? (item.discountType === 'percentage' ? formatPercent(num(item.discount)) : formatRupees(num(item.discount))) : '—'}
+                            <Typography sx={smallLabelSx}>{LINE_ITEM_LABELS.grossAmount}</Typography>
+                            <Typography sx={{ fontSize: '0.78rem', fontWeight: 600 }}>{money(item.grossAmount)}</Typography>
+                        </Box>
+                        <Box>
+                            <Typography sx={smallLabelSx}>{LINE_ITEM_LABELS.discount}</Typography>
+                            <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: item.discount > 0 ? 'var(--mui-palette-error-main)' : undefined }}>
+                                {item.discount > 0 ? `${formatPercent(item.discount)} (− ${money(item.discountAmount)})` : '—'}
                             </Typography>
                         </Box>
                         <Box>
-                            <Typography sx={smallLabelSx}>Tax{item.taxRate ? ` (${item.taxRate})` : ''}</Typography>
-                            <Typography sx={{ fontSize: '0.78rem', fontWeight: 600 }}>{formatRupees(num(item.taxAmount))}</Typography>
+                            <Typography sx={smallLabelSx}>{LINE_ITEM_LABELS.taxRate}</Typography>
+                            <Typography sx={{ fontSize: '0.78rem', fontWeight: 600 }}>{item.taxRate ? taxLabel(item.taxRate) : '—'}</Typography>
                         </Box>
                     </Box>
                 </Box>
@@ -569,6 +571,7 @@ function LineItemsBody({ block, ctx }: { block: Extract<DrawerBlock, { type: 'li
 
 function TotalsBody({ ctx }: { ctx: LayoutCtx }) {
     const r = ctx.record ?? {};
+    const money = moneyFor(ctx);
     const row = (label: string, value: string, color?: string, strong = false) => (
         <Box key={label} sx={{ display: 'flex', justifyContent: 'space-between', gap: 1.5 }}>
             <Typography sx={{ fontSize: '0.82rem', color: 'var(--mui-palette-text-secondary)' }}>{label}</Typography>
@@ -577,15 +580,15 @@ function TotalsBody({ ctx }: { ctx: LayoutCtx }) {
     );
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-            {row('Gross Total', formatRupees(num(r.totalAmount)))}
-            {num(r.totalDiscount) > 0 && row('Item Discounts', `- ${formatRupees(num(r.totalDiscount))}`, 'var(--mui-palette-error-main)')}
-            {num(r.lumpSumDiscount) > 0 && row('Lump Sum Discount', `- ${formatRupees(num(r.lumpSumDiscount))}`, 'var(--mui-palette-error-main)')}
-            {row('Subtotal', formatRupees(num(r.subtotal)), 'var(--crm-slate-900)', true)}
-            {row('Tax', `+ ${formatRupees(num(r.totalTax))}`, 'var(--crm-text-blue-600)')}
+            {row(LINE_ITEM_TOTAL_LABELS.totalAmount, money(num(r.totalAmount)))}
+            {num(r.totalDiscount) > 0 && row(LINE_ITEM_TOTAL_LABELS.totalDiscount, `− ${money(num(r.totalDiscount))}`, 'var(--mui-palette-error-main)')}
+            {row(LINE_ITEM_TOTAL_LABELS.subtotal, money(num(r.subtotal)), 'var(--crm-slate-900)', true)}
+            {row(LINE_ITEM_TOTAL_LABELS.totalTax, `+ ${money(num(r.totalTax))}`, 'var(--crm-text-blue-600)')}
+            {num(r.lumpSumDiscount) > 0 && row(LINE_ITEM_TOTAL_LABELS.lumpSumDiscount, `− ${money(num(r.lumpSumDiscount))}`, 'var(--mui-palette-error-main)')}
             <Box sx={{ height: '1px', backgroundColor: 'var(--mui-palette-border-strong)', my: 0.5 }} />
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1.5 }}>
-                <Typography sx={{ fontSize: '0.94rem', fontWeight: 800, color: 'var(--crm-slate-900)' }}>Grand Total</Typography>
-                <Typography sx={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--crm-green-700)', whiteSpace: 'nowrap' }}>{formatRupees(num(r.grandTotal))}</Typography>
+                <Typography sx={{ fontSize: '0.94rem', fontWeight: 800, color: 'var(--crm-slate-900)' }}>{LINE_ITEM_TOTAL_LABELS.grandTotal}</Typography>
+                <Typography sx={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--crm-green-700)', whiteSpace: 'nowrap' }}>{money(num(r.grandTotal))}</Typography>
             </Box>
         </Box>
     );
