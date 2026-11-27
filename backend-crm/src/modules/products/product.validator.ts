@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import { FIELD_MAX_LENGTH as L } from '../../config/fieldLimits.js';
 import {
-    booleanQuery,
     createdWithinDaysQuery,
     csvQuery,
     customFieldsSchema,
@@ -15,6 +14,17 @@ import {
 // Option lists from frontend-crm/src/types/product.types.ts (Product Category is open-ended there).
 export const PRODUCT_TYPES = ['Product', 'Service', 'Bundle', 'Subscription', 'License', 'Other'] as const;
 export const TAX_RATES = ['0%', '5%', '12%', '18%', '28%'] as const;
+
+/** The fixed `product_status` options. Only Admins change a product's Status; only Active products go on new line items. */
+export const PRODUCT_STATUSES = ['Active', 'Inactive'] as const;
+export type ProductStatus = (typeof PRODUCT_STATUSES)[number];
+export const ACTIVE_PRODUCT_STATUS: ProductStatus = 'Active';
+export const INACTIVE_PRODUCT_STATUS: ProductStatus = 'Inactive';
+/** Longest Inactivity Reason (the Organizations one has the same limit). */
+export const INACTIVITY_REASON_MAX_LENGTH = 500;
+/** Whether a stored status is Active (ignoring case and spaces, as the default SQL Server collation compares). */
+export const isActiveProductStatus = (status: string | null | undefined): boolean =>
+    (status ?? '').trim().toLowerCase() === ACTIVE_PRODUCT_STATUS.toLowerCase();
 
 /** `ProductFormData` (frontend-crm/src/validations/product.schema.ts) plus numeric checks on the price strings. */
 export const productInputSchema = z
@@ -36,7 +46,9 @@ export const productInputSchema = z
         contractCreate: enumWithDefault('Contract Create', ['Yes', 'No'], 'No'),
         description: optionalText('Description', L.longText),
         termsAndConditions: optionalText('Terms and Conditions', L.longText),
-        isActive: z.boolean().default(true),
+        status: enumWithDefault('Status', PRODUCT_STATUSES, ACTIVE_PRODUCT_STATUS),
+        /** Asked when a product is made Inactive; stored with the date and the admin (product.service.ts). */
+        inactivityReason: optionalText('Inactivity Reason', INACTIVITY_REASON_MAX_LENGTH),
         customFields: customFieldsSchema,
     })
     .superRefine((product, ctx) => {
@@ -57,7 +69,7 @@ export const manufacturerQuerySchema = z.object({
 export const productListQuerySchema = z.object({
     productCategory: csvQuery,
     type: csvQuery,
-    isActive: booleanQuery,
+    status: csvQuery,
     createdWithinDays: createdWithinDaysQuery,
     /** `used`: on at least one opportunity line item the viewer can see; `unused`: on none (product.usage.ts). */
     usage: z.enum(['used', 'unused']).optional(),

@@ -24,7 +24,8 @@ export const SYSTEM_FIELDS: Record<DrawerLayoutModule, readonly string[]> = {
     organizations: ['accountCode', 'accountVerified', 'activeAmc', 'activeCloud'],
     opportunities: ['opportunityCode', 'grandTotal', 'description'],
     quotations: ['quotationCode', 'grandTotal'],
-    products: ['productCode'],
+    // Set while a product is Inactive (Status): when, why and by whom.
+    products: ['productCode', 'inactiveSince', 'inactivityReason', 'inactivatedBy'],
     tickets: ['ticketNumber', 'amcFlag', 'cloudFlag'],
     contracts: ['contractNumber'],
     'partner-companies': [],

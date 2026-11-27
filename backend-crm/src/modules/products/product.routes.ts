@@ -5,11 +5,12 @@ import { productController } from './product.controller.js';
 
 /**
  * /api/products
- *   GET    /             ?page&limit&search&sortBy&sortOrder&productCategory&type&isActive&createdWithinDays
+ *   GET    /             ?page&limit&search&sortBy&sortOrder&productCategory&type&status&usage&createdWithinDays
  *   GET    /manufacturers ?search&limit → { name, products }[] (manufacturers of live products, A to Z)
  *   GET    /:id
  *   POST   /
- *   PUT    /:id          (partial; PATCH is an alias)
+ *   PUT    /:id          (partial; PATCH is an alias). Changing `status` is Admin only (403); Inactive needs
+ *                         `inactivityReason` (400); inactiveSince / inactivatedBy are set by the server
  *   DELETE /:id          (soft delete)
  *   POST   /bulk-delete  { ids }
  */

@@ -13,7 +13,7 @@ import { type FormTabDefinition } from '../common/Drawer';
 import { ROUTES } from '@/config/constants';
 import { setSaveFlash } from '@/utils/saveFlash';
 import { productFormSchema } from '@/validations';
-import type { ProductFormData } from '@/types/product.types';
+import { ACTIVE_PRODUCT_STATUS, type ProductFormData } from '@/types/product.types';
 import { productService } from '@/services';
 import { useProductManufacturers } from '@/hooks/queries/useProducts';
 import { PRODUCT_CATEGORIES } from '@/types/lead.types';
@@ -36,6 +36,7 @@ import {
 import { FormConfigProvider } from '@/context/FormConfigContext';
 import { DynamicModuleCustomFields } from '@/components/forms/DynamicModuleCustomFields';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
+import { ProductStatusSection, type SavedProductStatus } from './ProductStatusSection';
 
 // ─── Option Lists ──────────────────────────────────────────────────────────────
 // Fallbacks only: inside the FormConfigProvider every dropdown offers the admin's options. Product Category is the
@@ -67,6 +68,8 @@ const DEFAULT_FORM: ProductFormData = {
     contractCreate: 'No',
     description: '',
     termsAndConditions: '',
+    status: ACTIVE_PRODUCT_STATUS,
+    inactivityReason: '',
 };
 
 // ─── Single Source of Truth for Product Form Tabs ─────────────────────────────
@@ -106,6 +109,8 @@ export default function ProductForm({
     const { isDirty, isSubmitting } = formState;
     const productName = watch('productName');
     const [recordCode, setRecordCode] = useState('');
+    // The saved Status (with Inactive Since and who set it), shown by the Status section.
+    const [savedStatus, setSavedStatus] = useState<SavedProductStatus | null>(null);
     const showNumber = useShowRecordNumber();
     // Only the editable form offers suggestions.
     const { data: manufacturers, isLoading: manufacturersLoading } = useProductManufacturers(mode !== 'view');
@@ -139,6 +144,7 @@ export default function ProductForm({
                 if (active && found) {
                     reset({ ...DEFAULT_FORM, ...found });
                     setRecordCode(found.productCode ?? '');
+                    setSavedStatus({ status: found.status, inactiveSince: found.inactiveSince, inactivatedBy: found.inactivatedBy });
                 }
             })
             .catch(() => {})
@@ -334,6 +340,8 @@ export default function ProductForm({
                             />
                         </FormGridItem>
                     </FormGrid>
+                    {/* A new product starts Active: the Status is changed when editing (Admins only). */}
+                    {mode !== 'create' && <ProductStatusSection saved={savedStatus} />}
                     <DynamicModuleCustomFields module="products" tabKey="overview" sx={{ px: 0, pb: 0, mt: 3.5 }} />
                 </CommonFormLayout>
             </FormConfigProvider>

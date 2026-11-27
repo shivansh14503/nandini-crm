@@ -5,7 +5,7 @@ import { distinctFieldLabels, findCategory, formatCustomValue, isBuiltInCountryF
 import { formatPhoneDisplay } from '@/utils/phone';
 import { findCrmUser } from '@/services/masterData.store';
 import { isPrimaryEntry, primaryFirst } from '@/utils/primaryFirst';
-import { fmtDay, fmtMoney, fmtTime, getDisplayFormats } from '@/utils/formats';
+import { fmtDay, fmtInstantDay, fmtMoney, fmtTime, getDisplayFormats } from '@/utils/formats';
 
 /**
  * The values a drawer layout can show for a module: the form's active fields (built-in and custom, labelled so no
@@ -40,6 +40,9 @@ const SYSTEM_FIELD_DEFS: Record<string, { label: string; type: FieldType }> = {
     quotationCode: { label: 'Quotation Code', type: 'text' },
     grandTotal: { label: 'Grand Total', type: 'amount' },
     productCode: { label: 'Product Code', type: 'text' },
+    inactiveSince: { label: 'Inactive Since', type: 'date' },
+    inactivityReason: { label: 'Inactivity Reason', type: 'textarea' },
+    inactivatedBy: { label: 'Made Inactive By', type: 'text' },
     ticketNumber: { label: 'Ticket Number', type: 'text' },
     contractNumber: { label: 'Contract Number', type: 'text' },
     amcFlag: { label: 'AMC', type: 'checkbox' },
@@ -98,8 +101,11 @@ export function rawFieldValue(record: AnyRecord | null | undefined, def: DrawerF
     return record[def.key];
 }
 
+/** A full ISO timestamp with its zone ('2026-11-27T09:35:44.000Z'), not a plain day or wall clock. */
+const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})$/;
+
 /** Fields that store a CRM username (Assigned to, an opportunity's Lead Given By). */
-const USER_FIELD_KEYS = new Set(['assignedTo', 'leadGivenBy']);
+const USER_FIELD_KEYS = new Set(['assignedTo', 'leadGivenBy', 'inactivatedBy']);
 
 /** 125000 → '₹1,25,000' (up to 2 decimals, company number grouping). */
 export const formatRupees = (value: number): string => fmtMoney(value, { minDecimals: 0, maxDecimals: 2 });
@@ -151,7 +157,8 @@ export function fieldDisplayEntries(record: AnyRecord | null | undefined, def: D
         const text = typeof value === 'string' ? value : String(value);
         if (def.type === 'phone') return formatPhoneDisplay(text) || text;
         if (def.form && isBuiltInCountryField(def.form)) return getCountryNameByCode(text) || text;
-        if (def.type === 'date') return formatDay(text);
+        // A date stored as an instant (a product's Inactive Since) reads as its day on the business clock.
+        if (def.type === 'date') return ISO_INSTANT.test(text) ? fmtInstantDay(text) : formatDay(text);
         if (def.type === 'datetime') {
             // The time is either a paired field (nextFollowupTime) or part of the value itself (dueDate, renewalReminderDate: 'YYYY-MM-DDTHH:mm').
             const paired = record?.[def.key.replace(/Date$/, 'Time')];

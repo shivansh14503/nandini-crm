@@ -14,6 +14,7 @@ import { codeSearchPrefix } from '../shared/searchTerms.js';
 import { acquireLocks, assertDeletedRow, lockRecords, restoreData, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { loadProductUsage, usageOf, usedProductWhere } from './product.usage.js';
 import { toProductData, toProductDto, type ProductDto } from './product.mapper.js';
+import { productStatusData } from './product.status.js';
 import { manufacturerQuerySchema, PRODUCT_SORT_FIELDS, productInputSchema, productListQuerySchema, type ProductInput } from './product.validator.js';
 
 const notFound = () => HttpError.notFound('Product not found');
@@ -45,7 +46,7 @@ export async function createProductRecord(tx: TransactionClient, input: ProductI
     // Code first: its counter row lock queues concurrent creates before they take any other lock.
     const productCode = await generateEntityCode(tx, 'PRD');
     await assertUniqueName(tx, input.productName);
-    const row = await tx.product.create({ data: { ...toProductData(input), productCode, createdBy: actor.username } });
+    const row = await tx.product.create({ data: { ...toProductData(input), ...productStatusData(input, null, actor), productCode, createdBy: actor.username } });
     const dto = toProductDto(row);
     await auditService.record(tx, { entityType: 'Product', entityId: row.id, action: 'CREATE', changedBy: actor.username, changes: dto });
     return dto;
@@ -69,7 +70,7 @@ export const productService = {
         const where: Prisma.ProductWhereInput = { isDeleted: false };
         if (filters.productCategory?.length) where.productCategory = { in: filters.productCategory };
         if (filters.type?.length) where.type = { in: filters.type };
-        if (filters.isActive !== undefined) where.isActive = filters.isActive;
+        if (filters.status?.length) where.status = { in: filters.status };
         if (filters.createdWithinDays) where.createdAt = { gte: daysAgo(filters.createdWithinDays) };
         if (filters.usage === 'used') Object.assign(where, usedProductWhere(user));
         if (filters.usage === 'unused') where.NOT = usedProductWhere(user);
@@ -145,7 +146,8 @@ export const productService = {
             });
             // Renaming isn't checked against other products' names (Jira CRM-108); only a new product's name is.
 
-            const row = await tx.product.update({ where: { id }, data: { ...toProductData(input), updatedBy: actor.username } });
+            const status = productStatusData(input, existing, actor);
+            const row = await tx.product.update({ where: { id }, data: { ...toProductData(input), ...status, updatedBy: actor.username } });
             const after = toProductDto(row);
             const changes = diffRecords(before, after);
             if (Object.keys(changes).length > 0) {

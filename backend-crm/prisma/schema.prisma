@@ -573,7 +573,13 @@ model Product {
   contractCreate     String   @default("No") @db.NVarChar(3)
   description        String?  @db.NVarChar(2000)
   termsAndConditions String?  @db.NVarChar(2000)
-  isActive           Boolean  @default(true)
+  /// Option of the fixed `product_status` dropdown: Active / Inactive. Only Admins change it; only Active products are
+  /// offered in the opportunity / quotation line items (lines that already carry an inactive product keep it).
+  status             String   @default("Active") @db.NVarChar(30)
+  /// Set while Inactive (cleared on reactivation): the reason the admin gave, when and by whom (username).
+  inactivityReason   String?  @db.NVarChar(500)
+  inactiveSince      DateTime?
+  inactivatedBy      String?  @db.NVarChar(50)
 
   /// Admin-defined custom field values `{ [fieldKey]: value }` (see FormFieldDefinition) as JSON.
   customDataJson String? @db.NVarChar(Max)
@@ -592,6 +598,7 @@ model Product {
   @@index([manufacturer])
   @@index([productCategory])
   @@index([isDeleted, createdAt])
+  @@index([status])
 }
 
 // â”€â”€ Opportunities â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

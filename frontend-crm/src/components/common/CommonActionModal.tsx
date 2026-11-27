@@ -24,6 +24,8 @@ export interface CommonActionModalProps {
     reasonPlaceholder?: string;
     required?: boolean;
     presetReasons?: string[];
+    /** Longest reason accepted (characters); shows a counter. No limit when left out. */
+    maxLength?: number;
     confirmLabel?: string;
     cancelLabel?: string;
     confirmColor?: 'error' | 'warning' | 'primary';
@@ -50,6 +52,7 @@ export function CommonActionModal({
     reasonPlaceholder = 'Enter a reason...',
     required = true,
     presetReasons = [],
+    maxLength,
     confirmLabel = 'Confirm',
     cancelLabel = 'Cancel',
     confirmColor = 'primary',
@@ -134,7 +137,8 @@ export function CommonActionModal({
                     placeholder={reasonPlaceholder}
                     value={reason}
                     required={required}
-                    onChange={(e) => setReason(e.target.value)}
+                    onChange={(e) => setReason(maxLength ? e.target.value.slice(0, maxLength) : e.target.value)}
+                    slotProps={maxLength ? { htmlInput: { maxLength } } : undefined}
                     onKeyDown={(e) => {
                         if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                             e.preventDefault();
@@ -142,7 +146,16 @@ export function CommonActionModal({
                         }
                     }}
                     error={showError}
-                    helperText={showError ? `${reasonLabel} is required.` : 'Press Enter to confirm, Shift+Enter for a new line.'}
+                    helperText={
+                        <Box component="span" sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
+                            <span>{showError ? `${reasonLabel} is required.` : 'Press Enter to confirm, Shift+Enter for a new line.'}</span>
+                            {maxLength ? (
+                                <span>
+                                    {reason.length}/{maxLength}
+                                </span>
+                            ) : null}
+                        </Box>
+                    }
                 />
             </DialogContent>
 

@@ -6,6 +6,7 @@ import { normalizePlaceName } from '../../utils/cityMaster.js';
 import { booleanQuery } from '../../validators/common.js';
 import { businessToday } from '../../validators/notInPast.js';
 import { OUT_OF_OFFICE_SELECT, outOfOfficeOf, type OutOfOfficeColumns, type OutOfOfficeDto } from '../preferences/preferences.dto.js';
+import { ACTIVE_PRODUCT_STATUS } from '../products/product.validator.js';
 import { photoUrlOf } from '../profile/profile.dto.js';
 
 /**
@@ -254,7 +255,8 @@ export const lookupService = {
         const load = async () => {
             const where: Prisma.ProductWhereInput = {
                 isDeleted: false,
-                isActive: true,
+                // Only Active products can be picked (line items keep an inactive product they already have).
+                status: ACTIVE_PRODUCT_STATUS,
                 ...(productCategory ? { productCategory } : {}),
                 ...withSearch(search, [
                     { productName: { contains: search } },

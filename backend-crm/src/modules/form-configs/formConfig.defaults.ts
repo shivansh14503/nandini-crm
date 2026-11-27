@@ -8,7 +8,7 @@ import { ACTIVITY_REMINDERS, ACTIVITY_STATUSES } from '../activities/activity.sc
  * hand-built forms render; `fieldKey` is the React Hook Form name, so overrides apply to the matching control.
  *
  * Yes / No dropdowns (Left Job, Contract Create, Add Document, Commission), the activity Status and Reminder, and the
- * referral Status (Active / Inactive) have built-in lists like every other dropdown, but with fixed options
+ * referral and product Status (Active / Inactive) have built-in lists like every other dropdown, but with fixed options
  * (FIXED_OPTION_CATEGORY_KEYS): the API only accepts those values. The organization's Provide Support switch stays a fixed toggle.
  */
 
@@ -147,6 +147,8 @@ export const APP_REQUIRED_CATEGORY_KEYS: ReadonlySet<string> = new Set([
     // The calendar filters and the activity drawer read them by key.
     'activity_status',
     'activity_reminder',
+    // The Products list pills (one per Status option) and the Status field read it by key.
+    'product_status',
 ]);
 
 /**
@@ -163,6 +165,7 @@ export const FIXED_OPTION_CATEGORY_KEYS: ReadonlySet<string> = new Set([
     'activity_status',
     'activity_reminder',
     'referral_status',
+    'product_status',
 ]);
 
 /**
@@ -660,6 +663,14 @@ export const DEFAULT_CATEGORIES: DefaultCategory[] = [
     { key: 'product_contract_create', label: 'Contract Create', module: 'products', description: 'Fixed options: Yes / No.', options: yesNo('Yes') },
     { key: 'product_type', label: 'Product Type', module: 'products', options: ['Product', 'Service', 'Bundle', 'Subscription', 'License', 'Other'] },
     { key: 'product_tax_rate', label: 'Tax Rate', module: 'products', options: ['0%', '5%', '12%', '18%', '28%'] },
+    {
+        key: 'product_status',
+        label: 'Status',
+        module: 'products',
+        description:
+            'Fixed options: Active / Inactive. Only Admins change it, giving a reason for Inactive; only Active products are offered in opportunity and quotation line items.',
+        options: withSystem(['Active', 'Inactive'], ['Active', 'Inactive']),
+    },
 
     // ── Tickets ──
     {
@@ -780,6 +791,7 @@ export const DEFAULT_SELECTED_OPTIONS: Readonly<Record<string, readonly string[]
     activity_status: ['Planned'],
     activity_reminder: ['15 minutes before'],
     referral_status: ['Active'],
+    product_status: ['Active'],
 };
 
 // ── Built-in field definitions ───────────────────────────────────────────────
@@ -1054,6 +1066,9 @@ const RAW_DEFAULT_FIELDS: DefaultField[] = [
         t('description', 'Description', { type: 'textarea' }),
         t('termsAndConditions', 'Terms and Conditions', { type: 'textarea' }),
     ]),
+    // Admin only (edit form); Inactive asks for a reason. Inactive Since and the reason are set by the system: drawer
+    // and view page values ("Set by the system"), not form inputs. Locked: the line item pickers depend on it.
+    ...section('products', 'overview', 'Status', [sel('status', 'Status', 'product_status', { lock: true })]),
 
     // ── Tickets ──
     ...section('tickets', 'overview', 'Ticket Details', [
