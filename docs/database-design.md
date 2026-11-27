@@ -1,7 +1,7 @@
 # Nandini CRM — Database Design
 
-> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (94 migrations,
-> latest `20261215110000_recurring_activities`, Calendar Phase 4 recurring activities, as of 2026-11-27; before it `20261215100000_activity_conference`, Calendar Phase 3 P3-1 video meetings; before that `20261215090000_calendar_watch_channels`, Calendar Phase 2 P2-7 webhooks; before that `20261128120000_booking_links`, Calendar Phase 4 booking links; before that `20261128100000_activity_calendar_sync`, Calendar Phase 2 P2-3b, whose columns P2-3c (first-sync backfill) and P2-5 (calendar → CRM pull) use without a migration of their own; P2-6 busy times needed no migration (it reads `Activity` through the existing `[isDeleted, startAt]` index and stores nothing); P2-8 customer meetings from the calendar and replies both ways needed none either (as of 2026-11-27: it writes imported activities into the existing `Activity` organizer / `syncKey` columns, `attendee` rows of `ActivityExternalLink` (`baseJson` `{ self, mine? }`: the reply last agreed with the calendar, and the CRM reply of the owner of a meeting organized outside the CRM) and reads `CalendarSyncUser.importMeetings`; a meeting organized outside the CRM keeps the organizer's `ready` join link in the P3-1 conference columns, read only, and never gets a `seriesId`). Update it in the same change as any schema migration.
+> **Status:** living document, generated from `backend-crm/prisma/schema.prisma` and `prisma/migrations/` (95 migrations,
+> latest `20261216100000_email_logging`, Calendar Phase 4 email logging, as of 2026-11-27 with its review fixes; before it `20261215110000_recurring_activities`, Calendar Phase 4 recurring activities; before that `20261215100000_activity_conference`, Calendar Phase 3 P3-1 video meetings; before that `20261215090000_calendar_watch_channels`, Calendar Phase 2 P2-7 webhooks; before that `20261128120000_booking_links`, Calendar Phase 4 booking links; before that `20261128100000_activity_calendar_sync`, Calendar Phase 2 P2-3b, whose columns P2-3c (first-sync backfill) and P2-5 (calendar → CRM pull) use without a migration of their own; P2-6 busy times needed no migration (it reads `Activity` through the existing `[isDeleted, startAt]` index and stores nothing); P2-8 customer meetings from the calendar and replies both ways needed none either (as of 2026-11-27: it writes imported activities into the existing `Activity` organizer / `syncKey` columns, `attendee` rows of `ActivityExternalLink` (`baseJson` `{ self, mine? }`: the reply last agreed with the calendar, and the CRM reply of the owner of a meeting organized outside the CRM) and reads `CalendarSyncUser.importMeetings`; a meeting organized outside the CRM keeps the organizer's `ready` join link in the P3-1 conference columns, read only, and never gets a `seriesId`). Update it in the same change as any schema migration.
 > Related: [System design](system-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
 ---
@@ -947,6 +947,63 @@ token's expiry and the busy check, as of 2026-11-26), `createdAt`. Indexes
 `(bookingLinkId, createdAt)` (the management list, newest first). Kept with the link (no purge yet; visitor details are
 also on the activity as an attendee and in its remarks).
 
+### 4.33 `LoggedEmail`, `LoggedEmailCopy`, `LoggedEmailLink`, `LoggedEmailMailbox` (email logging, Calendar Phase 4)
+
+Migration `20261216100000_email_logging` (as of 2026-11-27, with the review fixes; new tables only, no existing data changes; hand-written,
+identical to `prisma migrate diff` for these tables plus the filtered index below). Module
+`backend-crm/src/modules/email-log`; see [system design §5.5](system-design.md). Named `LoggedEmail*` because `EmailLog`
+is the outgoing-mail delivery log (§4.26). Company settings live in `ModuleSetting (activities, emailLogging)`
+`{ enabled, defaultForPeople, visibility, retentionMonths, storeSnippets, enabledAt, defaultOnAt }` (no row = off, off,
+restricted, 24, true, null, null; the two ISO stamps are written by the server when the switch / the default for people
+turns on and bound the logging start).
+No FKs to users or records (usernames and record ids, as everywhere); FKs inside the group cascade from `LoggedEmail`.
+
+`LoggedEmail`: one email, stored **once per RFC Message-ID** whichever employees' mailboxes hold it. Not audited.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | NVARCHAR(50) PK | uuid |
+| `messageIdHash` | NVARCHAR(64) NULL | sha256 hex of the trimmed Message-ID + `\n` + the lower-cased sender (the header is sender-controlled, so a reused id from another sender is another email); **filtered UNIQUE** `UX_LoggedEmail_messageIdHash` `WHERE messageIdHash IS NOT NULL` (hand-written; decides concurrent inserts, D45). NULL when the mail has no Message-ID, or when a row with the same hash has a sent time more than 48 h apart (stored as its own email, not merged) |
+| `threadId` | NVARCHAR(200) NULL | Provider thread / conversation id of the first copy |
+| `subject` | NVARCHAR(300) | `(no subject)` when empty; one line |
+| `fromEmail` / `fromName` | NVARCHAR(254) / NVARCHAR(200) NULL | |
+| `toJson` / `ccJson` | NVARCHAR(4000) | JSON `[{ email, name? }]`, ≤ 25 addresses kept across both, never Bcc |
+| `moreRecipients` | INT, default 0 | Addresses not kept |
+| `sentAt` | DATETIME2 | Received time for received mail (Gmail `internalDate`, Graph `receivedDateTime`), sent time for the employee's sent mail; capped at ingestion time + 5 min (a forged future Date header can't escape retention) |
+| `direction` | NVARCHAR(3) | `in` / `out` (sender on a company domain) |
+| `snippet` | NVARCHAR(500) NULL | Plain text only (entities decoded, tags / control characters stripped); NULL with "Keep a short snippet" off (turning it off clears the stored ones in bounded batches, and the API never returns one while it is off) |
+| `hasAttachments` | BIT | Flag only; attachments are never stored |
+| `provider` | NVARCHAR(30) | `google` / `microsoft` / `fake` of the first copy |
+| `ownerUsername` | NVARCHAR(50) | Mailbox of the first copy |
+| `createdAt` | DATETIME2 | |
+
+Indexes `(sentAt)` (retention), `(ownerUsername)`.
+
+`LoggedEmailCopy`: one mailbox that holds the email. `id`, `emailId` (FK → `LoggedEmail`, CASCADE), `username`,
+`provider`, `providerMessageId` (NVARCHAR(300)), `providerThreadId` (NVARCHAR(200) NULL), `webLink` (NVARCHAR(1000) NULL,
+Graph's link; Gmail's is built from the id), `direction`, `addressed` (BIT, default 0: the mailbox's address is the
+sender or in To / Cc, or it is the sender's copy; 0 = received as Bcc or through a list, so it is listed as a participant
+only to that employee), `createdAt`. **UNIQUE** `(username, providerMessageId)` (a
+re-run never doubles a copy); index `(emailId)`. Visibility `restricted` reads "the caller holds a copy" from here.
+
+`LoggedEmailLink`: one CRM record the email shows on. `id`, `emailId` (FK → `LoggedEmail`, CASCADE), `module`
+(NVARCHAR(20): `contacts` / `leads` / `opportunities`), `recordId` (NVARCHAR(50)), `matchedEmail` (NVARCHAR(120) NULL, the
+address that matched; for an opportunity, its contact's address), `sentAt` (copied for the list order),
+`createdAt`. **UNIQUE** `(emailId, module, recordId)`; index `(module, recordId, sentAt)` answers a record's Emails tab
+newest first.
+
+`LoggedEmailMailbox`: per employee, the admin's switch and the ingestion state. `username` PK; `mode` (NVARCHAR(10) NULL:
+`on` / `off` / NULL = company default), `modeUpdatedBy`, `modeUpdatedAt`; `provider`, `accountEmail` (NVARCHAR(254), the
+mailbox read); `cursorJson` (NVARCHAR(MAX): Gmail `{ historyId }`, Graph `{ inbox, sent }` delta links, fake
+`{ position }`); `status` (default `idle`; `ok` / `error`), `errorLevel` (`user` / `app`), `lastErrorCode`
+(NVARCHAR(50)), `lastErrorMessage` (NVARCHAR(300), admin text), `lastErrorAt`, `consecutiveFailures`; `lastRunAt`,
+`lastSuccessAt`, `nextRunAt`; `loggedCount`; `loggingSince` (DATETIME2 NULL: when the person's effective switch last
+turned on; mail from before max(`loggingSince`, `purgedAt`, the company `enabledAt`, and `defaultOnAt` for people on the
+default) is never logged); `leaseId` / `leaseUntil` (one run per mailbox; a purge takes it too); `purgedAt` / `purgedBy`;
+`createdAt`, `updatedAt`. Index `(status, nextRunAt)`. Audited: `LoggedEmailMailbox` CREATE / UPDATE (the mode) and PURGE
+(module `admin-integrations`). A new table rather than a `CalendarSyncUser` column, so it doesn't touch the calendar
+choice rows.
+
 ## 5. Index strategy
 
 - **Scoped list composites** `(isDeleted, assignedTo, createdAt)` match the most common query: "live records I own or
@@ -980,6 +1037,11 @@ also on the activity as an attendee and in its remarks).
   index 64-character sha256 keys because the providers' ids (up to 1,024 characters) would exceed SQL Server's
   1,700-byte index key limit.
 
+- **Email logging** (Calendar Phase 4, as of 2026-11-26): `LoggedEmailLink (module, recordId, sentAt)` serves the
+  record's Emails tab with a seek and an ordered range; `UX_LoggedEmail_messageIdHash` indexes the 64-character sha256 of
+  the Message-ID (ids can be long) and is filtered so mail without one doesn't collide; `LoggedEmail (sentAt)` bounds the
+  nightly retention delete.
+
 ## 6. Data lifecycle
 
 | Event | Effect in the database |
@@ -1006,6 +1068,9 @@ also on the activity as an attendee and in its remarks).
 | Booking link saved | App lock (`booking:links:<owner>` on create, `booking:link:<id>` on change) → INSERT / UPDATE `BookingLink` → `AuditLog`; `cache:booking-link:<slug>` dropped after commit |
 | Calendar webhook channel (P2-7) | No transaction: the provider's watch call, then INSERT `CalendarWatchChannel` (`active`, or `failed` when refused); an insert that fails after the provider created the channel stops it there. Renewal UPDATEs `expiresAt` (Graph) or inserts the new row before marking the old `stopped` (Google). A stopped connection row marks its channels `stopped` after the enrolment transaction commits, then stops them at the provider |
 | People calendar choice | Upsert / delete `CalendarSyncUser` → `AuditLog` → reconcile the person after commit |
+| Email logged (Calendar Phase 4) | No transaction (D45): claim the mailbox lease (UPDATE … WHERE lease free, or INSERT) → per message: INSERT `LoggedEmail` (a `P2002` on `UX_LoggedEmail_messageIdHash` reads the winner) → INSERT `LoggedEmailCopy` / `LoggedEmailLink` (a `P2002` = already there) → cursor, health and lease release in one UPDATE |
+| Email logging switch / purge (Admin) | Mode: transaction upsert `LoggedEmailMailbox` (`loggingSince` when it turns on, `cursorJson = NULL` when it turns off) + `AuditLog` CREATE / UPDATE. Settings: the form-config write, then (switch / default off) one `UPDATE … SET cursorJson = NULL`, (snippets off) bounded `UPDATE … SET snippet = NULL` batches. Purge: one upsert taking the lease + `purgedAt` + `cursorJson = NULL`, bounded deletes of the person's copies and of emails left without a copy (outside a transaction), lease release, then `AuditLog` PURGE. A run overtaken by the purge deletes its own copies (same bounded delete) |
+| Email retention (00:25 nightly) | Bounded deletes (≤ 20 × 500) of `LoggedEmail` older than the retention months, then of emails without a copy for 24 h (≤ 4 × 500), then, while snippets are off, `snippet = NULL` (≤ 20 × 500); copies and links cascade |
 
 ## 7. Migrations and seeding
 
@@ -1019,7 +1084,8 @@ also on the activity as an attendee and in its remarks).
   `UX_CalendarConnection_account`; `UX_Activity_openFollowUp` of `20261127130000_followup_activities`;
   `UX_ActivityExternalLink_event` and `UX_Activity_syncKey` of `20261128100000_activity_calendar_sync`, the latter
   created through `sp_executesql` because its column is added in the same batch); `UX_Activity_seriesOccurrence` of
-  `20261215110000_recurring_activities` (also through `sp_executesql`). `20261127090000_calendar_connections`
+  `20261215110000_recurring_activities` (also through `sp_executesql`); `UX_LoggedEmail_messageIdHash` of
+  `20261216100000_email_logging`, created through `EXEC` after its table. `20261127090000_calendar_connections`
   also lower-cases `Users.email` and stops (THROW 50001, rolled back) when two active non-group users share an
   address: run `npm run calendar:check-emails` before deploying; after a stop, fix the users, run
   `npx prisma migrate resolve --rolled-back 20261127090000_calendar_connections` and deploy again.

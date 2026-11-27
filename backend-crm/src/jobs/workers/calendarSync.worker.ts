@@ -22,6 +22,8 @@ import { checkConference, markConferenceExhausted } from '../../modules/calendar
 import { pollCron } from '../../modules/calendar-sync/syncHours.js';
 import { pullAgainIfNotified } from '../../modules/calendar-sync/webhook.service.js';
 import { writeWorkerHeartbeat } from '../../modules/calendar-sync/workerHeartbeat.js';
+import { EMAIL_LOG_JOB } from '../../modules/email-log/emailLog.constants.js';
+import { runEmailLogJob } from '../../modules/email-log/emailLog.ingest.js';
 import { runWithAuditOrigin } from '../../services/auditContext.js';
 import { calendarSyncQueue, createQueueConnection, isQueueAvailable, QUEUE_NAMES } from '../queues.js';
 import { throttledLogger } from './throttledLogger.js';
@@ -43,10 +45,12 @@ import { throttledLogger } from './throttledLogger.js';
  *   poll      scheduler 'calendar-poll', every CALENDAR_POLL_MINUTES (5) inside CALENDAR_SYNC_HOURS (07:00–22:00):
  *             a pull per synced person (with webhooks live, every CALENDAR_POLL_MINUTES_WITH_WEBHOOKS for people whose
  *             channel is healthy) + outbox sweep + due checks + up to 20 webhook channels created / renewed
+ *   email-log one mailbox's email logging run (`email-log-<user tag>-<bucket>`, Calendar Phase 4), queued by the poll
  *   nightly   scheduler 'calendar-nightly', 00:25: reconcile + due checks + admin digest (from the reminders worker),
  *             the follow-up activity backfill (from the reminders worker), error-link retries, client secrets
  *             expiring, expired leases cleared, stale video links failed (P3-1), Outlook delta windows
- *             re-baselined, webhook channels (P2-7), imported meetings auto-completed (P2-8)
+ *             re-baselined, webhook channels (P2-7), imported meetings auto-completed (P2-8), logged-email
+ *             retention (Calendar Phase 4)
  * All in the business timezone. A push that finds the connection's lease taken, or the provider rate-limiting, moves
  * itself back without spending an attempt. Every Redis `ready` upserts the schedulers and runs one outbox sweep. While
  * Redis is down a one-minute tick runs due checks, pushes due links and pulls due people in-process inside the sync
@@ -150,6 +154,9 @@ export async function processCalendarJob(job: Job, token?: string): Promise<unkn
                 if (!linkId || typeof data.request !== 'number' || typeof data.attempt !== 'number') return null;
                 return { outcome: await checkConference({ linkId, request: data.request, attempt: data.attempt }) };
             }
+            case EMAIL_LOG_JOB:
+                // Calendar Phase 4: one mailbox's email logging run (emailLog.ingest.ts).
+                return runEmailLogJob(job.data);
             case CALENDAR_SYNC_JOBS.poll:
                 return runCalendarPoll();
             case CALENDAR_SYNC_JOBS.nightly:

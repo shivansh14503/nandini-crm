@@ -4,6 +4,7 @@ import type { SxProps, Theme } from '@mui/material';
 import type { AuditEntityType } from '@/hooks/queries/useAuditLogs';
 import type { RecordAuditStamp } from './RecordAuditFooter';
 import type { ActivityRelatedModule } from '@/types/activity.types';
+import type { EmailLogModule } from '@/types/emailLog.types';
 
 export interface DrawerTabItem {
     id: string;
@@ -105,6 +106,8 @@ export interface EntityDetailDrawerProps {
     includeChangesTab?: boolean; // Default true: attaches the standardized 'Changes' tab (needs auditEntity)
     /** Adds an 'Activities' tab (before Changes) listing the record's activities, with buttons to log new ones. */
     activities?: RecordActivitiesContext;
+    /** Adds an 'Emails' tab (after Activities) with the emails logged on the record, while email logging is on (Calendar Phase 4). */
+    emails?: { module: EmailLogModule; id: string };
     changesTabLabel?: string; // Default 'Changes'
     defaultTabIndex?: number;
     /** Shown at the right end of the badge row (e.g. a lead's Rating box). */

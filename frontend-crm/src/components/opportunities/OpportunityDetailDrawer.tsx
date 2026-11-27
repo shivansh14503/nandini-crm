@@ -132,6 +132,7 @@ export function OpportunityDetailDrawer({
             tabContents={view.tabContents}
             auditEntity={{ type: 'opportunities', id: opp.id }}
             activities={recordActivitiesContext('opportunities', opp)}
+            emails={{ module: 'opportunities', id: opp.id }}
             recordAudit={opp}
             includeChangesTab={true}
             primaryAction={{

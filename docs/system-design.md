@@ -1,6 +1,6 @@
 # Nandini CRM — System Design
 
-> **Status:** living document. Describes the system as built (code as of 2026-11-27; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Referrals module; Documents module; Activities data model and API, Calendar Phase 1 PR1; Activities screens and Calendar, PR2; notifications, reminders and mail workers, navbar bell and the morning summary email, PR3, with its review fixes; guarded cache reads for lookups, form configs and search, with its review fixes; Calendar Phase 2 P2-1, Admin › API Integrations foundation: encrypted provider credentials, connection tests, calendar sync settings, company emails, with its review fixes; My Profile (Profile Phase 1): profile, photo, change password, signed-in sessions; Admin › Users (Profile Phase 2, 2026-11-26): user management, the must-change-password claim, sessions revoked on deactivation / reset / role change; Calendar Phase 2 P2-2, employees connect / disconnect Google or Microsoft 365 calendars (replaced by P2-2b); Calendar Phase 2 P2-2b, admin-managed calendar connections: a Google service account with domain-wide delegation and a Microsoft Entra app with application permissions, automatic enrolment of everyone with a company email, in-memory tokens only, admin problem notifications; My Profile › Notifications (Profile Phase 3): bell kinds a user can turn off, the morning summary opt-out, a personal default reminder and out-of-office dates; Calendar Phase 2 P2-3a: one activity write path (system writes, write hook, lock seam, shared post-commit step), no behaviour change; Admin › Company formats (Profile Phase 5, PR5a): one company-wide date / time / number display setting, a shared formatter core, legacy styles kept until an admin saves; PR5b: the remaining ad-hoc format sites and the audit log's Before / After values follow it too; Calendar Phase 2 P2-4: lead / opportunity follow-ups create activities, locked follow-up fields, the nightly follow-up backfill; Calendar Phase 2 P2-3b: the CRM → calendar push engine (outbox, `crm-calendar-sync` queue and worker, Google / Graph event writes for enrolled people); Calendar Phase 2 P2-6: colleagues' busy times when picking a time, `GET /api/activities/busy`; Calendar Phase 2 P2-3c: the first-sync backfill, Send invitations / Retry / Add again and the sync status in the activity drawer; Calendar Phase 4: booking links, public scheduling pages `/book/<slug>` on free/busy; Calendar Phase 2 P2-5: calendar → CRM pull (Google sync tokens, Graph delta), office-hours polling, Sync now; Calendar Phase 2 P2-7: calendar webhooks (Google push channels, Graph subscriptions, `/api/webhooks/*`), the slower safety-net poll and the HTTPS go-live checklist; Calendar Phase 3 P3-1: Google Meet and Microsoft Teams links on activities from the owner's company calendar; Calendar Phase 4: recurring activities, CRM-authored series stored as one row per occurrence over a rolling 90-day horizon; Calendar Phase 2 P2-8: customer meetings imported from the calendar, two colleagues on one meeting, outside-organizer locks (the video meeting included; the organizer's join link shown read only), replies both ways (`rsvp` job), nightly auto-complete; as of 2026-11-27).
+> **Status:** living document. Describes the system as built (code as of 2026-11-27; audit context + ledger audit table, admin audit query API and screen, Users tab; Contracts module; Referrals module; Documents module; Activities data model and API, Calendar Phase 1 PR1; Activities screens and Calendar, PR2; notifications, reminders and mail workers, navbar bell and the morning summary email, PR3, with its review fixes; guarded cache reads for lookups, form configs and search, with its review fixes; Calendar Phase 2 P2-1, Admin › API Integrations foundation: encrypted provider credentials, connection tests, calendar sync settings, company emails, with its review fixes; My Profile (Profile Phase 1): profile, photo, change password, signed-in sessions; Admin › Users (Profile Phase 2, 2026-11-26): user management, the must-change-password claim, sessions revoked on deactivation / reset / role change; Calendar Phase 2 P2-2, employees connect / disconnect Google or Microsoft 365 calendars (replaced by P2-2b); Calendar Phase 2 P2-2b, admin-managed calendar connections: a Google service account with domain-wide delegation and a Microsoft Entra app with application permissions, automatic enrolment of everyone with a company email, in-memory tokens only, admin problem notifications; My Profile › Notifications (Profile Phase 3): bell kinds a user can turn off, the morning summary opt-out, a personal default reminder and out-of-office dates; Calendar Phase 2 P2-3a: one activity write path (system writes, write hook, lock seam, shared post-commit step), no behaviour change; Admin › Company formats (Profile Phase 5, PR5a): one company-wide date / time / number display setting, a shared formatter core, legacy styles kept until an admin saves; PR5b: the remaining ad-hoc format sites and the audit log's Before / After values follow it too; Calendar Phase 2 P2-4: lead / opportunity follow-ups create activities, locked follow-up fields, the nightly follow-up backfill; Calendar Phase 2 P2-3b: the CRM → calendar push engine (outbox, `crm-calendar-sync` queue and worker, Google / Graph event writes for enrolled people); Calendar Phase 2 P2-6: colleagues' busy times when picking a time, `GET /api/activities/busy`; Calendar Phase 2 P2-3c: the first-sync backfill, Send invitations / Retry / Add again and the sync status in the activity drawer; Calendar Phase 4: booking links, public scheduling pages `/book/<slug>` on free/busy; Calendar Phase 2 P2-5: calendar → CRM pull (Google sync tokens, Graph delta), office-hours polling, Sync now; Calendar Phase 2 P2-7: calendar webhooks (Google push channels, Graph subscriptions, `/api/webhooks/*`), the slower safety-net poll and the HTTPS go-live checklist; Calendar Phase 3 P3-1: Google Meet and Microsoft Teams links on activities from the owner's company calendar; Calendar Phase 4: recurring activities, CRM-authored series stored as one row per occurrence over a rolling 90-day horizon; Calendar Phase 2 P2-8: customer meetings imported from the calendar, two colleagues on one meeting, outside-organizer locks (the video meeting included; the organizer's join link shown read only), replies both ways (`rsvp` job), nightly auto-complete; Calendar Phase 4: email logging from Gmail / Outlook on contacts, leads and opportunities (§5.5, §8.10), with its review fixes (2026-11-27: no catch-up after switching off and on, purge vs running runs, Bcc never shown, sender-bound dedupe, capped times, snippets cleared when off, job ids / priority); as of 2026-11-27).
 > Update it in the same change that alters architecture, infrastructure, Redis usage, queues or security.
 > Related: [Database design](database-design.md) · [API plan](api-plan.md) · [Build plan](build-plan.md)
 
@@ -536,6 +536,7 @@ commands fail immediately instead of hanging, and reconnects in the background (
 | `calsync:notified:{connectionId}` | string (ms time of the last verified ping) | 600 s | calendar webhooks (P2-7) | D26: a `pull` job that finishes `done` after a ping arrived while it ran queues one follow-up pull (`pull-<connectionId>-n<stamp ms>`, so a follow-up of a follow-up gets its own id). Without Redis no stamp: the in-process pull runs once more instead (as of 2026-11-26) |
 | `ratelimit:calendar-webhooks:ip:{ip}` | counter | 60 s | `/api/webhooks/*` (P2-7) | 600 notifications / min / IP (in-memory per process whenever Redis can't count; never fails open) |
 | `calendar:worker:heartbeat` | string (ISO time) | 120 s | calendar sync worker, every 60 s and on each Redis `ready` | Admin › API Integrations shows whether a calendar worker is running (`worker` in `GET /api/admin/integrations`) |
+| `ratelimit:email-log-run:user:{id}` | counter | 60 s | `POST /api/admin/email-logging/people/:username/run` (Calendar Phase 4) | 6 "Log now" runs / min / admin (in-memory per process whenever Redis can't count; never fails open) |
 
 ¹ Read with `cacheService.getOrSetGuarded`, so the key briefly holds a `pending:<uuid>` placeholder while it is read
 (§4.2). `cache:dashboard:*` is defined and invalidated but nothing writes it yet (no dashboard API).
@@ -603,6 +604,7 @@ opens) always counts in SQL and re-caches that the same way.
 | Recently viewed | Not recorded, lists report none |
 | Activity reminders, contract renewals, morning email | Delayed reminder jobs can't be queued and the schedulers don't fire. Each worker process runs one-minute in-process ticks instead: while `isQueueAvailable()` is false the reminders worker runs the reminder sweep (missed reminders + renewals), so **the database is queried every minute while Redis is down**, and the mail worker makes up a missed morning summary (between its time and noon). Duplicates across processes are harmless (claims and unique dedupe keys). The check is made on every tick, not once at start-up |
 | Redis comes back | On every `ready` of the shared client (start-up and each reconnect) the reminders worker upserts its two schedulers, re-arms every pending reminder (`armPendingReminders`, batches of 500, same job ids) and runs one sweep; the mail worker upserts `morning-summary` and makes up a missed morning summary; every API and worker process drops all cached unread counts |
+| Email logging (Calendar Phase 4) | `email-log` jobs can't be queued: the calendar worker's fallback tick (inside `CALENDAR_SYNC_HOURS`) runs **one** due mailbox in-process per minute, and an admin's "Log now" runs inline (bounded: ≤ 200 messages, ≤ 20 provider pages). Cursors live in SQL, so nothing is lost; the "Log now" limit falls back to an in-memory counter |
 | Calendar push (P2-3b) and pull (P2-5) | Push and pull jobs can't be queued. A Sync now / page pull runs the pull in the API process, awaited (still under the lease and the `job:calendar-sync` origin); the fallback tick also pulls up to 5 people not pulled (or tried in-process) for a poll interval, longest-waiting first, so a few people whose pulls keep failing can't take every slot. A committed activity save pushes its dirty links in-process after the response; the calendar worker's one-minute fallback tick, **only inside `CALENDAR_SYNC_HOURS`** (default 07:00–22:00), runs due connection checks, one lost first-sync backfill (P2-3c) and pushes up to 20 due dirty links in-process. Links stay dirty in SQL (the outbox), so nothing is lost: on Redis `ready` the worker upserts its schedulers and runs one outbox sweep. The `enrolled` job is not queued; the fallback tick and the next sweep push those links instead |
 | Calendar webhooks (P2-7) | A verified ping runs its pull in the API process (one at a time per person; a ping during it runs it once more, at most 3 rounds); `watch` jobs (lifecycle renew / re-create) run in process; the rate limit counts in process (never open). The poll still slows down only for people with a healthy channel |
 | Notification bell | Unread count read from SQL on every poll (no cache); assignment / invitation notifications are still written after activity saves. Counts cached before the outage are dropped when Redis comes back |
@@ -626,7 +628,7 @@ flowchart LR
 | `crm-audit-ledger` | Job scheduler `audit-ledger-digest`, cron `15 0 * * *` in `BUSINESS_TIMEZONE`; `POST /api/admin/audit-logs/integrity/verify` (job id `ledger-verify`) | 1 | 1 | removed when done | Nightly: saves a ledger digest outside the database (`AUDIT_DIGEST_DIR` + `AuditDigest`) and tidies old exports. Verify: `sys.sp_verify_database_ledger` against every digest file on a separate SQL connection with a long timeout (`AUDIT_VERIFY_TIMEOUT_MS`, default 30 min; ~100 s per million entries) and writes a `LEDGER_VERIFY` entry |
 | `crm-lead-rating` | Job scheduler `lead-rating-ageing`, cron `5 0 * * *` in `BUSINESS_TIMEZONE` (upserted when the worker starts) | 1 | 1 (the next night catches up) | done 7 days / 30 jobs; failed 30 days | `ageLeadRatings`: re-rates leads ageing under a "Days since response" rule, writing only changed rows (history by `system`). The worker also runs it once at start-up, so a night missed while nothing ran (or Redis was down) is made up; runs are idempotent ([lead-rating-rules.md](lead-rating-rules.md)) |
 | `crm-reminders` | Activity saves (`remind`, delayed to `remindAt`); job schedulers `reminder-sweep` (`*/15 7-21 * * *`) and `reminder-nightly` (`20 0 * * *`), both in `BUSINESS_TIMEZONE`, upserted on every Redis `ready` | 1 | 3, exponential backoff from 30 s (every job is idempotent) | done 1 day / 1000 jobs; failed 7 days | In-app notifications (activity reminders, assignments, invitations, contract renewals); see §5.1 |
-| `crm-calendar-sync` (P2-3b) | Activity saves (`push`, 2 s delay, job id `push-<linkId>-<dirtyAtMs>`), the outbox sweep (`push-<linkId>-<dirtyAtMs>-s<minute>`), a connection row reaching `ok`, first time or after an error (`enrolled-<connectionId>-<enrolledAtMs>-r<readyAtMs>`), enrolment and the poll (`check-<connectionId>-<minute>`), the poll fan-out / Sync now / page / admin / nightly re-baseline / webhook pulls (`pull-<connectionId>-<10 s bucket>`, 1 attempt; P2-5; a webhook's pull waits 2 s, its D26 follow-up is `…-n`), webhook channel work (`watch-<connectionId>-<ensure\|renew\|recreate\|stop>-<minute>`, 3 attempts; P2-7), a pending Meet link (`conference`, 5 s delay, job id `conference-<linkId>-<request>-<attempt>`, up to 5 tries; P3-1), a colleague's CRM reply to a meeting (`rsvp-<activityId>-<username>-<respondedAtMs>`, P2-8, as of 2026-11-27; moved back without an attempt while the lease is taken or the provider rate-limits); schedulers `calendar-poll` (`*/5 7-21 * * *` by default, from `CALENDAR_SYNC_HOURS` / `CALENDAR_POLL_MINUTES`) and `calendar-nightly` (`25 0 * * *`), `BUSINESS_TIMEZONE`, upserted on every Redis `ready` | 4 (limiter: 10 jobs / s) | 5, exponential backoff from 30 s (pushes are idempotent: requested ids, compare-and-set on the outbox); a push that finds the connection's lease taken or the provider rate-limiting is moved back without spending an attempt | done 1 h / 2000 jobs; failed 7 days | CRM → Google / Outlook push; see §5.4 |
+| `crm-calendar-sync` (P2-3b) | Activity saves (`push`, 2 s delay, job id `push-<linkId>-<dirtyAtMs>`), the outbox sweep (`push-<linkId>-<dirtyAtMs>-s<minute>`), a connection row reaching `ok`, first time or after an error (`enrolled-<connectionId>-<enrolledAtMs>-r<readyAtMs>`), enrolment and the poll (`check-<connectionId>-<minute>`), the poll fan-out / Sync now / page / admin / nightly re-baseline / webhook pulls (`pull-<connectionId>-<10 s bucket>`, 1 attempt; P2-5; a webhook's pull waits 2 s, its D26 follow-up is `…-n`), webhook channel work (`watch-<connectionId>-<ensure\|renew\|recreate\|stop>-<minute>`, 3 attempts; P2-7), a pending Meet link (`conference`, 5 s delay, job id `conference-<linkId>-<request>-<attempt>`, up to 5 tries; P3-1), a colleague's CRM reply to a meeting (`rsvp-<activityId>-<username>-<respondedAtMs>`, P2-8, as of 2026-11-27; moved back without an attempt while the lease is taken or the provider rate-limits), email logging (`email-log`, job id `email-log-<sha256(username) 12 hex>-<poll bucket>-<lastRunAt ms, base 36>` from the poll tick, BullMQ `priority: 10` so pushes and pulls (no priority) go first, 2 attempts, so a run that stopped at its limit or a retry is queued again at the next tick while two ticks of one bucket queue it once; or `…-m<minute>` for an admin's "Log now", 1 attempt; Calendar Phase 4, §5.5); schedulers `calendar-poll` (`*/5 7-21 * * *` by default, from `CALENDAR_SYNC_HOURS` / `CALENDAR_POLL_MINUTES`) and `calendar-nightly` (`25 0 * * *`), `BUSINESS_TIMEZONE`, upserted on every Redis `ready` | 4 (limiter: 10 jobs / s) | 5, exponential backoff from 30 s (pushes are idempotent: requested ids, compare-and-set on the outbox); a push that finds the connection's lease taken or the provider rate-limiting is moved back without spending an attempt | done 1 h / 2000 jobs; failed 7 days | CRM → Google / Outlook push; see §5.4 |
 | `crm-mail` | Job scheduler `morning-summary` (`MORNING_SUMMARY_CRON`, default `0 9 * * 1-6`, `BUSINESS_TIMEZONE`), upserted on every Redis `ready` (removed while `MORNING_SUMMARY_ENABLED=false`); a missed run as a one-off `morning` job (`morning-catchup-<day>`) | 1 | 3, exponential backoff from 30 s (sends are deduplicated in `EmailLog`, so a retry re-sends only what failed) | done 7 days / 100 jobs; failed 30 days | The morning summary email (§5.2). Its own queue so a slow or unreachable SMTP server (20 s timeouts per send, retries) never delays a reminder; later mail jobs (quotation emails) belong here too |
 
 **Import flow:** the frontend wizard parses the CSV/XLSX in the browser (papaparse / xlsx), maps columns, validates
@@ -808,11 +810,12 @@ The same list is next to `DB_KEEPALIVE_INTERVAL_MS` in `.env.example`.
 | 00:05 | Lead Rating ageing |
 | 00:15 | Audit ledger digest |
 | 00:20 | Notification / email log purge + reminder re-arm, then recurring activities: series horizon extension (50 series max) and occurrences entering the 14-day calendar sync window (200 max); one indexed read each when nothing is due (as of 2026-11-26, Calendar Phase 4) |
-| 00:25 | Calendar nightly: connection reconcile / checks / digest, follow-up backfill, error-link retries, secrets expiring, leases, Outlook delta re-baseline (P2-5: rows whose window is over 30 days old get a full pull), stale video links failed (P3-1: still `requested` an hour after the last save), auto-complete of past imported meetings (P2-8, as of 2026-11-27: one indexed read, then ≤ 200 system writes per batch, only when there are any) (`crm-calendar-sync`; only reads when nothing is enrolled) |
+| 00:25 | Calendar nightly: connection reconcile / checks / digest, follow-up backfill, error-link retries, secrets expiring, leases, Outlook delta re-baseline (P2-5: rows whose window is over 30 days old get a full pull), stale video links failed (P3-1: still `requested` an hour after the last save), auto-complete of past imported meetings (P2-8, as of 2026-11-27: one indexed read, then ≤ 200 system writes per batch, only when there are any), logged-email retention (Calendar Phase 4, §5.5) (`crm-calendar-sync`; only reads when nothing is enrolled) |
 | 09:00 Mon–Sat | Morning summary email (only while mail is on; `crm-mail`) |
 | Every 15 min, 07:00–21:45 | Reminder sweep (contract renewals, missed reminders) |
 | Every `CALENDAR_POLL_MINUTES` (default 5) inside `CALENDAR_SYNC_HOURS` (default 07:00–22:00) | Calendar poll: outbox sweep + due connection checks + backfill recovery (three small indexed reads, P2-3c) + one `pull` job per synced person (P2-5, as of 2026-11-26). A pull with nothing new costs, per person, one lease claim / release, the `lastPulledAt` write and one provider list call; SQL is read per changed event only. The database is awake then anyway for the reminder sweep and users. Outside the hours nothing polls, so Azure SQL Serverless can pause overnight; changes made in a calendar at night come back with the first poll of the morning |
 | Calendar webhooks (P2-7, only with an https `PUBLIC_API_URL`) | **Inside `CALENDAR_SYNC_HOURS`**: per verified notification one indexed channel lookup and one `pull` job (debounced: pings within a 10 s bucket share one pending pull). People with a healthy channel are polled only every `CALENDAR_POLL_MINUTES_WITH_WEBHOOKS` (default 30) instead of every 5 minutes, so webhooks lower the daytime pull count. **Outside the hours** change notifications are answered without any database read (a forged one is refused before it too) and nothing is queued; the first poll of the morning pulls everyone. Only Microsoft lifecycle notifications (a subscription removed / needing reauthorization / missed notifications: rare) are handled at once at night, and only after their `clientState` HMAC verified without a read, so a forged lifecycle post can't wake the database either. Channel creation / renewal rides the poll ticks (≤ 20 people per tick) and the 00:25 nightly run (as of 2026-11-26) |
+| Every `EMAIL_LOG_POLL_MINUTES` (default 15) per enrolled mailbox, inside `CALENDAR_SYNC_HOURS`, only while email logging is on | Email logging (Calendar Phase 4, §5.5): rides the existing calendar poll tick (no new scheduler). Per tick one read of the company switch (form-config cache) and, while it is on, one indexed read of the due mailboxes; ≤ 25 `email-log` jobs. A run with no new mail costs a lease claim / release and one provider call; SQL per message only for messages to or from a CRM address. Off = no read at all beyond the cached switch. Retention rides the 00:25 nightly run (≤ 20 batches of 500 deletes) |
 | On demand | A person's **Sync now** (≥ 30 s apart), the silent pull when they open the calendar page (≥ 3 min apart), the admin's Sync now on People: one `pull` job each (P2-5) |
 | After a colleague replies to a meeting in the CRM (P2-8, as of 2026-11-26) | One `rsvp` job (only when both import switches are on for them and their calendar row is `ok`); the database is awake anyway for the reply itself |
 | After each activity save | Its calendar push (a `push` job, 2 s later), only for enrolled owners |
@@ -1128,6 +1131,122 @@ job and the sweep (connection checks and the nightly connection steps still run)
   **DB wakes (Azure SQL serverless):** nothing new scheduled outside the existing 00:25 nightly run (one indexed read);
   at most 5 event reads and 5 small Activity reads per link request, only within ~30 s after a push that asked for a
   Meet, plus one extra push per link that becomes ready; Teams links usually come on the create answer.
+
+### 5.5 Email logging (Calendar Phase 4, spec §17)
+
+As of 2026-11-27 (with the review fixes). Module `backend-crm/src/modules/email-log` (design note EL1–EL16 in the PR). Emails between
+**enrolled employees** and CRM **contacts / leads** are logged automatically on those records, and on the matched
+contacts' opportunities (≤ 10 most recently updated per contact). Admin-managed only, like calendar sync: there is no
+per-user OAuth and no employee switch.
+
+**Who is logged.** All of: `EMAIL_LOG_ENABLED` (server kill switch, default true), the company switch "Log emails with
+customers" (`ModuleSetting activities/emailLogging`, default **off**), the person's mode (`LoggedEmailMailbox.mode`
+`on` / `off`, else the company "Default for people", default **off**: admins switch people on in People › calendar),
+an active, non-group user, and a live calendar connection (`CalendarConnection` `status = ok`) on Google, Microsoft or
+the dev fake provider whose provider is enabled. The mailbox is the calendar connection's account (the company email),
+so email logging follows the calendar enrolment and needs no extra mapping. Employees see a read-only status on My
+Profile › Connected accounts (`GET /api/email-logs/me`).
+
+**Scopes (owner steps).** Mail uses its own access tokens (separate scope set, in memory only, never stored):
+- **Google**: add `https://www.googleapis.com/auth/gmail.readonly` to the service account's domain-wide delegation
+  entry (Admin console › Security › API controls › Domain-wide delegation; the full comma-delimited list is shown on
+  the Email logging card). `gmail.readonly` is needed because `gmail.metadata` can't return the snippet or use the
+  `q=after:` search of the bounded first sync; the CRM only ever asks for `format=metadata` (headers) and the snippet,
+  never `format=full` / `raw` or attachments.
+- **Microsoft**: the Graph application permission `Mail.Read` (admin consent). Recommended: **Exchange RBAC for
+  Applications** (`New-ManagementRoleAssignment -App <app> -Role "Application Mail.Read" -CustomResourceScope
+  <enrolled-mailboxes scope>`) instead of tenant-wide consent, so the app can read only the enrolled mailboxes. The CRM
+  reads only `$select`ed metadata, `bodyPreview` and (lazily) `internetMessageHeaders`, never `body` or attachments.
+- A missing scope / permission never crashes sync: the token or provider refusal is classified as an **app-level**
+  mail error (`mail_scope_missing`, `mail_permission_missing`), the provider's mail runs pause for 5 minutes in that
+  process, admins get one `calendar_sync_issue` notification per provider, code and day, and the Email logging card
+  shows the problem until a later run succeeds. Calendar health is untouched. Per-mailbox problems (`mail_unavailable`,
+  `no_mailbox`, `mailbox_out_of_scope`) are **user-level**: that mailbox backs off 15 min → 1 h → 6 h → 24 h.
+
+**Ingestion (incremental, bounded).**
+- **Logging start (no catch-up).** Mail is logged only from the moment logging is on for the person: the latest of the
+  company switch turning on (`enabledAt`, stamped in the setting), the person's own switch turning on
+  (`LoggedEmailMailbox.loggingSince`), the company default turning on for people without their own switch
+  (`defaultOnAt`) and the last purge (`purgedAt`). Every message dated before it is skipped (`before_logging`), and a
+  first sync / resync never reads before it (nor more than 7 days back). Turning logging off (company, default or
+  person) clears the cursors, so switching on again starts from a fresh baseline instead of reading the off period
+  from an old Gmail history id or Graph delta link. Switching on therefore never backfills.
+- **Gmail**: first run = `messages.list q="after:<max(7 days ago, logging start)> -in:chats -in:drafts -in:spam -in:trash"` (≤ 300
+  messages) and the profile's `historyId` as cursor; then `history.list(startHistoryId, historyTypes=messageAdded)`;
+  a `404` (history too old) falls back to the bounded first sync. Each new message: `messages.get format=metadata`
+  with only the headers needed (From, To, Cc, Subject, Date, Message-ID, List-Unsubscribe, List-Id,
+  Auto-Submitted, Precedence), 5 at a time. User labels (`labels.list`) give the private markers.
+- **Graph**: `/users/{mailbox}/mailFolders/inbox/messages/delta` and `…/sentitems/messages/delta` (`$select`,
+  `$filter=receivedDateTime ge <max(7 days ago, logging start)>` on the first round, `Prefer: IdType="ImmutableId"`), one stored
+  `@odata.deltaLink` per folder; an expired delta link restarts that folder (bounded). Next / delta links are accepted
+  only on `graph.microsoft.com`.
+- Per run: ≤ 200 messages and ≤ 20 provider pages; an unfinished page makes the mailbox due again at the next tick.
+  Runs ride the existing **calendar poll tick** inside `CALENDAR_SYNC_HOURS` (no new scheduler, no new DB wake-up
+  window): ≤ 25 due mailboxes per tick, each due every `EMAIL_LOG_POLL_MINUTES` (default 15), as `email-log` jobs on
+  `crm-calendar-sync` (§5). One **DB lease per mailbox** (`leaseId` / `leaseUntil`, 5 min) keeps two runs of one
+  mailbox apart; the cursor and health are written in `finally`. Job priority 10 keeps a wave of first syncs behind
+  activity pushes and calendar pulls on the shared queue.
+- **Admin actions during a run.** A run reads the person's switch again before it stores anything (switched off →
+  nothing stored, cursor cleared, status `stopped`), and after storing checks whether a purge happened since it
+  started; if so it deletes the copies it stored. The purge takes the mailbox lease, so the overtaken run's final write
+  (cursor, counts) is dropped.
+- A message hard-deleted between the Graph delta read and the lazy header read (404) is skipped (`deleted`), not a
+  mailbox error.
+- **Times**: received mail is dated by the provider (Gmail `internalDate`, Graph `receivedDateTime`), sent mail by its
+  sent time; every time is capped at now + 5 minutes, so a forged future `Date` header can't pin an email to the top of
+  a record or keep it past the retention.
+
+**Matching and filtering.** Only From / To / Cc (Bcc is never read, and Gmail / Graph return no Bcc for received
+mail). Addresses are normalised (lower-case, `mailto:`, angle brackets) and matched against **live** `EntityEmail`
+rows of non-deleted contacts and leads (chunks of 500). Skipped, before any address lookup: drafts, excluded folders
+(spam, trash, chats), **private** mail (a label / category named "Private", "Personal" or "No CRM", case-insensitive;
+Outlook sensitivity personal / private / confidential), **internal-only** mail (every participant on a company domain,
+from Admin › API Integrations' company domains) and mail with no participants. **Automated** mail (List-Unsubscribe, List-Id,
+Auto-Submitted ≠ no, Precedence bulk / list / junk / auto_reply) is skipped unless the sender is itself a matched contact / lead;
+Graph headers are fetched only when that decides it.
+
+**Dedupe and races (D45).** One `LoggedEmail` per RFC Message-ID and sender: `messageIdHash` = sha256 of the trimmed id
+plus the lower-cased From address (the header is sender-controlled: a customer reusing the id of an email they received
+can't attach their message, and its records, to a colleague's logged email), and a row found by hash is reused only when
+the sent times agree within 48 hours (else the message is stored as its own email without a hash). With the
+filtered unique index `UX_LoggedEmail_messageIdHash` (`WHERE messageIdHash IS NOT NULL`; mail without a Message-ID is
+stored per copy). Two employees on one thread are logged by two concurrent runs: each **inserts outside any
+transaction**, the index decides, and the loser catches `P2002` and reads the winner's row. Copies (`LoggedEmailCopy`,
+unique per mailbox message) and links (`LoggedEmailLink`, unique per email + record) are inserted the same way, so a
+re-run is idempotent. No unique error is ever caught inside a transaction.
+
+**Privacy and security.**
+- Stored: subject (≤ 300), from, to / cc (≤ 25 addresses kept, the rest counted, JSON ≤ 4000), sent time, direction,
+  a **plain-text snippet** (≤ 500, entities decoded, tags and control characters stripped; off with "Keep a short
+  snippet"), has-attachments, provider, the owning mailbox and the provider's message / thread ids and web link.
+  **Never** a body, HTML, an attachment, Bcc or a token. The UI renders every field as text (React escaping; no
+  `dangerouslySetInnerHTML`).
+- **Visibility** (company setting, default `restricted`): the record's owner and global-access roles (managers,
+  admins) see every email on a record they can open; others who can open it see only the emails their own mailbox
+  holds. `record`: everyone who can open the record sees them all. Record access itself follows the normal rules
+  (`assertRecordAccess`). "Open in Gmail / Outlook" is offered only on the caller's own copy. "Logged from" lists only
+  employees who are the sender or in To / Cc (`LoggedEmailCopy.addressed`); a Bcc or list copy is shown only to its own
+  employee, so a Bcc is never revealed to other viewers.
+- **Snippets off**: no snippet is returned from then on, the stored ones are cleared at once (≤ 20 batches of 500) and
+  the nightly clears any rest.
+- **Off means off**: with the company switch off nothing is logged and the record list returns nothing; switching it
+  (or a person) on again never logs mail from the off period (logging start above).
+- **Retention**: the 00:25 nightly run deletes emails older than "Keep logged emails for" (6 / 12 / 24 / 36 months,
+  default 24; ≤ 20 batches of 500) and emails left without a copy for 24 h (≤ 4 batches); copies and links go by
+  cascade. **Purge per person** (admin, People › calendar): takes the mailbox lease and stamps `purgedAt` (clearing the
+  cursor), deletes that person's copies and every email left without a copy in bounded batches outside a transaction,
+  frees the lease, then audits. Mail from before the purge is never logged again for that person, even after a cursor
+  expiry resync.
+- **Audit**: the company settings (form-config change), each person's switch (`LoggedEmailMailbox` CREATE / UPDATE)
+  and each purge (`LoggedEmailMailbox PURGE`, NOTICE), module `admin-integrations`. Logged emails themselves are not
+  audited (like the calendar pull).
+- Recommend telling employees before switching it on (works-council / notice duty in some places); the My Profile card
+  says what is kept and who sees it.
+
+**Env vars** (`backend-crm/.env`): `EMAIL_LOG_ENABLED` (default `true`; `false` stops all email logging whatever the
+admin settings), `EMAIL_LOG_POLL_MINUTES` (5–120, default 15: how often each enrolled mailbox is checked inside
+`CALENDAR_SYNC_HOURS`). **Azure SQL serverless:** nothing runs outside `CALENDAR_SYNC_HOURS` except the 00:25 nightly
+retention step (the database is awake then anyway); a shorter interval adds a few small reads per mailbox per tick.
 
 ## 6. PDF generation
 
@@ -1483,6 +1602,22 @@ holds the details, not the form). While another duration's times load, the previ
 available"; a request that got no answer (offline, API unreachable) shows a retryable "couldn't reach the booking
 service" (review fixes, as of 2026-11-26). The confirmation offers an `.ics`
 download (no email is sent). Theme tokens only (brand blue / green for selection and focus).
+
+### 8.10 Email logging (Calendar Phase 4)
+
+As of 2026-11-26. React Query keys `['emailLogs', …]` (`hooks/queries/useEmailLogs.ts`), refreshed by
+`notifyCrmUpdate('/api/email-logs')`. **Record drawers**: `EntityDetailDrawer` takes `emails={{ module, id }}` and adds an
+**Emails** tab after Activities (Contact, Lead and Opportunity drawers) only while the company switch is on
+(`utils/emailLogging.ts` reads `moduleSettings.activities.emailLogging.enabled` from the form configs, so no extra
+request); the panel (`components/email-log/RecordEmailsPanel.tsx`) is loaded when the tab opens and lists emails
+newest first with "Load more" (20 a page): subject, time, Sent / Received, from / to, the plain-text snippet (three
+lines), an attachment mark, who it was logged from, and "Open in Gmail / Outlook" on the caller's own copy. Restricted
+viewers see a one-line note. **Admin**: `EmailLoggingSettingsCard` on Admin › API Integrations (switch, default for
+people, visibility, retention, snippets, provider health and counts, scopes to copy) with the page's unsaved-changes
+guard; `PersonEmailLoggingSection` inside the People › calendar dialog (company default / on / off saved at once, status,
+"Log now", delete logged emails with an inline confirmation). **My Profile › Connected accounts**:
+`EmailLoggingStatusCard`, read-only, hidden while the company switch is off. Theme tokens only; every layout wraps
+(`minWidth: 0`, `flexWrap`, one column on phones).
 
 ## 9. Deployment topology
 

@@ -1,7 +1,7 @@
 # Nandini CRM — Build Plan
 
 > **Status:** living document. Part 1 records what has been built (reconstructed from git history, 115 commits
-> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-27, Calendar Phase 2 P2-1, P2-2, P2-2b (admin-managed calendar connections), P2-3a, P2-3b (calendar push engine), P2-3c (backfill, send invitations, sync status), P2-4, P2-5 (calendar → CRM pull), P2-6 (busy times), P2-7 (calendar webhooks) and P2-8 (customer meetings from the calendar, replies both ways), Calendar Phase 4 booking links and recurring activities, Profile Phase 1: My Profile, Profile Phase 2: Admin › Users, Profile Phase 3: notifications & preferences, Profile Phase 4: connected accounts and Profile Phase 5 PR5a + PR5b: company formats, which completes Phase 17; Calendar Phase 3 P3-1: Google Meet and Microsoft Teams links). Part 2
+> from 2026-10-15 to 2026-11-18; the snapshot as of 2026-11-27, Calendar Phase 2 P2-1, P2-2, P2-2b (admin-managed calendar connections), P2-3a, P2-3b (calendar push engine), P2-3c (backfill, send invitations, sync status), P2-4, P2-5 (calendar → CRM pull), P2-6 (busy times), P2-7 (calendar webhooks) and P2-8 (customer meetings from the calendar, replies both ways), Calendar Phase 4 booking links, recurring activities and email logging, Profile Phase 1: My Profile, Profile Phase 2: Admin › Users, Profile Phase 3: notifications & preferences, Profile Phase 4: connected accounts and Profile Phase 5 PR5a + PR5b: company formats, which completes Phase 17; Calendar Phase 3 P3-1: Google Meet and Microsoft Teams links). Part 2
 > is the roadmap. Tick
 > items off and add new ones as work lands.
 > Related: [System design](system-design.md) · [Database design](database-design.md) · [API plan](api-plan.md)
@@ -590,7 +590,31 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         real SQL Server, Google or Microsoft (doubles only). Later: email confirmations and visitor cancel /
         reschedule (mail layer), team / round-robin links, custom questions.
   - [x] Recurring activities (CRM-authored series, R12 occurrence rows). Done 2026-11-26 (migration `20261215110000_recurring_activities`): an `ActivitySeries` rule (daily / weekly on weekdays / monthly on a day or the nth weekday, every N, ends on a date or after a count, business timezone) with one `Activity` row per occurrence (`seriesId` + `originalStartAt`, filtered unique index) over a rolling 90-day horizon extended by the 00:20 nightly job; a Repeat control on the activity form and quick create (not Notes, not follow-ups); "This event / This and following / All events" for saves, cancels and deletes; occurrences pushed to calendars as single events inside a 14-day window; "Repeats …" in the drawer and a repeat mark on the calendar. Tested with in-memory doubles only, not against a real SQL Server, Google or Microsoft.
-  - [ ] Email logging.
+  - [x] **Email logging** (2026-11-26) — migration `20261216100000_email_logging` (`LoggedEmail` with the filtered
+        unique `UX_LoggedEmail_messageIdHash`, `LoggedEmailCopy`, `LoggedEmailLink`, `LoggedEmailMailbox`). Admin-managed
+        only: company switch "Log emails with customers" (default off), default for people (off), visibility
+        (`restricted` default / `record`), retention (6–36 months, 24) and snippets on Admin › API Integrations
+        (`ModuleSetting activities/emailLogging`); per-person switch, status, "Log now" and purge in People › calendar;
+        read-only status on My Profile. Mail from the existing Google service account (DWD `gmail.readonly`) and
+        Microsoft app (`Mail.Read`, Exchange RBAC for Applications recommended): Gmail `history.list` (404 → bounded
+        7-day resync), Graph inbox + sentitems delta, ≤ 200 messages / 20 pages per run, a DB lease per mailbox, riding
+        the calendar poll tick inside `CALENDAR_SYNC_HOURS` (≤ 25 mailboxes a tick, every `EMAIL_LOG_POLL_MINUTES`,
+        default 15). From / To / Cc only (never Bcc) against live contact / lead emails, plus the contacts'
+        opportunities; internal-only, private ("Private" / "Personal" / "No CRM" labels, Outlook sensitivity) and
+        automated mail skipped unless a matched contact sent it. One row per Message-ID across employees (D45: inserts
+        outside transactions, the index decides). Headers and a ≤ 500-character plain-text snippet only. "Emails" tab on
+        Contact / Lead / Opportunity drawers (newest first, "Open in Gmail / Outlook" for the employee's own copy).
+        Nightly bounded retention; audit of switches and purges. Missing scopes show as a provider problem and pause
+        mail runs, never calendar sync. Not run against a real SQL Server, Google or Microsoft (fake provider and
+        recorded-shape `fakeFetch` tests only). Review fixes (2026-11-27): mail from before the logging start (switch,
+        person or default turned on, last purge) is never logged and switching off clears cursors; a purge takes the
+        mailbox lease and a run it overtakes removes its rows; Bcc / list copies never show as participants to others;
+        dedupe keyed on Message-ID + sender and a 48 h sent-time check; times capped at now + 5 min (Graph received
+        mail by `receivedDateTime`); snippets cleared and hidden when switched off; continuation runs get their own
+        job id, poll jobs run at a low priority; a Graph message deleted before its header read is skipped; service
+        tests for the record list. Owner steps: add `gmail.readonly` to the DWD entry, grant `Mail.Read`
+        (scoped with RBAC for Applications), tell employees. Later: an Emails tab on the full record pages, an
+        explicit "Log this email" from the record, Graph `$filter` on delta checked against a real tenant.
 
 ### Phase 15 — Documents (P2, 2026-11-25)
 

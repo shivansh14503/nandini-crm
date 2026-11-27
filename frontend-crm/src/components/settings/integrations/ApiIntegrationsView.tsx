@@ -10,6 +10,7 @@ import { useLeaveGuard } from '@/components/settings/useLeaveGuard';
 import { useIntegrationsAdmin } from '@/hooks/queries/useIntegrationsAdmin';
 import type { IntegrationsAdmin } from '@/types/integration.types';
 import { BookingLinksSettingsCard } from './BookingLinksSettingsCard';
+import { EmailLoggingSettingsCard } from './EmailLoggingSettingsCard';
 import { CalendarSyncSettingsCard } from './CalendarSyncSettingsCard';
 import { PeopleTable, isPeopleFilter, type PeopleFilter } from './PeopleTable';
 import { ProviderCard } from './ProviderCard';
@@ -221,6 +222,7 @@ export function ApiIntegrationsView() {
     const onSettingsDirty = useCallback((dirty: boolean) => markDirty('settings', dirty), [markDirty]);
     const onSyncTypesDirty = useCallback((dirty: boolean) => markDirty('syncTypes', dirty), [markDirty]);
     const onBookingDirty = useCallback((dirty: boolean) => markDirty('bookingLinks', dirty), [markDirty]);
+    const onEmailLoggingDirty = useCallback((dirty: boolean) => markDirty('emailLogging', dirty), [markDirty]);
     const showToast = useCallback((message: string, severity: 'success' | 'error' = 'success') => setToast({ open: true, message, severity }), []);
 
     useLeaveGuard(Object.values(dirtyParts).some(Boolean), LEAVE_MESSAGE);
@@ -355,6 +357,8 @@ export function ApiIntegrationsView() {
                     </Box>
 
                     <BookingLinksSettingsCard onDirtyChange={onBookingDirty} onToast={showToast} />
+
+                    <EmailLoggingSettingsCard onDirtyChange={onEmailLoggingDirty} onToast={showToast} />
 
                     <PeopleTable
                         key={people.version}

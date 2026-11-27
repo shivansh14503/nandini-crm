@@ -6,6 +6,7 @@ import { errorMessage, inputSx, primaryButtonSx, secondaryButtonSx } from '@/com
 import { pullRequestMessage } from '@/components/integrations/calendarConnections.types';
 import { useCheckPersonCalendar, useSetPersonCalendar, useSyncPersonCalendar } from '@/hooks/queries/useIntegrationsAdmin';
 import { PERSON_CALENDAR_NOTE_MAX, type CalendarCheckOutcome, type Person, type PersonCalendarPayload, type ProviderAdmin } from '@/types/integration.types';
+import { PersonEmailLoggingSection } from './PersonEmailLoggingSection';
 import { CALENDAR_PROVIDER_LABELS, NOT_SYNCED_LABELS, fieldErrorsOf, formatDateTime, hintSx } from './integrationUi';
 
 const BY_DOMAIN = '__domain__';
@@ -208,6 +209,8 @@ export function CalendarChoiceDialog({
                     sx={inputSx}
                     slotProps={{ htmlInput: { maxLength: PERSON_CALENDAR_NOTE_MAX } }}
                 />
+
+                <PersonEmailLoggingSection username={person.username} onToast={onToast} />
 
                 {pulled && (
                     <Alert severity={pulled.tone} sx={{ fontSize: '0.78rem', py: 0.25 }}>
