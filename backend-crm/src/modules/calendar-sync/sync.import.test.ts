@@ -4,17 +4,18 @@ import type { FormConfigsPayload } from '../form-configs/formConfig.service.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { HttpError } from '../../utils/httpError.js';
 import { activityService } from '../activities/activity.service.js';
-import { blankActivity, EMPTY_CONFIGS, installActivityDouble, restoreActivityDouble, type ActivityDoubleState } from '../activities/testing/activityDouble.js';
+import { blankActivity, blankLink, EMPTY_CONFIGS, installActivityDouble, restoreActivityDouble, type ActivityDoubleState } from '../activities/testing/activityDouble.js';
 import { fakeAddEvent, fakeEditEvent, fakeProviderState, resetFakeProvider } from './providers/fake.js';
 import { resetProviderPauses } from './providers/http.js';
 import { setFakeHealth, setFakeProviderEnabledForTests } from './providers/registry.js';
 import type { GoogleEventWire } from './providers/wire.js';
-import { autoCompleteImported, classifyImport, MeetingImporter, selfReplyToApply, type ImportFacts } from './sync.import.js';
+import { autoCompleteImported, classifyImport, inFlightMatch, MeetingImporter, selfReplyToApply, type ImportFacts, type InFlightMeeting } from './sync.import.js';
 import { syncKeyOf } from './sync.keys.js';
 import { pullConnection, resetPullStateForTests, type PullResult } from './sync.pull.js';
 import { pushLink } from './sync.push.js';
 import { normalizeGoogle, type ProviderEvent } from './sync.shapes.js';
-import { setInlinePushForTests } from './sync.wake.js';
+import { runRsvp, setInlineRsvpForTests, type RsvpJobData } from './sync.rsvp.js';
+import { setInlinePushForTests, startImportPulls } from './sync.wake.js';
 import { blankConnection, type ConnectionRowState } from './testing/connectionDouble.js';
 import { setTokenSourceForTests } from './tokenSource.js';
 
@@ -183,6 +184,22 @@ describe('classifyImport (pure)', () => {
         assert.equal(selfReplyToApply('accepted', 'needsAction', 'accepted'), null);
         assert.equal(selfReplyToApply(null, 'declined', 'declined'), null);
         assert.equal(selfReplyToApply(null, 'tentative', 'accepted'), 'tentative');
+    });
+
+    it('inFlightMatch: a colleague’s CRM meeting still waiting for its event, by the Google event id (= requested id) or subject + exact time', () => {
+        const meeting: InFlightMeeting = {
+            id: 'a1',
+            assignedTo: 'asha',
+            requestedId: 'crm0123',
+            startMs: Date.parse('2026-11-28T10:00:00Z'),
+            endMs: Date.parse('2026-11-28T11:00:00Z'),
+            subject: 'review',
+        };
+        assert.equal(inFlightMatch(event(), [meeting])?.id, 'a1', 'same subject (any case) and time');
+        assert.equal(inFlightMatch(event({ id: 'crm0123', shape: { ...event().shape, subject: 'Renamed' } }), [meeting])?.id, 'a1', 'Google: the same event id');
+        assert.equal(inFlightMatch(event({}, { start: '2026-11-28T10:30:00Z' }), [meeting]), null, 'another time');
+        assert.equal(inFlightMatch(event(), []), null);
+        assert.equal(inFlightMatch(event(), undefined), null);
     });
 });
 
@@ -390,6 +407,149 @@ describe('pull: customer meetings brought in', () => {
         assert.equal(imported().length, 1);
         assert.equal(linksOf('winner')[0].role, 'attendee');
         assert.ok(attendeeOf('winner', 'palak'));
+    });
+    it('a gone copy of a CRM-held meeting the person owns changes nothing: its organizer link decides (a reassigned, overdue meeting stays Planned)', async () => {
+        install();
+        const start = inDays(2);
+        state.activities.push(
+            blankActivity({
+                id: 'held',
+                subject: 'Quarterly review with ACME',
+                assignedTo: 'palak',
+                createdBy: 'palak',
+                origin: 'crm',
+                status: 'Planned',
+                iCalUid: 'm1@fake.calendar',
+                syncKey: syncKeyOf('m1@fake.calendar'),
+                startAt: start,
+                endAt: new Date(start.getTime() + HOUR),
+            }),
+        );
+        fakeAddEvent(calendarMeeting('m1', { start: { dateTime: rfc(start), timeZone: TZ }, end: { dateTime: rfc(new Date(start.getTime() + HOUR)), timeZone: TZ } }));
+        assert.equal(done(await pullConnection('c2', 'poll')).counts.attended, 1);
+        // Handed to Asha; Palak's old event is cancelled, so Asha's invitation copy goes.
+        Object.assign(state.activities.find((a) => a.id === 'held') as object, { assignedTo: 'asha' });
+        fakeEditEvent('m1', { status: 'cancelled' }, new Date(Date.now() + 60_000));
+        done(await pullConnection('c2', 'poll'));
+        assert.equal(state.activities.find((a) => a.id === 'held')?.status, 'Planned', 'not cancelled by a copy');
+        assert.equal(linksOf('held').find((l) => l.connectionId === 'c2')?.state, 'cancelled');
+        assert.equal(state.notifications.length, 0);
+    });
+
+    it('this person’s own organizer copy of an activity a colleague’s pull brought in meanwhile is relinked, never attended (D45)', async () => {
+        install();
+        fakeAddEvent(calendarMeeting('m1'));
+        const event = normalizeGoogle(fakeProviderState.events.get('m1') as GoogleEventWire, 'palak@nandiniinfosys.com');
+        assert.equal(event.isOrganizerCopy, true);
+        const { loadCalendarSettings } = await import('../integrations/integration.settings.js');
+        const { loadActivityConfig } = await import('../activities/activity.service.js');
+        const importer = new MeetingImporter(state.connections[0] as never, await loadCalendarSettings(), await loadActivityConfig(), () => new Date());
+        await importer.init();
+        await importer.preparePage([event]);
+        const start = new Date(Date.parse(event.shape.when.start));
+        const holder = (id: string, assignedTo: string) =>
+            blankActivity({
+                id,
+                subject: 'Quarterly review with ACME',
+                assignedTo,
+                createdBy: 'calendar-sync',
+                origin: 'calendar',
+                syncKey: syncKeyOf(event.iCalUid),
+                externalOrganizer: true,
+                startAt: start,
+                endAt: new Date(start.getTime() + HOUR),
+            });
+        state.activities.push(holder('theirs', 'palak'));
+        const outcome = await importer.applyUnlinked(event);
+        assert.equal(outcome.relinkActivityId, 'theirs', 'the pull relinks it (§8.2)');
+        assert.equal(linksOf('theirs').length, 0, 'no attendee link on an organizer copy');
+
+        state.activities.splice(0, state.activities.length, holder('other', 'asha'));
+        const other = await importer.applyUnlinked(event);
+        assert.equal(other.outcome, 'ignored');
+        assert.equal(other.relinkActivityId, undefined);
+        assert.equal(linksOf('other').length, 0);
+    });
+
+    it('an invitation copy of a colleague’s CRM meeting whose push has not stored its identity yet attends it (no locked duplicate)', async () => {
+        install({ importing: ['palak'] });
+        const start = inDays(2);
+        state.activities.push(
+            blankActivity({ id: 'crm1', subject: 'Quarterly review with ACME', assignedTo: 'asha', createdBy: 'asha', origin: 'crm', status: 'Planned', startAt: start, endAt: new Date(start.getTime() + HOUR) }),
+        );
+        // Asha's push created the event, but its store failed: the link has no event id yet and waits for a retry.
+        state.links.push(blankLink({ id: 'l-crm1', activityId: 'crm1', connectionId: 'c2', provider: 'fake', requestedId: 'crmffff', role: 'organizer', state: 'error', dirtyAt: new Date() }));
+        fakeAddEvent(
+            calendarMeeting('m1', {
+                organizer: { email: 'asha@nandiniinfosys.com' },
+                start: { dateTime: rfc(start), timeZone: TZ },
+                end: { dateTime: rfc(new Date(start.getTime() + HOUR)), timeZone: TZ },
+                attendees: [
+                    { email: 'palak@nandiniinfosys.com', responseStatus: 'accepted' },
+                    { email: 'ravi@acme.com', responseStatus: 'accepted' },
+                ],
+            }),
+        );
+        const result = done(await pullConnection('c1', 'poll'));
+        assert.equal(result.counts.imported, 0);
+        assert.equal(result.counts.attended, 1);
+        assert.equal(imported().length, 0, 'no second activity');
+        assert.equal(linksOf('crm1').find((l) => l.connectionId === 'c1')?.role, 'attendee');
+        assert.equal(attendeeOf('crm1', 'palak')?.responseStatus, 'accepted');
+    });
+
+    it('turning import on brings in meetings already in the calendar: one full pull (incremental pulls never list them)', async () => {
+        install({ importing: [] });
+        fakeAddEvent(calendarMeeting('m1'));
+        done(await pullConnection('c1', 'poll'));
+        assert.ok(state.connections[0].syncCursor, 'a cursor from the first pull');
+        state.calendarSyncUsers.push({ username: 'palak', provider: null, excluded: false, note: null, importMeetings: true } as (typeof state.calendarSyncUsers)[number]);
+        assert.equal(done(await pullConnection('c1', 'poll')).counts.imported, 0, 'the meeting did not change, so an incremental pull never sees it');
+
+        assert.equal(await startImportPulls(['palak']), 1);
+        assert.equal(state.connections[0].syncCursor, null);
+        const full = done(await pullConnection('c1', 'poll'));
+        assert.equal(full.full, true);
+        assert.equal(full.counts.imported, 1);
+        assert.equal(await startImportPulls(['asha']), 0, 'nothing for someone whose calendar has no cursor yet');
+    });
+
+    it('the owner of a customer’s meeting replies in the CRM: Decline cancels it and reaches their copy; Maybe brings it back', async () => {
+        install();
+        const queued: RsvpJobData[] = [];
+        setInlineRsvpForTests((data) => queued.push(data));
+        try {
+            fakeAddEvent(calendarMeeting('m1', { organizer: { email: 'ravi@acme.com' }, attendees: [{ email: 'palak@nandiniinfosys.com', responseStatus: 'needsAction' }] }));
+            done(await pullConnection('c1', 'poll'));
+            const [row] = imported();
+            assert.equal(row.externalOrganizer, true);
+            assert.equal((await activityService.getById(row.id, PALAK)).viewer.myResponse, 'needsAction', 'Palak can answer her own invitation');
+
+            const declined = await activityService.respond(row.id, { responseStatus: 'declined' }, PALAK);
+            assert.equal(declined.status, 'Cancelled');
+            assert.equal(declined.viewer.myResponse, 'declined');
+            assert.deepEqual(queued, [{ activityId: row.id, username: 'palak' }]);
+            assert.ok(state.audits.some((a) => a.action === 'RSVP' && a.changedBy === 'palak'));
+            const palakInCalendar = () => fakeProviderState.events.get('m1')?.attendees?.find((a) => a.email === 'palak@nandiniinfosys.com')?.responseStatus;
+
+            // A pull before the reply is sent keeps the CRM answer (the calendar's needsAction never replaces it).
+            done(await pullConnection('c1', 'poll', { full: true }));
+            assert.equal((await activityService.getById(row.id, PALAK)).viewer.myResponse, 'declined');
+
+            assert.deepEqual(await runRsvp(row.id, 'palak'), { status: 'done', reply: 'declined' });
+            assert.equal(palakInCalendar(), 'declined', 'the customer sees the decline');
+            done(await pullConnection('c1', 'poll'));
+            assert.equal(imported()[0].status, 'Cancelled');
+
+            const maybe = await activityService.respond(row.id, { responseStatus: 'tentative' }, PALAK);
+            assert.equal(maybe.status, 'Planned');
+            assert.equal(maybe.viewer.myResponse, 'tentative');
+            assert.equal((await runRsvp(row.id, 'palak')).status, 'done');
+            assert.equal(palakInCalendar(), 'tentative');
+            await assert.rejects(activityService.respond(row.id, { responseStatus: 'accepted' }, ASHA), (err: unknown) => err instanceof HttpError && err.statusCode === 403);
+        } finally {
+            setInlineRsvpForTests(null);
+        }
     });
 });
 

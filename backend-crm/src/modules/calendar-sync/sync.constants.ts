@@ -204,6 +204,10 @@ export const IMPORT_UNTITLED = '(No title)';
 export const IMPORT_LOOKUP_CHUNK = 500;
 /** Imported activities auto-completed per nightly batch (§10.1 step 6). */
 export const AUTO_COMPLETE_BATCH = 200;
+/** Without Redis, an in-process reply runs at most this many times (busy lease, rate limit, transient failure). */
+export const INLINE_RSVP_ATTEMPTS = 5;
+/** Wait before trying an in-process reply again after a transient failure (× the attempt number). */
+export const INLINE_RSVP_RETRY_MS = 15_000;
 /** Link error of a reply the calendar refused (P2-8; first-run check F3 on Google). */
 export const RSVP_REFUSED_CODE = 'rsvp_refused';
 export const RSVP_REFUSED_MESSAGE = 'The calendar refused this reply. Your reply is saved in the CRM only.';

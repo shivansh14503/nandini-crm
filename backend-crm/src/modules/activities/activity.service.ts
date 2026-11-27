@@ -17,7 +17,8 @@ import {
     throwFieldIssues,
     type ModuleFieldConfig,
 } from '../form-configs/customFieldValidator.js';
-import { calendarViewOf, loadOwnerCalendarLinks, NO_CALENDAR_LINKS, type CalendarLinksByActivity } from '../calendar-sync/sync.view.js';
+import { isLiveStatus } from '../calendar-sync/connection.constants.js';
+import { calendarViewOf, loadOwnerCalendarLinks, NO_CALENDAR_LINKS, parseReplyBase, type CalendarLinksByActivity } from '../calendar-sync/sync.view.js';
 import { FOLLOWUP_TYPE_CATEGORY_KEY } from '../form-configs/formConfig.defaults.js';
 import type { DropdownCategoryDto } from '../form-configs/formConfig.service.js';
 import { notifyActivityParticipants, scheduleActivityReminder } from '../notifications/notification.reminders.js';
@@ -85,27 +86,58 @@ export function toActivityView(
     row: ActivityRow,
     user: AuthUser,
     links: CalendarLinksByActivity = NO_CALENDAR_LINKS,
-    importedFrom: ReadonlyMap<string, string> = NO_IMPORT_SOURCES,
+    importedFrom: ReadonlyMap<string, ImportSource> = NO_IMPORT_SOURCES,
 ): ActivityView {
     const canEdit = canEditActivity(user, row);
+    const source = row.origin === 'calendar' ? importedFrom.get(row.id) : undefined;
+    // P2-8: the owner of a meeting organized outside the CRM replies on their own invitation (no attendee row).
+    const ownerReply = row.externalOrganizer && nameKey(row.assignedTo) === nameKey(user.username) ? (source?.ownerReply ?? null) : null;
     return {
         ...toActivityDto(row),
-        viewer: { canEdit, myResponse: myResponseOf(user, row) },
+        viewer: { canEdit, myResponse: myResponseOf(user, row) ?? ownerReply },
         lockedFields: lockedFieldsFor(row),
         calendar: calendarViewOf(row, links.get(row.id), user.username, canEdit),
-        importedFrom: row.origin === 'calendar' ? (importedFrom.get(row.id) ?? null) : null,
+        importedFrom: source?.provider ?? null,
     };
 }
 
-const NO_IMPORT_SOURCES: ReadonlyMap<string, string> = new Map();
+/** P2-8: where an imported activity came from, and its owner's own reply when they hold an invitation copy. */
+export interface ImportSource {
+    provider: string;
+    ownerReply: string | null;
+}
+const NO_IMPORT_SOURCES: ReadonlyMap<string, ImportSource> = new Map();
 
-/** P2-8: the provider each imported activity came from (its first link, whatever its role or state). */
-export async function loadImportSources(rows: readonly ActivityRow[]): Promise<ReadonlyMap<string, string>> {
-    const ids = rows.filter((row) => row.origin === 'calendar').map((row) => row.id);
-    if (ids.length === 0) return NO_IMPORT_SOURCES;
-    const links = await prisma.activityExternalLink.findMany({ where: { activityId: { in: ids } }, select: { activityId: true, provider: true }, orderBy: { createdAt: 'asc' } });
-    const out = new Map<string, string>();
-    for (const link of links) if (!out.has(link.activityId)) out.set(link.activityId, link.provider);
+/**
+ * P2-8: the provider each imported activity came from (its first link, whatever its role or state), and for a meeting
+ * organized outside the CRM the owner's reply: from their live attendee link (`baseJson` `mine`, else `self`).
+ */
+export async function loadImportSources(rows: readonly ActivityRow[]): Promise<ReadonlyMap<string, ImportSource>> {
+    const imported = rows.filter((row) => row.origin === 'calendar');
+    if (imported.length === 0) return NO_IMPORT_SOURCES;
+    const links = await prisma.activityExternalLink.findMany({
+        where: { activityId: { in: imported.map((row) => row.id) } },
+        select: { activityId: true, provider: true, role: true, state: true, baseJson: true, connectionId: true },
+        orderBy: { createdAt: 'asc' },
+    });
+    const ownerOf = new Map(imported.map((row) => [row.id, row.externalOrganizer ? nameKey(row.assignedTo) : null]));
+    // Only an outside meeting's attendee links can carry the owner's reply: their connections, one more read when any.
+    const replyLinks = links.filter((link) => ownerOf.get(link.activityId) && link.role === 'attendee' && link.state !== 'detached');
+    const connections = replyLinks.length
+        ? await prisma.calendarConnection.findMany({ where: { id: { in: [...new Set(replyLinks.map((l) => l.connectionId))] } }, select: { id: true, username: true, status: true } })
+        : [];
+    const liveOwnerOf = new Map(connections.filter((c) => isLiveStatus(c.status)).map((c) => [c.id, nameKey(c.username)]));
+    const out = new Map<string, ImportSource>();
+    for (const link of links) {
+        const entry = out.get(link.activityId) ?? { provider: link.provider, ownerReply: null };
+        const owner = ownerOf.get(link.activityId);
+        const ownersCopy = Boolean(owner) && link.role === 'attendee' && link.state !== 'detached' && liveOwnerOf.get(link.connectionId) === owner;
+        if (ownersCopy) {
+            const base = parseReplyBase(link.baseJson);
+            entry.ownerReply = base.mine ?? base.self ?? 'needsAction';
+        }
+        out.set(link.activityId, entry);
+    }
     return out;
 }
 
@@ -768,6 +800,15 @@ export const activityService = {
     async respond(id: string, body: unknown, user: AuthUser): Promise<ActivityView> {
         const { responseStatus } = respondSchema.parse(body);
         const respondedAt = new Date();
+        // P2-8: the owner of a meeting organized outside the CRM replies on their own invitation (dynamic: no import cycle).
+        const { respondAsOwner, enqueueRsvp } = await import('../calendar-sync/sync.rsvp.js');
+        const owned = await respondAsOwner(id, responseStatus, user, respondedAt);
+        if (owned) {
+            await cacheService.invalidateEntityCaches('activities');
+            await runActivityPostCommit(owned.rows, user);
+            await enqueueRsvp(id, user.username, respondedAt);
+            return toOneView(owned.row, user);
+        }
         const { existing, row } = await runInTransaction(async (tx) => {
             await lockRecords(tx, 'activity', [id]);
             const existing = await tx.activity.findFirst({ where: { id, isDeleted: false }, include: WITH_ATTENDEES });
@@ -787,13 +828,8 @@ export const activityService = {
         await cacheService.invalidateEntityCaches('activities');
         // A reply changes no owner or invitation; this only re-arms the reminder (a no-op for a pending one).
         await runActivityPostCommit([{ before: existing, after: row }], user);
-        try {
-            // P2-8: the same reply to their own calendar copy when it syncs replies (dynamic: no import cycle).
-            const { enqueueRsvp } = await import('../calendar-sync/sync.rsvp.js');
-            await enqueueRsvp(id, user.username, respondedAt);
-        } catch (err) {
-            logger.warn({ err: (err as Error).message, activityId: id }, 'Could not queue the calendar reply');
-        }
+        // P2-8: the same reply to their own calendar copy when it syncs replies (never throws).
+        await enqueueRsvp(id, user.username, respondedAt);
         return toOneView(row, user);
     },
 

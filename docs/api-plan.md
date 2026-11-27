@@ -127,8 +127,9 @@ moves with its record. `ActivityDto.origin`: `crm` (made in the CRM), `followup`
 
 **Meetings from the calendar** (as of 2026-11-26, Calendar Phase 2 P2-8, `calendar-sync/sync.import.ts`). While the company
 switch `allowMeetingImport` and the person's admin-set `importMeetings` are on, the pull imports a customer meeting from
-the person's calendar as an activity with `origin: 'calendar'` (type = `importFollowupType`, `createdBy` / `changedBy`
-`calendar-sync`): timed, single, not private, not declined, not longer than the sync's long-event limit, starting from 1 day back to 180 days ahead, with at least
+the person's calendar as an activity with `origin: 'calendar'` (type = `importFollowupType`, which must be a type
+ticked under What goes to calendars; `createdBy` `calendar-sync`, audited `CREATE` with `changedBy` = the employee whose
+calendar it is, route `job:calendar-sync:<provider>`): timed, single, not private, not declined, not longer than the sync's long-event limit, starting from 1 day back to 180 days ahead, with at least
 one known contact's email. Owner = the organizer when they are a colleague (whose own pull imports it when they import meetings), else the
 person whose calendar it is. A meeting a customer organized (`externalOrganizer: true`) carries `organizerEmail` / `organizerName` and is
 locked in the CRM: `lockedFields` = `subject`, `startAt`, `endAt`, `allDay`, `location`, `attendees`, `assignedTo`, and a
@@ -137,7 +138,12 @@ The related record, remarks, customer response, Completed and custom fields stay
 meeting share one activity (one `syncKey` = iCalUID), each with their own calendar link (the second is an `attendee`
 link). Deleting an imported activity detaches the links and keeps `syncKey`, so it is never imported again. An imported
 meeting with no related record that ended before today and is still Planned is completed by the nightly maintenance
-(`completedBy` `calendar-sync`).
+(`completedBy` `calendar-sync`). Turning either switch on starts one full pull of each affected calendar, so meetings
+already there come in. `POST /api/activities/:id/response` is also open to the **owner** of an `externalOrganizer`
+meeting who holds the invitation in their own synced calendar (a customer invited them; they have no attendee row):
+`viewer.myResponse` carries their reply, Decline sets the activity Cancelled and Accept / Maybe bring a Cancelled one
+back (audited `RSVP` plus the status `UPDATE`); for them and for invited colleagues the reply goes to their calendar
+copy through the `rsvp` job (as of 2026-11-26, P2-8).
 `ActivityDto` gains `organizerEmail`, `organizerName` (`''` when unknown) and `externalOrganizer`; the activity view
 gains `importedFrom: 'google' | 'microsoft' | 'fake' | null` (the provider it came from, outside the audited record).
 

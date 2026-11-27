@@ -634,7 +634,8 @@ export function ActivityDetailDrawer({ activity, activityId, open, onClose, onEd
     );
 
     // Owners act on the activity; anyone invited as a colleague replies, owner or not (a manager invited to a rep's
-    // meeting can also edit it, and still needs to accept or decline). A note has no replies.
+    // meeting can also edit it, and still needs to accept or decline). P2-8: the owner of a meeting organized outside
+    // the CRM replies to their own invitation too (`viewer.myResponse` set by the server). A note has no replies.
     const canReply = myResponse !== null && !isNote;
     const rsvp = canReply ? (
         <Box

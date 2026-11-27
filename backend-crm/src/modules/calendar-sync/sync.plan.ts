@@ -61,6 +61,9 @@ export function planPush(input: PlanInput): PushPlan {
     if (activity.isDeleted && activity.origin === 'calendar') return { action: 'detach' };
     if (activity.isDeleted) return cancelOrNothing;
     if (activity.status === 'Cancelled') return cancelOrNothing;
+    // An imported meeting whose type stopped going to calendars (or lost its time) is still the employee's real meeting:
+    // the link stops, the event stays (only Cancel / an owner change removes it, §13.2).
+    if ((!input.typeSyncable || !activity.hasSchedule) && activity.origin === 'calendar') return { action: 'detach' };
     if (!input.typeSyncable || !activity.hasSchedule) return cancelOrNothing;
     if (activity.externalOrganizer) return { action: 'noop', state: 'detached' };
 

@@ -10,7 +10,7 @@ import { setFakeHealth, setFakeProviderEnabledForTests } from './providers/regis
 import { rsvpJobId } from './sync.keys.js';
 import { pullConnection, resetPullStateForTests } from './sync.pull.js';
 import { pushLink } from './sync.push.js';
-import { runRsvp, setInlineRsvpForTests, type RsvpJobData } from './sync.rsvp.js';
+import { runRsvp, runRsvpInline, setInlineRsvpForTests, type RsvpJobData, type RsvpResult } from './sync.rsvp.js';
 import { setInlinePushForTests } from './sync.wake.js';
 import { blankConnection, type ConnectionRowState } from './testing/connectionDouble.js';
 import { setTokenSourceForTests } from './tokenSource.js';
@@ -182,6 +182,31 @@ describe('rsvp: CRM → calendar', () => {
         assert.equal(links[0].state, 'pending');
         assert.equal(links[0].externalEventId, null, 'starts afresh: her copy was Palak’s event');
         assert.ok(links[0].dirtyAt);
+    });
+
+    it('without Redis: a busy lease, a rate limit or a transient failure is tried again in-process, a few times at most', async () => {
+        const waits: number[] = [];
+        const wait = async (ms: number) => void waits.push(ms);
+        const script = (...steps: (RsvpResult | Error)[]) => {
+            let i = 0;
+            return async () => {
+                const step = steps[Math.min(i++, steps.length - 1)];
+                if (step instanceof Error) throw step;
+                return step;
+            };
+        };
+        const data = { activityId: 'a1', username: 'asha' };
+        const done: RsvpResult = { status: 'done', reply: 'accepted' };
+        assert.deepEqual(await runRsvpInline(data, { run: script({ status: 'busy' }, { status: 'rate_limited', retryAfterMs: 2_000 }, new Error('503'), done), wait }), done);
+        assert.equal(waits.length, 3);
+        assert.ok(waits[0] >= 5_000 && waits[1] >= 2_000 && waits[2] === 45_000, JSON.stringify(waits));
+
+        waits.length = 0;
+        assert.equal(await runRsvpInline(data, { run: script({ status: 'busy' }), wait, attempts: 3 }), null, 'gives up; the reply stays in the CRM');
+        assert.equal(waits.length, 2);
+        waits.length = 0;
+        assert.deepEqual(await runRsvpInline(data, { run: script({ status: 'skipped', reason: 'owner' }), wait }), { status: 'skipped', reason: 'owner' });
+        assert.equal(waits.length, 0, 'finished results are not retried');
     });
 
     it('job id: rsvp-<activityId>-<username>-<respondedAtMs>, no colon', () => {

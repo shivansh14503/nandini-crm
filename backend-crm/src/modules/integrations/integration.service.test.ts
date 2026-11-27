@@ -463,6 +463,13 @@ describe('settings and sync types', () => {
         assert.equal(settingSaves.length, 1);
     });
 
+    it('P2-8: a type unticked under What goes to calendars is refused as the import type (its pushes would delete the meeting)', async () => {
+        const { settingSaves } = setup({ configs: followupConfigs([{ value: 'Call' }, { value: 'Visit', meta: { calendarSync: false, icon: 'meeting' } }]) });
+        await expectHttp(saveCalendarSettings({ importFollowupType: 'Visit' }, admin), 400, 'VALIDATION_ERROR');
+        assert.equal(settingSaves.length, 0);
+        assert.notEqual((await loadCalendarSettings()).importFollowupType, 'Visit', 'never the default either');
+    });
+
     it('lists Followup Types with Task / Note locked off; saves real changes through the option update', async () => {
         const { optionUpdates, state } = setup({ configs: followupConfigs([{ value: 'Call', meta: { icon: 'call' } }, { value: 'WhatsApp', meta: { calendarSync: false } }, { value: 'Task' }]) });
         assert.deepEqual(await integrationService.getSyncTypes(), [
@@ -618,6 +625,24 @@ describe('People', () => {
         await saveCalendarSettings({ allowMeetingImport: false }, admin);
         await integrationService.setPersonCalendar('asha', { importMeetings: false }, admin);
         assert.equal(state.syncUsers.length, 0);
+    });
+
+    it('P2-8: turning import on (the person’s switch, or the company switch for those who import) starts a full pull', async () => {
+        setFakeProviderEnabledForTests(true);
+        const { state } = setup({ users, connections: [blankConnection({ id: 'c-asha', username: 'asha', provider: 'fake', accountEmail: 'asha@nandiniinfosys.com', status: 'ok' }, now)] });
+        const cursor = () => state.connections.find((c) => c.id === 'c-asha')?.syncCursor ?? null;
+        const setCursor = () => Object.assign(state.connections.find((c) => c.id === 'c-asha') as object, { syncCursor: 'cursor-1' });
+        setCursor();
+        await saveCalendarSettings({ allowMeetingImport: true }, admin);
+        assert.equal(cursor(), 'cursor-1', 'nobody imports yet');
+        await integrationService.setPersonCalendar('asha', { importMeetings: true }, admin);
+        assert.equal(cursor(), null, 'her next pull lists the whole calendar, so meetings already there come in');
+        setCursor();
+        await integrationService.setPersonCalendar('asha', { note: 'Sales lead' }, admin);
+        assert.equal(cursor(), 'cursor-1', 'other changes leave the cursor alone');
+        await saveCalendarSettings({ allowMeetingImport: false }, admin);
+        await saveCalendarSettings({ allowMeetingImport: true }, admin);
+        assert.equal(cursor(), null, 'the company switch coming back on: everyone who imports');
     });
 
     it('calendar choice: the test calendar only while the fake is on (400); unknown person 404; unknown field 400', async () => {

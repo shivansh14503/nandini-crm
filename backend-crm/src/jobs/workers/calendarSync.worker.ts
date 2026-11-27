@@ -17,7 +17,7 @@ import { runCalendarNightly, runCalendarPoll, runEnrolled, runFallbackTick, swee
 import { isWatchOp, runWatchJob } from '../../modules/calendar-sync/sync.channels.js';
 import { pullConnection, type PullResult } from '../../modules/calendar-sync/sync.pull.js';
 import { markPushExhausted, pushLink, type PushResult } from '../../modules/calendar-sync/sync.push.js';
-import { runRsvp, type RsvpResult } from '../../modules/calendar-sync/sync.rsvp.js';
+import { rsvpRetryDelay, runRsvp } from '../../modules/calendar-sync/sync.rsvp.js';
 import { pollCron } from '../../modules/calendar-sync/syncHours.js';
 import { pullAgainIfNotified } from '../../modules/calendar-sync/webhook.service.js';
 import { writeWorkerHeartbeat } from '../../modules/calendar-sync/workerHeartbeat.js';
@@ -74,12 +74,8 @@ export function pullRetryDelay(result: PullResult, random: () => number = Math.r
     return null;
 }
 
-/** When a reply job that couldn't run now should run again (ms from now), or null (P2-8). Pure. */
-export function rsvpRetryDelay(result: RsvpResult, random: () => number = Math.random): number | null {
-    if (result.status === 'busy') return LEASE_RETRY_DELAY_MS + Math.floor(random() * 2_000);
-    if (result.status === 'rate_limited') return Math.max(1_000, result.retryAfterMs) + Math.floor(random() * 1_000);
-    return null;
-}
+/** Re-exported for the worker tests (the in-process reply runner uses the same delays, P2-8). */
+export { rsvpRetryDelay };
 
 const reasonOf = (data: unknown): PullReason => {
     const value = (data as Record<string, unknown> | null)?.reason;

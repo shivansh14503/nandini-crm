@@ -522,8 +522,14 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         `sendUpdates=all`, Graph `accept` / `tentativelyAccept` / `decline` with `sendResponse: true` (app-only),
         the copy found lazily by iCalUID; a refusal (F3) is recorded on the link (`rsvp_refused`) and marks nothing
         unhealthy. The nightly completes past imported meetings with no related record. Handing a meeting to an
-        invitee turns their attendee link into their organizer link. Admin › API Integrations: the company switch and
-        the import type (active, not Task / Note); People dialog: "Import customer meetings" (admins only, `409
+        invitee turns their attendee link into their organizer link. The owner of a customer's meeting replies too
+        (Decline cancels it, Accept / Maybe revive it; kept on their link as `baseJson.mine`). Turning either switch
+        on starts one full pull per affected calendar (meetings already there come in). Without Redis a reply is
+        retried in-process up to 5 times. Races: this person's own organizer copy is relinked, never attended; an
+        invitation copy of a colleague's CRM meeting whose push hasn't stored its identity yet attends it. A push of
+        an imported organizer link whose type stopped going to calendars detaches instead of deleting the event
+        (review fixes, as of 2026-11-27). Admin › API Integrations: the company switch and the import type (active,
+        ticked under What goes to calendars, not Task / Note); People dialog: "Import customer meetings" (admins only, `409
         MEETING_IMPORT_OFF` while the company switch is off; no self-service). Drawer: "Imported from …" / "Organized
         by …" caption, an Organizer field, no Reschedule or time edits for outside meetings; the form shows the
         locked fields. No new wake-up (imports ride the pulls, the auto-complete the 00:25 nightly). Owner steps:

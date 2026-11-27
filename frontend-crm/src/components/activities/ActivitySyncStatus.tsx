@@ -369,7 +369,7 @@ export function ActivitySyncStatus({ activity, onRefresh, onNotify }: ActivitySy
  * when there is no event to cancel (not in a calendar, already cancelled or removed there, a repeating series).
  */
 export function calendarRemovalNote(
-    activity: Pick<Activity, 'calendar' | 'origin' | 'assignedTo' | 'attendees' | 'importedFrom' | 'externalOrganizer'>,
+    activity: Pick<Activity, 'calendar' | 'origin' | 'assignedTo' | 'attendees' | 'importedFrom' | 'externalOrganizer' | 'viewer'>,
     viewerUsername: string | null | undefined,
     verb: 'delete' | 'cancel',
 ): string {
@@ -378,7 +378,11 @@ export function calendarRemovalNote(
     // meeting organized outside the CRM is never written to the calendar at all.
     const source = calendar?.provider ?? activity.importedFrom;
     if (activity.origin === 'calendar' && verb === 'delete' && source) return ` Removes it from the CRM only: the event stays in the ${calendarProviderName(source)}.`;
-    if (activity.externalOrganizer && verb === 'cancel') return ' Cancels it in the CRM only: the meeting stays in the calendar.';
+    if (activity.externalOrganizer && verb === 'cancel') {
+        // P2-8: Decline (the reply buttons) is what answers the organizer; Cancel only changes the CRM.
+        const canDecline = Boolean(activity.viewer?.myResponse);
+        return ` Cancels it in the CRM only: the meeting stays in the calendar and the organizer isn't told.${canDecline ? ' To turn the invitation down, use Decline.' : ''}`;
+    }
     if (!calendar || calendar.state === 'unsupported' || calendar.state === 'removed_remote' || calendar.state === 'cancelled') return '';
     const where = calendarProviderName(calendar.provider);
     const whose = lc(activity.assignedTo) === lc(viewerUsername) ? 'your' : `${personName(activity.assignedTo)}'s`;

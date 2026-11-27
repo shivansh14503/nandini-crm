@@ -822,7 +822,11 @@ shorter interval keeps the database awake longer.
 P2-8 (customer meetings from the calendar, replies both ways; as of 2026-11-26) adds **no new wake-up**: imports and
 attendee copies ride the existing pulls (poll, webhook, Sync now), with the import lookups batched per page (≤ 500
 keys per query) and only for events that aren't linked yet; a CRM reply's `rsvp` job runs right after the reply,
-while the database is awake for it; the auto-complete is a step of the existing 00:25 calendar nightly.
+while the database is awake for it; the auto-complete is a step of the existing 00:25 calendar nightly. Turning import
+on (the company switch, or an admin's per-person switch) drops the cursor of each affected synced calendar and queues
+one full pull (`rebaseline`), once per person per switch-on, while an admin is using the app anyway; without Redis the
+next poll does it inside the sync hours. Without Redis a reply that meets a busy lease, a rate limit or a transient
+failure is tried again in-process up to 5 times (15 s × attempt apart, or the provider's wait), no extra wake-up.
 
 The navbar bell's unread count is served from Redis, so open browser tabs polling it don't keep the database awake:
 the key lives 24 h and is dropped only by a change to the user's notifications (which already used the database), by
@@ -926,7 +930,11 @@ job and the sweep (connection checks and the nightly connection steps still run)
   `tentativelyAccept` / `decline` with `sendResponse: true` on `/users/{mailbox}` (app-only). The calls are
   read-only for health: a refusal (F3: Google's `calendar.events.owned` scope may not allow writing an invitation
   copy) is recorded on the link (`rsvp_refused`) and marks neither the row nor the provider; the CRM keeps the reply
-  either way. Busy / rate-limited → moved back without an attempt; other failures retried (5 attempts).
+  either way. Busy / rate-limited → moved back without an attempt; other failures retried (5 attempts). Without Redis
+  the same reply runs in-process, retried up to 5 times on busy / rate-limited / transient failures (a restart in
+  between drops it; the CRM keeps the reply). The owner of a meeting organized outside the CRM replies too: their reply
+  is kept on their attendee link (`baseJson.mine`) until the calendar answers differently, Decline cancels the
+  activity and Accept / Maybe revive it (as of 2026-11-26).
 - **Pull** (as of 2026-11-26, P2-5; `sync.pull.ts` `pullConnection`, `sync.classify.ts`, `sync.inbound.ts`,
   `providers/googleChanges.ts`, `providers/graphChanges.ts`): per synced person (row `ok`, user active,
   `CALENDAR_SYNC_ENABLED`), under the same lease as the push and audit origin `job:calendar-sync:<provider>` with the
@@ -953,7 +961,12 @@ job and the sweep (connection checks and the nightly connection steps still run)
   link (the oldest live one) mirrors those fields from the calendar. On an attendee link the person's reply is
   merged three-way against `baseJson` `{ self }` (a calendar `needsAction` never replaces a CRM answer) and written
   as an audited `RSVP` by that person; the owner declining / the event cancelled on an outside meeting → Cancelled,
-  accepting again → Planned. Everything else stays counted and unstored, as before. Switches off: nothing new is
+  accepting again → Planned (a gone copy of a CRM-held meeting changes nothing: that is its organizer link's business).
+  This person's own organizer copy is never attached as an attendee: when a colleague's pull brought the meeting in
+  meanwhile and it is assigned to them, it is relinked (§8.2). An invitation copy of a colleague's CRM meeting whose
+  push hasn't stored its identity yet (the organizer link still has no event id) attends that activity, matched by the
+  Google event id (= the requested id) or by owner, subject and exact time, instead of importing a duplicate. A push of
+  an imported organizer link whose type stopped going to calendars detaches the link instead of deleting the event. Everything else stays counted and unstored, as before. Switches off: nothing new is
   imported or attached; existing links keep working. **Merge**: three-way against `baseJson`
   (`planMerge`, shared with the push's 412 path): the calendar wins for subject / time / location / attendees
   unless the CRM changed the same group since the base (then the later write wins); reminder, description, type,

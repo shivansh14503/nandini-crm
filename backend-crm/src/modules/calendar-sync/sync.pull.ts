@@ -20,7 +20,7 @@ import { CursorExpiredError, ProviderError, ProviderRateLimitedError } from './p
 import { getAdapter } from './providers/registry.js';
 import type { CalendarProviderAdapter, CallCtx, ChangePage } from './providers/types.js';
 import { attendeeInputsFromProvider, parseHeld } from './sync.attendees.js';
-import { classifyInbound, emptyPullCounts, type InboundAction, type PullCounts } from './sync.classify.js';
+import { classifyInbound, emptyPullCounts, isTooLong, type InboundAction, type PullCounts } from './sync.classify.js';
 import {
     FOLLOW_UP_TIME_KEPT_PREFIX,
     LEASE_CALL_HEADROOM_MS,
@@ -343,8 +343,12 @@ class ConnectionPull {
         switch (action.kind) {
             case 'ignore':
                 return { ...NOTHING, outcome: 'ignored' };
-            case 'unlinked':
-                return this.imported(await this.importer.applyUnlinked(event));
+            case 'unlinked': {
+                const result = await this.importer.applyUnlinked(event);
+                // P2-8 (D45): this person's own organizer copy of a meeting a colleague's pull brought in meanwhile.
+                if (result.relinkActivityId) return this.merge(event, result.relinkActivityId, null, { tooLong: isTooLong(event.shape.when), relink: true });
+                return this.imported(result);
+            }
             case 'attendee':
                 return this.imported(await this.importer.applyAttendeeLink(event, link as ActivityExternalLink));
             case 'skip':

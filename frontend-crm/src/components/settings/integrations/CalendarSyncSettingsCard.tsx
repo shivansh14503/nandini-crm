@@ -121,8 +121,9 @@ export function CalendarSyncSettingsCard({
         }
     };
 
-    // Task and Note never go to calendars, so they can't be the type of an imported meeting.
-    const importTypes = syncTypes.filter((t) => !t.locked);
+    // Only a type ticked under What goes to calendars (never Task / Note): a meeting the employee organizes stays two-way.
+    const importTypes = syncTypes.filter((t) => !t.locked && t.calendarSync);
+    const importTypeGone = Boolean(form.importFollowupType) && !importTypes.some((t) => t.value === form.importFollowupType);
 
     const domainsError = domainError || errors.companyDomains || Object.entries(errors).find(([k]) => k.startsWith('companyDomains.'))?.[1] || '';
 
@@ -299,7 +300,12 @@ export function CalendarSyncSettingsCard({
                             onChange={(e) => set('importFollowupType', e.target.value)}
                             disabled={save.isPending}
                             error={Boolean(errors.importFollowupType)}
-                            helperText={errors.importFollowupType || 'Imported meetings get this Followup Type.'}
+                            helperText={
+                                errors.importFollowupType ||
+                                (importTypeGone
+                                    ? `${form.importFollowupType} no longer goes to calendars. Pick another type.`
+                                    : 'Imported meetings get this Followup Type. Only types that go to calendars are listed.')
+                            }
                             sx={{ ...inputSx, mt: 1.5, width: { xs: '100%', sm: 320 }, maxWidth: '100%' }}
                         >
                             {importTypes.map((t) => (

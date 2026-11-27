@@ -4,6 +4,7 @@ import type { ActivityCalendarView, ActivityRow } from '../activities/activity.m
 import { LIVE_CONNECTION_STATUSES } from './connection.constants.js';
 import { parseHeld } from './sync.attendees.js';
 import { FOLLOW_UP_NOTE_DAYS, FOLLOW_UP_TIME_KEPT_PREFIX } from './sync.constants.js';
+import type { AttendeeResponse } from './sync.shapes.js';
 
 /**
  * `ActivityView.calendar` (Calendar Phase 2 spec §4.4, §14.5; the drawer's ActivitySyncStatus, the list's Calendar
@@ -23,6 +24,25 @@ export type CalendarLinksByActivity = ReadonlyMap<string, OwnerCalendarLink>;
 export const NO_CALENDAR_LINKS: CalendarLinksByActivity = new Map();
 
 const lc = (value: string | null | undefined) => (value ?? '').trim().toLowerCase();
+
+const REPLIES: ReadonlySet<string> = new Set(['needsAction', 'accepted', 'tentative', 'declined']);
+const replyOf = (value: unknown): AttendeeResponse | null => (typeof value === 'string' && REPLIES.has(value) ? (value as AttendeeResponse) : null);
+
+/**
+ * An attendee link's `baseJson` (P2-8): `self` = the reply last agreed with the calendar; `mine` = the CRM reply of the
+ * activity's owner on their own invitation (a meeting organized outside the CRM: the owner has no attendee row), kept
+ * until the calendar answers differently. Pure; nulls for anything unreadable.
+ */
+export function parseReplyBase(json: string | null | undefined): { self: AttendeeResponse | null; mine: AttendeeResponse | null } {
+    if (!json) return { self: null, mine: null };
+    try {
+        const value = JSON.parse(json) as { self?: unknown; mine?: unknown } | null;
+        return { self: replyOf(value?.self), mine: replyOf(value?.mine) };
+    } catch {
+        return { self: null, mine: null };
+    }
+}
+
 const iso = (date: Date | null | undefined) => (date ? date.toISOString() : null);
 
 /** The organizer link on the owner's own live connection, per activity (an old owner's or detached link doesn't show). */

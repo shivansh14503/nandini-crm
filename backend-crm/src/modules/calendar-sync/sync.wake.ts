@@ -3,7 +3,7 @@ import { logger } from '../../config/logger.js';
 import { prisma } from '../../config/prisma.js';
 import { calendarSyncQueue, tryEnqueue } from '../../jobs/queues.js';
 import { notify } from '../notifications/notification.producer.js';
-import { CALENDAR_SYNC_JOBS, PUSH_JOB_DELAY_MS, type PullReason } from './sync.constants.js';
+import { CALENDAR_SYNC_JOBS, IMPORT_LOOKUP_CHUNK, PUSH_JOB_DELAY_MS, type PullReason } from './sync.constants.js';
 import { checkJobId, enrolledJobId, pullJobId, pushJobId } from './sync.keys.js';
 import { invitesHeldNotification } from './sync.notifications.js';
 import { takeOutboxResult, type DirtyLink, type HeldNotice } from './sync.outbox.js';
@@ -101,6 +101,46 @@ export function enqueuePull(connectionId: string, reason: PullReason, now: Date 
         // A failed pull isn't retried: the next poll (every few minutes) pulls again from the same cursor.
         attempts: 1,
     });
+}
+
+/**
+ * P2-8: customer-meeting import was just turned on (the company switch: `usernames` null = everyone who imports; an
+ * admin's per-person switch: that person). Pulls are incremental (a Google sync token / Graph delta only returns events
+ * that changed), so meetings already in the calendar would never reach the importer: each affected live connection
+ * drops its cursor and gets one full pull (`rebaseline`). The cursor drop is durable, so without Redis the next poll
+ * pulls in full. One full pull per person per switch-on; never throws. Returns how many connections start over.
+ */
+export async function startImportPulls(usernames: readonly string[] | null, now: Date = new Date()): Promise<number> {
+    try {
+        if (!ENV.INTEGRATIONS.SYNC_ENABLED) return 0;
+        let people: string[];
+        if (usernames) {
+            people = [...usernames];
+        } else {
+            const rows = await prisma.calendarSyncUser.findMany({ where: { importMeetings: true, excluded: false }, select: { username: true } });
+            people = rows.map((r) => r.username);
+        }
+        if (people.length === 0) return 0;
+        // `pending` rows have no cursor yet: their first pull is full anyway.
+        const connections: { id: string }[] = [];
+        for (let i = 0; i < people.length; i += IMPORT_LOOKUP_CHUNK) {
+            connections.push(
+                ...(await prisma.calendarConnection.findMany({
+                    where: { username: { in: people.slice(i, i + IMPORT_LOOKUP_CHUNK) }, status: { in: ['ok', 'error'] }, syncCursor: { not: null } },
+                    select: { id: true },
+                })),
+            );
+        }
+        for (const { id } of connections) {
+            await prisma.calendarConnection.updateMany({ where: { id }, data: { syncCursor: null } });
+            await enqueuePull(id, 'rebaseline', now).catch(() => null);
+        }
+        if (connections.length > 0) logger.info({ connections: connections.length }, 'Customer-meeting import turned on; full calendar pulls started');
+        return connections.length;
+    } catch (err) {
+        logger.warn({ err: (err as Error).message }, 'Could not start the full pulls for customer-meeting import; meetings come in as they change');
+        return 0;
+    }
 }
 
 /** `calendar_invites_held` to each owner, naming who added the guests. */

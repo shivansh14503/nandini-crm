@@ -12,6 +12,7 @@ import type { CalendarSyncSettings } from '../integrations/calendarSyncSettings.
 import { lockRecords, runInTransaction } from '../shared/transactions.js';
 import { zonedStartOfDay, zonedDayOf } from '../../utils/zonedTime.js';
 import { attendeeInputsFromProvider, resolveAttendeeEmails } from './sync.attendees.js';
+import { LIVE_CONNECTION_STATUSES } from './connection.constants.js';
 import { isTooLong } from './sync.classify.js';
 import {
     AUTO_COMPLETE_BATCH,
@@ -27,6 +28,7 @@ import { capAttendees, inboundCrmNow } from './sync.inbound.js';
 import { eventKeyOf, requestedIdFor, syncKeyOf } from './sync.keys.js';
 import { scheduleFieldsOf } from './sync.merge.js';
 import { crmWhenOf, sameWhen, type AttendeeResponse, type CrmAttendee, type ProviderEvent } from './sync.shapes.js';
+import { parseReplyBase } from './sync.view.js';
 
 /**
  * Customer meetings from the calendar (Calendar Phase 2 spec §13.1–§13.2, D17, D18; P2-8), run by the pull
@@ -44,13 +46,19 @@ import { crmWhenOf, sameWhen, type AttendeeResponse, type CrmAttendee, type Prov
  *   (three-way against the reply last agreed, kept on the link as `{ self }`; a calendar `needsAction` never undoes a
  *   CRM answer). For a meeting organized outside the CRM, one designated attendee link (the oldest live one) also
  *   mirrors the title, time, place and guest list: nobody can change those in the CRM (locks), and no organizer copy
- *   is linked that could. A cancelled copy cancels the activity when it is this person's own (they own it), else it
- *   counts as their decline.
+ *   is linked that could. A cancelled copy of a meeting organized outside the CRM cancels the activity when it is this
+ *   person's own (they own it), else it counts as their decline; a CRM-held meeting is left to its organizer link.
+ * - The owner of a meeting organized outside the CRM has no attendee row: their own reply (the RSVP buttons, sync.rsvp.ts)
+ *   is kept on their attendee link as `{ self, mine }` until the calendar answers differently.
  * - Nightly: imported activities without a related record that ended before today are completed (§10.1 step 6).
  *
  * Unique-index races (D45): the syncKey holder is read first inside the import's transaction; a concurrent import of
  * the same meeting that wins anyway makes the insert fail outside any catch here, and the pull retries the event once
- * from the start (sync.pull.ts `applySafely`), which then attends the activity the other pull created.
+ * from the start (sync.pull.ts `applySafely`), which then attends the activity the other pull created, or, for this
+ * person's own organizer copy of an activity assigned to them, relinks it (§8.2: `relinkActivityId`). An invitation copy
+ * of a CRM meeting whose push hasn't stored its identity yet (the organizer's link still waits for its event) attends
+ * that activity instead of importing a second one (matched by the Google event id = the requested id, or by owner,
+ * subject and time).
  */
 
 const DAY_MS = 24 * 60 * 60_000;
@@ -144,10 +152,39 @@ export interface ImportContact {
     organizationId: string | null;
 }
 
+/** A colleague's CRM meeting whose organizer link still waits for its event (the push hasn't stored its identity yet). */
+export interface InFlightMeeting {
+    id: string;
+    assignedTo: string;
+    requestedId: string;
+    startMs: number;
+    endMs: number;
+    subject: string;
+}
+
 export interface ImportContext {
     contactByEmail: Map<string, ImportContact>;
     userByEmail: Map<string, { username: string; importsOwn: boolean }>;
     bySyncKey: Map<string, { id: string; isDeleted: boolean; assignedTo: string }>;
+    /** By the organizer's lower-cased username. */
+    inFlight: Map<string, InFlightMeeting[]>;
+}
+
+const emptyContext = (): ImportContext => ({ contactByEmail: new Map(), userByEmail: new Map(), bySyncKey: new Map(), inFlight: new Map() });
+
+/**
+ * The colleague's in-flight CRM meeting this invitation copy belongs to, if any (pure): Google gives the invitation copy
+ * the organizer's event id, which is the push's requested id; otherwise the same subject and exact start and end.
+ */
+export function inFlightMatch(event: ProviderEvent, candidates: readonly InFlightMeeting[] | undefined): InFlightMeeting | null {
+    if (!candidates?.length) return null;
+    const byId = candidates.find((c) => c.requestedId === event.id);
+    if (byId) return byId;
+    if (event.shape.when.allDay) return null;
+    const start = Date.parse(event.shape.when.start);
+    const end = Date.parse(event.shape.when.end);
+    const subject = lc(event.shape.subject);
+    return candidates.find((c) => c.startMs === start && c.endMs === end && lc(c.subject) === subject) ?? null;
 }
 
 const chunks = <T>(items: readonly T[], size: number = IMPORT_LOOKUP_CHUNK): T[][] => {
@@ -164,7 +201,7 @@ export function peopleOfEvent(event: ProviderEvent): string[] {
 
 /** The lookups `classifyImport` needs for one page of unknown events (chunked IN lists, a handful of queries). */
 export async function loadImportContext(events: readonly ProviderEvent[], companyOn: boolean): Promise<ImportContext> {
-    const context: ImportContext = { contactByEmail: new Map(), userByEmail: new Map(), bySyncKey: new Map() };
+    const context = emptyContext();
     if (events.length === 0) return context;
 
     const syncKeys = [...new Set(events.filter((e) => e.iCalUid).map((e) => syncKeyOf(e.iCalUid)))];
@@ -199,14 +236,42 @@ export async function loadImportContext(events: readonly ProviderEvent[], compan
     if (users.length > 0) {
         const usernames = users.map((u) => u.username);
         const [connections, choices] = await Promise.all([
-            prisma.calendarConnection.findMany({ where: { username: { in: usernames }, status: 'ok' }, select: { username: true } }),
+            prisma.calendarConnection.findMany({ where: { username: { in: usernames }, status: { in: [...LIVE_CONNECTION_STATUSES] } }, select: { id: true, username: true, status: true } }),
             prisma.calendarSyncUser.findMany({ where: { username: { in: usernames }, importMeetings: true, excluded: false }, select: { username: true } }),
         ]);
-        const connected = new Set(connections.map((c) => lc(c.username)));
+        const connected = new Set(connections.filter((c) => c.status === 'ok').map((c) => lc(c.username)));
         const importing = new Set(choices.map((c) => lc(c.username)));
         for (const user of users) {
             const key = lc(user.username);
             context.userByEmail.set(lc(user.email), { username: user.username, importsOwn: companyOn && connected.has(key) && importing.has(key) });
+        }
+        // Their CRM meetings whose organizer link still waits for its event (created in the calendar, identity not stored yet).
+        const waiting = connections.length
+            ? await prisma.activityExternalLink.findMany({
+                  where: { connectionId: { in: connections.map((c) => c.id) }, role: 'organizer', externalEventId: null, state: { in: ['pending', 'error'] } },
+                  select: { activityId: true, requestedId: true },
+                  take: IMPORT_LOOKUP_CHUNK,
+              })
+            : [];
+        const requestedOf = new Map(waiting.map((l) => [l.activityId, l.requestedId]));
+        const meetings = waiting.length
+            ? await prisma.activity.findMany({
+                  where: { id: { in: [...requestedOf.keys()] }, assignedTo: { in: usernames }, isDeleted: false, syncKey: null },
+                  select: { id: true, assignedTo: true, startAt: true, endAt: true, subject: true },
+              })
+            : [];
+        for (const row of meetings) {
+            if (!row.startAt || !row.endAt) continue;
+            const key = lc(row.assignedTo);
+            const meeting: InFlightMeeting = {
+                id: row.id,
+                assignedTo: row.assignedTo,
+                requestedId: requestedOf.get(row.id) ?? '',
+                startMs: row.startAt.getTime(),
+                endMs: row.endAt.getTime(),
+                subject: row.subject ?? '',
+            };
+            context.inFlight.set(key, [...(context.inFlight.get(key) ?? []), meeting]);
         }
     }
     return context;
@@ -214,18 +279,16 @@ export async function loadImportContext(events: readonly ProviderEvent[], compan
 
 // ── Helpers ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
-/** The reply last agreed on an attendee link (`baseJson = { self }`); null when none. */
+/** The reply last agreed on an attendee link (`baseJson = { self, mine? }`); null when none. */
 export function parseSelfBase(json: string | null | undefined): AttendeeResponse | null {
-    if (!json) return null;
-    try {
-        const value = JSON.parse(json) as { self?: unknown };
-        return value && typeof value.self === 'string' && RESPONSES.has(value.self) ? (value.self as AttendeeResponse) : null;
-    } catch {
-        return null;
-    }
+    return parseReplyBase(json).self;
 }
-const RESPONSES = new Set(['needsAction', 'accepted', 'tentative', 'declined']);
-export const selfBaseJson = (self: AttendeeResponse) => JSON.stringify({ self });
+/** The owner's own CRM reply kept on their attendee link (a meeting organized outside the CRM); null when none. */
+export function parseOwnerReply(json: string | null | undefined): AttendeeResponse | null {
+    const mine = parseReplyBase(json).mine;
+    return mine === 'needsAction' ? null : mine;
+}
+export const selfBaseJson = (self: AttendeeResponse, mine?: AttendeeResponse | null) => JSON.stringify(mine ? { self, mine } : { self });
 
 /**
  * Provider → CRM reply of the connected person (three-way): the calendar's reply is applied when it changed since the
@@ -270,6 +333,8 @@ export type ImportOutcomeKind = 'imported' | 'attended' | 'applied' | 'deleted' 
 export interface ImportOutcome {
     rows: ActivityCommitRow[];
     outcome: ImportOutcomeKind;
+    /** This person's organizer copy of an activity assigned to them that another pull brought in meanwhile: the pull relinks it (§8.2). */
+    relinkActivityId?: string;
 }
 
 const UNCHANGED: ImportOutcome = { rows: [], outcome: 'unchanged' };
@@ -278,7 +343,7 @@ const NOT_IMPORTED: ImportOutcome = { rows: [], outcome: 'skippedUnlinked' };
 
 export class MeetingImporter {
     private personOn = false;
-    private context: ImportContext = { contactByEmail: new Map(), userByEmail: new Map(), bySyncKey: new Map() };
+    private context: ImportContext = emptyContext();
     private readonly connection: CalendarConnection;
     private readonly settings: CalendarSyncSettings;
     private readonly config: ActivityConfig;
@@ -304,7 +369,7 @@ export class MeetingImporter {
 
     /** Loads the page's lookups for its unknown events (nothing when the switches are off). */
     async preparePage(unknown: readonly ProviderEvent[]): Promise<void> {
-        this.context = this.enabled && unknown.length > 0 ? await loadImportContext(unknown, this.settings.allowMeetingImport) : { contactByEmail: new Map(), userByEmail: new Map(), bySyncKey: new Map() };
+        this.context = this.enabled && unknown.length > 0 ? await loadImportContext(unknown, this.settings.allowMeetingImport) : emptyContext();
     }
 
     /** An event of this calendar the CRM has no link for (and no §8.2 match). */
@@ -318,13 +383,17 @@ export class MeetingImporter {
 
     decide(event: ProviderEvent): ImportDecision {
         const people = peopleOfEvent(event);
+        const organizerUser = event.isOrganizerCopy ? null : (this.context.userByEmail.get(lc(event.organizerEmail)) ?? null);
+        const held = event.iCalUid ? (this.context.bySyncKey.get(syncKeyOf(event.iCalUid)) ?? null) : null;
+        // A colleague's CRM meeting whose push hasn't stored its identity yet: this copy attends it (no second activity).
+        const waiting = !held && organizerUser ? inFlightMatch(event, this.context.inFlight.get(lc(organizerUser.username))) : null;
         return classifyImport(event, {
             enabled: this.enabled,
             now: this.clock(),
             username: this.connection.username,
-            existing: event.iCalUid ? (this.context.bySyncKey.get(syncKeyOf(event.iCalUid)) ?? null) : null,
+            existing: held ?? (waiting ? { id: waiting.id, isDeleted: false, assignedTo: waiting.assignedTo } : null),
             hasContact: people.some((email) => this.context.contactByEmail.has(email)),
-            organizerUser: event.isOrganizerCopy ? null : (this.context.userByEmail.get(lc(event.organizerEmail)) ?? null),
+            organizerUser,
         });
     }
 
@@ -353,8 +422,14 @@ export class MeetingImporter {
 
         const result = await runInTransaction(async (tx): Promise<ImportOutcome | { attend: string }> => {
             // D45: whoever holds the meeting's identity (deleted rows included: removed from the CRM = never again).
-            const holder = await tx.activity.findFirst({ where: { syncKey }, select: { id: true, isDeleted: true } });
-            if (holder) return holder.isDeleted ? NOT_IMPORTED : { attend: holder.id };
+            const holder = await tx.activity.findFirst({ where: { syncKey }, select: { id: true, isDeleted: true, assignedTo: true } });
+            if (holder?.isDeleted) return NOT_IMPORTED;
+            if (holder && decision.role === 'organizer') {
+                // This person's own organizer copy, brought in meanwhile by a colleague's pull: theirs is relinked (§8.2,
+                // two-way, externalOrganizer cleared); never an attendee link on an organizer copy.
+                return sameUser(holder.assignedTo, username) ? { ...NOT_IMPORTED, relinkActivityId: holder.id } : IGNORED;
+            }
+            if (holder) return { attend: holder.id };
             const taken = await tx.activityExternalLink.findFirst({ where: { connectionId: this.connection.id, externalEventKey: eventKeyOf(event.id) }, select: { id: true } });
             if (taken) return IGNORED;
 
@@ -428,6 +503,8 @@ export class MeetingImporter {
 
     /** This person's invitation copy of a meeting the CRM holds: an attendee link, and they're on the guest list. */
     private async attend(event: ProviderEvent, activityId: string): Promise<ImportOutcome> {
+        // An organizer copy is never an attendee link (the owner's is relinked, §8.2; anyone else's is left alone).
+        if (event.isOrganizerCopy) return NOT_IMPORTED;
         const now = this.clock();
         const username = this.connection.username;
         return runInTransaction(async (tx) => {
@@ -508,19 +585,24 @@ export class MeetingImporter {
             const patch: Partial<SystemActivityFields> = {};
             const base = parseSelfBase(current.baseJson);
             let self: AttendeeResponse = event.selfResponse ?? 'needsAction';
+            // The owner's own CRM reply on a meeting organized outside the CRM (sync.rsvp.ts), kept until the calendar
+            // answers differently.
+            let mine = isOwner && activity.externalOrganizer ? parseOwnerReply(current.baseJson) : null;
 
             if (event.status === 'cancelled') {
-                // The copy is gone: the organizer cancelled, or this person removed it from their calendar. The owner's
-                // activity is cancelled; for anyone else's copy of a meeting organized outside the CRM it counts as their
+                // The copy is gone: the organizer cancelled, or this person removed it from their calendar. For a meeting
+                // organized outside the CRM the owner's activity is cancelled, and anyone else's copy counts as their
                 // decline (below). A CRM-held meeting is the organizer link's business: a copy gone (the CRM made the
-                // event again, e.g. after an owner change) changes no reply.
-                if (isOwner && activity.status === PLANNED_STATUS) patch.status = 'Cancelled';
-                self = activity.externalOrganizer || isOwner ? 'declined' : (base ?? 'needsAction');
+                // event again, e.g. after an owner change or a reassignment) changes neither its status nor a reply.
+                if (isOwner && activity.externalOrganizer && activity.status === PLANNED_STATUS) patch.status = 'Cancelled';
+                self = activity.externalOrganizer ? 'declined' : (base ?? 'needsAction');
+                mine = null;
             } else if (isOwner && activity.externalOrganizer) {
                 // The owner's own meeting organized outside the CRM (they have no attendee row): declining it there
                 // cancels it here, accepting it again (or the copy coming back) brings it back.
                 const revived = current.state === 'cancelled' && self !== 'declined';
-                const reply = selfReplyToApply(base, self, activity.status === 'Cancelled' ? 'declined' : 'accepted');
+                const reply = selfReplyToApply(base, self, mine ?? (activity.status === 'Cancelled' ? 'declined' : 'accepted'));
+                if (reply) mine = null;
                 if (reply === 'declined' && activity.status === PLANNED_STATUS) patch.status = 'Cancelled';
                 else if ((revived || (reply && reply !== 'declined')) && activity.status === 'Cancelled') patch.status = PLANNED_STATUS;
             }
@@ -553,7 +635,7 @@ export class MeetingImporter {
                     etag: event.etag || null,
                     htmlLink: event.htmlLink ?? current.htmlLink,
                     providerUpdatedAt: parseInstant(event.updated),
-                    baseJson: selfBaseJson(self),
+                    baseJson: selfBaseJson(self, mine),
                     lastSyncedAt: now,
                     crmSyncedAt: rows.at(-1)?.after.updatedAt ?? activity.updatedAt,
                 },
