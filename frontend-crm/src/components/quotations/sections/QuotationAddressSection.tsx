@@ -22,6 +22,7 @@ import type { QuotationFormData } from '@/types/quotation.types';
 import { normalizeLegacyStateName } from '@/data/addressMaster';
 import { normalizeCountryValue } from '@/utils/address';
 import { useContacts, useOrganizations } from '@/hooks/queries';
+import { currentContactsFirst, isPickableContact } from '@/components/common/lookup';
 import type { ExtendedOrganization } from '@/types/organization.types';
 import type { Contact } from '@/types/contact.types';
 
@@ -41,7 +42,8 @@ export function QuotationAddressSection() {
     const { data: organizations = NO_ORGANIZATIONS } = useOrganizations();
     const { data: contacts = NO_CONTACTS } = useContacts();
     const orgOptions = useMemo(() => organizations.map((o) => o.organizationName), [organizations]);
-    const contactOptions = useMemo(() => contacts.map((c) => c.name), [contacts]);
+    // Contacts who left their job aren't offered, as in every contact picker.
+    const contactOptions = useMemo(() => contacts.filter(isPickableContact).map((c) => c.name), [contacts]);
     // Number and email filled from a picked contact are locked, as on Convert Lead.
     const contactLocks = usePickedContactLocks<QuotationFormData>(control, contacts, { contact: 'contact', number: 'contactNumber', email: 'contactEmail', organization: 'organizationName' });
 
@@ -93,7 +95,8 @@ export function QuotationAddressSection() {
         if (!contactName || contactName === prevContactRef.current) return;
         prevContactRef.current = contactName;
 
-        const contact = contacts.find(
+        // A namesake who left their job loses a tie to the contact still in it (the one the suggestions offer).
+        const contact = currentContactsFirst(contacts).find(
             (c) =>
                 c.name.trim().toLowerCase() === contactName.trim().toLowerCase()
         );

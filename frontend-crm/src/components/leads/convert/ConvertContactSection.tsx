@@ -17,7 +17,7 @@ import {
     RhfPhoneField,
 } from '@/components/forms';
 import { LOOKUP_FIELD_SIZE } from '@/components/forms/fieldSizing';
-import { RecordLookupModal } from '@/components/common/lookup';
+import { isPickableContact, RecordLookupModal } from '@/components/common/lookup';
 import { FormConfigProvider } from '@/context/FormConfigContext';
 import { FormModeProvider } from '@/context/FormModeContext';
 import { matchExistingContact } from '@/services';
@@ -66,9 +66,13 @@ export function ConvertContactSection() {
     const [typed, setTyped] = useState('');
     const [pickerOpen, setPickerOpen] = useState(false);
 
-    // Label → contact lookup for the "select existing" picker.
+    // Label → contact lookup for the "select existing" picker. Contacts who left their job aren't offered (the
+    // Contact Search popup's Left Job filter is locked to No).
     const { data: contacts = NO_CONTACTS } = useContacts();
-    const contactsByLabel = useMemo(() => new Map(contacts.map((c) => [contactLabel(c), c] as const)), [contacts]);
+    const contactsByLabel = useMemo(
+        () => new Map(contacts.filter(isPickableContact).map((c) => [contactLabel(c), c] as const)),
+        [contacts]
+    );
     const selectedContact = useMemo(
         () => (existingContactId ? contacts.find((c) => c.id === existingContactId) : undefined),
         [contacts, existingContactId]

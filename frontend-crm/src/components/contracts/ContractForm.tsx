@@ -29,6 +29,7 @@ import type { Contact } from '@/types/contact.types';
 import type { Opportunity } from '@/types/opportunity.types';
 import { contractService } from '@/services';
 import { useContacts, useOpportunities, useOrganizations } from '@/hooks/queries';
+import { isPickableContact } from '@/components/common/lookup';
 import {
     CommonFormLayout,
     AppToast,
@@ -158,9 +159,13 @@ export default function ContractForm({ mode = 'create', contractId, initialData 
     const { data: opportunities = EMPTY_OPPORTUNITIES } = useOpportunities();
     const organizationNames = useMemo(() => uniqueNames(organizations.map((o) => o.organizationName)), [organizations]);
 
-    // Contact suggestions narrow to the chosen organization's contacts when it has any.
+    // Contact suggestions narrow to the chosen organization's contacts when it has any. Contacts who left their job
+    // aren't offered (the Contact Search popup's Left Job filter is locked to No).
     const contactNames = useMemo(
-        () => uniqueNames(narrowToOrganization(contacts, { id: organizationId, name: organizationName ?? '' }).map((c) => c.name)),
+        () =>
+            uniqueNames(
+                narrowToOrganization(contacts.filter(isPickableContact), { id: organizationId, name: organizationName ?? '' }).map((c) => c.name)
+            ),
         [contacts, organizationId, organizationName]
     );
     // Opportunity suggestions and picker open on the chosen organization's opportunities.

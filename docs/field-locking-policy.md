@@ -74,7 +74,7 @@ Fields not listed are ○ Free today and stay ○ Free.
 | Field | Current | Final | Why |
 |---|---|---|---|
 | Organization name | 🔒R | 🔒 | Relation |
-| Contact | 🔒R | 🔒 | Relation |
+| Contact | 🔒R | 🔒 | Relation (its Contact Search picker lists contacts still in their job only: the Left Job filter is locked to No, and typing doesn't suggest contacts who left) |
 | Lead Given By | 🔒R | ⭐ | Attribution; conversion and import fill it automatically |
 | Type | 🔒R | ⭐ | Classification |
 | Lead Source | 🔒R | ⭐ | Reporting |
@@ -105,7 +105,7 @@ Fields not listed are ○ Free today and stay ○ Free.
 | Assigned to | 🔒R | 🔒 | Ownership |
 | Terms & Condition | 🔒R | ⭐ | Printed on PDF; blank when empty |
 | Payment Terms | 🔒R | ⭐ | Printed on PDF; blank when empty |
-| Contact | 🔒R | 🔒 | Relation |
+| Contact | 🔒R | 🔒 | Relation (typing doesn't suggest contacts who left their job, as in every contact picker) |
 | Billing Street / City / State / PIN / Country | 🔒R | 🔒 | PDF "bill to"; tax state |
 
 ### Products
@@ -121,7 +121,7 @@ Fields not listed are ○ Free today and stay ○ Free.
 | Ticket Subject | 🔒 | 🔒 | Identity (optional, but always visible) |
 | Problem Reported | 🔒R | 🔒 | Identity fallback: the list shows Subject, or Problem Reported when there's no subject |
 | Organization Name | 🔒R | 🔒 | Relation |
-| Contact Person Name | 🔒R | 🔒 | Relation |
+| Contact Person Name | 🔒R | 🔒 | Relation (its Contact Search picker lists contacts still in their job only: the Left Job filter is locked to No, and typing doesn't suggest contacts who left) |
 | Nature Of Call | 🔒R | ⭐ | Classification (lookup list) |
 | Ticket Priority | 🔒R | ⭐ | Only used for sorting; no SLA logic depends on it |
 | Ticket Status | — | ○ (list fixed) | Defaults to `New` when omitted |
@@ -140,7 +140,7 @@ Tally Serial Number, Contract Start / End Date, Renewal Reminder Date, Descripti
 | Status | 🔒 required | Logic: status cards and Expiring in 30 Days; defaults to `Not Started` when omitted |
 | Contract Manager (Assigned to) | 🔒 required | Ownership / access scope |
 | Organization Name | 🔒 required | Relation |
-| Contact Person | 🔒 required | Relation |
+| Contact Person | 🔒 required | Relation (its Contact Search picker lists contacts still in their job only: the Left Job filter is locked to No, and typing doesn't suggest contacts who left) |
 | Contract Value | ⭐ | Business preference; the status cards total it (blank adds nothing) |
 | Contract Period | ⭐ | Business preference; a length such as `1 Year` also fills End Date in the form |
 | Contract Type | ⭐ | Classification |
@@ -150,7 +150,10 @@ Tally Serial Number, Contract Start / End Date, Renewal Reminder Date, Descripti
 
 New module (2026-11-25, Calendar Phase 1), shipped with these tiers (no "Current" column; one tab, Overview).
 Fields not listed are ○ Free: Organization Name, Contact, End, All Day, Reminder, Location, Attendees, Customer
-Response, Remarks.
+Response, Remarks. Contact's picker, like every contact picker (Opportunity, Ticket, Contract, Convert Lead's Select
+Existing Contact), lists contacts still in their job only: its Contact Search popup's Left Job filter is locked to No,
+and typing doesn't suggest contacts who left. Quotation's Contact, which has no popup, filters its suggestions the same
+way.
 
 | Field | Tier | Why |
 |---|---|---|

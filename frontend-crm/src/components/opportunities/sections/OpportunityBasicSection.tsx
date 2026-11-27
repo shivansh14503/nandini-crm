@@ -32,6 +32,7 @@ import {
     ReferredByLookup,
 } from '@/components/forms';
 import { useContacts, useOrganizations } from '@/hooks/queries';
+import { isPickableContact } from '@/components/common/lookup';
 import type { Contact } from '@/types/contact.types';
 import type { ExtendedOrganization } from '@/types/organization.types';
 import type { OpportunityFormData } from '@/types/opportunity.types';
@@ -157,10 +158,12 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
         setValue('commissionType', typeForAmount, { shouldDirty: true, shouldValidate: Boolean(commissionType) });
     }, [editable, typeForAmount, commissionType, setValue]);
     const organizationNames = useMemo(() => organizations.map((o) => o.organizationName), [organizations]);
+    // Contacts who left their job aren't offered (the Contact Search popup's Left Job filter is locked to No).
     const contactNames = useMemo(() => {
+        const pickable = contacts.filter(isPickableContact);
         const org = organizationName.trim().toLowerCase();
-        const inOrg = org ? contacts.filter((c) => (c.organizationName ?? '').trim().toLowerCase() === org) : [];
-        return (inOrg.length > 0 ? inOrg : contacts).map((c) => c.name);
+        const inOrg = org ? pickable.filter((c) => (c.organizationName ?? '').trim().toLowerCase() === org) : [];
+        return (inOrg.length > 0 ? inOrg : pickable).map((c) => c.name);
     }, [contacts, organizationName]);
 
     // Number, email and organization taken from the picked contact are locked (as Convert Lead locks the lead's values).
@@ -183,10 +186,12 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
     };
 
     // Picking a contact fills in their number, email and organization. When people at several companies share the
-    // name, the one at the organization already chosen wins (the suggestions only list that organization's people).
+    // name, the one at the organization already chosen wins (the suggestions list that organization's people first),
+    // unless they left their job: the pickers don't offer them, so they never replace the contact picked.
     const handleContactPicked = (picked: Contact) => {
         const org = getValues('organizationName')?.trim();
-        const contact = (org && contacts.find((c) => sameName(c.name, picked.name) && sameName(c.organizationName ?? '', org))) || picked;
+        const atOrg = (c: Contact) => isPickableContact(c) && sameName(c.name, picked.name) && sameName(c.organizationName ?? '', org ?? '');
+        const contact = (org && contacts.find(atOrg)) || picked;
         setValue('contactNumber', contact.mobile || '', touch);
         setValue('contactEmail', primaryEmail(contact), touch);
         if (contact.organizationName) setValue('organizationName', contact.organizationName, touch);

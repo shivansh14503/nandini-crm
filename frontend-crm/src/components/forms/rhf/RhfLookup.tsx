@@ -7,7 +7,14 @@ import { useController, type FieldPath, type FieldValues } from 'react-hook-form
 import { FormField } from '../FormField';
 import { LookupField } from '../LookupField';
 import { LOOKUP_FIELD_SIZE, resolveFieldSize, type FieldSize } from '../fieldSizing';
-import { RecordLookupModal, LOOKUP_DISPLAY_VALUE, findLookupRecord, useActiveReferrals } from '@/components/common/lookup';
+import {
+    RecordLookupModal,
+    LOOKUP_DISPLAY_VALUE,
+    currentContactsFirst,
+    findLookupRecord,
+    isPickableContact,
+    useActiveReferrals,
+} from '@/components/common/lookup';
 import { UserAwayChip } from '@/components/common/UserAwayChip';
 import { findCrmUser, formatCrmUserDisplay, getAssignableUserNames, getPartnerCompanies } from '@/services/masterData.store';
 import { useContacts, useOpportunities, useOrganizations } from '@/hooks/queries';
@@ -129,6 +136,9 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
         const ofOrg = (o: LookupRecordMap['opportunity']) => (o.organizationName ?? '').toLowerCase().includes(opportunityOrg);
         return [...allOpportunities.filter(ofOrg), ...allOpportunities.filter((o) => !ofOrg(o))];
     }, [allOpportunities, opportunityOrg]);
+    // Exact-match pool: contacts still in their job first, so a name shared with someone who left resolves to the
+    // contact the suggestions offer.
+    const matchContacts = useMemo(() => contacts && currentContactsFirst(contacts), [contacts]);
     const excludeKey = excludeValues?.map((v) => v.trim().toLowerCase()).join('\u0000') ?? '';
     const suggestions = useMemo(() => {
         // User fields always suggest active users by full name; caller-supplied username lists are ignored.
@@ -139,7 +149,8 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
             kind === 'organization'
                 ? (organizations ?? []).map((o) => o.organizationName)
                 : kind === 'contact'
-                  ? (contacts ?? []).map((c) => c.name)
+                  ? // Contacts who left their job aren't offered, as in the Contact Search popup.
+                    (contacts ?? []).filter(isPickableContact).map((c) => c.name)
                   : kind === 'opportunity'
                     ? (allOpportunities ?? [])
                           .filter((o) => !opportunityOrg || (o.organizationName ?? '').toLowerCase().includes(opportunityOrg))
@@ -183,7 +194,7 @@ export function RhfLookup<T extends FieldValues, K extends LookupKind = LookupKi
             return;
         }
         if (!kind || !onSelectRecord || next === displayValue) return;
-        const match = findLookupRecord(kind, next, { organizations, contacts, opportunities, referrals });
+        const match = findLookupRecord(kind, next, { organizations, contacts: matchContacts, opportunities, referrals });
         if (match) onSelectRecord(match);
     };
 

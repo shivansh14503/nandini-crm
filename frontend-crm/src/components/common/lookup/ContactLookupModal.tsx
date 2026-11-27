@@ -7,7 +7,7 @@ import { ROUTES } from '@/config/constants';
 import type { Contact } from '@/types/contact.types';
 import type { EntityLookupModalProps } from '@/types/lookup.types';
 import { GenericLookupModal } from './GenericLookupModal';
-import { CONTACT_LOOKUP_PRESET, type ContactLookupRow } from './lookupConfigs';
+import { CONTACT_LOCKED_FILTERS, CONTACT_LOOKUP_PRESET, type ContactLookupRow } from './lookupConfigs';
 
 const NO_ROWS: ContactLookupRow[] = [];
 
@@ -61,6 +61,8 @@ export function ContactLookupModal({ open, onClose, onSelect, selectedValue }: E
             loading={open && !contacts}
             {...CONTACT_LOOKUP_PRESET}
             filterFields={filterFields}
+            // Contacts still in their job only: Left Job is fixed at No.
+            lockedFilterValues={CONTACT_LOCKED_FILTERS}
             createAction={{ label: 'Create Contact', onClick: () => window.open(ROUTES.CONTACT_NEW, '_blank', 'noopener') }}
         />
     );

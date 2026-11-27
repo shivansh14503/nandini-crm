@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import { useFormState, useWatch, type Control, type FieldValues, type Path } from 'react-hook-form';
 import type { Contact } from '@/types/contact.types';
+import { currentContactsFirst } from '@/components/common/lookup';
 
 /** Field names of the contact-derived values a form fills from a picked contact. */
 export interface PickedContactFieldNames<T extends FieldValues> {
@@ -47,7 +48,8 @@ export function usePickedContactLocks<T extends FieldValues>(
     return useMemo(() => {
         const name = text(contactName);
         const org = names.organization ? text(organization) : '';
-        const matches = name ? contacts.filter((c) => same(c.name, name)) : [];
+        // Contacts still in their job first: a namesake who left loses a tie, as in the pickers.
+        const matches = name ? currentContactsFirst(contacts.filter((c) => same(c.name, name))) : [];
         const contact = (org && matches.find((c) => same(c.organizationName, org))) || matches[0];
         const hasError = (field: Path<T> | undefined) => Boolean(field && (errors as Record<string, unknown>)[field]);
         const lock = (field: Path<T> | undefined, value: unknown, fromContact: string | undefined) =>
