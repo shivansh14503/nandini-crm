@@ -1,15 +1,6 @@
 import { z } from 'zod';
 import { FIELD_MAX_LENGTH as L } from '../config/fieldLimits';
-import {
-    requiredString,
-    optionalString,
-    requiredText,
-    optionalText,
-    zodPhoneOptional,
-    zodEmailOptional,
-    configurableOption,
-    customFieldsSchema,
-} from './common';
+import { configurableOption, customFieldsSchema, optionalLongText, optionalString, optionalText, requiredLongText, requiredString, requiredText, zodEmailOptional, zodPhoneOptional } from './common';
 import { getNatureOfCalls } from '../services/masterData.store';
 
 export const ticketFormSchema = z.object({
@@ -24,9 +15,9 @@ export const ticketFormSchema = z.object({
     ticketPriority: optionalString,
     source: configurableOption('Source', 'Call'),
     supportType: configurableOption('Support Type', 'Free'),
-    problemReported: requiredText('Problem Reported', L.longText),
-    resolution: optionalText('Resolution', L.longText),
-    reasonForEscalatedCalls: optionalText('Reason For Escalated Calls', L.longText),
+    problemReported: requiredLongText('Problem Reported'),
+    resolution: optionalLongText,
+    reasonForEscalatedCalls: optionalLongText,
     assignedTo: requiredString('Assigned to'),
 
     // Overview — right column
@@ -43,9 +34,9 @@ export const ticketFormSchema = z.object({
         message: 'Due Date must be a valid date and time.',
     }),
     supportMode: optionalString,
-    problemObserved: optionalText('Problem Observed', L.longText),
-    rca: optionalText('RCA', L.longText),
-    addDescription: optionalText('Add Description', L.longText),
+    problemObserved: optionalLongText,
+    rca: optionalLongText,
+    addDescription: optionalLongText,
 
     // Partner Company tab
     partnerCompany: optionalString,

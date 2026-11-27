@@ -51,7 +51,6 @@ import {
     BOOKING_MAX_DURATIONS,
     BOOKING_MAX_HORIZON_DAYS,
     BOOKING_MAX_PER_DAY,
-    BOOKING_NOTE_MAX,
     BOOKING_SLOT_STEPS,
     BOOKING_TITLE_MAX,
     BOOKING_VIDEO_PROVIDERS,
@@ -511,7 +510,6 @@ export function BookingLinkDialog({
                     inputLabel="Note for visitors"
                     value={draft.note}
                     onChange={(value) => set('note', value)}
-                    maxLength={BOOKING_NOTE_MAX}
                     helperText="Shown above the times (what to prepare, what the meeting covers)."
                     error={errorOf('note')}
                 />

@@ -1,17 +1,6 @@
 import { z } from 'zod';
 import { FIELD_MAX_LENGTH as L } from '../config/fieldLimits';
-import {
-    optionalString,
-    optionalText,
-    refinePostalCodeForCountry,
-    requiredText,
-    zodGstOptional,
-    zodIfscOptional,
-    zodPanOptional,
-    zodPhoneOptional,
-    zodPostalCodeOptional,
-    customFieldsSchema,
-} from './common';
+import { customFieldsSchema, optionalLongText, optionalString, optionalText, refinePostalCodeForCountry, requiredText, zodGstOptional, zodIfscOptional, zodPanOptional, zodPhoneOptional, zodPostalCodeOptional } from './common';
 import { corporateEmailSchema } from './contact.schema';
 
 /** Column widths without a shared `FIELD_MAX_LENGTH` entry (mirrors backend-crm partnerCompany.validator.ts). */
@@ -35,8 +24,8 @@ export const partnerCompanyFormSchema = z
             .refine((list) => list.some((e) => (e.email || '').trim().length > 0), {
                 message: 'Email Address is required.',
             }),
-        addDescription: optionalText('Add Description', L.longText),
-        description: optionalText('Description', L.longText),
+        addDescription: optionalLongText,
+        description: optionalLongText,
         assignedTo: optionalString,
         principalCompany: optionalText('Principal Company', L.organizationName),
 

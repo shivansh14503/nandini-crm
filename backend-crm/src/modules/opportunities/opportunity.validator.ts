@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { FIELD_MAX_LENGTH as L } from '../../config/fieldLimits.js';
 import {
+    optionalLongText,
     booleanQuery,
     createdWithinDaysQuery,
     csvQuery,
@@ -130,7 +131,7 @@ export const opportunityInputSchema = z.object({
     followupType: optionalText('Followup Type', L.option),
     customerResponse: optionalText('Customer Response', L.option),
     remarks: optionalDescription('Remarks'),
-    description: optionalText('Description', L.longText),
+    description: optionalLongText(),
     assignedTo: requiredText('Assigned Representative', L.username),
 
     tallySerialNo: optionalTallySerialNo('Tally Serial No'),

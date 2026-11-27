@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { FIELD_MAX_LENGTH as L } from '../../config/fieldLimits.js';
 import {
+    optionalLongText,
     booleanQuery,
     createdWithinDaysQuery,
     csvQuery,
@@ -68,7 +69,7 @@ const leadFields = z.object({
     status: textWithDefault('Status', 30, 'New'),
     nextFollowupDate: optionalDate('Next Followup Date'),
     nextFollowupTime: optionalText('Next Followup Time', 20),
-    description: optionalText('Description', L.longText),
+    description: optionalLongText(),
     noOfEmployee: optionalText('No of Employee', 30),
     // Required for Lead Source CA / Reference; Partner Company for Lead Source Partner (shared/leadSource.ts).
     // Referred By is a Referral: its id, and its name (resolved by shared/referredBy.ts).
@@ -145,7 +146,7 @@ export const convertLeadSchema = z.object({
     natureOfPartner: optionalText('Nature of Partner', L.option),
     leadSource: optionalText('Lead Source', L.option),
     memberOf: optionalText('Member of', L.organizationName),
-    organizationDescription: optionalText('Organization Description', L.organizationDescription),
+    organizationDescription: optionalLongText(),
     // No Assigned To: the new organization, contact and opportunity go to the lead's own Assigned To.
 
     // Contact
@@ -160,7 +161,7 @@ export const convertLeadSchema = z.object({
     department: optionalText('Department', L.option),
     communicationType: stringList('Communication Type', 10, 30).default(['Call', 'Email']),
     doNotCall: z.boolean().default(false),
-    contactDescription: optionalText('Contact Description', L.longText),
+    contactDescription: optionalLongText(),
 
     // Opportunity. `createOpportunity: false` converts without one (the deal already has an opportunity); the
     // opportunity fields are then ignored.
@@ -174,7 +175,7 @@ export const convertLeadSchema = z.object({
     nextFollowupDate: optionalDate('Next Followup Date'),
     nextFollowupTime: optionalText('Next Followup Time', 20),
     followupType: optionalText('Followup Type', L.option),
-    opportunityDescription: optionalText('Opportunity Description', L.longText),
+    opportunityDescription: optionalLongText(),
     opportunityLeadSource: optionalText('Lead Source', L.option),
 
     /**

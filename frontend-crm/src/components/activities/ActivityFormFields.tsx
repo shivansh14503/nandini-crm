@@ -730,7 +730,6 @@ export function ActivityFormFields({
                                     label="Remarks"
                                     required={isNote}
                                     multiline
-                                    maxLength={FIELD_MAX_LENGTH.longText}
                                     placeholder={isNote ? 'What was discussed or decided...' : 'Agenda, outcome, next steps...'}
                                 />
                             </FormGridItem>

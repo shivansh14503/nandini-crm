@@ -384,7 +384,6 @@ export function OpportunityBasicSection({ notify, onDecisionPendingChange }: Opp
                         hint="Stage summary & action items"
                         multiline
                         placeholder="Provide current milestone details or immediate actions..."
-                        maxLength={FIELD_MAX_LENGTH.longText}
                     />
                 </FormGridItem>
             </FormGrid>

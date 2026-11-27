@@ -1,7 +1,6 @@
 import { z } from 'zod';
-import { FIELD_MAX_LENGTH as L } from '../config/fieldLimits';
 import { DEFAULT_DISCOUNT_TYPE, isBlankLineItem, LINE_ITEM_DISCOUNT_TYPES, roundMoney } from '../lib/line-items/lineItemMath';
-import { optionalString, optionalText, zodAmount } from './common';
+import { optionalLongText, optionalString, zodAmount } from './common';
 
 /**
  * Line items, the same on opportunities and quotations (Jira CRM-111; the API's rules are in backend
@@ -20,8 +19,8 @@ const lineItemShape = z.object({
     discountAmount: zodAmount.default(0),
     taxRate: z.string().trim().default(''),
     taxableAmount: zodAmount.default(0),
-    description: optionalText('Description', L.longText),
-    note: optionalText('Note', L.longText),
+    description: optionalLongText,
+    note: optionalLongText,
 });
 
 export type LineItemSchemaType = z.infer<typeof lineItemShape>;

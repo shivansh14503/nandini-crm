@@ -4,9 +4,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 import type { z } from 'zod';
-import { FIELD_MAX_LENGTH as L } from '../config/fieldLimits.js';
 import { quotationInputSchema } from '../modules/quotations/quotation.validator.js';
 import { convertLeadSchema } from '../modules/leads/lead.validator.js';
+import { ticketInputSchema } from '../modules/tickets/ticket.validator.js';
 
 /** Whether `schema` reports an issue on `field` for `{ [field]: value }` (other required fields may fail too). */
 function failsOn(schema: z.ZodType, field: string, value: string): boolean {
@@ -14,39 +14,54 @@ function failsOn(schema: z.ZodType, field: string, value: string): boolean {
     return !result.success && result.error.issues.some((issue) => issue.path[0] === field);
 }
 
-const text = (length: number) => 'a'.repeat(length);
+/** Far longer than any limit these fields used to have (500 – 4,000). */
+const HUGE = 'Clause. '.repeat(6_000);
 
-describe('long text limits', () => {
-    it('quotation terms take up to the terms limit (4,000 characters)', () => {
-        for (const field of ['termsAndConditionDescription', 'paymentTermsDescription', 'termsAndConditions']) {
-            assert.equal(failsOn(quotationInputSchema, field, text(L.termsText)), false, `${field} at the limit`);
-            assert.equal(failsOn(quotationInputSchema, field, text(L.termsText + 1)), true, `${field} over the limit`);
+/** Long text columns: no character limit, so they must be NVARCHAR(MAX). */
+const LONG_TEXT_COLUMNS: Record<string, string[]> = {
+    Organization: ['inactivityReason', 'addDescriptionAndScope'],
+    Contact: ['addDescription'],
+    Lead: ['remarks', 'description'],
+    Product: ['description', 'termsAndConditions', 'inactivityReason'],
+    Opportunity: ['remarks', 'description'],
+    OpportunityLineItem: ['description', 'note'],
+    Quotation: ['remarks', 'termsAndConditionDescription', 'paymentTermsDescription', 'notes', 'termsAndConditions'],
+    QuotationLineItem: ['description', 'note'],
+    Ticket: ['problemReported', 'problemObserved', 'resolution', 'reasonForEscalatedCalls', 'rca', 'addDescription'],
+    Contract: ['description'],
+    Activity: ['remarks'],
+    PartnerCompany: ['addDescription', 'description'],
+    BookingLink: ['note'],
+};
+
+describe('long text has no character limit', () => {
+    it('quotation terms, remarks and notes accept any length', () => {
+        for (const field of ['termsAndConditionDescription', 'paymentTermsDescription', 'termsAndConditions', 'remarks', 'notes']) {
+            assert.equal(failsOn(quotationInputSchema, field, HUGE), false, field);
         }
     });
 
-    it('quotation remarks keep the long-text limit', () => {
-        assert.equal(failsOn(quotationInputSchema, 'remarks', text(L.longText)), false);
-        assert.equal(failsOn(quotationInputSchema, 'remarks', text(L.longText + 1)), true);
+    it('Convert Lead descriptions accept any length', () => {
+        for (const field of ['organizationDescription', 'contactDescription', 'opportunityDescription']) {
+            assert.equal(failsOn(convertLeadSchema, field, HUGE), false, field);
+        }
     });
 
-    it('Convert Lead caps the organization description at the organization limit', () => {
-        assert.equal(failsOn(convertLeadSchema, 'organizationDescription', text(L.organizationDescription)), false);
-        assert.equal(failsOn(convertLeadSchema, 'organizationDescription', text(L.organizationDescription + 1)), true);
+    it('ticket case notes accept any length; Problem Reported is still required', () => {
+        for (const field of ['problemReported', 'problemObserved', 'resolution', 'reasonForEscalatedCalls', 'rca', 'addDescription']) {
+            assert.equal(failsOn(ticketInputSchema, field, HUGE), false, field);
+        }
+        assert.equal(failsOn(ticketInputSchema, 'problemReported', '   '), true);
     });
 
-    it('no long-text limit is wider than the column that stores it', () => {
+    it('every long text column is NVARCHAR(MAX)', () => {
         const schema = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../prisma/schema.prisma'), 'utf8');
-        const width = (model: string, column: string): number => {
+        for (const [model, columns] of Object.entries(LONG_TEXT_COLUMNS)) {
             const body = schema.match(new RegExp(`model ${model} \\{([\\s\\S]*?)\\n\\}`))?.[1] ?? '';
-            const size = body.match(new RegExp(`\\n\\s*${column}\\s+String\\??\\s+@db\\.NVarChar\\((\\d+)\\)`))?.[1];
-            assert.ok(size, `${model}.${column} not found`);
-            return Number(size);
-        };
-        assert.ok(L.termsText <= width('Quotation', 'termsAndConditionDescription'));
-        assert.ok(L.termsText <= width('Quotation', 'paymentTermsDescription'));
-        assert.ok(L.termsText <= width('Quotation', 'termsAndConditions'));
-        assert.ok(L.organizationDescription <= width('Organization', 'addDescriptionAndScope'));
-        assert.ok(L.inactivityReason <= width('Organization', 'inactivityReason'));
-        assert.ok(L.longText <= width('Product', 'description'));
+            for (const column of columns) {
+                const type = body.match(new RegExp(`\\n\\s*${column}\\s+String\\??\\s+@db\\.NVarChar\\((\\w+)\\)`))?.[1];
+                assert.equal(type, 'Max', `${model}.${column}`);
+            }
+        }
     });
 });

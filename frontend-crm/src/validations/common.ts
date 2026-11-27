@@ -108,11 +108,20 @@ export const optionalText = (fieldName: string, max: number) =>
         .or(z.literal(''));
 
 /**
- * "Add Description" on leads / opportunities: optional here (the form configuration decides whether it's
- * required, see docs/field-locking-policy.md), but at least 3 characters when given.
+ * Long text (descriptions, remarks, notes, terms, reasons): no character limit, like the API (NVARCHAR(MAX) columns).
+ * Never give a long text field a `max` or an input `maxLength`.
  */
-export const optionalDescription = (fieldName: string, max: number) =>
-    optionalText(fieldName, max).refine((value) => !value || value.length >= 3, {
+export const optionalLongText = z.string().trim().optional().or(z.literal(''));
+
+/** Required long text (e.g. a ticket's Problem Reported): no character limit. */
+export const requiredLongText = (fieldName: string) => requiredString(fieldName);
+
+/**
+ * "Add Description" on leads / opportunities: optional here (the form configuration decides whether it's
+ * required, see docs/field-locking-policy.md), but at least 3 characters when given; no upper limit.
+ */
+export const optionalDescription = (fieldName: string) =>
+    optionalLongText.refine((value) => !value || value.length >= 3, {
         message: `${fieldName} must be at least 3 characters.`,
     });
 

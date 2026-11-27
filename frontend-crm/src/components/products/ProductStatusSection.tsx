@@ -15,7 +15,6 @@ import { fmtInstant } from '@/utils/formats';
 import {
     ACTIVE_PRODUCT_STATUS,
     INACTIVE_PRODUCT_STATUS,
-    INACTIVITY_REASON_MAX_LENGTH,
     PRODUCT_STATUSES,
     isActiveProduct,
     type ProductFormData,
@@ -94,7 +93,6 @@ export function ProductStatusSection({ saved }: { saved: SavedProductStatus | nu
                 description="Inactive products can't be added to opportunity or quotation line items. Records that already have it keep it."
                 reasonLabel="Reason"
                 reasonPlaceholder="Why is this product being deactivated?"
-                maxLength={INACTIVITY_REASON_MAX_LENGTH}
                 confirmLabel="Deactivate Product"
                 confirmColor="warning"
                 onConfirm={(text) => {

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { FIELD_MAX_LENGTH as L } from '../../config/fieldLimits.js';
 import {
+    optionalLongText,
     booleanQuery,
     bulkIdsSchema,
     createdWithinDaysQuery,
@@ -80,7 +81,7 @@ const organizationFields = z.object({
     natureOfBusiness: optionalText('Nature of Business', L.option),
     // Admin-customizable (org_account_status / shared_registration_type); the system options keep their meaning.
     accountStatus: textWithDefault('Account Status', 20, 'Active'),
-    inactivityReason: optionalText('Inactivity Reason', L.inactivityReason),
+    inactivityReason: optionalLongText(),
     typeOfEntity: optionalText('Type of Entity', L.option),
     customerType: optionalText('Customer Type', L.option),
     // Required when Customer Type is Partner (assertNatureOfPartner); stored only for partner organizations.
@@ -91,7 +92,7 @@ const organizationFields = z.object({
     memberOf: optionalText('Parent Corporation', L.organizationName),
     numberOfEmployees: optionalText('Number of Employees', 30),
     annualTurnover: optionalText('Annual Turnover', 30),
-    addDescriptionAndScope: optionalText('Description', L.organizationDescription),
+    addDescriptionAndScope: optionalLongText(),
     accountVerified: z.boolean().default(false),
     activeAmc: z.boolean().default(false),
     activeCloud: z.boolean().default(false),
@@ -212,7 +213,7 @@ export const checkOrganizationUniqueQuerySchema = z.object({
 
 export const bulkStatusSchema =bulkIdsSchema.extend({
     status: z.enum(ACCOUNT_STATUSES, { error: 'status must be Active or Inactive.' }),
-    inactivityReason: optionalText('Inactivity Reason', L.inactivityReason),
+    inactivityReason: optionalLongText(),
 });
 
 export const ORGANIZATION_SORT_FIELDS = [

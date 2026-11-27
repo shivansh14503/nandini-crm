@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { FIELD_MAX_LENGTH as L } from '../../config/fieldLimits.js';
 import {
+    optionalLongText,
     booleanQuery,
     createdWithinDaysQuery,
     customFieldsSchema,
@@ -41,7 +42,7 @@ export const contactInputSchema = z.object({
         .max(MAX_COMMUNICATION_TYPES, { message: `At most ${MAX_COMMUNICATION_TYPES} communication types are allowed.` })
         .default(['Call', 'Email']),
     doNotCall: z.boolean().default(false),
-    addDescription: optionalText('Add Description', L.longText),
+    addDescription: optionalLongText(),
     customFields: customFieldsSchema,
 });
 

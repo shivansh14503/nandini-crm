@@ -4,7 +4,7 @@ import type { TransactionClient } from '../../config/prisma.js';
 import type { OpportunityLineItem, QuotationLineItem } from '../../generated/prisma/client.js';
 import { HttpError } from '../../utils/httpError.js';
 import { decimalToNumber } from '../../utils/mappers.js';
-import { optionalText, requiredText } from '../../validators/common.js';
+import { optionalLongText, optionalText, requiredText } from '../../validators/common.js';
 import { isActiveProductStatus } from '../products/product.validator.js';
 import { DEFAULT_DISCOUNT_TYPE, isBlankLineItem, LINE_ITEM_DISCOUNT_TYPES, lineItemAmounts, lineItemTotals, normalizeTaxRate, roundMoney, toDiscountType, type LineItemAmounts, type LineItemDiscountType, type LineItemTotals } from './lineItemMath.js';
 
@@ -74,8 +74,8 @@ export const lineItemInputSchema = z.preprocess(
             .min(1, { message: 'GST is required.' })
             .max(20)
             .refine((value) => /\d\s*%/.test(value), { message: 'GST must be a rate such as 18%.' }),
-        description: optionalText('Description', L.longText),
-        note: optionalText('Note', L.longText),
+        description: optionalLongText(),
+        note: optionalLongText(),
         // grossAmount / discountAmount / taxableAmount are derived; client values are ignored.
     }).superRefine((item, ctx) => {
         if (item.discountType === 'percentage' && item.discount > 100) {

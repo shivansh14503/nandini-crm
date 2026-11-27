@@ -17,7 +17,6 @@ import {
 import { localNow, localToday } from '@/utils/pastDates';
 import { digitsOnly, emailText, rewriteValueKeepingCaret, setInputValueIfChanged, upperCase, useUndoSafeSanitizer } from '../undoSafeInput';
 import { formatPersonName } from '@/utils/personName';
-import { FIELD_MAX_LENGTH } from '@/config/fieldLimits';
 import { LongTextInput } from '../LongTextInput';
 
 /** Native date / time pickers: fixed-length display value plus the picker icon. */
@@ -165,7 +164,8 @@ export function RhfTextField<T extends FieldValues>({
     };
 
     if (inputProps.multiline) {
-        // Long text: auto-growing textarea with a counter and the larger editor. Unknown names get the long-text cap.
+        // Long text: auto-growing textarea with the larger editor; no character limit (an explicit `maxLength`, e.g.
+        // a short multi-line value like a street address, still applies and shows a counter).
         return (
             <FormField name={name} label={label} required={required} hint={hint} size={resolvedSize}>
                 <LongTextInput
@@ -175,7 +175,7 @@ export function RhfTextField<T extends FieldValues>({
                     onChange={field.onChange}
                     onBlur={field.onBlur}
                     inputRef={field.ref}
-                    maxLength={resolvedMaxLength ?? FIELD_MAX_LENGTH.longText}
+                    maxLength={resolvedMaxLength}
                     placeholder={override ? override.placeholder : inputProps.placeholder}
                     disabled={inputProps.disabled}
                     error={fieldState.error?.message}
