@@ -126,9 +126,14 @@ user in. Retired: the must-change-password gate, the `mcp` claim and `403 PASSWO
 catalog MRP (when above 0) and its `taxRate` from the product's Tax Rate (when set); lines that already held the
 product keep their saved values. Lines in the format before CRM-111 are still accepted: `amount` is read as `rate`, a
 `discountType: 'direct'` (per unit) discount becomes an `amount` discount of per unit × quantity, `GST 18%` / `--None--` become `18%` / `0%`,
-and derived values (`salePrice`, `taxAmount`, `total`, the three amounts above) are ignored. Totals: `totalAmount`
-(Gross Amount), `totalDiscount`, `subtotal` (Taxable Amount), `totalTax` (GST), `grandTotal` = max(0, subtotal +
-totalTax − `lumpSumDiscount`), whole rupees; a quotation `PATCH` that sends totals disagreeing with its lines is `400`.
+and derived values (`salePrice`, `taxAmount`, `total`, the three amounts above) are ignored. Summary Breakdown (Jira CRM-111): requests send
+`lumpSumDiscount` (≥ 0, at most the Total Taxable Amount, else `400` on `lumpSumDiscount` "Lump Sum Discount cannot
+exceed the Total Taxable Amount.") and `roundOff` (boolean, default `true`). Responses add, to the paisa: `totalAmount`
+(Gross Amount), `totalDiscount`, `subtotal` (Total Taxable Amount), `actualBeforeTax` (subtotal − lump sum),
+`totalTax` (GST over all rates), `gstType` (`IGST` | `CGST_SGST` | `null`, set by the API from the Company State and the
+customer's shipping / billing state on every save; `null` = no Company State), `roundOff`, `roundOffAmount` (signed) and
+`grandTotal` (actual + GST, rounded to the rupee while `roundOff`). Math in `docs/database-design.md` §4.6 "Summary
+Breakdown". A quotation `POST` / `PATCH` that sends totals disagreeing with its lines is `400`.
 
 ### 2.2a Activities (calls, meetings, tasks, notes)
 
@@ -470,7 +475,7 @@ bodies say when and what it is related to (e.g. "Starts at 10:30 AM (in 15 min) 
 | Method | Path | Description |
 | --- | --- | --- |
 | GET | `/scorecards` | `{ [module]: { module, fieldKey, currencyFieldKey, options: [{ value, color, hidden? }], listViewColor, drawerViewColor, enabled, allLabel, version, updatedBy, updatedAt } }` for configured modules (any signed-in user). `enabled: false` = the list shows no cards (the list column / drawer colors still follow their own switches); `allLabel` null = the screen's own "All" wording |
-| PUT | `/scorecards/:module` | Admin only. `{ fieldKey, currencyFieldKey?, options, listViewColor, drawerViewColor, enabled? (default true), allLabel? (≤ 60 chars, empty = default), version }` where `version` is the saved version the admin edited (null when nothing was saved). Returns the saved scorecard with `version` + 1 (1 on create). **409** when another admin saved (or reset) the scorecard since that version. **400** when `fieldKey` isn't an active `select` field of the module, `currencyFieldKey` isn't an active `amount` / `number` field or one of the module's built-in totals, an option isn't in the field's dropdown, or a color isn't `#RRGGBB`. Built-in totals are `builtin.*` keys the list works out from its line items (`BUILT_IN_SCORECARD_AMOUNTS` in `scorecard.validator.ts`; Opportunities: `builtin.totalAmount`, `builtin.subtotal`, `builtin.totalDiscount`, `builtin.totalTax`, `builtin.grandTotal`, `builtin.subtotalPlusTax`, `builtin.commissionAmount`, `builtin.lumpSumDiscount`; Quotations: the same without `builtin.grandTotal` and `builtin.commissionAmount`). No `currencyFieldKey` = the screen's default total (Opportunities: Actual (Before Tax); Quotations: Grand Total) |
+| PUT | `/scorecards/:module` | Admin only. `{ fieldKey, currencyFieldKey?, options, listViewColor, drawerViewColor, enabled? (default true), allLabel? (≤ 60 chars, empty = default), version }` where `version` is the saved version the admin edited (null when nothing was saved). Returns the saved scorecard with `version` + 1 (1 on create). **409** when another admin saved (or reset) the scorecard since that version. **400** when `fieldKey` isn't an active `select` field of the module, `currencyFieldKey` isn't an active `amount` / `number` field or one of the module's built-in totals, an option isn't in the field's dropdown, or a color isn't `#RRGGBB`. Built-in totals are `builtin.*` keys the list works out from its line items (`BUILT_IN_SCORECARD_AMOUNTS` in `scorecard.validator.ts`; Opportunities: `builtin.totalAmount`, `builtin.subtotal`, `builtin.totalDiscount`, `builtin.totalTax`, `builtin.grandTotal`, `builtin.subtotalPlusTax`, `builtin.commissionAmount`, `builtin.lumpSumDiscount`, `builtin.roundOffAmount`; Quotations: the same without `builtin.grandTotal` and `builtin.commissionAmount`, plus `builtin.actualBeforeTax`). No `currencyFieldKey` = the screen's default total (Opportunities: Actual (Before Tax); Quotations: Grand Total) |
 | DELETE | `/scorecards/:module` | Admin only. Back to the screen's built-in cards (Leads, Opportunities, Quotations, Contracts) or no cards (the other lists) |
 
 Saves and resets are audited as entity type `Scorecard` with `entityId` = module key (read with `GET /audit-logs/scorecards/:module`). Set up under Admin › List Scorecards (`/admin/scorecards?module=…`).
@@ -600,6 +605,14 @@ Errors: 400 `VALIDATION_ERROR` (`errors[].path` `['dateFormat']` "Pick a date fo
 key); 401; 403 `FORBIDDEN` (PUT / DELETE by a non-admin role). The value lists and
 formatters are `backend-crm/src/modules/company-formats/core/displayFormats.ts`, copied to
 `frontend-crm/src/lib/display-formats` by `npm run sync:display-formats` (checked by `contractSync.test.ts`).
+
+**Company details** — `/company-settings` (Admin › Company Details, Jira CRM-111;
+`backend-crm/src/modules/company-settings/companySettings.routes.ts`, route header comment = source of truth).
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/` | Any signed-in user: `{ companyState, updatedBy, updatedAt }`; `companyState` is `''` while not set |
+| PUT | `/` 🔐 | `{ companyState }`: an Indian state or union territory by name or ISO code (`IN-GJ`), `''` clears it; stored as the address master's name → `{ success, data, message: 'Company details saved' }`. `400` on `companyState` "Pick an Indian state or union territory." Audited `CompanySettings UPDATE`. A changed state recomputes the totals of records saved without one (`gstType` null) |
 
 **Holidays** — `/holidays` (Admin › Holidays; `backend-crm/src/modules/holidays`, route header comment = source of truth)
 

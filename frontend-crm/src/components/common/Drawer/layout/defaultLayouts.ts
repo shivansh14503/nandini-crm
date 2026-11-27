@@ -689,8 +689,8 @@ export interface BuiltInPiece {
 
 const PIECE_DESCRIPTIONS: Record<string, string> = {
     'Line items': 'Every product and service on the record, one card each',
-    'Financial totals': 'Gross amount, discounts, taxable amount, GST and grand total',
-    'Commercial breakdown': 'Gross amount, discounts, taxable amount, GST and grand total',
+    'Financial totals': 'Total taxable amount, lump sum discount, GST, round off and grand total',
+    'Commercial breakdown': 'Total taxable amount, lump sum discount, GST, round off and grand total',
     'Assigned User': 'The owner with their role and department',
     'Account Owner': 'The owner with their role and department',
     'Assigned Representative': 'The owner with their role and department',

@@ -5,7 +5,7 @@ import { defaultCommissionType, hasCommission, opportunityInputSchema, payeeBank
 import { toOpportunityData } from './opportunity.mapper.js';
 
 const links = { organization: { id: null, name: 'ACME TRADERS' }, contact: { id: null, name: 'Ravi Kumar' } };
-const totals = { totalAmount: 0, totalDiscount: 0, subtotal: 0, totalTax: 0, grandTotal: 0 };
+const totals = { totalAmount: 0, totalDiscount: 0, subtotal: 0, actualBeforeTax: 0, totalTax: 0, roundOffAmount: 0, grandTotal: 0 };
 
 const base = {
     contact: 'Ravi Kumar',
@@ -46,22 +46,23 @@ describe('opportunity commission type', () => {
     });
 
     it('fills the default type and keeps bank details only for Other', () => {
-        const small = toOpportunityData(opportunityInputSchema.parse({ ...base, commission: 'Yes', commissionAmount: 800, bankName: 'HDFC Bank' }), links, totals);
+        const small = toOpportunityData(opportunityInputSchema.parse({ ...base, commission: 'Yes', commissionAmount: 800, bankName: 'HDFC Bank' }), links, totals, null);
         assert.equal(small.commissionType, 'Self');
         assert.equal(small.bankName, null);
         const large = toOpportunityData(
             opportunityInputSchema.parse({ ...base, commission: 'Yes', commissionAmount: 5000, bankName: 'HDFC Bank', ifscCode: 'hdfc0001234', panNumber: 'abcde1234f' }),
             links,
             totals,
+            null,
         );
         assert.equal(large.commissionType, 'Other');
         assert.equal(large.bankName, 'HDFC Bank');
         assert.equal(large.ifscCode, 'HDFC0001234');
         // Not editable: a type sent with the save gives way to the amount's.
-        const picked = toOpportunityData(opportunityInputSchema.parse({ ...base, commission: 'Yes', commissionAmount: 800, commissionType: 'Other', bankName: 'HDFC Bank' }), links, totals);
+        const picked = toOpportunityData(opportunityInputSchema.parse({ ...base, commission: 'Yes', commissionAmount: 800, commissionType: 'Other', bankName: 'HDFC Bank' }), links, totals, null);
         assert.equal(picked.commissionType, 'Self');
         assert.equal(picked.bankName, null);
-        const none = toOpportunityData(opportunityInputSchema.parse({ ...base, commission: 'No', commissionType: 'Other', bankName: 'HDFC Bank' }), links, totals);
+        const none = toOpportunityData(opportunityInputSchema.parse({ ...base, commission: 'No', commissionType: 'Other', bankName: 'HDFC Bank' }), links, totals, null);
         assert.equal(none.commissionType, null);
         assert.equal(none.bankName, null);
     });

@@ -22,6 +22,7 @@ import { type DataTableFilterItem } from '../common/DataTable';
 import { ROUTES } from '@/config/constants';
 import { useAuth } from '@/context/AuthContext';
 import type { Opportunity } from '@/types/opportunity.types';
+import { opportunityAmountBeforeTax } from './master/stageScorecard';
 import { useOpportunities, useBulkDeleteOpportunities, useDropdownOptionLabel } from '@/hooks/queries';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import type { OpportunityFilterTab, OpportunitySortField } from './master';
@@ -192,8 +193,10 @@ export function OpportunitiesMasterView() {
     const sortedOpportunities = useMemo(() => {
         return [...filteredOpportunities].sort((a, b) => {
             if (sortField === 'grandTotal' || sortField === 'subtotal') {
-                const valA = Number(a[sortField]) || 0;
-                const valB = Number(b[sortField]) || 0;
+                // The `subtotal` column shows Actual (Before Tax).
+                const amountOf = (o: Opportunity) => (sortField === 'subtotal' ? opportunityAmountBeforeTax(o) : Number(o.grandTotal) || 0);
+                const valA = amountOf(a);
+                const valB = amountOf(b);
                 return sortOrder === 'asc' ? valA - valB : valB - valA;
             }
 

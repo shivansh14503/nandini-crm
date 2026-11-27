@@ -128,7 +128,8 @@ const LINE_ITEMS = [
     toLineItem({ id: 'li2', productName: 'Tally On Cloud', description: '10 users, yearly plan', quantity: 1, rate: 48000, discount: 0, taxRate: '18%' }),
 ];
 const LUMP_SUM_DISCOUNT = 2000;
-const TOTALS = { lineItems: LINE_ITEMS, lumpSumDiscount: LUMP_SUM_DISCOUNT, ...totalsOf(LINE_ITEMS, LUMP_SUM_DISCOUNT) };
+const SUMMARY_OPTIONS = { lumpSumDiscount: LUMP_SUM_DISCOUNT, roundOff: true, gstType: 'IGST' } as const;
+const TOTALS = { lineItems: LINE_ITEMS, ...SUMMARY_OPTIONS, ...totalsOf(LINE_ITEMS, SUMMARY_OPTIONS) };
 
 const SAMPLE_OPPORTUNITY: Record<string, unknown> = {
     id: '__sample',

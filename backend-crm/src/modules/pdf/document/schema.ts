@@ -150,20 +150,53 @@ export function upgradeLineItemColumns(value: unknown): unknown {
 }
 
 /** Totals default labels that changed with CRM-111 (a label an admin changed stays). */
-const RELABELLED_TOTAL_ROWS: Record<string, { from: string; to: string }> = {
-    subtotal: { from: 'Subtotal', to: 'Taxable Amount' },
-    totalTax: { from: 'Tax', to: 'GST' },
-    lumpSumDiscount: { from: 'Lump-sum Discount', to: 'Lump Sum Discount' },
+const RELABELLED_TOTAL_ROWS: Record<string, { from: readonly string[]; to: string }> = {
+    subtotal: { from: ['Subtotal', 'Taxable Amount'], to: 'Total Taxable Amount' },
+    totalTax: { from: ['Tax'], to: 'GST' },
+    lumpSumDiscount: { from: ['Lump-sum Discount'], to: 'Lump Sum Discount' },
 };
 
+/**
+ * The totals rows in the order of the line items' Summary Breakdown (Jira CRM-111): Total Taxable Amount, Lump Sum
+ * Discount, Actual (Before Tax), the GST rows (`taxes`: one per rate, `Add: IGST @ 18%` or `Add: CGST @ 9%` and
+ * `Add: SGST @ 9%`), Round Off and Grand Total. Gross Amount, Discount and the GST total stay available, hidden.
+ */
+export const SUMMARY_TOTAL_ROWS = [
+    { key: 'totalAmount', label: 'Gross Amount', visible: false, hideIfZero: false },
+    { key: 'totalDiscount', label: 'Discount', visible: false, hideIfZero: true },
+    { key: 'subtotal', label: 'Total Taxable Amount', visible: true, hideIfZero: false },
+    { key: 'lumpSumDiscount', label: 'Lump Sum Discount', visible: true, hideIfZero: true },
+    { key: 'actualBeforeTax', label: 'Actual (Before Tax)', visible: true, hideIfZero: false },
+    { key: 'taxes', label: 'GST (a row per rate)', visible: true, hideIfZero: true },
+    { key: 'totalTax', label: 'GST', visible: false, hideIfZero: false },
+    { key: 'roundOffAmount', label: 'Round Off', visible: true, hideIfZero: true },
+    { key: 'grandTotal', label: 'Grand Total', visible: true, hideIfZero: false },
+] as const;
+
+const relabelTotalRow = (row: Record<string, unknown>): Record<string, unknown> => {
+    const change = typeof row.key === 'string' ? RELABELLED_TOTAL_ROWS[row.key] : undefined;
+    return change && typeof row.label === 'string' && change.from.includes(row.label) ? { ...row, label: change.to } : row;
+};
+
+/**
+ * Totals rows saved before the Summary Breakdown (no `taxes` row) take its order: an admin's labels and choices stay,
+ * Actual (Before Tax), the GST rows and Round Off are added, the GST rows show where the GST total was (which is then
+ * hidden), and Gross Amount and Discount are hidden (they are on the lines). Old default labels are renamed.
+ */
 export function upgradeTotalRows(value: unknown): unknown {
     if (!Array.isArray(value)) return value;
-    return value.map((row) => {
-        if (!isObject(row) || typeof row.key !== 'string') return row;
-        const change = RELABELLED_TOTAL_ROWS[row.key];
-        return change && row.label === change.from ? { ...row, label: change.to } : row;
+    const rows = value.map((row) => (isObject(row) ? relabelTotalRow(row) : row));
+    if (rows.some((row) => isObject(row) && row.key === 'taxes')) return rows;
+    const saved = new Map(rows.filter(isObject).map((row) => [row.key, row]));
+    return SUMMARY_TOTAL_ROWS.map((row) => {
+        const stored = saved.get(row.key);
+        if (row.key === 'taxes') return { ...row, visible: isObject(saved.get('totalTax')) ? saved.get('totalTax')?.visible !== false : true };
+        if (!stored) return { ...row };
+        if (row.key === 'totalAmount' || row.key === 'totalDiscount' || row.key === 'totalTax') return { ...stored, visible: false };
+        return stored;
     });
 }
+
 const lineItemColumnSchema = z.object({
     key: z.string().regex(/^\w{1,40}$/),
     label: shortText(60),
@@ -173,7 +206,7 @@ const lineItemColumnSchema = z.object({
     align: z.enum(['left', 'center', 'right']),
 });
 
-export const TOTAL_ROW_KEYS = ['totalAmount', 'totalDiscount', 'lumpSumDiscount', 'subtotal', 'totalTax', 'grandTotal'] as const;
+export const TOTAL_ROW_KEYS = ['totalAmount', 'totalDiscount', 'lumpSumDiscount', 'subtotal', 'actualBeforeTax', 'taxes', 'totalTax', 'roundOffAmount', 'grandTotal'] as const;
 const totalRowSchema = z.object({ key: z.enum(TOTAL_ROW_KEYS), label: shortText(60), visible: z.boolean(), hideIfZero: z.boolean() });
 
 export const TERMS_SECTION_KEYS = ['paymentTerms', 'termsAndConditions', 'remarks'] as const;
@@ -247,7 +280,7 @@ const totalsBlock = z.object({
     ...blockBase,
     type: z.literal('totals'),
     props: z.object({
-        rows: z.preprocess(upgradeTotalRows, z.array(totalRowSchema).max(10)),
+        rows: z.preprocess(upgradeTotalRows, z.array(totalRowSchema).max(12)),
         highlightGrandTotal: z.boolean(),
         /** Grand-total highlight colours; omitted = accent background / white text. */
         grandTotalBackground: colorSchema.optional(),

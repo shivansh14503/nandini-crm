@@ -29,10 +29,12 @@ export const QUOTATION_CARD_AMOUNTS: readonly ScorecardAmount<Quotation>[] = [
     LINE_ITEM_CARD_AMOUNTS.grandTotal,
     LINE_ITEM_CARD_AMOUNTS.totalAmount,
     LINE_ITEM_CARD_AMOUNTS.subtotal,
+    LINE_ITEM_CARD_AMOUNTS.actualBeforeTax,
     LINE_ITEM_CARD_AMOUNTS.totalDiscount,
     LINE_ITEM_CARD_AMOUNTS.totalTax,
     LINE_ITEM_CARD_AMOUNTS.subtotalPlusTax,
     LINE_ITEM_CARD_AMOUNTS.lumpSumDiscount,
+    LINE_ITEM_CARD_AMOUNTS.roundOffAmount,
 ];
 
 /**

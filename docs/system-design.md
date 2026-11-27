@@ -128,6 +128,12 @@ Order of global middleware (`src/app.ts`): `helmet` → `cors` (credentials, LAN
    Jira CRM-15): products whose name no live product has are created as `system`, in one transaction; the
    `ModuleSetting` row `system` / `productCatalogSheetLoaded` then stops later start-ups from loading it again (so
    products deleted afterwards stay deleted). A failure is logged and retried on the next start-up.
+   Then, once, recompute every opportunity's and quotation's line item totals with the Summary Breakdown math
+   (`recalculateLineItemTotalsOnceSafely`, `shared/lineItemTotals.recalculate.ts`, Jira CRM-111): Actual (Before Tax),
+   GST per rate (IGST / CGST + SGST by the Company State), Round Off. Pages of 100, each record in its own transaction
+   guarded by its `updatedAt` (a record saved meanwhile is skipped, its save already used the new math), `updatedAt`
+   kept. The `ModuleSetting` row `system` / `lineItemSummaryTotals` marks it done; a failure is logged and retried on
+   the next start-up.
 6. Seed built-in PDF templates (Classic, Modern, Compact).
 7. Resume bulk email checks a restart interrupted (`resumeEmailValidationRuns`).
 8. Start BullMQ workers if `RUN_WORKERS=true`.
@@ -571,6 +577,7 @@ commands fail immediately instead of hanging, and reconnects in the background (
 | `cache:lookups:partner-companies` / `partner-contacts` | JSON, guarded ¹ | 1 h | lookups | Partner master lists; dropped by partner company writes |
 | `cache:lookups:nature-of-calls` | JSON | 1 h | lookups (plain read) | Seeded master list; TTL only |
 | `cache:lookups:form-configs:{all\|active}` | JSON, guarded ¹ | 1 h | `formConfig.service` | Whole form/dropdown configuration |
+| `cache:lookups:company-settings` | JSON (the `CompanySettings` row, or `null` = not set), guarded ¹ | 1 h | `companySettings.service` (opportunity / quotation saves, Admin › Company Details) | Company State for the GST split of line items; dropped after a save commits |
 | `cache:lookups:company-formats` | JSON (the `CompanyFormatSettings` row, or `null` = not customized), guarded ¹ | 1 h | `companyFormats.service` (API, PDF render, BullMQ workers) | Company display formats; dropped after a save or reset commits. Read through Redis rather than memoised in process, so a worker in another process sees a change on its next job |
 | `cache:address-master` / `cache:address-master:{country}` | JSON | 24 h | lookups (plain read) | Countries and states (seeded ISO data); TTL only |
 | `cache:address-master:cities:{state}:{limit}` | JSON, guarded ¹ | 24 h | lookups | A state's biggest cities; dropped by city admin writes |

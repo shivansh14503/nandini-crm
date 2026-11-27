@@ -6,10 +6,41 @@ import { HttpError } from '../../utils/httpError.js';
 import { decimalToNumber } from '../../utils/mappers.js';
 import { optionalLongText, optionalText, requiredText } from '../../validators/common.js';
 import { isActiveProductStatus } from '../products/product.validator.js';
-import { DEFAULT_DISCOUNT_TYPE, isBlankLineItem, LINE_ITEM_DISCOUNT_TYPES, lineItemAmounts, lineItemTotals, normalizeTaxRate, roundMoney, toDiscountType, type LineItemAmounts, type LineItemDiscountType, type LineItemTotals } from './lineItemMath.js';
+import {
+    DEFAULT_DISCOUNT_TYPE,
+    isBlankLineItem,
+    LINE_ITEM_DISCOUNT_TYPES,
+    lineItemAmounts,
+    lineItemTotals,
+    normalizeTaxRate,
+    roundMoney,
+    toDiscountType,
+    toRoundOff,
+    type GstType,
+    type LineItemAmounts,
+    type LineItemDiscountType,
+    type LineItemTotals,
+    type LineItemTotalsOptions,
+} from './lineItemMath.js';
 
-export { isBlankLineItem, lineItemAmounts, lineItemTotals, normalizeTaxRate, parseTaxRate, toDiscountType, DEFAULT_DISCOUNT_TYPE, LINE_ITEM_DISCOUNT_TYPES, LINE_ITEM_TAX_RATES } from './lineItemMath.js';
-export type { LineItemAmounts, LineItemDiscountType, LineItemTotals } from './lineItemMath.js';
+export {
+    customerStateOf,
+    gstTypeFor,
+    isBlankLineItem,
+    lineItemAmounts,
+    lineItemSummary,
+    lineItemTotals,
+    normalizeTaxRate,
+    parseTaxRate,
+    toDiscountType,
+    toGstType,
+    toRoundOff,
+    DEFAULT_DISCOUNT_TYPE,
+    GST_TYPES,
+    LINE_ITEM_DISCOUNT_TYPES,
+    LINE_ITEM_TAX_RATES,
+} from './lineItemMath.js';
+export type { GstType, LineItemAmounts, LineItemDiscountType, LineItemSummary, LineItemTaxRow, LineItemTotals, LineItemTotalsOptions } from './lineItemMath.js';
 
 /**
  * Line items shared by opportunities and quotations (Jira CRM-111): one shape, one set of labels and one calculation
@@ -120,22 +151,40 @@ export function assertHasLineItems(lineItems: readonly unknown[], record: string
 export interface ComputedLineItem extends LineItemInput, LineItemAmounts {}
 
 /** Per-line amounts and the document totals, exactly as the line items editor shows them. */
-export function calculateLineItems(items: readonly LineItemInput[], lumpSumDiscount: number): { items: ComputedLineItem[]; totals: LineItemTotals } {
+export function calculateLineItems(items: readonly LineItemInput[], options: LineItemTotalsOptions): { items: ComputedLineItem[]; totals: LineItemTotals } {
     return {
         items: items.map((item) => ({ ...item, ...lineItemAmounts(item) })),
-        totals: lineItemTotals(items, lumpSumDiscount),
+        totals: lineItemTotals(items, options),
     };
 }
 
-const TOTAL_FIELDS = ['totalAmount', 'totalDiscount', 'subtotal', 'totalTax', 'grandTotal'] as const;
+/** The Summary Breakdown's Round Off checkbox: on unless sent false (`false`, 'false', 0). */
+export const roundOffSchema = z.preprocess((value) => (value === undefined || value === null || value === '' ? true : toRoundOff(value)), z.boolean());
+
+/** Column values of the Summary Breakdown: the computed totals and what they were computed with. */
+export function totalsData(totals: LineItemTotals, options: { lumpSumDiscount: number; roundOff: boolean; gstType: GstType | null }) {
+    return { ...totals, lumpSumDiscount: options.lumpSumDiscount, roundOff: options.roundOff, gstType: options.gstType };
+}
+
+export const lumpSumTooLargeMessage = 'Lump Sum Discount cannot exceed the Total Taxable Amount.';
+
+/** Rejects a Lump Sum Discount above the Total Taxable Amount (the lines' Taxable Amounts added up). */
+export function assertLumpSumWithinTotal(items: readonly LineItemInput[], lumpSumDiscount: number): void {
+    const subtotal = lineItemTotals(items).subtotal;
+    if (roundMoney(lumpSumDiscount) > subtotal) {
+        throw HttpError.badRequest(lumpSumTooLargeMessage, [{ path: ['lumpSumDiscount'], message: lumpSumTooLargeMessage }]);
+    }
+}
+
+const TOTAL_FIELDS = ['totalAmount', 'totalDiscount', 'subtotal', 'actualBeforeTax', 'totalTax', 'roundOffAmount', 'grandTotal'] as const;
 
 /**
- * Rejects a request whose explicitly sent totals disagree with the line items (a stale or tampered quote).
- * Only fields present in the request are compared; the stored values are always the computed ones.
+ * Rejects a request whose explicitly sent totals disagree with the line items (a stale or tampered quote), to the
+ * paisa. Only fields present in the request are compared; the stored values are always the computed ones.
  */
 export function assertTotalsMatch(sent: Record<string, unknown>, computed: LineItemTotals): void {
-    const mismatches = TOTAL_FIELDS.filter((field) => field in sent && sent[field] !== null && sent[field] !== undefined)
-        .filter((field) => Math.round(Number(sent[field])) !== computed[field])
+    const mismatches = TOTAL_FIELDS.filter((field) => field in sent && sent[field] !== null && sent[field] !== undefined && sent[field] !== '')
+        .filter((field) => Math.abs(roundMoney(Number(sent[field])) - computed[field]) >= 0.005)
         .map((field) => ({ message: `${field} should be ${computed[field]} for these line items.`, path: [field] }));
     if (mismatches.length > 0) {
         throw HttpError.badRequest('Totals do not match the line items. Refresh the totals and try again.', mismatches);

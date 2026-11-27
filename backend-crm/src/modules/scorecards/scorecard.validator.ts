@@ -23,6 +23,7 @@ export const BUILT_IN_SCORECARD_AMOUNTS: Readonly<Record<string, readonly string
         'builtin.subtotalPlusTax',
         'builtin.commissionAmount',
         'builtin.lumpSumDiscount',
+        'builtin.roundOffAmount',
     ],
     // Default: Grand Total.
     quotations: [
@@ -32,6 +33,8 @@ export const BUILT_IN_SCORECARD_AMOUNTS: Readonly<Record<string, readonly string
         'builtin.totalTax',
         'builtin.subtotalPlusTax',
         'builtin.lumpSumDiscount',
+        'builtin.actualBeforeTax',
+        'builtin.roundOffAmount',
     ],
 };
 

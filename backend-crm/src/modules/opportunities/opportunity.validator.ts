@@ -22,7 +22,7 @@ import {
     stringList,
 } from '../../validators/common.js';
 import { DEFAULT_DISPLAY_FORMATS, formatMoney, type DisplayFormats } from '../company-formats/core/displayFormats.js';
-import { lineItemListSchema } from '../shared/lineItems.js';
+import { lineItemListSchema, roundOffSchema } from '../shared/lineItems.js';
 
 /** Commission Amounts up to this default to Commission Type Self; larger ones to Other. */
 export const SMALL_COMMISSION_LIMIT = 1000;
@@ -163,6 +163,8 @@ export const opportunityInputSchema = z.object({
     // Line items (no currency: it is set per quotation, Jira CRM-111).
     lineItems: lineItemListSchema.default([]),
     lumpSumDiscount: z.coerce.number({ error: 'Lump Sum Discount must be a number.' }).min(0, { message: 'Lump Sum Discount cannot be negative.' }).default(0),
+    // Summary Breakdown's Round Off checkbox (on unless sent false). GST type and the totals are computed, never taken.
+    roundOff: roundOffSchema,
 
     customFields: customFieldsSchema,
 }).superRefine((input, ctx) => {

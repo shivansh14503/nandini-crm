@@ -4,7 +4,7 @@ import { decimalToNumber, parseCustomFields, text } from '../../../utils/mappers
 import type { AuthUser } from '../../../types/user.types.js';
 import { assertRecordAccess } from '../../shared/accessControl.js';
 import { lineItemsInclude } from '../../shared/lineItems.js';
-import { toDiscountType } from '../../shared/lineItemMath.js';
+import { GST_TYPE_LABELS, lineItemSummary, sumTax, taxRowLines, toDiscountType, toGstType, type GstType } from '../../shared/lineItemMath.js';
 import { shownNumberModules } from '../../document-series/documentSeries.service.js';
 import type { DisplayFormats } from '../../company-formats/core/displayFormats.js';
 import type { CustomFieldMeta } from '../fieldRegistry.js';
@@ -57,7 +57,20 @@ export interface QuotationSource {
     billing: Omit<PdfAddress, 'full'>;
     shipping: Omit<PdfAddress, 'full'>;
     salesPerson: { fullName: string; phone: string; email: string; username: string };
-    totals: { totalAmount: number; totalDiscount: number; lumpSumDiscount: number; subtotal: number; totalTax: number; grandTotal: number };
+    totals: {
+        totalAmount: number;
+        totalDiscount: number;
+        lumpSumDiscount: number;
+        /** Total Taxable Amount. */
+        subtotal: number;
+        actualBeforeTax: number;
+        /** IGST / CGST_SGST as saved; null = plain GST. */
+        gstType: GstType | null;
+        totalTax: number;
+        roundOff: boolean;
+        roundOffAmount: number;
+        grandTotal: number;
+    };
     terms: { paymentTerms: string; paymentTermsDescription: string; termsAndCondition: string; termsAndConditionDescription: string };
     lineItems: QuotationSourceLineItem[];
     customValues: Record<string, unknown>;
@@ -111,13 +124,31 @@ export function assembleQuotationContext(source: QuotationSource, input: Context
     }));
 
     const t = source.totals;
+    // The per-rate GST lines ("Add: IGST @ 18%"), recomputed from the saved lines with the saved options.
+    const summary = lineItemSummary(source.lineItems, { lumpSumDiscount: t.lumpSumDiscount, roundOff: t.roundOff, gstType: t.gstType });
+    const taxRows = summary.taxes.flatMap((row) => taxRowLines(row, t.gstType)).map((line) => ({ ...line, amountFormatted: money(line.amount) }));
+    const signed = (value: number) => (value > 0 ? `+ ${money(value)}` : value < 0 ? `- ${money(-value)}` : money(0));
+    const igst = sumTax(summary.taxes, 'igst');
+    const cgst = sumTax(summary.taxes, 'cgst');
+    const sgst = sumTax(summary.taxes, 'sgst');
     const totals = {
         ...t,
         totalAmountFormatted: money(t.totalAmount),
         totalDiscountFormatted: money(t.totalDiscount),
         lumpSumDiscountFormatted: money(t.lumpSumDiscount),
         subtotalFormatted: money(t.subtotal),
+        actualBeforeTaxFormatted: money(t.actualBeforeTax),
+        gstTypeLabel: t.gstType ? GST_TYPE_LABELS[t.gstType] : 'GST',
+        taxes: t.totalTax,
+        taxRows,
+        igst,
+        cgst,
+        sgst,
+        igstFormatted: money(igst),
+        cgstFormatted: money(cgst),
+        sgstFormatted: money(sgst),
         totalTaxFormatted: money(t.totalTax),
+        roundOffAmountFormatted: signed(t.roundOffAmount),
         grandTotalFormatted: money(t.grandTotal),
         amountInWords: amountInWords(t.grandTotal, currency, formats),
         hasDiscount: t.totalDiscount > 0,
@@ -283,7 +314,11 @@ async function loadSource(recordId: string): Promise<QuotationSource> {
             totalDiscount: decimalToNumber(row.totalDiscount),
             lumpSumDiscount: decimalToNumber(row.lumpSumDiscount),
             subtotal: decimalToNumber(row.subtotal),
+            actualBeforeTax: decimalToNumber(row.actualBeforeTax),
+            gstType: toGstType(row.gstType),
             totalTax: decimalToNumber(row.totalTax),
+            roundOff: row.roundOff,
+            roundOffAmount: decimalToNumber(row.roundOffAmount),
             grandTotal: decimalToNumber(row.grandTotal),
         },
         terms: {

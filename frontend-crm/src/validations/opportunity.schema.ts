@@ -6,6 +6,7 @@ import { isRecordFile } from '../types/recordFile.types';
 import { fmtMoney } from '../utils/formats';
 import { customFieldsSchema, optionalDescription, optionalLongText, optionalString, optionalText, requiredString, requiredText, tallySerialNoOptional, zodAmount, zodEmailOptional, zodIfscOptional, zodPanOptional, zodPhoneOptional } from './common';
 import { lineItemListSchema } from './lineItem.schema';
+import { GST_TYPES } from '@/lib/line-items/lineItemMath';
 
 /** Same line items as quotations (Jira CRM-111): see lineItem.schema.ts. An opportunity needs at least one too. */
 export const opportunityLineItemsSchema = lineItemListSchema({ required: true, record: 'opportunity' });
@@ -66,10 +67,17 @@ export const opportunityFormSchema = z.object({
     // Line Items (no currency: it is set per quotation)
     lineItems: opportunityLineItemsSchema.default([]),
     lumpSumDiscount: zodAmount.default(0),
+    // Round Off checkbox: on by default.
+    roundOff: z.boolean().default(true),
     totalAmount: zodAmount.default(0),
     totalDiscount: zodAmount.default(0),
     subtotal: zodAmount.default(0),
+    actualBeforeTax: zodAmount.default(0),
     totalTax: zodAmount.default(0),
+    // Set by the API from the company and customer states.
+    gstType: z.enum(GST_TYPES).nullish(),
+    // Signed: the Grand Total can round down.
+    roundOffAmount: z.coerce.number().default(0),
     grandTotal: zodAmount.default(0),
 
     /** Admin-defined custom field values (validated against the form configuration by useRhfForm). */

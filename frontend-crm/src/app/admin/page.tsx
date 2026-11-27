@@ -10,6 +10,7 @@ import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
 import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined';
 import FormatListNumberedOutlinedIcon from '@mui/icons-material/FormatListNumberedOutlined';
 import TranslateOutlinedIcon from '@mui/icons-material/TranslateOutlined';
+import ApartmentOutlinedIcon from '@mui/icons-material/ApartmentOutlined';
 import MarkEmailReadOutlinedIcon from '@mui/icons-material/MarkEmailReadOutlined';
 import EventBusyOutlinedIcon from '@mui/icons-material/EventBusyOutlined';
 import HubOutlinedIcon from '@mui/icons-material/HubOutlined';
@@ -90,6 +91,15 @@ const ADMIN_MODULES: AdminModule[] = [
         href: ROUTES.COMPANY_FORMATS,
         badge: BADGES.available,
         highlights: ['Date', 'Time', 'Number grouping', 'Preview'],
+    },
+    {
+        key: 'company-details',
+        title: 'Company Details',
+        description: 'Set your company’s state. Line items charge IGST to customers in another state and CGST + SGST within it.',
+        icon: <ApartmentOutlinedIcon />,
+        href: ROUTES.COMPANY_DETAILS,
+        badge: BADGES.available,
+        highlights: ['Company State', 'IGST', 'CGST + SGST'],
     },
     {
         key: 'email-validation',

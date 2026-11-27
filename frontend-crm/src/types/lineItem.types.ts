@@ -1,4 +1,4 @@
-import type { LineItemDiscountType } from '@/lib/line-items/lineItemMath';
+import type { GstType, LineItemDiscountType } from '@/lib/line-items/lineItemMath';
 
 /**
  * One line of an opportunity's or a quotation's Line Items (Jira CRM-111): the same fields, labels and API keys
@@ -32,14 +32,22 @@ export interface LineItemsValues {
     /** Quotations only: the quotation's currency (`Indian Rupee: ₹`). Opportunities have none (always ₹). */
     currency?: string;
     lineItems: LineItem[];
+    /** Taken off the Total Taxable Amount, before GST. */
     lumpSumDiscount: number;
+    /** The Round Off checkbox (on by default): rounds the Grand Total to the nearest rupee, 0.50 up. */
+    roundOff?: boolean;
     /** Gross Amount. */
     totalAmount?: number;
     /** Discount. */
     totalDiscount?: number;
-    /** Taxable Amount. */
+    /** Total Taxable Amount. */
     subtotal?: number;
-    /** GST. */
+    /** Actual (Before Tax): Total Taxable Amount − Lump Sum Discount. */
+    actualBeforeTax?: number;
+    /** GST (all rates, IGST or CGST + SGST). */
     totalTax?: number;
+    /** IGST or CGST_SGST as saved; null = plain GST (no company state then). Set by the API. */
+    gstType?: GstType | null;
+    roundOffAmount?: number;
     grandTotal?: number;
 }

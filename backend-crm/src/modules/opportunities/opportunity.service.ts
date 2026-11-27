@@ -8,7 +8,8 @@ import { generateEntityCode } from '../../utils/codeGenerator.js';
 import { HttpError } from '../../utils/httpError.js';
 import { daysAgo, fromDateOnly } from '../../utils/mappers.js';
 import { parsePagination } from '../../utils/pagination.js';
-import { assertHasLineItems, calculateLineItems, lineItemsInclude, linkedProductIds, prepareLineItems, toLineItemData, type PreparedLineItems } from '../shared/lineItems.js';
+import { assertHasLineItems, assertLumpSumWithinTotal, calculateLineItems, lineItemsInclude, linkedProductIds, prepareLineItems, toLineItemData, type PreparedLineItems } from '../shared/lineItems.js';
+import { opportunityGstType } from '../shared/lineItemGst.js';
 import { asPayload, checkModulePayload, loadModuleFieldConfig, throwFieldIssues, validateModulePayload } from '../form-configs/customFieldValidator.js';
 import { assertAssigneeValid, assertRecordAccess, buildAccessScopeWhere } from '../shared/accessControl.js';
 import { findOrganizationByName, type PrefetchedLookups } from '../shared/prefetch.js';
@@ -181,10 +182,13 @@ export async function createOpportunityRecord(
     await assertRecordFile(tx, 'opportunities', input.documentFile, 'documentFile');
     const lines = await prepareOpportunityLines(tx, null, input);
     input.lineItems = lines.items;
-    const computed = calculateLineItems(input.lineItems, input.lumpSumDiscount);
+    assertLumpSumWithinTotal(input.lineItems, input.lumpSumDiscount);
+    // GST: IGST or CGST + SGST by the organization's state and the company's (Summary Breakdown, CRM-111).
+    const gstType = await opportunityGstType(tx, links.organization.id);
+    const computed = calculateLineItems(input.lineItems, { lumpSumDiscount: input.lumpSumDiscount, roundOff: input.roundOff, gstType });
 
     const row = await tx.opportunity.create({
-        data: { ...toOpportunityData({ ...input, assignedTo }, links, computed.totals), opportunityCode, createdBy: user.username },
+        data: { ...toOpportunityData({ ...input, assignedTo }, links, computed.totals, gstType), opportunityCode, createdBy: user.username },
     });
     await replaceLineItems(tx, row.id, computed, lines.knownProductIds);
     await syncOpportunityDocument(tx, row.id, input, user);
@@ -359,10 +363,14 @@ export const opportunityService = {
             const assignedTo = (await assertAssigneeValid(tx, input.assignedTo, { previous: existing.assignedTo })) ?? existing.assignedTo;
             const lines = 'lineItems' in patch ? await prepareOpportunityLines(tx, id, input) : null;
             if (lines) input.lineItems = lines.items;
-            const computed = calculateLineItems(input.lineItems, input.lumpSumDiscount);
+            // Checked when the edit sends the lines or the lump sum (older records keep taking unrelated edits).
+            if (lines || 'lumpSumDiscount' in patch) assertLumpSumWithinTotal(input.lineItems, input.lumpSumDiscount);
+            // The GST split follows the organization's and the company's state at every save.
+            const gstType = await opportunityGstType(tx, links.organization.id);
+            const computed = calculateLineItems(input.lineItems, { lumpSumDiscount: input.lumpSumDiscount, roundOff: input.roundOff, gstType });
             await tx.opportunity.update({
                 where: { id },
-                data: { ...toOpportunityData({ ...input, assignedTo }, links, computed.totals), updatedBy: user.username },
+                data: { ...toOpportunityData({ ...input, assignedTo }, links, computed.totals, gstType), updatedBy: user.username },
             });
             if (lines) await replaceLineItems(tx, id, computed, lines.knownProductIds);
             await syncOpportunityDocument(tx, id, input, user);

@@ -1,5 +1,5 @@
 import type { Block, BlockOf, BlockType, Column, PageMargins, PdfDocument, RichInline, RichText, Section, Style, Theme } from './schema.js';
-import { DOCUMENT_VERSION } from './schema.js';
+import { DOCUMENT_VERSION, SUMMARY_TOTAL_ROWS } from './schema.js';
 
 /** Factories for new blocks / sections / documents and small helpers shared by templates and the builder. */
 
@@ -100,14 +100,8 @@ export function lineItemColumnsFrom(columns: LineItemColumnInfo[]): BlockOf<'lin
     return columns.map((c) => ({ key: c.key, label: c.label, visible: c.defaultVisible, align: c.align, ...(c.widthPct !== undefined ? { widthPct: c.widthPct } : {}) }));
 }
 
-export const DEFAULT_TOTAL_ROWS: BlockOf<'totals'>['props']['rows'] = [
-    { key: 'totalAmount', label: 'Gross Amount', visible: true, hideIfZero: false },
-    { key: 'totalDiscount', label: 'Discount', visible: true, hideIfZero: true },
-    { key: 'lumpSumDiscount', label: 'Lump Sum Discount', visible: true, hideIfZero: true },
-    { key: 'subtotal', label: 'Taxable Amount', visible: true, hideIfZero: false },
-    { key: 'totalTax', label: 'GST', visible: true, hideIfZero: false },
-    { key: 'grandTotal', label: 'Grand Total', visible: true, hideIfZero: false },
-];
+/** The Summary Breakdown's rows (Jira CRM-111): see SUMMARY_TOTAL_ROWS in schema.ts. */
+export const DEFAULT_TOTAL_ROWS: BlockOf<'totals'>['props']['rows'] = SUMMARY_TOTAL_ROWS.map((row) => ({ ...row }));
 
 export function createBlock<T extends BlockType>(type: T, input: BlockFactoryInput): BlockOf<T>;
 export function createBlock(type: BlockType, input: BlockFactoryInput): Block {

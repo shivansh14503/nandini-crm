@@ -94,10 +94,14 @@ const LINE_ITEMS_FIELD_KEYS = [
     'lineItems',
     'currency',
     'lumpSumDiscount',
+    'roundOff',
     'totalAmount',
     'totalDiscount',
     'subtotal',
+    'actualBeforeTax',
     'totalTax',
+    'gstType',
+    'roundOffAmount',
     'grandTotal',
 ];
 
@@ -162,10 +166,14 @@ const EMPTY_DEFAULTS: QuotationFormData = {
     // The editor always shows one empty line (a quotation needs at least one filled line).
     lineItems: [],
     lumpSumDiscount: 0,
+    roundOff: true,
     totalAmount: 0,
     totalDiscount: 0,
     subtotal: 0,
+    actualBeforeTax: 0,
     totalTax: 0,
+    gstType: null,
+    roundOffAmount: 0,
     grandTotal: 0,
 
     // Tab 3: Address Information

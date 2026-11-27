@@ -10,6 +10,7 @@ import { RecordLink } from '../common/RecordLink';
 import { documentNumberColumn, type DataTableColumn } from '../common/DataTable';
 import { ROUTES } from '@/config/constants';
 import type { Opportunity } from '@/types/opportunity.types';
+import { opportunityAmountBeforeTax } from './master/stageScorecard';
 import { useProducts, useQuotations } from '@/hooks/queries';
 import type { Product } from '@/types/product.types';
 import { OPPORTUNITY_PRODUCTS_FILTER_KEY } from '@/utils/productUsage';
@@ -290,15 +291,15 @@ export function useOpportunityColumns(openRecord: (record: Opportunity) => void,
                 },
             },
             {
-                // Line items after discount, before tax.
+                // Actual (Before Tax): Total Taxable Amount − Lump Sum Discount. The id stays `subtotal` for saved views.
                 id: 'subtotal',
                 label: 'ACTUAL (BEFORE TAX)',
                 sortable: true,
-                filter: { kind: 'number', label: 'Actual (Before Tax)', getValue: (o) => o.subtotal ?? (o.grandTotal || 0) - (o.totalTax || 0) },
+                filter: { kind: 'number', label: 'Actual (Before Tax)', getValue: opportunityAmountBeforeTax },
                 minWidth: 150,
                 render: (o) => (
                     <Typography sx={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--crm-slate-900)' }}>
-                        {formatCurrency(o.subtotal ?? (o.grandTotal || 0) - (o.totalTax || 0))}
+                        {formatCurrency(opportunityAmountBeforeTax(o))}
                     </Typography>
                 ),
             },

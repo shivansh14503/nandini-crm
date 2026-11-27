@@ -11,7 +11,9 @@ import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
 import { getCountryNameByCode } from '@/data/addressMaster';
 import { useDropdownOptionLabel, useFormConfigs } from '@/hooks/queries/useFormConfigs';
-import { currencyCodeOf, LINE_ITEM_LABELS, LINE_ITEM_TAX_RATE_CATEGORY, LINE_ITEM_TOTAL_LABELS, toLineItem, lineDiscountText } from '@/lib/line-items';
+import { currencyCodeOf, LINE_ITEM_LABELS, LINE_ITEM_TAX_RATE_CATEGORY, lineItemSummaryLines, summaryLineText, toLineItem, lineDiscountText } from '@/lib/line-items';
+import type { LineItemsValues } from '@/types/lineItem.types';
+import { SUMMARY_LINE_COLORS } from '@/components/forms/rhf/CrmLineItemsReadOnly';
 import type { LineItem } from '@/types/lineItem.types';
 import { useDrawerLayouts } from '@/hooks/queries/useDrawerLayouts';
 import { LINE_ITEM_MODULES, pruneLayout, type DrawerBadge, type DrawerBlock, type DrawerLayoutDocument, type DrawerLayoutModule, type DrawerSection, type SectionStyle } from '@/lib/drawer-layout';
@@ -577,26 +579,30 @@ function LineItemsBody({ block, ctx }: { block: Extract<DrawerBlock, { type: 'li
 }
 
 function TotalsBody({ ctx }: { ctx: LayoutCtx }) {
-    const r = ctx.record ?? {};
     const money = moneyFor(ctx);
-    const row = (label: string, value: string, color?: string, strong = false) => (
-        <Box key={label} sx={{ display: 'flex', justifyContent: 'space-between', gap: 1.5 }}>
-            <Typography sx={{ fontSize: '0.82rem', color: 'var(--mui-palette-text-secondary)' }}>{label}</Typography>
-            <Typography sx={{ fontSize: '0.84rem', fontWeight: strong ? 700 : 600, color: color ?? 'var(--mui-palette-text-primary)', whiteSpace: 'nowrap' }}>{value}</Typography>
-        </Box>
-    );
+    // The Summary Breakdown, as on the record's Line Items (Jira CRM-111).
+    const lines = lineItemSummaryLines({ ...(ctx.record ?? {}), lineItems: lineItemsOf(ctx) } as Partial<LineItemsValues>);
+    if (lines.length === 0) return <Typography sx={{ fontSize: '0.82rem', color: 'var(--mui-palette-text-secondary)' }}>No line items yet.</Typography>;
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-            {row(LINE_ITEM_TOTAL_LABELS.totalAmount, money(num(r.totalAmount)))}
-            {num(r.totalDiscount) > 0 && row(LINE_ITEM_TOTAL_LABELS.totalDiscount, `− ${money(num(r.totalDiscount))}`, 'var(--mui-palette-error-main)')}
-            {row(LINE_ITEM_TOTAL_LABELS.subtotal, money(num(r.subtotal)), 'var(--crm-slate-900)', true)}
-            {row(LINE_ITEM_TOTAL_LABELS.totalTax, `+ ${money(num(r.totalTax))}`, 'var(--crm-text-blue-600)')}
-            {num(r.lumpSumDiscount) > 0 && row(LINE_ITEM_TOTAL_LABELS.lumpSumDiscount, `− ${money(num(r.lumpSumDiscount))}`, 'var(--mui-palette-error-main)')}
-            <Box sx={{ height: '1px', backgroundColor: 'var(--mui-palette-border-strong)', my: 0.5 }} />
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1.5 }}>
-                <Typography sx={{ fontSize: '0.94rem', fontWeight: 800, color: 'var(--crm-slate-900)' }}>{LINE_ITEM_TOTAL_LABELS.grandTotal}</Typography>
-                <Typography sx={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--crm-green-700)', whiteSpace: 'nowrap' }}>{money(num(r.grandTotal))}</Typography>
-            </Box>
+            {lines.map((line) =>
+                line.tone === 'grand' ? (
+                    <React.Fragment key={line.key}>
+                        <Box sx={{ height: '1px', backgroundColor: 'var(--mui-palette-border-strong)', my: 0.5 }} />
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1.5 }}>
+                            <Typography sx={{ fontSize: '0.94rem', fontWeight: 800, color: 'var(--crm-slate-900)' }}>{line.label}</Typography>
+                            <Typography sx={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--crm-green-700)', whiteSpace: 'nowrap' }}>{money(line.amount)}</Typography>
+                        </Box>
+                    </React.Fragment>
+                ) : (
+                    <Box key={line.key} sx={{ display: 'flex', justifyContent: 'space-between', gap: 1.5 }}>
+                        <Typography sx={{ fontSize: '0.82rem', fontWeight: line.tone === 'strong' ? 700 : 400, color: 'var(--mui-palette-text-secondary)', minWidth: 0 }}>{line.label}</Typography>
+                        <Typography sx={{ fontSize: '0.84rem', fontWeight: line.tone === 'strong' ? 700 : 600, color: SUMMARY_LINE_COLORS[line.tone], whiteSpace: 'nowrap' }}>
+                            {summaryLineText(line, money)}
+                        </Typography>
+                    </Box>
+                ),
+            )}
         </Box>
     );
 }

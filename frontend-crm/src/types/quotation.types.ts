@@ -1,3 +1,4 @@
+import type { GstType } from '@/lib/line-items/lineItemMath';
 import type { LineItem } from './lineItem.types';
 
 export type QuotationStatus = 'Draft' | 'Sent' | 'Accepted' | 'Rejected';
@@ -115,10 +116,19 @@ export interface QuotationFormData {
     currency: string;
     lineItems: QuotationLineItem[];
     lumpSumDiscount: number;
+    /** Round Off checkbox (on by default). */
+    roundOff: boolean;
+    /** Gross Amount. */
     totalAmount: number;
     totalDiscount: number;
+    /** Total Taxable Amount. */
     subtotal: number;
+    /** Actual (Before Tax): Total Taxable Amount − Lump Sum Discount. */
+    actualBeforeTax: number;
     totalTax: number;
+    /** IGST or CGST_SGST as saved; null = plain GST (no company state then). */
+    gstType?: GstType | null;
+    roundOffAmount: number;
     grandTotal: number;
 
     // ── Tab 3: Address Information ────────────────────────────────

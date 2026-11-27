@@ -72,8 +72,14 @@ const QUOTATION_FIELDS: PdfFieldDefinition[] = [
     f('totalAmount', 'totals.totalAmountFormatted', 'Gross Amount', 'Totals', 'currency', false),
     f('totalDiscount', 'totals.totalDiscountFormatted', 'Discount', 'Totals', 'currency'),
     f('lumpSumDiscount', 'totals.lumpSumDiscountFormatted', 'Lump Sum Discount', 'Totals', 'currency'),
-    f('subtotal', 'totals.subtotalFormatted', 'Taxable Amount', 'Totals', 'currency'),
+    f('subtotal', 'totals.subtotalFormatted', 'Total Taxable Amount', 'Totals', 'currency'),
+    f('actualBeforeTax', 'totals.actualBeforeTaxFormatted', 'Actual (Before Tax)', 'Totals', 'currency'),
+    f('gstType', 'totals.gstTypeLabel', 'GST Type (IGST / CGST + SGST)', 'Totals', 'text', false),
+    f('igst', 'totals.igstFormatted', 'IGST', 'Totals', 'currency', false),
+    f('cgst', 'totals.cgstFormatted', 'CGST', 'Totals', 'currency', false),
+    f('sgst', 'totals.sgstFormatted', 'SGST', 'Totals', 'currency', false),
     f('totalTax', 'totals.totalTaxFormatted', 'GST', 'Totals', 'currency'),
+    f('roundOffAmount', 'totals.roundOffAmountFormatted', 'Round Off', 'Totals', 'currency'),
     f('grandTotal', 'totals.grandTotalFormatted', 'Grand Total', 'Totals', 'currency'),
     f('amountInWords', 'totals.amountInWords', 'Amount in Words', 'Totals'),
     f('paymentTerms', 'terms.paymentTerms', 'Payment Terms', 'Terms'),
@@ -88,13 +94,13 @@ export const QUOTATION_LINE_ITEM_COLUMNS: LineItemColumnDefinition[] = [
     { key: 'productName', label: 'Item Name', defaultVisible: true, align: 'left' },
     { key: 'description', label: 'Description', defaultVisible: true, align: 'left' },
     { key: 'note', label: 'Note', defaultVisible: false, align: 'left' },
-    // Same fields, labels and order as the line items on the quotation form (Jira CRM-111).
-    { key: 'quantity', label: 'Qty', defaultVisible: true, align: 'right', widthPct: 7 },
-    { key: 'rate', label: 'Rate', defaultVisible: true, align: 'right', widthPct: 12 },
-    { key: 'grossAmount', label: 'Gross Amount', defaultVisible: true, align: 'right', widthPct: 12 },
-    { key: 'discount', label: 'Discount', defaultVisible: true, align: 'right', widthPct: 8 },
-    { key: 'taxRate', label: 'GST', defaultVisible: true, align: 'right', widthPct: 7 },
-    { key: 'taxableAmount', label: 'Taxable Amount', defaultVisible: true, align: 'right', widthPct: 13 },
+    // Same fields, labels, order and left alignment as the line items on the quotation form (Jira CRM-111).
+    { key: 'quantity', label: 'Qty', defaultVisible: true, align: 'left', widthPct: 7 },
+    { key: 'rate', label: 'Rate', defaultVisible: true, align: 'left', widthPct: 12 },
+    { key: 'grossAmount', label: 'Gross Amount', defaultVisible: true, align: 'left', widthPct: 12 },
+    { key: 'discount', label: 'Discount', defaultVisible: true, align: 'left', widthPct: 8 },
+    { key: 'taxRate', label: 'GST', defaultVisible: true, align: 'left', widthPct: 7 },
+    { key: 'taxableAmount', label: 'Taxable Amount', defaultVisible: true, align: 'left', widthPct: 13 },
 ];
 
 interface ModuleFieldConfig {
