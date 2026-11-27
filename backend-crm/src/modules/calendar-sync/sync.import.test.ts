@@ -7,7 +7,7 @@ import { activityService } from '../activities/activity.service.js';
 import { blankActivity, blankLink, EMPTY_CONFIGS, installActivityDouble, restoreActivityDouble, type ActivityDoubleState } from '../activities/testing/activityDouble.js';
 import { fakeAddEvent, fakeEditEvent, fakeMeetUrl, fakeProviderState, resetFakeProvider } from './providers/fake.js';
 import { resetProviderPauses } from './providers/http.js';
-import { setFakeHealth, setFakeProviderEnabledForTests } from './providers/registry.js';
+import { getAdapter, setAdapterForTests, setFakeHealth, setFakeProviderEnabledForTests } from './providers/registry.js';
 import type { GoogleEventWire } from './providers/wire.js';
 import { autoCompleteImported, classifyImport, inFlightMatch, MeetingImporter, selfReplyToApply, type ImportFacts, type InFlightMeeting } from './sync.import.js';
 import { syncKeyOf } from './sync.keys.js';
@@ -596,6 +596,174 @@ describe('pull: customer meetings brought in', () => {
         } finally {
             setInlineRsvpForTests(null);
         }
+    });
+});
+
+describe('customer meetings: second review fixes', () => {
+    const ADMIN: AuthUser = { id: 9, username: 'admin', role: 'admin' };
+    const locked = (field: string) => (err: unknown) =>
+        err instanceof HttpError && err.statusCode === 409 && err.code === 'EXTERNAL_EVENT_LOCKED' && JSON.stringify(err.errors ?? []).includes(field);
+    const meet = (id: string) => ({
+        hangoutLink: fakeMeetUrl(id),
+        conferenceData: { conferenceId: id, conferenceSolution: { key: { type: 'hangoutsMeet' } }, entryPoints: [{ entryPointType: 'video', uri: fakeMeetUrl(id) }] },
+    });
+    const customerMeeting = (id: string, over: Partial<GoogleEventWire> = {}) =>
+        calendarMeeting(id, { organizer: { email: 'ravi@acme.com' }, attendees: [{ email: 'palak@nandiniinfosys.com', responseStatus: 'accepted' }], ...over });
+
+    it('an outside meeting can’t become a Task or Note (409 on followupType); another type is fine; no join link is mirrored onto a Task', async () => {
+        install();
+        fakeAddEvent(customerMeeting('m1', meet('aaa-bbbb-ccc')));
+        done(await pullConnection('c1', 'poll'));
+        const [row] = imported();
+        const view = await activityService.getById(row.id, PALAK);
+        await assert.rejects(activityService.update(row.id, { ...view, followupType: 'Task' }, PALAK), locked('followupType'));
+        await assert.rejects(activityService.update(row.id, { ...view, followupType: 'Note', remarks: 'Call notes' }, PALAK), locked('followupType'));
+        const after = imported()[0];
+        assert.equal(after.followupType, view.followupType);
+        assert.equal(after.conferenceJoinUrl, fakeMeetUrl('aaa-bbbb-ccc'), 'nothing was dropped');
+        assert.ok(after.endAt && after.location, 'times and place kept');
+        assert.equal((await activityService.update(row.id, { ...view, followupType: 'Call' }, PALAK)).followupType, 'Call');
+
+        // A Task stored before this guard: the mirror never puts a Join link on it.
+        Object.assign(imported()[0], { followupType: 'Task', conferenceProvider: null, conferenceState: null, conferenceJoinUrl: null, conferenceId: null });
+        fakeEditEvent('m1', { summary: 'Quarterly review (moved room)', ...meet('ddd-eeee-fff') }, new Date(Date.now() + 60_000));
+        done(await pullConnection('c1', 'poll'));
+        assert.equal(imported()[0].subject, 'Quarterly review (moved room)');
+        assert.equal(imported()[0].conferenceProvider, null);
+        assert.equal(imported()[0].conferenceJoinUrl, null);
+    });
+
+    it('the person’s own meeting brings its Meet link along at import (adopted: the push neither asks for nor removes one)', async () => {
+        install();
+        fakeAddEvent(calendarMeeting('m1', meet('own-meet-xyz')));
+        done(await pullConnection('c1', 'poll'));
+        const [row] = imported();
+        assert.equal(row.externalOrganizer, false);
+        assert.equal(row.conferenceProvider, 'meet');
+        assert.equal(row.conferenceState, 'ready');
+        assert.equal(row.conferenceJoinUrl, fakeMeetUrl('own-meet-xyz'));
+        const [link] = linksOf(row.id);
+        assert.equal(JSON.parse(link.baseJson as string).crm.conference?.provider, 'meet', 'the base records the adopted link');
+        assert.ok(link.dirtyAt, 'one push for the join details');
+        const view = await activityService.getById(row.id, PALAK);
+        assert.equal(view.videoMeeting, 'meet');
+
+        await pushLink(link.id);
+        assert.equal(fakeProviderState.eventCalls.filter((c) => c.op === 'create').length, 0, 'no new event');
+        assert.equal(imported()[0].conferenceJoinUrl, fakeMeetUrl('own-meet-xyz'), 'the link stays');
+        assert.equal(fakeProviderState.events.get('m1')?.hangoutLink, fakeMeetUrl('own-meet-xyz'), 'never removed from the event');
+    });
+
+    it('a cancelled copy can’t be answered: no reply buttons, 403, and the meeting stays Cancelled', async () => {
+        install();
+        setInlineRsvpForTests(() => undefined);
+        try {
+            fakeAddEvent(customerMeeting('m1'));
+            done(await pullConnection('c1', 'poll'));
+            const [row] = imported();
+            fakeEditEvent('m1', { status: 'cancelled' }, new Date(Date.now() + 60_000));
+            done(await pullConnection('c1', 'poll'));
+            assert.equal(imported()[0].status, 'Cancelled');
+            assert.equal(linksOf(row.id)[0].state, 'cancelled');
+            assert.equal((await activityService.getById(row.id, PALAK)).viewer.myResponse, null, 'nothing to answer');
+            await assert.rejects(activityService.respond(row.id, { responseStatus: 'accepted' }, PALAK), (err: unknown) => err instanceof HttpError && err.statusCode === 403);
+            assert.equal(imported()[0].status, 'Cancelled', 'not brought back');
+        } finally {
+            setInlineRsvpForTests(null);
+        }
+    });
+
+    it('the rsvp job keeps an owner’s newer reply saved while its call was in flight (and the next job sends it)', async () => {
+        install();
+        setInlineRsvpForTests(() => undefined);
+        const real = getAdapter('fake');
+        try {
+            fakeAddEvent(customerMeeting('m1', { attendees: [{ email: 'palak@nandiniinfosys.com', responseStatus: 'needsAction' }] }));
+            done(await pullConnection('c1', 'poll'));
+            const [row] = imported();
+            await activityService.respond(row.id, { responseStatus: 'declined' }, PALAK);
+            let raced = false;
+            setAdapterForTests('fake', {
+                ...real,
+                respond: async (ctx, id, reply) => {
+                    if (!raced) {
+                        raced = true;
+                        // Palak changes her mind while the decline is on its way.
+                        await activityService.respond(row.id, { responseStatus: 'accepted' }, PALAK);
+                    }
+                    return (real.respond as NonNullable<typeof real.respond>)(ctx, id, reply);
+                },
+            });
+            assert.deepEqual(await runRsvp(row.id, 'palak'), { status: 'done', reply: 'declined' });
+            assert.equal(imported()[0].status, 'Planned');
+            assert.equal((await activityService.getById(row.id, PALAK)).viewer.myResponse, 'accepted', 'the newer reply is kept');
+            assert.deepEqual(await runRsvp(row.id, 'palak'), { status: 'done', reply: 'accepted' });
+            assert.equal(fakeProviderState.events.get('m1')?.attendees?.find((a) => a.email === 'palak@nandiniinfosys.com')?.responseStatus, 'accepted');
+        } finally {
+            setAdapterForTests('fake', null);
+            setInlineRsvpForTests(null);
+        }
+    });
+
+    it('a colleague’s meeting nobody else follows: its last copy cancelled cancels it (never auto-completed); the copy coming back brings it back', async () => {
+        install({ connections: [conn()] });
+        fakeAddEvent(calendarMeeting('m1', { organizer: { email: 'asha@nandiniinfosys.com' }, attendees: [{ email: 'palak@nandiniinfosys.com', responseStatus: 'accepted' }, { email: 'ravi@acme.com', responseStatus: 'accepted' }] }));
+        done(await pullConnection('c1', 'poll'));
+        const [row] = imported();
+        assert.equal(row.assignedTo, 'asha');
+        fakeEditEvent('m1', { status: 'cancelled' }, new Date(Date.now() + 60_000));
+        done(await pullConnection('c1', 'poll'));
+        assert.equal(imported()[0].status, 'Cancelled', 'Asha cancelled it');
+        assert.equal(attendeeOf(row.id, 'palak')?.responseStatus, 'declined');
+        assert.equal(await autoCompleteImported(new Date(Date.now() + 10 * DAY)), 0, 'never completed');
+
+        fakeEditEvent('m1', { status: 'confirmed' }, new Date(Date.now() + 120_000));
+        done(await pullConnection('c1', 'poll'));
+        assert.equal(imported()[0].status, 'Planned', 'put back');
+    });
+
+    it('a copy cancelled while another colleague still holds one is only that colleague’s decline', async () => {
+        install({ connections: [conn(), ashaConn()], importing: ['palak'] });
+        state.users.push({ username: 'sam', fullName: 'Sam Iyer', isActive: true, email: 'sam@nandiniinfosys.com' } as (typeof state.users)[number]);
+        fakeAddEvent(
+            calendarMeeting('m1', {
+                organizer: { email: 'sam@nandiniinfosys.com' },
+                attendees: [
+                    { email: 'palak@nandiniinfosys.com', responseStatus: 'accepted' },
+                    { email: 'asha@nandiniinfosys.com', responseStatus: 'accepted' },
+                    { email: 'ravi@acme.com', responseStatus: 'accepted' },
+                ],
+            }),
+        );
+        done(await pullConnection('c1', 'poll'));
+        const [row] = imported();
+        assert.equal(row.assignedTo, 'sam');
+        state.links.push(blankLink({ id: 'l-asha', activityId: row.id, connectionId: 'c2', provider: 'fake', requestedId: 'x', role: 'attendee', state: 'synced', externalEventId: 'other-copy' }));
+        fakeEditEvent('m1', { status: 'cancelled' }, new Date(Date.now() + 60_000));
+        done(await pullConnection('c1', 'poll'));
+        assert.equal(imported()[0].status, 'Planned', 'Asha’s copy still follows it');
+        assert.equal(attendeeOf(row.id, 'palak')?.responseStatus, 'declined');
+    });
+
+    it('restoring a removed outside meeting re-attaches its copies and pulls in full: the organizer’s changes reach it again', async () => {
+        install();
+        fakeAddEvent(customerMeeting('m1'));
+        done(await pullConnection('c1', 'poll'));
+        const [row] = imported();
+        await activityService.remove(row.id, PALAK);
+        fakeEditEvent('m1', { summary: 'Moved while removed' }, new Date(Date.now() + 60_000));
+        done(await pullConnection('c1', 'poll'));
+        assert.equal(linksOf(row.id)[0].state, 'detached');
+
+        await activityService.restore(row.id, ADMIN);
+        const link = linksOf(row.id)[0];
+        assert.equal(link.state, 'synced');
+        assert.equal(link.etag, null);
+        assert.equal(state.connections[0].syncCursor, null, 'one full pull');
+        const full = done(await pullConnection('c1', 'poll'));
+        assert.equal(full.full, true);
+        assert.equal(imported()[0].subject, 'Moved while removed');
+        assert.equal((await activityService.getById(row.id, PALAK)).viewer.myResponse, 'accepted', 'the owner can answer again');
     });
 });
 

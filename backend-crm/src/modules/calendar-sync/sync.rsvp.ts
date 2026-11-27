@@ -203,15 +203,24 @@ export async function runRsvp(activityId: string, username: string, options: { n
             await lease.keepAlive(clock());
             const sent = reply as RsvpReply;
             const event = await withCalendarAccess(connection.id, (ctx) => (adapter.respond as NonNullable<typeof adapter.respond>)(ctx, eventId as string, sent), { clock, readOnly: true });
-            await prisma.activityExternalLink.updateMany({
-                where: { id: link.id },
-                data: {
-                    baseJson: selfBaseJson(sent, isOwner ? sent : null),
-                    lastSyncedAt: clock(),
-                    lastErrorCode: null,
-                    lastErrorMessage: null,
-                    ...(event ? { etag: event.etag || null, htmlLink: event.htmlLink ?? link.htmlLink } : {}),
-                },
+            const sentLinkId = link.id;
+            const htmlLink = link.htmlLink;
+            // Under the activity lock `respondAsOwner` writes with: an owner's newer reply saved while the call was in
+            // flight is kept (`mine`), so the job it queued sends that one instead of this answer again.
+            await runInTransaction(async (tx) => {
+                await lockRecords(tx, 'activity', [activityId]);
+                const current = await tx.activityExternalLink.findUnique({ where: { id: sentLinkId }, select: { baseJson: true } });
+                const newer = isOwner ? parseOwnerReply(current?.baseJson ?? null) : null;
+                await tx.activityExternalLink.updateMany({
+                    where: { id: sentLinkId },
+                    data: {
+                        baseJson: selfBaseJson(sent, isOwner ? (newer ?? sent) : null),
+                        lastSyncedAt: clock(),
+                        lastErrorCode: null,
+                        lastErrorMessage: null,
+                        ...(event ? { etag: event.etag || null, htmlLink: event.htmlLink ?? htmlLink } : {}),
+                    },
+                });
             });
             logger.info({ activityId, connectionId: connection.id, reply: sent }, 'Reply sent to the calendar');
             return { status: 'done', reply: sent } as const;
@@ -266,7 +275,9 @@ export async function respondAsOwner(
         const mineConnections = await tx.calendarConnection.findMany({ where: { username: user.username, status: { in: [...LIVE_CONNECTION_STATUSES] } }, select: { id: true } });
         const link = mineConnections.length
             ? await tx.activityExternalLink.findFirst({
-                  where: { activityId, role: 'attendee', state: { not: 'detached' }, connectionId: { in: mineConnections.map((c) => c.id) } },
+                  // A cancelled copy is gone from the calendar (the organizer cancelled it, or it was removed): there is
+                  // nothing to answer, and Accept would bring back a meeting only the calendar can bring back (D21).
+                  where: { activityId, role: 'attendee', state: { notIn: ['detached', 'cancelled'] }, connectionId: { in: mineConnections.map((c) => c.id) } },
                   select: { id: true, baseJson: true },
               })
             : null;

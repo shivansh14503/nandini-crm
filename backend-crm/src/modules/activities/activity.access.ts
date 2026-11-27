@@ -1,6 +1,7 @@
 import type { Activity, Prisma } from '../../generated/prisma/client.js';
 import type { AuthUser } from '../../types/user.types.js';
 import { canAccessRecord, hasGlobalAccess } from '../shared/accessControl.js';
+import { isActivityOnlyFollowupType } from '../shared/followupTypes.js';
 
 /**
  * Row-level access to activities: the CRM rule (global roles see everything; others what they own or created,
@@ -94,6 +95,21 @@ export function externalOrganizerLockOf(row: ActivityLockRow): ActivityLock | nu
         code: EXTERNAL_EVENT_LOCKED,
         message: `${who} in their calendar. Times, title, place, attendees and the video meeting can only be changed there.`,
         deleteRefusedReason: null,
+    };
+}
+
+/**
+ * 409 EXTERNAL_EVENT_LOCKED body when a CRM update would turn a meeting organized outside the CRM into Task or Note
+ * (activity-only types), or null. The type itself stays the CRM's (another meeting type is fine), but Task / Note drop
+ * the end, place, attendees, video meeting (and for a Note the times) that the organizer's calendar owns, so the change
+ * is refused before anything is derived from it (activity.service.ts `applyCrmUpdate`).
+ */
+export function externalTypeChangeRefusal(row: ActivityLockRow & Pick<Activity, 'followupType'>, nextType: string): { message: string; code: string } | null {
+    if (!row.externalOrganizer || !isActivityOnlyFollowupType(nextType) || isActivityOnlyFollowupType(row.followupType)) return null;
+    const who = row.organizerEmail ? `Organized by ${row.organizerEmail}` : 'Organized by someone outside the CRM';
+    return {
+        message: `${who} in their calendar. It can't become a ${nextType.trim()}: that would drop the times, place and attendees the calendar owns. Pick another meeting type.`,
+        code: EXTERNAL_EVENT_LOCKED,
     };
 }
 

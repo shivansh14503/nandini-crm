@@ -27,6 +27,7 @@ import { useFormMode } from '@/context/FormModeContext';
 import { DynamicModuleCustomFields } from '@/components/forms/DynamicModuleCustomFields';
 import { CUSTOMER_RESPONSE_CATEGORY, CUSTOMER_RESPONSES } from '@/components/forms/FollowUpDecision';
 import { useDropdownOptionMeta, useFormConfigs, useModuleFormConfig } from '@/hooks/queries/useFormConfigs';
+import { isActivityOnlyFollowupType } from '@/utils/followupTypes';
 import { useMyPreferences } from '@/hooks/queries/useProfile';
 import { activityService } from '@/services/activity.service';
 import {
@@ -34,6 +35,7 @@ import {
     ACTIVITY_REMINDERS,
     ACTIVITY_STATUSES,
     ACTIVITY_TYPES,
+    isExternallyOrganized,
     NOTE_TYPE,
     PLANNED_STATUS,
     TASK_TYPE,
@@ -522,7 +524,12 @@ export function ActivityFormFields({
 
     const defaultTime = (day: string) => (day === nowWall.slice(0, 10) ? nextQuarterHour(clock.now(), tz).slice(11, 16) : '09:00');
     const columns = compact ? 2 : 3;
-    const typeOptions = getOptions(FOLLOWUP_TYPE_CATEGORY_KEY, ACTIVITY_TYPES);
+    // P2-8: a meeting organized outside the CRM can't become a Task / Note (the API answers 409 EXTERNAL_EVENT_LOCKED):
+    // they would drop the times, place and attendees the organizer's calendar owns.
+    const externallyOrganized = isExternallyOrganized(activity);
+    const typeOptions = getOptions(FOLLOWUP_TYPE_CATEGORY_KEY, ACTIVITY_TYPES).filter(
+        (value) => !externallyOrganized || !isActivityOnlyFollowupType(value) || value === activity?.followupType,
+    );
     const showSchedule = !isNote || ['startAt', 'endAt', 'allDay', 'reminder', 'location', 'videoMeeting', 'attendees'].some(shows);
     const showOutcome = shows('customerResponse') || shows('remarks');
     const divider = <Divider sx={{ my: compact ? 2.5 : 3.5, borderColor: 'var(--mui-palette-border-light)' }} />;

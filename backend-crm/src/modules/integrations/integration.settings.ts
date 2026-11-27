@@ -66,7 +66,7 @@ export async function providerDomainsInUse(): Promise<{ provider: string; domain
  * P2-8: the type of imported meetings must be an active Followup Type that can sit in a calendar: never Task / Note
  * (activity-only), and ticked under "What goes to calendars" (`meta.calendarSync` not false). An imported meeting the
  * employee organizes is two-way; a type that doesn't go to calendars would have its first push treat the event as one
- * to remove. 400 on `importFollowupType` otherwise.
+ * to remove. 400 on `importFollowupType` otherwise: checked when the type changes and on every save while import is on.
  */
 export function assertImportType(configs: Pick<FormConfigsPayload, 'categories'>, value: string): void {
     const category = configs.categories.find((c) => c.key === FOLLOWUP_TYPE_CATEGORY_KEY);
@@ -94,7 +94,9 @@ export async function saveCalendarSettings(patch: unknown, user: AuthUser): Prom
     const configs = await formConfigService.getAllConfigs();
     const before = calendarSettingsFrom(configs);
     const merged = calendarSyncSettingsSchema.parse({ ...before, ...changes });
-    if (changes.importFollowupType !== undefined) assertImportType(configs, merged.importFollowupType);
+    // While import is on, every save checks the type it imports with (turning it on with a type that stopped going to
+    // calendars would otherwise slip through, since only changed keys are sent).
+    if (changes.importFollowupType !== undefined || merged.allowMeetingImport) assertImportType(configs, merged.importFollowupType);
     const domainsChanged = changes.companyDomains !== undefined && JSON.stringify([...before.companyDomains].sort()) !== JSON.stringify([...merged.companyDomains].sort());
     if (domainsChanged) {
         const kept = new Set(merged.companyDomains);

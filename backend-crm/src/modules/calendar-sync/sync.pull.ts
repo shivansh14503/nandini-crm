@@ -373,7 +373,7 @@ class ConnectionPull {
             this.counts.skippedUnlinked += 1;
             return { ...NOTHING, outcome: 'ignored' };
         }
-        return { ...NOTHING, rows: result.rows, outcome: result.outcome };
+        return { ...NOTHING, rows: result.rows, wake: result.wake ?? [], outcome: result.outcome };
     }
 
     // ── Applying ────────────────────────────────────────────────────────────────────────────────────────────

@@ -470,6 +470,16 @@ describe('settings and sync types', () => {
         assert.notEqual((await loadCalendarSettings()).importFollowupType, 'Visit', 'never the default either');
     });
 
+    it('P2-8: turning import on checks the type it would import with, even when only the switch is sent', async () => {
+        // No active, calendar-able option with the meeting icon: the stored / default type ('Meeting') doesn't exist.
+        const { settingSaves } = setup({ configs: followupConfigs([{ value: 'Call' }, { value: 'Visit', meta: { calendarSync: false, icon: 'meeting' } }]) });
+        await expectHttp(saveCalendarSettings({ allowMeetingImport: true }, admin), 400, 'VALIDATION_ERROR');
+        assert.equal(settingSaves.length, 0);
+        const saved = await saveCalendarSettings({ allowMeetingImport: true, importFollowupType: 'Call' }, admin);
+        assert.equal(saved.allowMeetingImport, true);
+        assert.equal(settingSaves.length, 1);
+    });
+
     it('lists Followup Types with Task / Note locked off; saves real changes through the option update', async () => {
         const { optionUpdates, state } = setup({ configs: followupConfigs([{ value: 'Call', meta: { icon: 'call' } }, { value: 'WhatsApp', meta: { calendarSync: false } }, { value: 'Task' }]) });
         assert.deepEqual(await integrationService.getSyncTypes(), [

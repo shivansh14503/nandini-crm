@@ -99,6 +99,7 @@ export function CalendarSyncSettingsCard({
     };
 
     const submit = async () => {
+        if (importTypeMissing) return;
         const domains = domainInput.trim() ? addDomains(domainInput) : form.companyDomains;
         if (!domains) return;
         if (!domains.length) {
@@ -123,7 +124,17 @@ export function CalendarSyncSettingsCard({
 
     // Only a type ticked under What goes to calendars (never Task / Note): a meeting the employee organizes stays two-way.
     const importTypes = syncTypes.filter((t) => !t.locked && t.calendarSync);
-    const importTypeGone = Boolean(form.importFollowupType) && !importTypes.some((t) => t.value === form.importFollowupType);
+    const importTypeListed = importTypes.some((t) => t.value === form.importFollowupType);
+    const importTypeGone = Boolean(form.importFollowupType) && !importTypeListed;
+    // Import on without a listed type can't be saved (the server refuses it too): pick one first.
+    const importTypeMissing = form.allowMeetingImport && !importTypeListed;
+    const importTypeHint = importTypes.length === 0
+        ? 'No Followup Type goes to calendars yet. Tick one under What goes to calendars first.'
+        : importTypeGone
+          ? `${form.importFollowupType} no longer goes to calendars. Pick another type.`
+          : importTypeMissing
+            ? 'Pick the type imported meetings get.'
+            : 'Imported meetings get this Followup Type. Only types that go to calendars are listed.';
 
     const domainsError = domainError || errors.companyDomains || Object.entries(errors).find(([k]) => k.startsWith('companyDomains.'))?.[1] || '';
 
@@ -296,16 +307,11 @@ export function CalendarSyncSettingsCard({
                             select
                             size="small"
                             label="Type of imported meetings"
-                            value={importTypes.some((t) => t.value === form.importFollowupType) ? form.importFollowupType : ''}
+                            value={importTypeListed ? form.importFollowupType : ''}
                             onChange={(e) => set('importFollowupType', e.target.value)}
                             disabled={save.isPending}
-                            error={Boolean(errors.importFollowupType)}
-                            helperText={
-                                errors.importFollowupType ||
-                                (importTypeGone
-                                    ? `${form.importFollowupType} no longer goes to calendars. Pick another type.`
-                                    : 'Imported meetings get this Followup Type. Only types that go to calendars are listed.')
-                            }
+                            error={Boolean(errors.importFollowupType) || importTypeMissing}
+                            helperText={errors.importFollowupType || importTypeHint}
                             sx={{ ...inputSx, mt: 1.5, width: { xs: '100%', sm: 320 }, maxWidth: '100%' }}
                         >
                             {importTypes.map((t) => (
@@ -325,7 +331,7 @@ export function CalendarSyncSettingsCard({
                             Cancel
                         </Button>
                     )}
-                    <Button variant="contained" sx={{ ...primaryButtonSx, minHeight: 36 }} disabled={!dirty || save.isPending} onClick={() => void submit()}>
+                    <Button variant="contained" sx={{ ...primaryButtonSx, minHeight: 36 }} disabled={!dirty || save.isPending || importTypeMissing} onClick={() => void submit()}>
                         {save.isPending ? 'Saving…' : 'Save settings'}
                     </Button>
                 </Box>

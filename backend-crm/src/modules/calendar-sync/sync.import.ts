@@ -4,7 +4,7 @@ import type { Activity, ActivityAttendee, ActivityExternalLink, CalendarConnecti
 import { auditService, diffRecords } from '../../services/audit.service.js';
 import { ENV } from '../../config/env.js';
 import { toActivityDto, type ActivityRow } from '../activities/activity.mapper.js';
-import { PLANNED_STATUS } from '../activities/activity.schedule.js';
+import { NOTE_TYPE, PLANNED_STATUS, TASK_TYPE } from '../activities/activity.schedule.js';
 import { loadActivityConfig, WITH_ATTENDEES, type ActivityCommitRow, type ActivityConfig } from '../activities/activity.service.js';
 import { applySystemPatch, insertSystemActivity, type SystemActivityFields } from '../activities/activity.system.js';
 import type { AttendeeInput } from '../activities/activity.validator.js';
@@ -29,6 +29,8 @@ import { eventKeyOf, requestedIdFor, syncKeyOf } from './sync.keys.js';
 import { scheduleFieldsOf } from './sync.merge.js';
 import { crmWhenOf, sameWhen, type AttendeeResponse, type CrmAttendee, type ProviderEvent } from './sync.shapes.js';
 import { parseReplyBase } from './sync.view.js';
+import { recordConference, settleConference } from './sync.conference.js';
+import type { DirtyLink } from './sync.outbox.js';
 
 /**
  * Customer meetings from the calendar (Calendar Phase 2 spec §13.1–§13.2, D17, D18; P2-8), run by the pull
@@ -326,6 +328,9 @@ const parseInstant = (value: string): Date | null => {
     return Number.isNaN(ms) ? null : new Date(ms);
 };
 
+/** Task and Note never carry a video meeting (P3-1), so no join link is mirrored onto one. */
+const carriesVideo = (followupType: string): boolean => followupType !== TASK_TYPE && followupType !== NOTE_TYPE;
+
 type PulledConference = Pick<Activity, 'conferenceProvider' | 'conferenceState' | 'conferenceJoinUrl' | 'conferenceId' | 'conferenceError'>;
 
 /**
@@ -366,6 +371,8 @@ export interface ImportOutcome {
     outcome: ImportOutcomeKind;
     /** This person's organizer copy of an activity assigned to them that another pull brought in meanwhile: the pull relinks it (§8.2). */
     relinkActivityId?: string;
+    /** Links left dirty (an imported organizer copy whose join link was taken over: one push for the join details). */
+    wake?: DirtyLink[];
 }
 
 const UNCHANGED: ImportOutcome = { rows: [], outcome: 'unchanged' };
@@ -492,13 +499,14 @@ export class MeetingImporter {
                     organizerName: (event.organizerName ?? '').trim().slice(0, 200) || null,
                     externalOrganizer: decision.externalOrganizer,
                     // P3-1: the organizer's join link, shown read only (the CRM never asks for one on such a meeting).
-                    ...(decision.externalOrganizer ? (pulledConferenceColumns(null, event) ?? {}) : {}),
+                    ...(decision.externalOrganizer && carriesVideo(this.settings.importFollowupType) ? (pulledConferenceColumns(null, event) ?? {}) : {}),
                 },
                 markSync: false,
                 notify: false,
             });
 
             let baseJson: string;
+            let joinReady = false;
             if (decision.role === 'organizer') {
                 const { crmNow } = await inboundCrmNow(
                     tx,
@@ -508,27 +516,33 @@ export class MeetingImporter {
                     this.connection.accountEmail,
                     this.settings.companyDomains,
                 );
-                baseJson = JSON.stringify({ crm: crmNow, provider: event.shape });
+                // P3-1 inbound adoption, as the pull's merge does for organizer copies: a ready Meet / Teams link the
+                // person made in their calendar is taken over, and the base records it so the push never asks for
+                // another (or removes it). One more push then carries the join details, as after a push answer.
+                const conference = settleConference(written.after, event, this.connection.provider, null, crmNow);
+                joinReady = conference.outcome.columns?.conferenceState === 'ready' && (await recordConference(tx, written.after, conference.outcome));
+                baseJson = JSON.stringify({ crm: joinReady ? conference.crm : crmNow, provider: event.shape });
             } else {
                 baseJson = selfBaseJson(event.selfResponse ?? 'needsAction');
             }
-            await tx.activityExternalLink.create({
+            const link = await tx.activityExternalLink.create({
                 data: {
                     activityId: written.after.id,
                     connectionId: this.connection.id,
                     provider: this.connection.provider,
                     role: decision.role,
-                    state: 'synced',
+                    state: joinReady ? 'pending' : 'synced',
                     invites: 'send',
                     requestedId: requestedIdFor(written.after.id, this.connection.id, 0),
                     ...this.linkIdentity(event, now),
                     baseJson,
                     crmSyncedAt: written.after.updatedAt,
+                    ...(joinReady ? { dirtyAt: now } : {}),
                 },
                 select: { id: true },
             });
             logger.info({ activityId: written.after.id, connectionId: this.connection.id, role: decision.role }, 'Customer meeting brought in from the calendar');
-            return { rows: [written], outcome: 'imported' };
+            return { rows: [written], outcome: 'imported', ...(joinReady ? { wake: [{ id: link.id, dirtyAt: now }] } : {}) };
         });
         if ('attend' in result) return this.attend(event, result.attend);
         return result;
@@ -628,8 +642,15 @@ export class MeetingImporter {
                 // decline (below). A CRM-held meeting is the organizer link's business: a copy gone (the CRM made the
                 // event again, e.g. after an owner change or a reassignment) changes neither its status nor a reply.
                 if (isOwner && activity.externalOrganizer && activity.status === PLANNED_STATUS) patch.status = 'Cancelled';
+                // The owner holds no copy the CRM follows (a colleague who doesn't import organized it) and this was the
+                // last live copy: nothing else could ever cancel it, so the cancel is the meeting's (else the nightly
+                // would complete a meeting that never took place).
+                else if (activity.externalOrganizer && activity.status === PLANNED_STATUS && !(await this.hasOtherLiveCopy(tx, activity.id, current.id))) patch.status = 'Cancelled';
                 self = activity.externalOrganizer ? 'declined' : (base ?? 'needsAction');
                 mine = null;
+            } else if (!isOwner && activity.externalOrganizer && current.state === 'cancelled' && self !== 'declined' && activity.status === 'Cancelled') {
+                // That last copy came back (the meeting was put back): so does the activity, unless someone else holds a copy.
+                if (!(await this.hasOtherLiveCopy(tx, activity.id, current.id))) patch.status = PLANNED_STATUS;
             } else if (isOwner && activity.externalOrganizer) {
                 // The owner's own meeting organized outside the CRM (they have no attendee row): declining it there
                 // cancels it here, accepting it again (or the copy coming back) brings it back.
@@ -654,8 +675,9 @@ export class MeetingImporter {
                 after = written.after;
                 await tx.activity.updateMany({ where: { id: activity.id, updatedAt: after.updatedAt }, data: { externalUpdatedAt: now, updatedAt: after.updatedAt } });
             }
-            // P3-1: the organizer's join link, mirrored read only (bookkeeping: no audit entry, updatedAt kept).
-            const conference = mirrors ? pulledConferenceColumns(after, event) : null;
+            // P3-1: the organizer's join link, mirrored read only (bookkeeping: no audit entry, updatedAt kept). Never
+            // onto a Task / Note, which has no video meeting.
+            const conference = mirrors && carriesVideo(after.followupType) ? pulledConferenceColumns(after, event) : null;
             if (conference) await tx.activity.updateMany({ where: { id: activity.id, updatedAt: after.updatedAt }, data: { ...conference, updatedAt: after.updatedAt } });
 
             if (!isOwner) {
@@ -680,6 +702,15 @@ export class MeetingImporter {
             if (rows.length === 0) return conference ? { rows, outcome: 'applied' } : UNCHANGED;
             return { rows, outcome: event.status === 'cancelled' && patch.status === 'Cancelled' ? 'deleted' : 'applied' };
         });
+    }
+
+    /** Another live copy of the meeting (an attendee link other than `linkId`, the owner's own included) the CRM still follows. */
+    private async hasOtherLiveCopy(tx: TransactionClient, activityId: string, linkId: string): Promise<boolean> {
+        const other = await tx.activityExternalLink.findFirst({
+            where: { activityId, id: { not: linkId }, role: 'attendee', state: { notIn: ['detached', 'cancelled'] } },
+            select: { id: true },
+        });
+        return other !== null;
     }
 
     /** The oldest live attendee link of the activity mirrors it (so two employees' copies never take turns). */

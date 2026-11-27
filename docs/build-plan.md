@@ -541,6 +541,14 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         link is taken over read only on import and mirrored by the designated attendee link (cleared when the
         organizer removes it; no audit entry, never pushed); imported meetings never repeat (`assertRepeatable`) and a
         series edit never rewrites or cancels an `externalOrganizer` row (`isRewritable`).
+        Second review fixes (as of 2026-11-27): an outside meeting can't become Task / Note (`409 EXTERNAL_EVENT_LOCKED`
+        on `followupType`; the form leaves them out) and no join link is mirrored onto a Task / Note; a meeting the
+        employee organized brings its own Meet / Teams link along at import (adopted as on a pull, one push for the join
+        details); a cancelled copy can't be answered (no reply buttons, `403`); the `rsvp` job keeps an owner's newer
+        reply saved while its call was in flight; when the last copy the CRM follows is cancelled and the owner holds
+        none, the meeting is Cancelled (so the nightly never completes it), and Planned again if the copy returns; a
+        restored imported meeting re-attaches its invitation copies and pulls those calendars in full once; import can't
+        be on with a type that stopped going to calendars (checked on every save while on; the card blocks Save).
 - [ ] **Calendar Phase 3: video meetings** (spec §16, adapted to admin-managed connections)
   - [x] **P3-1: Google Meet + Microsoft Teams links** (2026-11-26) — migration `20261215100000_activity_conference`
         (`Activity.conferenceProvider` / `conferenceState` / `conferenceJoinUrl` / `conferenceId` / `conferenceError` /

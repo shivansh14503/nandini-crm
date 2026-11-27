@@ -64,6 +64,8 @@ export interface HeldNotice {
 export interface OutboxResult {
     links: DirtyLink[];
     notices: HeldNotice[];
+    /** P2-8: connections whose cursor was dropped for one full pull (a restored imported meeting's copies re-attached). */
+    pulls?: string[];
 }
 
 /** Outbox results of written rows, read (and dropped) after commit by `takeOutboxResult`. */
@@ -176,16 +178,46 @@ export function reattachedState(link: { externalEventId: string | null; baseJson
     return link.externalEventId && !link.baseJson ? 'cancelled' : 'pending';
 }
 
+/**
+ * P2-8: an imported meeting brought back from the bin (Admin › Audit Log restore). Deleting it detached its invitation
+ * copies (attendee links) on their next pull; on live connections they are made live again with no etag, and each such
+ * connection drops its cursor for one full pull, so the meeting's current state in the calendar (changed meanwhile or
+ * not) is applied again and later changes keep arriving. Returns those connection ids (none: nothing was detached).
+ * Only on a restore, so it adds no regular database wake-up.
+ */
+async function reattachImportedCopies(db: OutboxDb, activityId: string): Promise<string[]> {
+    const detached = await db.activityExternalLink.findMany({ where: { activityId, role: 'attendee', state: 'detached' }, select: { id: true, connectionId: true } });
+    if (detached.length === 0) return [];
+    const live = await db.calendarConnection.findMany({
+        where: { id: { in: [...new Set(detached.map((l) => l.connectionId))] }, status: { in: [...LIVE_CONNECTION_STATUSES] } },
+        select: { id: true },
+    });
+    const liveIds = live.map((c) => c.id);
+    if (liveIds.length === 0) return [];
+    await db.activityExternalLink.updateMany({
+        where: { id: { in: detached.filter((l) => liveIds.includes(l.connectionId)).map((l) => l.id) }, state: 'detached' },
+        data: { state: 'synced', etag: null, dirtyAt: null, nextAttemptAt: null, lastErrorCode: null, lastErrorMessage: null },
+    });
+    await db.calendarConnection.updateMany({ where: { id: { in: liveIds } }, data: { syncCursor: null } });
+    return liveIds;
+}
+
 export async function markActivityForSync(db: OutboxDb, event: ActivityWriteEvent): Promise<OutboxResult | null> {
     const { before, after, actor, now, config } = event;
     if (!event.markSync || !pushableChanged(before, after)) return null;
 
+    const pulls = before?.isDeleted && !after.isDeleted && after.origin === 'calendar' ? await reattachImportedCopies(db, after.id) : [];
     const owner = after.assignedTo;
     const ownerConn = await ownerConnectionOf(db, owner);
     const links = before ? await db.activityExternalLink.findMany({ where: { activityId: after.id, role: 'organizer' } }) : [];
-    if (!ownerConn && links.length === 0) return null;
+    if (!ownerConn && links.length === 0) {
+        if (pulls.length === 0) return null;
+        const only: OutboxResult = { links: [], notices: [], pulls };
+        pending.set(after, only);
+        return only;
+    }
 
-    const result: OutboxResult = { links: [], notices: [] };
+    const result: OutboxResult = { links: [], notices: [], ...(pulls.length > 0 ? { pulls } : {}) };
     const actorIsOwner = sameUser(actor, owner);
     const eligible = isCreateEligible(after, config, now);
     const ownerLink = ownerConn ? links.find((l) => l.connectionId === ownerConn.id) : undefined;
@@ -258,7 +290,7 @@ export async function markActivityForSync(db: OutboxDb, event: ActivityWriteEven
         const [first, ...rest] = result.notices;
         result.notices = [{ ...first, guests: Math.max(...result.notices.map((n) => n.guests)), newCopy: [first, ...rest].some((n) => n.newCopy) }];
     }
-    if (result.links.length === 0 && result.notices.length === 0) return null;
+    if (result.links.length === 0 && result.notices.length === 0 && !result.pulls) return null;
     pending.set(after, result);
     return result;
 }

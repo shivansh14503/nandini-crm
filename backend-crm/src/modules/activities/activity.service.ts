@@ -24,7 +24,7 @@ import type { DropdownCategoryDto } from '../form-configs/formConfig.service.js'
 import { notifyActivityParticipants, scheduleActivityReminder } from '../notifications/notification.reminders.js';
 import { assertAssigneeValid } from '../shared/accessControl.js';
 import { assertDeletedRow, lockRecords, restoreData, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
-import { activityLocks, activityScopeWhere, canEditActivity, canViewActivity, lockedFieldsFor, myResponseOf, type ActivityAccessRow } from './activity.access.js';
+import { activityLocks, activityScopeWhere, canEditActivity, canViewActivity, externalTypeChangeRefusal, lockedFieldsFor, myResponseOf, type ActivityAccessRow } from './activity.access.js';
 import { assertOwnerCanHaveVideo, assertVideoMeetingAllowed, conferenceColumnsFor, ownerVideoForChange, retryColumnsFor, videoOptionsFor, type VideoOptions } from './activity.conference.js';
 import { normalizeAttendees, planAttendeeSync, syncAttendees, type StoredAttendee } from './activity.attendees.js';
 import { activityRangeWhere, calendarFeed, type CalendarFeed } from './activity.calendar.js';
@@ -115,10 +115,13 @@ export interface ImportSource {
     ownerReply: string | null;
 }
 const NO_IMPORT_SOURCES: ReadonlyMap<string, ImportSource> = new Map();
+/** An attendee link whose calendar copy can still be answered (not detached, not cancelled). */
+const isReplyLink = (link: { role: string; state: string }): boolean => link.role === 'attendee' && link.state !== 'detached' && link.state !== 'cancelled';
 
 /**
  * P2-8: the provider each imported activity came from (its first link, whatever its role or state), and for a meeting
- * organized outside the CRM the owner's reply: from their live attendee link (`baseJson` `mine`, else `self`).
+ * organized outside the CRM the owner's reply: from their live attendee link (`baseJson` `mine`, else `self`; a cancelled
+ * copy has none).
  */
 export async function loadImportSources(rows: readonly ActivityRow[]): Promise<ReadonlyMap<string, ImportSource>> {
     const imported = rows.filter((row) => row.origin === 'calendar');
@@ -130,7 +133,8 @@ export async function loadImportSources(rows: readonly ActivityRow[]): Promise<R
     });
     const ownerOf = new Map(imported.map((row) => [row.id, row.externalOrganizer ? nameKey(row.assignedTo) : null]));
     // Only an outside meeting's attendee links can carry the owner's reply: their connections, one more read when any.
-    const replyLinks = links.filter((link) => ownerOf.get(link.activityId) && link.role === 'attendee' && link.state !== 'detached');
+    // A cancelled copy is gone from the calendar: nothing to answer (sync.rsvp.ts `respondAsOwner` refuses it too).
+    const replyLinks = links.filter((link) => ownerOf.get(link.activityId) && isReplyLink(link));
     const connections = replyLinks.length
         ? await prisma.calendarConnection.findMany({ where: { id: { in: [...new Set(replyLinks.map((l) => l.connectionId))] } }, select: { id: true, username: true, status: true } })
         : [];
@@ -139,7 +143,7 @@ export async function loadImportSources(rows: readonly ActivityRow[]): Promise<R
     for (const link of links) {
         const entry = out.get(link.activityId) ?? { provider: link.provider, ownerReply: null };
         const owner = ownerOf.get(link.activityId);
-        const ownersCopy = Boolean(owner) && link.role === 'attendee' && link.state !== 'detached' && liveOwnerOf.get(link.connectionId) === owner;
+        const ownersCopy = Boolean(owner) && isReplyLink(link) && liveOwnerOf.get(link.connectionId) === owner;
         if (ownersCopy) {
             const base = parseReplyBase(link.baseJson);
             entry.ownerReply = base.mine ?? base.self ?? 'needsAction';
@@ -759,6 +763,11 @@ export async function applyCrmUpdate(
     const now = new Date();
     throwFieldIssues(activityPastIssues({ ...input, ...schedule }, before, now, ENV.BUSINESS_TIMEZONE));
     const requested = requestedChanges(before, patch);
+    // P2-8: Task / Note would drop what the organizer's calendar owns (refused before any of it is derived).
+    const typeRefusal = requested.has('followupType') ? externalTypeChangeRefusal(existing, input.followupType) : null;
+    if (typeRefusal) {
+        throw new HttpError(typeRefusal.message, StatusCodes.CONFLICT, { code: typeRefusal.code, errors: [{ message: typeRefusal.message, path: ['followupType'] }] });
+    }
     // A locked Video meeting (P2-8: a meeting organized outside the CRM) answers its lock's 409 before the P3-1 rules,
     // which would otherwise ask the owner's calendar about a link the CRM may not add or remove.
     assertUnlockedChanges(existing, requested.has('videoMeeting') ? { videoMeeting: input.videoMeeting ?? null } : {}, requested);

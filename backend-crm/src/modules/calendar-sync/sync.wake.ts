@@ -156,12 +156,16 @@ export async function notifyHeldInvites(notices: readonly HeldNotice[], now: Dat
 export async function runCalendarPostCommit(rows: readonly { after: object }[]): Promise<void> {
     const links: DirtyLink[] = [];
     const notices: HeldNotice[] = [];
+    const pulls = new Set<string>();
     for (const row of rows) {
         const result = takeOutboxResult(row.after);
         if (!result) continue;
         links.push(...result.links);
         notices.push(...result.notices);
+        for (const id of result.pulls ?? []) pulls.add(id);
     }
+    // P2-8: a restored imported meeting's calendars pull in full (the dropped cursor makes the next poll full without Redis).
+    for (const id of pulls) await enqueuePull(id, 'rebaseline').catch(() => null);
     try {
         await wakePushes(links);
     } catch (err) {
