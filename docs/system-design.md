@@ -976,7 +976,9 @@ job and the sweep (connection checks and the nightly connection steps still run)
   when that job already started, finished or failed (BullMQ keeps it an hour and silently ignores the same id) they
   queue `pull-<connectionId>-<bucket>-<ms>`, which waits for the lease if a pull is running. One extra BullMQ state
   read (Redis, no SQL) per on-demand request; the poll fan-out, re-baseline and missed-webhook pulls keep the bucket
-  id (no state read). Since P2-7 a verified webhook notification also queues a pull (next bullet).
+  id (no state read). When that state read times out (3 s) or fails, `enqueuePull` returns null at once without
+  trying the add, so the request pulls in-process under the lease after one 3 s wait, not two (as of 2026-11-27).
+  Since P2-7 a verified webhook notification also queues a pull (next bullet).
 - **Webhooks** (as of 2026-11-26, P2-7; `sync.channels.ts`, `webhook.service.ts`, `webhook.routes.ts`,
   `providers/googleWatch.ts`, `providers/graphWatch.ts`, table `CalendarWatchChannel`): **live** only when
   `PUBLIC_API_URL` starts with `https://`, `CALENDAR_WEBHOOKS_ENABLED` (default true), `CALENDAR_SYNC_ENABLED` and the

@@ -162,9 +162,9 @@ const twoColSx = { display: 'grid', gridTemplateColumns: { xs: 'minmax(0,1fr)', 
 /**
  * Default video meeting of booked meetings: None / Google Meet / Microsoft Teams (Zoom is never offered on links). The
  * choices follow the link OWNER's company calendar (GET /api/activities/video-options?owner=); ones it can't make are
- * disabled with the reason under the field. The saved choice stays selectable (re-saving it is allowed even when the
- * calendar or the type changed since; the booking then goes without a link and notes why). The API checks again (409
- * VIDEO_PROVIDER_NOT_CONNECTED).
+ * disabled with the reason under the field; when the check itself fails, all stay selectable and the API decides. The
+ * saved choice stays selectable (re-saving it is allowed even when the calendar or the type changed since; the booking
+ * then goes without a link and notes why). The API checks again (409 VIDEO_PROVIDER_NOT_CONNECTED).
  */
 function VideoMeetingSelect({
     owner,
@@ -190,7 +190,9 @@ function VideoMeetingSelect({
     const { data, isLoading, isError } = useVideoOptions(owner, { enabled: Boolean(owner) && typeOffersVideo });
     const available = useMemo(() => new Set((data?.options ?? []).filter((o) => o.available).map((o) => o.value)), [data]);
     const reasonOf = (provider: BookingVideoProvider) => data?.options.find((o) => o.value === provider)?.reason;
-    const selectable = (provider: BookingVideoProvider) => typeOffersVideo && (available.has(provider) || provider === saved);
+    // The owner's calendar couldn't be read (and nothing is cached): leave the choices open, the API's 409 decides.
+    const unchecked = isError && !data;
+    const selectable = (provider: BookingVideoProvider) => typeOffersVideo && (unchecked || available.has(provider) || provider === saved);
     const firstReason = BOOKING_VIDEO_PROVIDERS.map(reasonOf).find(Boolean);
 
     let hint: string;
@@ -200,7 +202,7 @@ function VideoMeetingSelect({
             : `Video meetings aren't offered for ${typeLabel}. An admin can switch them on in Admin › API Integrations › What goes to calendars.`;
     } else if (isLoading) {
         hint = 'Checking the owner’s calendar…';
-    } else if (isError) {
+    } else if (unchecked) {
         hint = 'Couldn’t check the owner’s calendar. You can still save; the server checks again.';
     } else if (value && !available.has(value)) {
         hint = `${reasonOf(value) ?? ''} Booked meetings get no link until this is fixed; choose another option or None.`.trim();
@@ -226,7 +228,7 @@ function VideoMeetingSelect({
             {BOOKING_VIDEO_PROVIDERS.map((p) => (
                 <MenuItem key={p} value={p} disabled={!selectable(p)} sx={{ whiteSpace: 'normal' }}>
                     {VIDEO_PROVIDER_LABELS[p]}
-                    {!selectable(p) && typeOffersVideo && !isLoading ? ' (not available for this owner)' : ''}
+                    {!selectable(p) && typeOffersVideo && !isLoading && !unchecked ? ' (not available for this owner)' : ''}
                 </MenuItem>
             ))}
         </TextField>

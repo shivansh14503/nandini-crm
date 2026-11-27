@@ -465,7 +465,8 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         (R20, owner decision). Tested with the fake provider and hand-written provider answers; no real SQL Server,
         Google or Microsoft call. Follow-up (2026-11-27): Sync now / page / admin pulls follow P2-7's pending-only rule
         (`pendingOnlyPullJobId`): a finished or running job of the same 10 s bucket no longer silently absorbs them
-        (fresh id `pull-<conn>-<bucket>-<ms>`); the poll fan-out keeps its bucket id.
+        (fresh id `pull-<conn>-<bucket>-<ms>`); the poll fan-out keeps its bucket id. A state read that times out
+        returns null at once (in-process pull after one 3 s wait, not two).
   - [x] **P2-6: busy times** (2026-11-26) — no migration. `GET /api/activities/busy?users&from&to&exclude&suggest`
         (`modules/calendar-sync/busy.*`): up to 20 people, ≤ 31 days, times only (D11). CRM part: Planned activities
         (owner, or invited colleague not declined; Site Visit all-day → `away`), cached 30 s and dropped by activity
@@ -560,7 +561,8 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         reschedule (mail layer), team / round-robin links, custom questions.
         Default video meeting (2026-11-27, migration `20261216110000_booking_video`): `BookingLink.videoMeeting`
         (meet / teams / none; Zoom never) chosen in the dialog from the link owner's calendar (`GET
-        /api/activities/video-options?owner=`, unavailable choices disabled with the reason), validated on save (type
+        /api/activities/video-options?owner=`, unavailable choices disabled with the reason; all left selectable when
+        that check fails, so the API's 409 decides), validated on save (type
         offers video, else 400; `409 VIDEO_PROVIDER_NOT_CONNECTED`), copied onto the booked activity so the P3-1 push
         asks for the link (booked without one, with a note in the remarks, when the type or the owner's calendar no
         longer allows it). The page and `.ics` say "Google Meet / Microsoft Teams link: sent by <owner>"; the

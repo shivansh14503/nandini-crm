@@ -2,12 +2,13 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import { ENV } from '../../config/env.js';
 import { freshPullJobId, pendingOnlyPullJobId, pullJobId } from './sync.keys.js';
-import { enqueuePull, setPullJobQueueForTests, type PullJobData, type PullJobQueue } from './sync.wake.js';
+import { enqueuePull, setPullJobQueueForTests, UNREADABLE_JOB_STATE, type PullJobData, type PullJobQueue } from './sync.wake.js';
 
 /**
  * P2-5's `enqueuePull` job ids with P2-7's pending-only rule: on-demand pulls (Sync now, page open, admin) are absorbed
- * only by a bucket job that hasn't started; a started, finished, failed or unreadable one gets a fresh id (BullMQ would
- * silently ignore the same id for the hour it keeps a finished job). The poll fan-out keeps the bucket id.
+ * only by a bucket job that hasn't started; a started, finished or failed one gets a fresh id (BullMQ would silently
+ * ignore the same id for the hour it keeps a finished job). An unreadable state (Redis didn't answer) returns null at
+ * once, so the caller pulls in-process without a second timeout. The poll fan-out keeps the bucket id.
  */
 
 interface FakeQueue extends PullJobQueue {
@@ -96,9 +97,14 @@ describe('enqueuePull', () => {
         assert.equal(await enqueuePull('c1', 'page', at(2_000)), freshPullJobId('c1', at(2_000)));
         q.states.set(pullJobId('c1', T0), 'failed');
         assert.equal(await enqueuePull('c1', 'manual', at(3_000)), freshPullJobId('c1', at(3_000)));
-        q.states.set(pullJobId('c1', T0), 'unknown');
-        assert.equal(await enqueuePull('c1', 'manual', at(5_000)), freshPullJobId('c1', at(5_000)));
-        assert.equal(q.added.length, 3);
+        assert.equal(q.added.length, 2);
+    });
+
+    it('an unreadable state (Redis timed out) returns null without trying the add, so the caller pulls in-process', async () => {
+        q.states.set(pullJobId('c1', T0), UNREADABLE_JOB_STATE);
+        for (const reason of ['manual', 'page', 'admin'] as const) assert.equal(await enqueuePull('c1', reason, at(5_000)), null, reason);
+        assert.equal(q.added.length, 0, 'no add after the state read timed out');
+        assert.equal(q.stateReads.length, 3);
     });
 
     it('the poll fan-out (and re-baseline / missed) keep the bucket id without a state read', async () => {

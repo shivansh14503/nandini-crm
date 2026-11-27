@@ -95,13 +95,19 @@ export const ON_DEMAND_PULL_REASONS: ReadonlySet<PullReason> = new Set<PullReaso
 
 /** The BullMQ side of on-demand pulls (job state, add), replaceable in tests. */
 export interface PullJobQueue {
-    /** The state of a kept job (waiting, delayed, active, completed, failed, …), null when none, 'unknown' when unreadable. */
+    /**
+     * The state of a kept job (waiting, delayed, active, completed, failed, …), null when none, UNREADABLE_JOB_STATE
+     * when Redis didn't answer in time or the read failed.
+     */
     stateOf(jobId: string): Promise<string | null>;
     /** Adds a `pull` job; the id, or null when Redis didn't take it (the caller pulls in-process). */
     add(jobId: string, data: PullJobData): Promise<string | null>;
 }
 
 const STATE_TIMEOUT_MS = 3_000;
+
+/** `stateOf`'s answer when the state read timed out or failed: Redis isn't answering, so `enqueuePull` doesn't try an add. */
+export const UNREADABLE_JOB_STATE = 'unknown';
 
 const bullPullJobs: PullJobQueue = {
     async stateOf(jobId) {
@@ -112,8 +118,8 @@ const bullPullJobs: PullJobQueue = {
             const job = await Promise.race([calendarSyncQueue().getJob(jobId), timeout]);
             return job ? await Promise.race([job.getState(), timeout]) : null;
         } catch {
-            // Unknown: treat as finished, so the request gets a fresh id rather than being absorbed.
-            return 'unknown';
+            // Timed out or failed: Redis isn't answering. `enqueuePull` returns null so the caller pulls in-process.
+            return UNREADABLE_JOB_STATE;
         } finally {
             clearTimeout(timer);
         }
@@ -143,13 +149,20 @@ export function setPullJobQueueForTests(queue: PullJobQueue | null): void {
  * "Sync now" always reads the calendar after the click. A running pull holds the lease; the new job waits for it
  * (`pullRetryDelay`). The poll fan-out, re-baseline and missed-webhook pulls keep the bucket id (one state read less per
  * person and tick; a just-finished pull of the same 10 s covered them).
+ *
+ * When the state read times out or fails (UNREADABLE_JOB_STATE), an on-demand pull returns null at once instead of
+ * also trying the add: Redis isn't answering, and the person waits on the request, so the caller pulls in-process
+ * (under the lease) after at most one 3 s timeout, as before the state read existed.
  */
 export async function enqueuePull(connectionId: string, reason: PullReason, now: Date = new Date()): Promise<string | null> {
     if (!ENV.INTEGRATIONS.SYNC_ENABLED) return null;
     const data: PullJobData = { connectionId, reason };
     const bucketId = pullJobId(connectionId, now);
     if (!ON_DEMAND_PULL_REASONS.has(reason)) return pullJobs.add(bucketId, data);
-    const jobId = pendingOnlyPullJobId(await pullJobs.stateOf(bucketId), bucketId, freshPullJobId(connectionId, now));
+    const state = await pullJobs.stateOf(bucketId);
+    // Redis didn't answer the state read: don't wait out a second timeout on the add.
+    if (state === UNREADABLE_JOB_STATE) return null;
+    const jobId = pendingOnlyPullJobId(state, bucketId, freshPullJobId(connectionId, now));
     // The pending bucket job hasn't started: it will read the calendar after this request.
     if (jobId === null) return bucketId;
     return pullJobs.add(jobId, data);
