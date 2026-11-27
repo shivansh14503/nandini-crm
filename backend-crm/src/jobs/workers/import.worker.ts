@@ -1,6 +1,7 @@
 import { Worker } from 'bullmq';
 import { logger } from '../../config/logger.js';
-import { processImport, type ImportJobData, type ImportResult } from '../../modules/imports/import.processor.js';
+import { redis } from '../../config/redis.js';
+import { importCancelKey, processImport, type ImportJobData, type ImportResult } from '../../modules/imports/import.processor.js';
 import { createQueueConnection, QUEUE_NAMES } from '../queues.js';
 import { throttledLogger } from './throttledLogger.js';
 
@@ -8,7 +9,13 @@ import { throttledLogger } from './throttledLogger.js';
 export function startImportWorker(): Worker<ImportJobData, ImportResult> {
     const worker = new Worker<ImportJobData, ImportResult>(
         QUEUE_NAMES.import,
-        (job) => processImport(job.data, (percent) => job.updateProgress(percent)),
+        (job) =>
+            processImport(job.data, {
+                // Live counts (processed / created / failed) for the wizard's progress screen.
+                onProgress: (progress) => job.updateProgress({ ...progress }),
+                // The owner's Cancel (POST /api/import/jobs/:importId/cancel) sets this key; a Redis hiccup never stops an import.
+                shouldCancel: async () => (await redis.exists(importCancelKey(job.data.importId)).catch(() => 0)) === 1,
+            }),
         { connection: createQueueConnection(), concurrency: 1 },
     );
     const warn = throttledLogger();

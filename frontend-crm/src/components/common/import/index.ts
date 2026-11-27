@@ -6,3 +6,6 @@ export { ColumnMappingStep } from './ColumnMappingStep';
 export { ImportPreviewStep } from './ImportPreviewStep';
 export { DataImportModal } from './DataImportModal';
 export type { DataImportModalProps } from './DataImportModal';
+export { ImportProgressPanel } from './ImportProgressPanel';
+export { BackgroundImports } from './BackgroundImports';
+export * from './importErrorsFile';
