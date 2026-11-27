@@ -294,7 +294,7 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
       design §4–§5, §8.4, §9 (worker and SMTP relay setup). Unit tests for recipients, stale policy, keys, texts,
       producer chunking, delivery claims, EmailLog claims, cron catch-up, summary sections, Google links and escaping,
       STARTTLS enforcement (fake SMTP server), the guarded cache and the overdue / today split.
-- [ ] **Phase 2: calendar sync** (Google / Microsoft 365) — **admin-managed** since the owner's plan change of
+- [x] **Phase 2: calendar sync** (Google / Microsoft 365; all of P2-1 to P2-8 done as of 2026-11-27) — **admin-managed** since the owner's plan change of
       2026-11-26 (P2-2b): admins connect the company once (Google service account with domain-wide delegation,
       Microsoft Entra app with application permissions) and everyone with a company email is synced automatically;
       employees have no connect / disconnect. Zoom stays per-user OAuth in Phase 3. Needs (for webhooks, P2-7) the app
@@ -555,7 +555,7 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         runs stays dropped (the cursor is saved only over the one the pull started from) and the import switch-on's full
         pull is never absorbed by a running poll job; import can't
         be on with a type that stopped going to calendars (checked on every save while on; the card blocks Save).
-- [ ] **Calendar Phase 3: video meetings** (spec §16, adapted to admin-managed connections)
+- [ ] **Calendar Phase 3: video meetings** (spec §16, adapted to admin-managed connections; as of 2026-11-27 P3-1 Meet / Teams is done and P3-2 Zoom is parked by the owner because Zoom has no company-wide admin connection)
   - [x] **P3-1: Google Meet + Microsoft Teams links** (2026-11-26) — migration `20261215100000_activity_conference`
         (`Activity.conferenceProvider` / `conferenceState` / `conferenceJoinUrl` / `conferenceId` / `conferenceError` /
         `conferenceRequest`; option meta `videoMeeting: true` on Meeting and Demo / Presentation). Built-in form field
@@ -582,7 +582,7 @@ keeps wall-clock times); all-day activities are entered as business-timezone day
         (see Booking links below). `DrawerCopyButton` now has a 32 px hit area everywhere (default `minTarget` 32 via
         an invisible `::before`, visual size and layouts unchanged; Join keeps its 32 px box through `boxSize`).
   - [ ] **P3-2: Zoom** (per-user OAuth, `CalendarConnection kind='video'`; the option stays disabled until then)
-- [ ] **Phase 4 (later; spec §17)**: booking links, recurring activities, email logging.
+- [x] **Phase 4 (later; spec §17)**: booking links, recurring activities, email logging (all three done as of 2026-11-27).
   - [x] **Booking links (public scheduling page on free/busy)** (2026-11-26) — migration `20261128120000_booking_links`
         (`BookingLink`, `BookingLinkBooking`; `Activity.origin` gains `booking`, notification kind `booking_created`).
         Company switch (default off) and "who may create links" (everyone / managers and admins / admins) on Admin ›
