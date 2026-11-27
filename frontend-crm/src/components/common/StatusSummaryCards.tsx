@@ -54,10 +54,19 @@ const formatCount = (n: number) => fmtCount(n);
 const formatShare = (share: number) => (share > 0 && share < 0.1 ? '<0.1' : share.toFixed(1).replace(/\.0$/, ''));
 
 /* ------------------------------------------------------------------------------------------------------------
- * Fit-to-width sizing. The cards never scroll sideways: they share the row equally, and the more cards there
- * are, the smaller each one gets (padding, icon, fonts, gaps). Only when a card would get narrower than a
- * readable minimum does the row wrap onto a second line (phones, or a very long list of cards).
+ * Fit-to-width sizing. The cards share the row equally, and the more cards there are, the smaller each one gets
+ * (padding, icon, fonts, gaps). Only when a card would get narrower than a readable minimum does the row wrap
+ * onto a second line (phones, or a very long list of cards).
+ *
+ * Exception: while a record drawer sits beside the list (wide screens, see `CommonMasterView`), the row stays a
+ * single line and scrolls sideways instead of wrapping or squashing the cards (`ScorecardScrollContext`).
  * ---------------------------------------------------------------------------------------------------------- */
+
+/**
+ * True while a side drawer narrows the list on wide (lg+) screens: the scorecard row then scrolls sideways.
+ * Provided by `CommonMasterView`; anywhere else (admin preview, settings pages) the row fits the width as usual.
+ */
+export const ScorecardScrollContext = React.createContext(false);
 
 /** Size steps from roomy (0) to dense (3). */
 type Density = 0 | 1 | 2 | 3;
@@ -87,6 +96,9 @@ const SIZES = {
     gearInset: [10, 8, 7, 6],
 } as const;
 
+/** Narrowest a card may get in the sideways-scrolling row (drawer open), per density. */
+const SCROLL_CARD_PX = [184, 164, 150, 140] as const;
+
 /** Narrowest a card may get before the row wraps, per breakpoint. */
 const MIN_CARD_PX = { xs: 136, sm: 124, md: 104 } as const;
 
@@ -100,13 +112,15 @@ const densityForCount = (count: number): Density => (count <= 4 ? 0 : count <= 6
  * Density per breakpoint: phones and small tablets wrap into a grid of narrow cards, so they always use a small
  * step; laptops (md) are one step denser than wide screens for the same number of cards.
  */
-const densityByBp = (count: number): Record<Bp, Density> => {
+const densityByBp = (count: number, scroll = false): Record<Bp, Density> => {
     const wide = densityForCount(count);
+    const md = Math.min(wide + 1, 3) as Density;
     return {
         xs: count <= 2 ? 1 : 2,
         sm: count <= 3 ? 1 : 2,
-        md: Math.min(wide + 1, 3) as Density,
-        lg: wide,
+        md,
+        // With a drawer beside the list the row is about as wide as a laptop's: use the laptop step.
+        lg: scroll ? md : wide,
     };
 };
 
@@ -116,9 +130,14 @@ const sized = <K extends keyof typeof SIZES>(d: Record<Bp, Density>, key: K, map
 
 /**
  * The cards' grid: every card gets an equal share of the row (`100% / count`, less the gaps); when that share
- * would be below the breakpoint's minimum card width, columns of the minimum width wrap instead. Never scrolls.
+ * would be below the breakpoint's minimum card width, columns of the minimum width wrap instead.
+ *
+ * With `scroll` (a drawer narrows the list on lg+ screens) the cards stay on one line: they still share the row
+ * equally while they fit, and past their minimum width the row scrolls sideways (touch, trackpad, shift + wheel
+ * or the slim scrollbar) with soft snapping to each card. Phones and tablets keep the wrapping grid, since the
+ * drawer covers the list there instead of narrowing it.
  */
-const gridSx = (count: number, d: Record<Bp, Density>) => {
+const gridSx = (count: number, d: Record<Bp, Density>, scroll = false) => {
     const n = Math.max(count, 1);
     const columns = (bp: Bp) => {
         const gapPx = SIZES.gap[d[bp]] * 8;
@@ -126,7 +145,7 @@ const gridSx = (count: number, d: Record<Bp, Density>) => {
         // 0.5 px of slack so rounding never pushes the last card onto a new line.
         return `repeat(auto-fit, minmax(max(${min}px, calc((100% - ${(n - 1) * gapPx}px) / ${n} - 0.5px)), 1fr))`;
     };
-    return {
+    const base = {
         display: 'grid',
         minWidth: 0,
         mb: 2,
@@ -134,6 +153,35 @@ const gridSx = (count: number, d: Record<Bp, Density>) => {
         gridTemplateColumns: Object.fromEntries(BPS.map((bp) => [bp, columns(bp)])),
         // Room for the hover lift and focus ring.
         pt: 0.5,
+    };
+    if (!scroll) return base;
+    // Only lg+ scrolls; below it the drawer overlays the list, so nothing changes under it (no layout shift).
+    const lg = <T, U>(below: T, wide: U) => ({ xs: below, lg: wide });
+    return {
+        ...base,
+        gridTemplateColumns: { ...base.gridTemplateColumns, lg: 'none' },
+        gridAutoFlow: lg('row', 'column'),
+        gridAutoColumns: lg('auto', `minmax(${SCROLL_CARD_PX[d.lg]}px, 1fr)`),
+        overflowX: lg('visible', 'auto'),
+        overflowY: lg('visible', 'hidden'),
+        overscrollBehaviorX: 'contain',
+        WebkitOverflowScrolling: 'touch',
+        scrollSnapType: lg('none', 'x proximity'),
+        scrollPaddingInline: '4px',
+        '& > *': { scrollSnapAlign: 'start' },
+        // A scrolling box clips its overflow: keep room around the cards for the hover lift, shadows and focus
+        // ring (padding inside the box, cancelled by an equal negative margin so the row doesn't move).
+        px: lg(0, '4px'),
+        mx: lg(0, '-4px'),
+        pb: lg(0, 1.25),
+        mb: lg(2, 0.75),
+        // Slim scrollbar, only as tall as needed; it is the visible cue that more cards are to the side.
+        scrollbarWidth: 'thin',
+        scrollbarColor: 'var(--mui-palette-border-strong) transparent',
+        '&::-webkit-scrollbar': { height: 6 },
+        '&::-webkit-scrollbar-track': { background: 'transparent' },
+        '&::-webkit-scrollbar-thumb': { backgroundColor: 'var(--mui-palette-border-strong)', borderRadius: 3 },
+        '&::-webkit-scrollbar-thumb:hover': { backgroundColor: 'var(--mui-palette-text-muted)' },
     } as const;
 };
 
@@ -148,9 +196,10 @@ export function StatusSummaryCardsSkeleton({
     /** The cards will show amounts: same shape, so they don't jump when they load. */
     withAmount?: boolean;
 }) {
-    const d = densityByBp(count);
+    const scroll = React.useContext(ScorecardScrollContext);
+    const d = densityByBp(count, scroll);
     return (
-        <Box sx={gridSx(count, d)} aria-busy="true" aria-label="Loading summary">
+        <Box sx={gridSx(count, d, scroll)} aria-busy="true" aria-label="Loading summary">
             {Array.from({ length: count }, (_, i) => (
                 <Box
                     key={i}
@@ -188,7 +237,8 @@ export function StatusSummaryCardsSkeleton({
 /**
  * Status summary cards (KPI tiles) shown above a master list: one card per status bucket with its count and
  * share of the total. Clicking a card filters the list to that bucket; clicking the active card clears it.
- * The cards always fit the width (no sideways scrolling): more cards means smaller cards.
+ * The cards fit the width (more cards means smaller cards), except while a side drawer narrows the list on wide
+ * screens: the row then stays on one line and scrolls sideways (`ScorecardScrollContext`).
  */
 export function StatusSummaryCards<TId extends string = string>({
     items,
@@ -201,10 +251,11 @@ export function StatusSummaryCards<TId extends string = string>({
     useDisplayFormats();
     const base = total ?? items[0]?.count ?? 0;
     const resetId = allId ?? items[0]?.id;
-    const d = densityByBp(items.length);
+    const scroll = React.useContext(ScorecardScrollContext);
+    const d = densityByBp(items.length, scroll);
 
     return (
-        <Box sx={gridSx(items.length, d)} role="group" aria-label="Status summary">
+        <Box sx={gridSx(items.length, d, scroll)} role="group" aria-label="Status summary">
             {items.map((item) => {
                 const c = item.color ?? TONE_COLOR[item.tone ?? 'brand'];
                 const isActive = item.id === activeId;

@@ -28,6 +28,7 @@ import { useSearchScope } from '../search/SearchScope';
 import { moduleKeyFrom, moduleTableTintVars } from '@/theme/moduleColors';
 import { useScorecardColumns } from './scorecard/scorecardDisplay';
 import { useCloseOnOutsideClick } from './Drawer/useCloseOnOutsideClick';
+import { ScorecardScrollContext } from './StatusSummaryCards';
 import { MasterPermissionsContext, type MasterPermissions } from './masterPermissions';
 import { usePermissions } from '@/hooks/usePermissions';
 import type { OwnedRecord, PermissionModule } from '@/utils/permissions';
@@ -581,7 +582,12 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
                     </Box>
                 )}
 
-                {!embedded && summary}
+                {/* While the drawer narrows the list (lg+), the scorecards scroll sideways instead of wrapping. */}
+                {!embedded && summary && (
+                    <ScorecardScrollContext.Provider value={isDrawerOpen && !isRightDrawerCollapsed}>
+                        {summary}
+                    </ScorecardScrollContext.Provider>
+                )}
 
                 {/* ── Line 2: All Filters & Optional Header Actions ── */}
                 {!embedded && (resolvedFilters || resolvedHeaderActions) && (
