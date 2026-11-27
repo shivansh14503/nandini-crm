@@ -6,7 +6,7 @@ import { toContactDto, type ContactDto } from '../contacts/contact.mapper.js';
 import { createContactRecord, findLiveContact } from '../contacts/contact.service.js';
 import { contactInputSchema } from '../contacts/contact.validator.js';
 import { createOpportunityRecord } from '../opportunities/opportunity.service.js';
-import { opportunityInputSchema } from '../opportunities/opportunity.validator.js';
+import { opportunityInputSchema, opportunityNotApplicableKeys } from '../opportunities/opportunity.validator.js';
 import type { OpportunityDto } from '../opportunities/opportunity.mapper.js';
 import { toOrganizationDto, type OrganizationDto } from '../organizations/organization.mapper.js';
 import { checkModulePayload, loadModuleFieldConfig, throwFieldIssues, type ModuleFieldConfig } from '../form-configs/customFieldValidator.js';
@@ -89,7 +89,9 @@ function checkConvertRecord(
     };
     const names: Record<string, string> = CONVERT_FIELD_NAMES[module];
     try {
-        return { customFields: checkModulePayload(shown, payload, payload.customFields), issues: [] };
+        // The opportunity's document / commission details apply only once Add Document / Commission is Yes.
+        const notApplicableKeys = module === 'opportunities' ? opportunityNotApplicableKeys(payload) : undefined;
+        return { customFields: checkModulePayload(shown, payload, payload.customFields, { notApplicableKeys }), issues: [] };
     } catch (err) {
         const errors = err instanceof HttpError ? err.errors : undefined;
         if (!errors) throw err;

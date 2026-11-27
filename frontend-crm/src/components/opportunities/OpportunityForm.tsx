@@ -21,7 +21,7 @@ import { type FormTabDefinition } from '../common/Drawer';
 import { useRhfForm } from '../forms/rhf';
 import { ROUTES } from '@/config/constants';
 import { leadSourceDetailIssues } from '@/utils/leadSource';
-import { commissionIssues, documentationIssues, opportunityFormSchema } from '../../validations';
+import { commissionIssues, documentationIssues, opportunityFormSchema, opportunityNotApplicableFields } from '../../validations';
 import type { OpportunityFormData } from '@/types/opportunity.types';
 import { opportunityService } from '../../services/opportunity.service';
 import type { RecordAuditStamp } from '../common/Drawer/RecordAuditFooter';
@@ -186,7 +186,9 @@ export default function OpportunityForm({
             },
             relaxedFields: (values) => {
                 const { closed, noFollowUp } = followUpKind(values, responseRulesRef.current);
-                return noFollowUp ? ['nextFollowupDate', 'nextFollowupTime', ...(closed ? ['customerResponse'] : [])] : [];
+                // Document / commission details are only asked for while Add Document / Commission is Yes.
+                const hidden = opportunityNotApplicableFields(values);
+                return noFollowUp ? [...hidden, 'nextFollowupDate', 'nextFollowupTime', ...(closed ? ['customerResponse'] : [])] : hidden;
             },
             module: 'opportunities',
             defaultValues: { ...DEFAULT_OPPORTUNITY_FORM, ...initialData },

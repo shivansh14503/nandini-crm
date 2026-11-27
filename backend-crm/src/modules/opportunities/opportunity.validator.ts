@@ -69,6 +69,20 @@ export const QUOTE_SALES_STAGE = 'Proposal/Price Quote';
 /** Sales Stage that needs a document: Add Document Yes, with the file (Upload Doc). */
 export const PO_SALES_STAGE = 'PO';
 
+/** The Documentation fields shown (and kept) only while Add Document is Yes. */
+export const DOCUMENT_DETAIL_KEYS = ['documentNo', 'documentDate', 'documentFile'] as const;
+/** The Commission fields shown (and kept) only while Commission is Yes. */
+export const COMMISSION_DETAIL_KEYS = ['commissionAmount', 'commissionType', ...PAYEE_BANK_FIELDS.map((f) => f.key)] as const;
+
+/**
+ * Built-in fields the form hides for these values (`notApplicableKeys`): never "required" from the Form Builder,
+ * so a Document No an admin made required is asked for only while Add Document is Yes. Mirrors the frontend's
+ * opportunityNotApplicableFields (validations/opportunity.schema.ts).
+ */
+export function opportunityNotApplicableKeys(input: Readonly<Record<string, unknown>>): ReadonlySet<string> {
+    return new Set<string>([...(input.addDocument === 'Yes' ? [] : DOCUMENT_DETAIL_KEYS), ...(input.commission === 'Yes' ? [] : COMMISSION_DETAIL_KEYS)]);
+}
+
 /** The Documentation rules: Add Document Yes at Sales Stage PO, and a file (Upload Doc) whenever it is Yes. */
 export function documentationIssues(input: { salesStage?: string; addDocument?: string; documentFile?: string | null }): { path: string[]; message: string }[] {
     if (input.salesStage === PO_SALES_STAGE && input.addDocument !== 'Yes') {

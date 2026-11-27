@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { HttpError } from '../../utils/httpError.js';
 import { buildModuleFieldConfig, checkModulePayload, configuredRequiredIssues, type ModuleFieldConfig } from './customFieldValidator.js';
+import { opportunityNotApplicableKeys } from '../opportunities/opportunity.validator.js';
 import type { DropdownCategoryDto, FormConfigsPayload, FormFieldDefinitionDto } from './formConfig.service.js';
 
 function field(overrides: Partial<FormFieldDefinitionDto> & Pick<FormFieldDefinitionDto, 'fieldKey'>): FormFieldDefinitionDto {
@@ -288,5 +289,21 @@ describe('checkModulePayload: custom field keys', () => {
     it('keeps values of configured fields and drops anything else', () => {
         const config = configWith([field({ fieldKey: 'cf_po_number', label: 'PO Number' })]);
         assert.deepEqual(checkModulePayload(config, {}, { cf_po_number: 'PO-1', poNumber: 'x', stray: 'y' }), { cf_po_number: 'PO-1' });
+    });
+});
+
+describe('opportunity Document No made required in the Form Builder', () => {
+    const config = configWith([field({ fieldKey: 'documentNo', label: 'Document No', isSystem: true, isRequired: true, module: 'opportunities' })]);
+    const check = (payload: Record<string, unknown>) =>
+        checkModulePayload(config, payload, undefined, { notApplicableKeys: opportunityNotApplicableKeys(payload) });
+
+    it('is not asked for while Add Document is No or unset', () => {
+        assert.doesNotThrow(() => check({ addDocument: 'No' }));
+        assert.doesNotThrow(() => check({}));
+    });
+
+    it('is asked for once Add Document is Yes', () => {
+        assert.throws(() => check({ addDocument: 'Yes' }), HttpError);
+        assert.doesNotThrow(() => check({ addDocument: 'Yes', documentNo: 'PO-1' }));
     });
 });
