@@ -456,6 +456,8 @@ export function Canvas({ zoom }: { zoom: number }) {
                     backgroundColor: '#fff',
                     boxShadow: '0 4px 24px rgba(15,23,42,0.12)',
                     fontFamily: "'Noto Sans', 'Segoe UI', Arial, sans-serif",
+                    // As the printed PDF: long text wraps in full, even unbroken strings (URLs, codes).
+                    overflowWrap: 'break-word',
                     display: 'flex',
                     flexDirection: 'column',
                     '& *': { boxSizing: 'border-box' },

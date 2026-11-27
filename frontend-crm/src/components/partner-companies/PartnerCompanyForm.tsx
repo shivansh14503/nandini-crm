@@ -323,8 +323,6 @@ export default function PartnerCompanyForm({
                                 name="addDescription"
                                 label="Add Description"
                                 multiline
-                                minRows={3}
-                                maxRows={6}
                                 placeholder="Short note about this partner..."
                                 maxLength={FIELD_MAX_LENGTH.longText}
                             />
@@ -332,8 +330,6 @@ export default function PartnerCompanyForm({
                                 name="description"
                                 label="Description"
                                 multiline
-                                minRows={3}
-                                maxRows={6}
                                 placeholder="Partnership scope, products covered, terms..."
                                 maxLength={FIELD_MAX_LENGTH.longText}
                             />

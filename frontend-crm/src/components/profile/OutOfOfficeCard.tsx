@@ -13,6 +13,7 @@ import { formatDayRange, useBusinessToday } from '@/utils/userAvailability';
 import { addDays, isDay } from '@/utils/zonedTime';
 import type { Notify } from './ProfileView';
 import { CardSaveFooter, ProfileCard, ProfileNote, cardButtonLayoutSx } from './profileUi';
+import { LongTextInput } from '@/components/forms/LongTextInput';
 
 interface OutOfOfficeForm {
     from: string;
@@ -180,20 +181,16 @@ export function OutOfOfficeCard({ preferences, notify }: { preferences: Preferen
                         slotProps={{ inputLabel: { shrink: true }, htmlInput: { min: endMin, max: endMax } }}
                     />
                 </Box>
-                <TextField
+                <LongTextInput
                     label="Message (optional)"
-                    multiline
-                    minRows={2}
-                    maxRows={5}
-                    size="small"
+                    inputLabel="Message (optional)"
                     value={values.message}
-                    onChange={(e) => set('message', e.target.value)}
+                    onChange={(value) => set('message', value)}
                     disabled={saving}
                     placeholder="e.g. Back on Monday. For anything urgent, call the sales desk."
-                    error={Boolean(errors.message)}
-                    helperText={errors.message || `${values.message.length}/${OUT_OF_OFFICE_MESSAGE_MAX}`}
-                    sx={inputSx}
-                    slotProps={{ htmlInput: { maxLength: OUT_OF_OFFICE_MESSAGE_MAX } }}
+                    error={errors.message}
+                    maxLength={OUT_OF_OFFICE_MESSAGE_MAX}
+                    expandable={false}
                 />
                 <Typography sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)', lineHeight: 1.5 }}>
                     While you are out of office, colleagues see &quot;Out of office until …&quot; when they pick you, and your morning summary email is paused. Bell

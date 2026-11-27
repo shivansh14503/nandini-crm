@@ -17,6 +17,8 @@ import {
 import { localNow, localToday } from '@/utils/pastDates';
 import { digitsOnly, emailText, rewriteValueKeepingCaret, setInputValueIfChanged, upperCase, useUndoSafeSanitizer } from '../undoSafeInput';
 import { formatPersonName } from '@/utils/personName';
+import { FIELD_MAX_LENGTH } from '@/config/fieldLimits';
+import { LongTextInput } from '../LongTextInput';
 
 /** Native date / time pickers: fixed-length display value plus the picker icon. */
 const PICKER_FIT: Record<string, FieldContentFit> = {
@@ -30,6 +32,11 @@ export interface RhfTextFieldProps<T extends FieldValues>
         TextFieldProps,
         'type' | 'multiline' | 'minRows' | 'maxRows' | 'placeholder' | 'disabled' | 'slotProps' | 'sx'
     > {
+    /**
+     * Multiline only: the expand button that opens the larger editor (default true). Off for short multi-line
+     * values such as street addresses. Long text fields leave `minRows` / `maxRows` unset so they all grow alike.
+     */
+    expandable?: boolean;
     name: FieldPath<T>;
     label: string;
     required?: boolean;
@@ -75,6 +82,7 @@ export function RhfTextField<T extends FieldValues>({
     fieldType,
     sx,
     slotProps,
+    expandable,
     ...inputProps
 }: RhfTextFieldProps<T>) {
     const { field, fieldState } = useController<T>({ name });
@@ -155,6 +163,30 @@ export function RhfTextField<T extends FieldValues>({
         field.onChange(val);
         inputProps.onChange?.(e);
     };
+
+    if (inputProps.multiline) {
+        // Long text: auto-growing textarea with a counter and the larger editor. Unknown names get the long-text cap.
+        return (
+            <FormField name={name} label={label} required={required} hint={hint} size={resolvedSize}>
+                <LongTextInput
+                    name={field.name}
+                    label={override?.label ?? label}
+                    value={typeof field.value === 'string' ? field.value : field.value == null ? '' : String(field.value)}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    inputRef={field.ref}
+                    maxLength={resolvedMaxLength ?? FIELD_MAX_LENGTH.longText}
+                    placeholder={override ? override.placeholder : inputProps.placeholder}
+                    disabled={inputProps.disabled}
+                    error={fieldState.error?.message}
+                    expandable={expandable}
+                    minRows={typeof inputProps.minRows === 'number' ? inputProps.minRows : undefined}
+                    maxRows={typeof inputProps.maxRows === 'number' ? inputProps.maxRows : undefined}
+                    sx={sx}
+                />
+            </FormField>
+        );
+    }
 
     // Date pickers start at today: past days can't be picked in the CRM (forms also reject typed ones), except on
     // fields that record a past date (`allowPastDates`).

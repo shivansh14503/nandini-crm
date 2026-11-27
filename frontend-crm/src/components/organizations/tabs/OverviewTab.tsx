@@ -34,6 +34,7 @@ import {
     StyledSelect,
     fieldSx,
     FIELD_MAX_LENGTH,
+    ConfiguredLongTextInput,
     RhfSelect,
     RhfLookup,
     RhfToggleGroupCard,
@@ -612,23 +613,14 @@ function OverviewTabInner({
                 />
 
                 {/* Description (full row) */}
-                <FormField
-                    name="addDescriptionAndScope"
-                    label="Add Description & Scope"
-                    size="full"
-                    hint={`${form.addDescriptionAndScope.length} / ${DESCRIPTION_MAX_LENGTH}`}
-                >
-                    <TextField
-                        fullWidth
-                        multiline
-                        minRows={4}
-                        maxRows={8}
-                        size="small"
+                <FormField name="addDescriptionAndScope" label="Add Description & Scope" size="full">
+                    <ConfiguredLongTextInput
+                        name="addDescriptionAndScope"
+                        label="Add Description & Scope"
                         placeholder="Describe the organization's scope, activities, and key details..."
                         value={form.addDescriptionAndScope}
-                        onChange={(e) => set('addDescriptionAndScope', e.target.value.slice(0, DESCRIPTION_MAX_LENGTH))}
-                        sx={fieldSx}
-                        slotProps={{ htmlInput: { maxLength: DESCRIPTION_MAX_LENGTH } }}
+                        onChange={(value) => set('addDescriptionAndScope', value)}
+                        maxLength={DESCRIPTION_MAX_LENGTH}
                     />
                 </FormField>
             </FormGrid>

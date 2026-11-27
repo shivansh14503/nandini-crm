@@ -346,7 +346,6 @@ export default function ProductForm({
                                 name="description"
                                 label="Description"
                                 multiline
-                                minRows={4}
                                 placeholder="Enter product description..."
                             />
                         </FormGridItem>
@@ -355,7 +354,6 @@ export default function ProductForm({
                                 name="termsAndConditions"
                                 label="Terms and Conditions"
                                 multiline
-                                minRows={4}
                                 placeholder="Enter terms and conditions..."
                             />
                         </FormGridItem>

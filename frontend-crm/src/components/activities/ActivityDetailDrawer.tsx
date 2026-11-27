@@ -39,6 +39,9 @@ import { RecordLink } from '@/components/common/RecordLink';
 import { AppToast } from '@/components/common/AppToast';
 import { NestedDrawerLayer, RaisedLayer } from '@/components/common/RaisedLayer';
 import { fieldSx } from '@/components/forms/FormField';
+import { LongTextInput } from '@/components/forms/LongTextInput';
+import { ClampedText } from '@/components/common/ClampedText';
+import { FIELD_MAX_LENGTH } from '@/config/fieldLimits';
 import { activityResponseCategory, CUSTOMER_RESPONSES } from '@/components/forms/FollowUpDecision';
 import { useActivity, useDeleteActivity, useDeleteActivityScoped } from '@/hooks/queries/useActivities';
 import { useActivityResponseLabel, useDropdownOptionLabel, useModuleFormConfig } from '@/hooks/queries/useFormConfigs';
@@ -210,18 +213,14 @@ function CompleteDialog({ activity, onClose, onDone }: { activity: Activity; onC
                     </TextField>
                 )}
                 {!remarksField.hidden && (
-                    <TextField
-                        multiline
-                        minRows={3}
-                        size="small"
+                    <LongTextInput
                         label={remarksField.label}
+                        inputLabel={remarksField.label}
                         value={remarks}
-                        onChange={(e) => setRemarks(e.target.value.slice(0, 2000))}
+                        onChange={setRemarks}
+                        maxLength={FIELD_MAX_LENGTH.longText}
                         placeholder="How did it go? Next steps..."
-                        error={remarksTooShort}
-                        helperText={remarksTooShort ? `${remarksField.label} must be at least 3 characters.` : undefined}
-                        sx={fieldSx}
-                        slotProps={{ inputLabel: { shrink: true } }}
+                        error={remarksTooShort ? `${remarksField.label} must be at least 3 characters.` : undefined}
                     />
                 )}
             </DialogContent>
@@ -643,7 +642,9 @@ export function ActivityDetailDrawer({ activity, activityId, open, onClose, onEd
                         {a.customerResponse && <Field label="Customer Response">{responseLabel(a)}</Field>}
                         {a.remarks && (
                             <Field label="Remarks">
-                                <Typography sx={{ ...valueSx, fontWeight: 500, whiteSpace: 'pre-wrap' }}>{a.remarks}</Typography>
+                                <Typography component="div" sx={{ ...valueSx, fontWeight: 500, whiteSpace: 'pre-wrap' }}>
+                                    <ClampedText>{a.remarks}</ClampedText>
+                                </Typography>
                             </Field>
                         )}
                     </Box>

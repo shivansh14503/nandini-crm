@@ -427,6 +427,7 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
                                     name="accountAddress"
                                     label="Account Address"
                                     multiline
+                                    expandable={false}
                                     minRows={2}
                                     hint="From the selected organization"
                                     placeholder="Customer site address"
@@ -443,30 +444,28 @@ export default function TicketForm({ mode = 'create', initialData, ticketId, bre
                                     label="Problem Reported"
                                     required
                                     multiline
-                                    minRows={3}
                                     placeholder="What the customer reported..."
                                 />
                             </FormGridItem>
                             <FormGridItem>
-                                <RhfTextField<TicketFormData> name="problemObserved" label="Problem Observed" multiline minRows={3} placeholder="What the engineer found..." />
+                                <RhfTextField<TicketFormData> name="problemObserved" label="Problem Observed" multiline placeholder="What the engineer found..." />
                             </FormGridItem>
                             <FormGridItem>
-                                <RhfTextField<TicketFormData> name="rca" label="RCA (Root Cause Analysis)" multiline minRows={3} placeholder="Underlying cause..." />
+                                <RhfTextField<TicketFormData> name="rca" label="RCA (Root Cause Analysis)" multiline placeholder="Underlying cause..." />
                             </FormGridItem>
                             <FormGridItem>
-                                <RhfTextField<TicketFormData> name="resolution" label="Resolution" multiline minRows={3} placeholder="Steps taken to resolve..." />
+                                <RhfTextField<TicketFormData> name="resolution" label="Resolution" multiline placeholder="Steps taken to resolve..." />
                             </FormGridItem>
                             <FormGridItem>
                                 <RhfTextField<TicketFormData>
                                     name="reasonForEscalatedCalls"
                                     label="Reason For Escalated Calls"
                                     multiline
-                                    minRows={3}
                                     placeholder="Why this call was escalated..."
                                 />
                             </FormGridItem>
                             <FormGridItem>
-                                <RhfTextField<TicketFormData> name="addDescription" label="Add Description" multiline minRows={3} placeholder="Additional notes..." />
+                                <RhfTextField<TicketFormData> name="addDescription" label="Add Description" multiline placeholder="Additional notes..." />
                             </FormGridItem>
                         </FormGrid>
                         <DynamicModuleCustomFields module="tickets" tabKey="overview" sx={{ px: 0, pb: 0, mt: 3.5 }} />

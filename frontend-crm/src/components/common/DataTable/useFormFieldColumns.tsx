@@ -17,6 +17,7 @@ import { formatPhoneDisplay } from '@/utils/phone';
 import { primaryFirst } from '@/utils/primaryFirst';
 import { getCountryNameByCode } from '@/data/addressMaster';
 import type { DataTableColumn } from './types';
+import { ClampedText } from '../ClampedText';
 
 export const isCrmModuleKey = (value: string | undefined): value is CrmModuleKey =>
     Boolean(value && (CRM_MODULE_KEYS as readonly string[]).includes(value));
@@ -116,9 +117,10 @@ export function useFormFieldColumns<T>(
                     render: (row: T) => {
                         const text = formatFieldCell(field, readFieldValue(row, field), configs);
                         return (
-                            // Wraps within the column width (the table caps cell width), so the full value shows.
-                            <Typography sx={{ fontSize: '0.78rem', color: text ? 'var(--crm-slate-700)' : 'var(--mui-palette-text-muted)' }}>
-                                {text || '-'}
+                            // Wraps within the column width (the table caps cell width). Long text shows 3 lines with
+                            // "Show more"; other values show in full.
+                            <Typography component="div" sx={{ fontSize: '0.78rem', color: text ? 'var(--crm-slate-700)' : 'var(--mui-palette-text-muted)' }}>
+                                {isLong && text ? <ClampedText toggleFontSize="0.72rem">{text}</ClampedText> : text || '-'}
                             </Typography>
                         );
                     },

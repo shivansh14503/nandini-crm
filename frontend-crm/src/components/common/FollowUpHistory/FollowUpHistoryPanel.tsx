@@ -9,6 +9,7 @@ import { glassSurfaceSx, GLASS_SHADOW, GLASS_RADIUS, FLOAT_INSET } from '@/theme
 import { DOCK } from '@/components/common/Drawer/RelatedModulesSidebar';
 import { buildFollowUpEvents, formatEventTime, type FollowUpEvent } from './followUpEvents';
 import { useDisplayFormats } from '@/utils/formats';
+import { ClampedText } from '../ClampedText';
 
 /** Width of the follow-up panel on wide screens (px). */
 export const FOLLOW_UP_PANEL_WIDTH = 320;
@@ -212,8 +213,8 @@ function TimelineItem({ event, recordLabel, latest, last }: { event: FollowUpEve
             )}
 
             {event.remarks && (
-                <Typography sx={{ mt: 0.6, fontSize: '0.75rem', color: 'var(--crm-slate-700)', lineHeight: 1.5, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
-                    {event.remarks}
+                <Typography component="div" sx={{ mt: 0.6, fontSize: '0.75rem', color: 'var(--crm-slate-700)', lineHeight: 1.5, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                    <ClampedText toggleFontSize="0.72rem">{event.remarks}</ClampedText>
                 </Typography>
             )}
 

@@ -30,7 +30,7 @@ export const quotationFormSchema = z.object({
     remarks: optionalText('Remarks', L.longText),
     // Terms, Payment Terms and Validation Period are required by the form configuration (admin-relaxable).
     termsAndCondition: optionalString,
-    termsAndConditionDescription: optionalText('Terms & Condition Description', L.longText),
+    termsAndConditionDescription: optionalText('Terms & Condition Description', L.termsText),
     assignedTo: requiredString('Assigned Representative'),
 
     opportunity: requiredString('Opportunity'),
@@ -38,7 +38,7 @@ export const quotationFormSchema = z.object({
     validationPeriod: optionalString,
     otherRef: optionalText('Other Ref.', L.shortText),
     paymentTerms: optionalString,
-    paymentTermsDescription: optionalText('Payment Terms Description', L.longText),
+    paymentTermsDescription: optionalText('Payment Terms Description', L.termsText),
     preparedFor: requiredString('Prepared For'),
 
     // ── Tab 2: Line Items ─────────────────────────────────────────
@@ -81,7 +81,7 @@ export const quotationFormSchema = z.object({
     quoteDate: optionalString,
     quotationSubject: optionalText('Quotation Subject', L.title),
     notes: optionalText('Internal Notes', L.longText),
-    termsAndConditions: optionalText('Terms and Conditions', L.longText),
+    termsAndConditions: optionalText('Terms and Conditions', L.termsText),
 
     /** Admin-defined custom field values (validated against the form configuration by useRhfForm). */
     customFields: customFieldsSchema,

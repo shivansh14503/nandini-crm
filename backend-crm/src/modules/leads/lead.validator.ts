@@ -145,7 +145,7 @@ export const convertLeadSchema = z.object({
     natureOfPartner: optionalText('Nature of Partner', L.option),
     leadSource: optionalText('Lead Source', L.option),
     memberOf: optionalText('Member of', L.organizationName),
-    organizationDescription: optionalText('Organization Description', L.longText),
+    organizationDescription: optionalText('Organization Description', L.organizationDescription),
     // No Assigned To: the new organization, contact and opportunity go to the lead's own Assigned To.
 
     // Contact

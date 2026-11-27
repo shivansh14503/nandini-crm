@@ -119,7 +119,10 @@ const TAX_IDENTIFIER_PATTERN = /^(gst(in)?|pan|tan|cin)(no|number)?$|ifsc/;
  * lowercased, non-alphanumerics stripped (`lineItems.0.unitPrice` → `unitprice`, `PIN Code` → `pincode`).
  */
 const FIELD_RULES: readonly FieldRule[] = [
-    // Long-form text
+    // Long-form text (specific limits first, then the general long-text cap)
+    { pattern: /^(adddescriptionandscope|organizationdescription)$/, size: 'full', maxLength: FIELD_MAX_LENGTH.organizationDescription },
+    { pattern: /^(termsandconditiondescription|paymenttermsdescription)$/, size: 'full', maxLength: FIELD_MAX_LENGTH.termsText },
+    { pattern: /^inactivityreason$/, size: 'full', maxLength: FIELD_MAX_LENGTH.inactivityReason },
     {
         pattern: /(description|remarks?|notes?|comments?|termsandconditions?|resolution|problem(observed|reported)|^rca$|reason)/,
         size: 'full',

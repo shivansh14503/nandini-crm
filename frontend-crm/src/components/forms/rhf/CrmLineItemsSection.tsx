@@ -34,6 +34,7 @@ import type { LineItem, LineItemsValues } from '@/types/lineItem.types';
 import { FIELD_MAX_LENGTH, FIELD_SIZE_WIDTH } from '../fieldSizing';
 import { useFormMode } from '@/context/FormModeContext';
 import { CrmLineItemsReadOnly } from './CrmLineItemsReadOnly';
+import { LongTextInput } from '../LongTextInput';
 import { fmtMoney, fmtNumber, useDisplayFormats } from '@/utils/formats';
 import {
     computeLineItem,
@@ -626,43 +627,34 @@ export function CrmLineItemsEditor({ value, onChange, error, lineErrors, withCur
                                     <Box
                                         sx={{
                                             display: 'grid',
-                                            gridTemplateColumns: '1fr 1fr',
+                                            // One column on phones, side by side from tablets up.
+                                            gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: 'minmax(0, 1fr) minmax(0, 1fr)' },
                                             gap: 2,
                                             pt: 1,
-                                            pl: showActions ? 5.5 : 0,
+                                            pl: showActions ? { xs: 0, sm: 5.5 } : 0,
                                             borderTop: '1px dashed var(--mui-palette-border-main)',
                                         }}
                                     >
                                         <Box data-field={`lineItems.${index}.description`}>
                                             <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)', mb: 0.5 }}>{LABELS.description}</Typography>
-                                            <TextField
-                                                fullWidth
-                                                size="small"
-                                                multiline
-                                                rows={2}
+                                            <LongTextInput
+                                                label={LABELS.description}
                                                 placeholder="Line item scope or package specifications..."
                                                 value={item.description || ''}
-                                                onChange={(e) => updateLine(item.id, { description: e.target.value })}
-                                                error={Boolean(errs.description)}
-                                                helperText={errs.description}
-                                                slotProps={{ htmlInput: { maxLength: FIELD_MAX_LENGTH.longText } }}
-                                                sx={fieldSx}
+                                                onChange={(value) => updateLine(item.id, { description: value })}
+                                                error={errs.description}
+                                                maxLength={FIELD_MAX_LENGTH.longText}
                                             />
                                         </Box>
                                         <Box data-field={`lineItems.${index}.note`}>
                                             <Typography sx={{ fontSize: '0.72rem', color: 'var(--mui-palette-text-secondary)', mb: 0.5 }}>{LABELS.note}</Typography>
-                                            <TextField
-                                                fullWidth
-                                                size="small"
-                                                multiline
-                                                rows={2}
+                                            <LongTextInput
+                                                label={LABELS.note}
                                                 placeholder="Internal notes, discount justifications, or terms..."
                                                 value={item.note || ''}
-                                                onChange={(e) => updateLine(item.id, { note: e.target.value })}
-                                                error={Boolean(errs.note)}
-                                                helperText={errs.note}
-                                                slotProps={{ htmlInput: { maxLength: FIELD_MAX_LENGTH.longText } }}
-                                                sx={fieldSx}
+                                                onChange={(value) => updateLine(item.id, { note: value })}
+                                                error={errs.note}
+                                                maxLength={FIELD_MAX_LENGTH.longText}
                                             />
                                         </Box>
                                     </Box>

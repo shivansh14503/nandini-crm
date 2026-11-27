@@ -208,8 +208,6 @@ export function QuotationOverviewSection() {
                         name="termsAndConditionDescription"
                         label="Terms & Condition Description"
                         multiline
-                        minRows={3}
-                        maxRows={6}
                         placeholder="Detailed terms, commercial conditions, and delivery clauses..."
                     />
                 </FormGridItem>
@@ -226,8 +224,6 @@ export function QuotationOverviewSection() {
                         name="paymentTermsDescription"
                         label="Payment Terms Description"
                         multiline
-                        minRows={3}
-                        maxRows={6}
                         placeholder="Milestone schedule, advance % and delivery breakdown..."
                     />
                 </FormGridItem>
@@ -235,8 +231,6 @@ export function QuotationOverviewSection() {
                     name="remarks"
                     label="Remarks"
                     multiline
-                    minRows={3}
-                    maxRows={5}
                     placeholder="Internal or customer-facing quotation remarks..."
                 />
             </FormGrid>

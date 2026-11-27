@@ -183,7 +183,7 @@ export function ConvertOrganizationSection() {
                             ),
                             memberOf: <RhfTextField<F> name="memberOf" label="Member of (Parent Corporation)" placeholder="e.g. Apex Holdings Conglomerate Ltd." />,
                             addDescriptionAndScope: (
-                                <RhfTextField<F> name="organizationDescription" label="Add Description & Scope" multiline minRows={3} placeholder="Notes about this organization..." />
+                                <RhfTextField<F> name="organizationDescription" label="Add Description & Scope" multiline placeholder="Notes about this organization..." />
                             ),
                         }}
                     />

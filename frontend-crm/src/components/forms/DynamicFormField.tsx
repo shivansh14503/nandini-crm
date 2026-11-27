@@ -8,7 +8,7 @@ import { useCodedFieldDefaults } from '@/context/CodedFieldDefaultsContext';
 import type { FormFieldDefinitionDto } from '@/types/formConfig.types';
 import { activeOptionValues, defaultOptionValues, fieldFormName, findCategory, optionLabelMap, optionsForModule, parseDefaultValue } from '@/utils/formConfig';
 import type { RecordFileModule } from '@/types/recordFile.types';
-import type { FieldSize } from './fieldSizing';
+import { FIELD_MAX_LENGTH, resolveFieldMaxLength, type FieldSize } from './fieldSizing';
 import { FieldAutoSizeProvider } from './FormField';
 import {
     RhfAmountField,
@@ -130,7 +130,16 @@ export function DynamicFormField({ field, required, applyDefault = true, name: n
     const control = ((): React.ReactNode => {
         switch (field.fieldType) {
             case 'textarea':
-                return <RhfTextField {...common} placeholder={placeholder} multiline minRows={3} maxRows={6} fieldSize={fieldSize} maxLength={4000} />;
+                // Built-in long text keeps its own limit (Live Preview); admin-added ones take the custom long-text cap.
+                return (
+                    <RhfTextField
+                        {...common}
+                        placeholder={placeholder}
+                        multiline
+                        fieldSize={fieldSize}
+                        maxLength={(field.isSystem ? resolveFieldMaxLength(field.fieldKey) : undefined) ?? FIELD_MAX_LENGTH.customLongText}
+                    />
+                );
             case 'number':
                 return <RhfTextField {...common} placeholder={placeholder} type="number" fieldSize={fieldSize} />;
             case 'amount':

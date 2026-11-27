@@ -482,7 +482,6 @@ export default function ContractForm({ mode = 'create', contractId, initialData 
                                 name="description"
                                 label="Description"
                                 multiline
-                                minRows={3}
                                 maxLength={FIELD_MAX_LENGTH.longText}
                                 placeholder="Scope, visits included, special terms..."
                             />

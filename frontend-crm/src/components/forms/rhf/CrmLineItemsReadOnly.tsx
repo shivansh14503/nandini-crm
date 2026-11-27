@@ -7,6 +7,7 @@ import type { LineItemsValues } from '@/types/lineItem.types';
 import { useDropdownOptionLabel } from '@/hooks/queries/useFormConfigs';
 import { fmtMoney, fmtNumber } from '@/utils/formats';
 import { currencyCodeOf, DEFAULT_CURRENCY, LINE_ITEM_LABELS as LABELS, LINE_ITEM_TAX_RATE_CATEGORY, LINE_ITEM_TOTAL_LABELS as TOTAL_LABELS, totalsOf } from '@/lib/line-items';
+import { ClampedText } from '@/components/common/ClampedText';
 
 const headCellSx = {
     fontSize: '0.7rem',
@@ -76,8 +77,8 @@ export function CrmLineItemsReadOnly({ value, withCurrency = false }: { value: L
                                     <TableCell sx={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--crm-slate-900)', minWidth: 220 }}>
                                         {item.productName || '—'}
                                         {(item.description || item.note) && (
-                                            <Typography sx={{ fontSize: '0.74rem', color: 'var(--mui-palette-text-secondary)', fontWeight: 400, mt: 0.3, whiteSpace: 'pre-wrap' }}>
-                                                {[item.description, item.note].filter(Boolean).join(' • ')}
+                                            <Typography component="div" sx={{ fontSize: '0.74rem', color: 'var(--mui-palette-text-secondary)', fontWeight: 400, mt: 0.3, whiteSpace: 'pre-wrap' }}>
+                                                <ClampedText toggleFontSize="0.72rem">{[item.description, item.note].filter(Boolean).join(' • ')}</ClampedText>
                                             </Typography>
                                         )}
                                     </TableCell>

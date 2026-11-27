@@ -27,6 +27,7 @@ import { TICKET_PRIORITY_COLORS, TICKET_STATUS_COLORS } from '@/components/ticke
 import type { TicketPriority, TicketStatus } from '@/types/ticket.types';
 import { DrawerChannelRow, DrawerCopyButton, DrawerSectionCard } from '../DrawerPrimitives';
 import { PrimaryTag } from '@/components/common/PrimaryTag';
+import { ClampedText } from '@/components/common/ClampedText';
 import { formatAddressLine } from '@/utils/address';
 import { fmtMoney, fmtNumber, getDisplayFormats, useDisplayFormats } from '@/utils/formats';
 import type { DrawerBadgeItem } from '../types';
@@ -288,8 +289,8 @@ function FieldBlockBody({ block, ctx, sectionStyle }: { block: Extract<DrawerBlo
                             border: `1px solid ${attention ? 'var(--crm-orange-200)' : 'var(--mui-palette-border-main)'}`,
                         }}
                     >
-                        <Typography sx={{ fontSize: '0.76rem', color: attention ? 'var(--crm-orange-800)' : 'var(--crm-slate-700)', fontWeight: 500, lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>
-                            &quot;{copyable(values.join(', '))}&quot;
+                        <Typography component="div" sx={{ fontSize: '0.76rem', color: attention ? 'var(--crm-orange-800)' : 'var(--crm-slate-700)', fontWeight: 500, lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>
+                            <ClampedText>&quot;{copyable(values.join(', '))}&quot;</ClampedText>
                         </Typography>
                     </Box>
                 </Box>
@@ -354,9 +355,11 @@ function FieldBlockBody({ block, ctx, sectionStyle }: { block: Extract<DrawerBlo
             );
         default:
             return block.showLabel ? (
-                <ReadOnlyField label={label} value={copyable(values.join(', '))} />
+                <ReadOnlyField label={label} value={copyable(values.join(', '))} clamp />
             ) : (
-                <Typography sx={{ fontSize: '0.86rem', fontWeight: 600, color: 'var(--crm-slate-900)', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{copyable(values.join(', '))}</Typography>
+                <Typography component="div" sx={{ fontSize: '0.86rem', fontWeight: 600, color: 'var(--crm-slate-900)', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>
+                    <ClampedText>{copyable(values.join(', '))}</ClampedText>
+                </Typography>
             );
     }
 }
@@ -532,7 +535,11 @@ function LineItemsBody({ block, ctx }: { block: Extract<DrawerBlock, { type: 'li
                     <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.5, mb: 1 }}>
                         <Box sx={{ minWidth: 0 }}>
                             <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--crm-slate-900)', wordBreak: 'break-word' }}>{item.productName || 'Item'}</Typography>
-                            {item.description && <Typography sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)', mt: 0.3, lineHeight: 1.4 }}>{item.description}</Typography>}
+                            {item.description && (
+                                <Typography component="div" sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)', mt: 0.3, lineHeight: 1.4 }}>
+                                    <ClampedText toggleFontSize="0.72rem">{item.description}</ClampedText>
+                                </Typography>
+                            )}
                         </Box>
                         <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
                             <Typography sx={smallLabelSx}>{LINE_ITEM_LABELS.taxableAmount}</Typography>
