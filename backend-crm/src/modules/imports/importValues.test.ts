@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 import { HttpError } from '../../utils/httpError.js';
 import type { ModuleFieldConfig } from '../form-configs/customFieldValidator.js';
 import type { FormFieldDefinitionDto } from '../form-configs/formConfig.service.js';
-import { buildImportPayload, importableFields, parseImportDate, splitDateTime } from './importValues.js';
+import { buildImportPayload, importableFields, matchImportOption, parseImportDate, splitDateTime } from './importValues.js';
 
 function field(overrides: Partial<FormFieldDefinitionDto> & Pick<FormFieldDefinitionDto, 'fieldKey'>): FormFieldDefinitionDto {
     return {
@@ -128,8 +128,24 @@ describe('buildImportPayload', () => {
             (err: unknown) =>
                 err instanceof HttpError &&
                 JSON.stringify(err.errors?.map((e) => e.message)) ===
-                    JSON.stringify(['"AMC" is not an option of Lead Source.', '"Task" is not an option of Followup Type.', 'Invoice Date must be a date (DD-MM-YYYY or YYYY-MM-DD).']),
+                    JSON.stringify([
+                        '"AMC" is not an option of Lead Source. Allowed: Website Enquiry, CA.',
+                        '"Task" is not an option of Followup Type. Allowed: Call.',
+                        'Invoice Date must be a date (DD-MM-YYYY or YYYY-MM-DD).',
+                    ]),
         );
+    });
+
+    it('matches options with any case and spacing, and percentage options from bare or fractional numbers', () => {
+        const rates = new Map([['0%', '0%'], ['5%', '5%'], ['18%', '18%'], ['28%', '28%']]);
+        assert.equal(matchImportOption(rates, '0.18'), '18%');
+        assert.equal(matchImportOption(rates, '18'), '18%');
+        assert.equal(matchImportOption(rates, ' 18 % '.replace(/ /g, '')), '18%');
+        assert.equal(matchImportOption(rates, '0.05'), '5%');
+        assert.equal(matchImportOption(rates, '0'), '0%');
+        assert.equal(matchImportOption(rates, '0.12'), undefined);
+        const sources = new Map([['website enquiry', 'Website Enquiry'], ['ca', 'CA']]);
+        assert.equal(matchImportOption(sources, '  WEBSITE\u00a0 enquiry '), 'Website Enquiry');
     });
 
     it('offers only active, visible, non-file fields', () => {

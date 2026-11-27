@@ -51,6 +51,8 @@ export interface MappedRow {
     rowNumber: number;
     values: Record<string, string>;
     errors: string[];
+    /** The error of each cell that failed, by field key (highlighted in the preview). */
+    cellErrors: Record<string, string>;
 }
 
 /** The import wizard's steps (the full-size progress dialog of a background import shows the last one). */
