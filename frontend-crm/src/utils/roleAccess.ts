@@ -11,7 +11,7 @@ export const ROLE_ACCESS_LEVELS = ['admin', 'all-records', 'own-records'] as con
 /**
  * `admin`: opens the admin panel (forms, users, PDF templates, …). `all-records`: sees and changes every CRM record.
  * `own-records`: only the records the user owns or created. An admin role may or may not also see all records (see
- * `hasGlobalAccessRole`): "Admin" does, "Administrator" and "Super Admin" don't today.
+ * `hasGlobalAccessRole`): "Super Admin" and "Admin" do, "Administrator" doesn't today.
  */
 export type RoleAccess = (typeof ROLE_ACCESS_LEVELS)[number];
 
@@ -20,6 +20,7 @@ export const ADMIN_ROLES = ['Admin', 'Administrator', 'Super Admin'] as const;
 
 /** Roles that see and change every record, matched by `normalizeRole` (any case, any dash style). */
 export const GLOBAL_ACCESS_ROLES = [
+    'Super Admin',
     'Admin',
     'Director – Operations',
     'Regional Sales Head',
@@ -62,4 +63,12 @@ export function roleAccess(role: string): RoleAccess {
     if (isAdminAccessRole(role)) return 'admin';
     if (hasGlobalAccessRole(role)) return 'all-records';
     return 'own-records';
+}
+
+/** The developer role: full access everywhere, and the only role that may create or manage Super Admin users. */
+export const SUPER_ADMIN_ROLE = 'Super Admin';
+
+/** Whether the role is Super Admin (any case, any spacing). */
+export function isSuperAdminRole(role: string | null | undefined): boolean {
+    return normalizeRole(role ?? '') === normalizeRole(SUPER_ADMIN_ROLE);
 }

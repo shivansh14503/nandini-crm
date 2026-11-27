@@ -1,7 +1,7 @@
 import { randomInt } from 'node:crypto';
 import { FIELD_MAX_LENGTH as L } from '../../config/fieldLimits.js';
 import { passwordPolicyIssue } from '../auth/passwordPolicy.js';
-import { isAdminAccessRole } from './roles.js';
+import { isAdminAccessRole, isSuperAdminRole } from './roles.js';
 
 /** Pure rules of Admin › Users (no database), unit tested in userAdmin.rules.test.ts. */
 
@@ -74,6 +74,20 @@ export const ADMIN_GUARD_MESSAGES: Record<AdminGuardIssue, string> = {
     SELF_LOCKOUT: 'You cannot remove your own admin access. Ask another admin to do it.',
     LAST_ADMIN: 'This is the last active admin. Give another active user an admin role first.',
 };
+
+// ── Super Admin ──────────────────────────────────────────────────────────────
+
+/**
+ * Only a Super Admin may create a Super Admin, give or take the Super Admin role, or edit, deactivate, activate or
+ * reset the password of a Super Admin. `targetRole` is the user's role before the change (null for a new user),
+ * `nextRole` after it. True when the change is refused.
+ */
+export function superAdminOnly(actorRole: string, targetRole: string | null, nextRole: string | null): boolean {
+    if (isSuperAdminRole(actorRole)) return false;
+    return isSuperAdminRole(targetRole) || isSuperAdminRole(nextRole);
+}
+
+export const SUPER_ADMIN_ONLY_MESSAGE = 'Only a Super Admin can add or manage Super Admin users.';
 
 // ── Names ────────────────────────────────────────────────────────────────────
 

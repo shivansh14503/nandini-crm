@@ -38,6 +38,7 @@ import { TableSkeleton } from '@/components/common/skeletons';
 import { UserAvatar } from '@/components/common/UserAvatar';
 import { EmptyState, errorMessage, inputSx, panelHeaderSx, primaryButtonSx, secondaryButtonSx, surfaceSx } from '@/components/settings/form-customization/builderUi';
 import { formatDateTime } from '@/utils/date';
+import { isSuperAdminRole } from '@/utils/roleAccess';
 import { useAuth } from '@/context/AuthContext';
 import { useAdminUsers, useAdminUsersMeta, useDeactivateAdminUser } from '@/hooks/queries/useUserAdmin';
 import type { AdminUserDto, AdminUserListParams, UserStatusFilter } from '@/types/userAdmin.types';
@@ -245,6 +246,8 @@ export function UsersView() {
 
     const menuUser = menu?.user ?? null;
     const menuIsSelf = Boolean(menuUser && me && menuUser.id === me.id);
+    // Super Admin users are managed only by a Super Admin (the API answers 403 SUPER_ADMIN_ONLY otherwise).
+    const menuLocked = Boolean(menuUser && isSuperAdminRole(menuUser.role) && !isSuperAdminRole(me?.role));
 
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
@@ -558,6 +561,7 @@ export function UsersView() {
                 slotProps={{ paper: { sx: { borderRadius: '10px', minWidth: 220, border: '1px solid var(--mui-palette-border-main)' } } }}
             >
                 <MenuItem
+                    disabled={menuLocked}
                     onClick={() => {
                         const u = menuUser;
                         setMenu(null);
@@ -568,10 +572,10 @@ export function UsersView() {
                     <ListItemIcon>
                         <EditOutlinedIcon fontSize="small" />
                     </ListItemIcon>
-                    <ListItemText primary="Edit" />
+                    <ListItemText primary="Edit" secondary={menuLocked ? 'Only a Super Admin can manage this user' : undefined} />
                 </MenuItem>
                 <MenuItem
-                    disabled={menuIsSelf || !menuUser?.isActive}
+                    disabled={menuIsSelf || menuLocked || !menuUser?.isActive}
                     onClick={() => {
                         const u = menuUser;
                         setMenu(null);
@@ -589,7 +593,7 @@ export function UsersView() {
                 </MenuItem>
                 {menuUser?.isActive ? (
                     <MenuItem
-                        disabled={menuIsSelf}
+                        disabled={menuIsSelf || menuLocked}
                         onClick={() => {
                             const u = menuUser;
                             setMenu(null);
@@ -606,6 +610,7 @@ export function UsersView() {
                     [
                         <MenuItem
                             key="activate"
+                            disabled={menuLocked}
                             onClick={() => {
                                 const u = menuUser;
                                 setMenu(null);
@@ -620,7 +625,7 @@ export function UsersView() {
                         </MenuItem>,
                         <MenuItem
                             key="sign-out"
-                            disabled={signOutSessions.isPending}
+                            disabled={signOutSessions.isPending || menuLocked}
                             onClick={() => {
                                 const u = menuUser;
                                 setMenu(null);

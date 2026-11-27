@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { passwordPolicyIssue } from '../auth/passwordPolicy.js';
-import { adminGuardIssue, fullNameLengthIssue, generateTemporaryPassword, losesAdminAccess, managerIssue, MAX_MANAGER_DEPTH, TEMPORARY_PASSWORD_LENGTH } from './userAdmin.rules.js';
+import { adminGuardIssue, fullNameLengthIssue, generateTemporaryPassword, losesAdminAccess, managerIssue, MAX_MANAGER_DEPTH, superAdminOnly, TEMPORARY_PASSWORD_LENGTH } from './userAdmin.rules.js';
 
 describe('managerIssue (reports-to cycles)', () => {
     // 2 → 1, 3 → 2, 4 → 3 ; 5 reports to nobody.
@@ -92,5 +92,23 @@ describe('generateTemporaryPassword', () => {
         const second = generateTemporaryPassword(first, seeded());
         assert.notEqual(second, first);
         assert.equal(passwordPolicyIssue(second, { username: first }), null);
+    });
+});
+
+describe('superAdminOnly', () => {
+    it('lets a Super Admin manage anyone, including Super Admins', () => {
+        assert.equal(superAdminOnly('Super Admin', 'Super Admin', null), false);
+        assert.equal(superAdminOnly('super admin', null, 'Super Admin'), false);
+        assert.equal(superAdminOnly('Super Admin', 'Sales Executive', 'Admin'), false);
+    });
+    it('stops other admins from creating, promoting to, demoting or editing a Super Admin', () => {
+        assert.equal(superAdminOnly('Admin', null, 'Super Admin'), true);
+        assert.equal(superAdminOnly('Admin', 'Sales Executive', 'super  admin'), true);
+        assert.equal(superAdminOnly('Administrator', 'Super Admin', 'Admin'), true);
+        assert.equal(superAdminOnly('Admin', 'Super Admin', null), true);
+    });
+    it('leaves every other change to any admin', () => {
+        assert.equal(superAdminOnly('Admin', 'Sales Executive', 'Sales Manager'), false);
+        assert.equal(superAdminOnly('Administrator', null, 'Admin'), false);
     });
 });

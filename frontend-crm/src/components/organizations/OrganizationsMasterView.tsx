@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useCallback } from 'react';
+import { isSuperAdminRole } from '@/utils/roleAccess';
 import { useResetTab } from '@/hooks/useResetTab';
 import { useRouter } from 'next/navigation';
 import { Button } from '@mui/material';
@@ -32,7 +33,8 @@ const NO_RECORDS: ExtendedOrganization[] = [];
 export function OrganizationsMasterView() {
     const router = useRouter();
     const { user } = useAuth();
-    const isAdmin = user?.role?.toLowerCase() === 'admin';
+    // Admin, and Super Admin (full access everywhere), may open and edit an inactive account.
+    const isAdmin = user?.role?.toLowerCase() === 'admin' || isSuperAdminRole(user?.role);
     // The record totals below follow the company number grouping (Indian until it is changed).
     useDisplayFormats();
 

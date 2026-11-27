@@ -30,6 +30,14 @@ export function isAdminAccessRole(role: string | null | undefined): boolean {
     return ADMIN_ROLE_KEYS.has((role ?? '').toLowerCase());
 }
 
+/** The developer role: full access everywhere, and the only role that may create or manage Super Admin users. */
+export const SUPER_ADMIN_ROLE = 'Super Admin';
+
+/** Whether the role is Super Admin (any case, any spacing). */
+export function isSuperAdminRole(role: string | null | undefined): boolean {
+    return normalizeRole(role ?? '') === normalizeRole(SUPER_ADMIN_ROLE);
+}
+
 /** Whether the role sees and changes every record (the same test as `hasGlobalAccess`). */
 export function hasGlobalAccessRole(role: string | null | undefined): boolean {
     return GLOBAL_ROLE_KEYS.has(normalizeRole(role ?? ''));

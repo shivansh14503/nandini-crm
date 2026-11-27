@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useId, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Alert, Box, Button, CircularProgress, IconButton, InputAdornment, TextField, Typography } from '@mui/material';
 import LockResetRoundedIcon from '@mui/icons-material/LockResetRounded';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
@@ -8,6 +9,7 @@ import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined
 import { PasswordRulesChecklist } from '@/components/common/PasswordRulesChecklist';
 import { fieldSx } from '@/components/forms/FormField';
 import { secondaryButtonSx } from '@/components/settings/form-customization/builderUi';
+import { ROUTES } from '@/config/constants';
 import { useAuth } from '@/context/AuthContext';
 import { useChangePassword } from '@/hooks/queries/useProfile';
 import { ApiClientError } from '@/services/apiClient';
@@ -75,6 +77,10 @@ export function PasswordInput({
                                 <IconButton
                                     aria-label={visible ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
                                     aria-pressed={visible}
+                                    // Out of the Tab order: Tab goes from this field straight to the next one.
+                                    tabIndex={-1}
+                                    // Keeps the caret in the field when the eye is clicked.
+                                    onMouseDown={(e) => e.preventDefault()}
                                     onClick={() => setVisible((v) => !v)}
                                     edge="end"
                                     sx={{
@@ -98,10 +104,20 @@ export function PasswordInput({
 
 const EMPTY = { currentPassword: '', newPassword: '', confirmPassword: '' };
 
-/** My Profile › Security › Change password. Other sessions are signed out by the API on success. */
+/**
+ * My Profile › Security › Change password. Other sessions are signed out by the API on success.
+ *
+ * First login / forced change (a new user or an admin reset, signed in a moment ago with the temporary password): the
+ * current password isn't asked for again, and the user goes on to the dashboard once the new one is saved. Should the
+ * API still ask for it (a session opened before the reset), the field is shown.
+ */
 export function ChangePasswordCard({ profile, notify }: { profile: ProfileDto; notify: Notify }) {
     const changePassword = useChangePassword();
+    const router = useRouter();
     const { user } = useAuth();
+    const forced = Boolean(user?.mustChangePassword && profile.mustChangePassword);
+    const [currentAsked, setCurrentAsked] = useState(false);
+    const askCurrent = !forced || currentAsked;
     const [values, setValues] = useState(EMPTY);
     const [confirmTouched, setConfirmTouched] = useState(false);
     const [serverErrors, setServerErrors] = useState<{ currentPassword?: string; newPassword?: string }>({});
@@ -111,7 +127,7 @@ export function ChangePasswordCard({ profile, notify }: { profile: ProfileDto; n
     const ctx: PasswordPolicyContext = { username: profile.username, currentPassword: values.currentPassword };
     const policyIssue = passwordPolicyIssue(values.newPassword, ctx);
     const confirmMismatch = values.confirmPassword !== '' && values.confirmPassword !== values.newPassword;
-    const canSubmit = values.currentPassword !== '' && values.newPassword !== '' && !policyIssue && values.confirmPassword === values.newPassword;
+    const canSubmit = (!askCurrent || values.currentPassword !== '') && values.newPassword !== '' && !policyIssue && values.confirmPassword === values.newPassword;
     const saving = changePassword.isPending;
     const touchedAny = values.currentPassword !== '' || values.newPassword !== '' || values.confirmPassword !== '';
 
@@ -134,11 +150,15 @@ export function ChangePasswordCard({ profile, notify }: { profile: ProfileDto; n
         if (!canSubmit || saving) return;
         try {
             const wasRequired = Boolean(user?.mustChangePassword || profile.mustChangePassword);
-            const result = await changePassword.mutateAsync({ currentPassword: values.currentPassword, newPassword: values.newPassword });
+            const result = await changePassword.mutateAsync({
+                ...(askCurrent || values.currentPassword ? { currentPassword: values.currentPassword } : {}),
+                newPassword: values.newPassword,
+            });
             clear();
             const n = result.signedOutSessions;
             if (wasRequired) {
                 notify('Password changed. You can now use the CRM.');
+                router.push(ROUTES.DASHBOARD);
             } else if (n === null) {
                 notify('Password changed, but your other sessions could not be signed out. Sign them out below, or try again in a moment.', 'warning');
             } else {
@@ -147,8 +167,11 @@ export function ChangePasswordCard({ profile, notify }: { profile: ProfileDto; n
         } catch (err) {
             const code = err instanceof ApiClientError ? err.details?.code : undefined;
             const message = err instanceof Error && err.message ? err.message : 'Could not change your password.';
-            if (code === 'WRONG_PASSWORD') setServerErrors({ currentPassword: message });
-            else if (code === 'WEAK_PASSWORD') setServerErrors({ newPassword: message });
+            const onCurrent = err instanceof ApiClientError && err.details?.errors?.some((e) => e.path?.[0] === 'currentPassword');
+            if (code === 'WRONG_PASSWORD' || onCurrent) {
+                setCurrentAsked(true);
+                setServerErrors({ currentPassword: message });
+            } else if (code === 'WEAK_PASSWORD') setServerErrors({ newPassword: message });
             else setFormError(message);
         }
     };
@@ -173,16 +196,20 @@ export function ChangePasswordCard({ profile, notify }: { profile: ProfileDto; n
                 <input type="text" name="username" autoComplete="username" value={profile.username} readOnly hidden />
 
                 <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'repeat(2, minmax(0, 1fr))' }, columnGap: 3, rowGap: 2 }}>
-                    <PasswordInput
-                        label="Current password"
-                        value={values.currentPassword}
-                        onChange={set('currentPassword')}
-                        autoComplete="current-password"
-                        disabled={saving}
-                        error={Boolean(serverErrors.currentPassword)}
-                        helperText={serverErrors.currentPassword}
-                    />
-                    <Box sx={{ display: { xs: 'none', md: 'block' } }} />
+                    {askCurrent && (
+                        <>
+                            <PasswordInput
+                                label="Current password"
+                                value={values.currentPassword}
+                                onChange={set('currentPassword')}
+                                autoComplete="current-password"
+                                disabled={saving}
+                                error={Boolean(serverErrors.currentPassword)}
+                                helperText={serverErrors.currentPassword}
+                            />
+                            <Box sx={{ display: { xs: 'none', md: 'block' } }} />
+                        </>
+                    )}
                     <PasswordInput
                         label="New password"
                         value={values.newPassword}

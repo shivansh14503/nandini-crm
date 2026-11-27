@@ -22,7 +22,8 @@ export interface LoginPayload {
 }
 
 export interface ChangePasswordPayload {
-    currentPassword: string;
+    /** Left out on the first-login / forced change (the temporary password was just used to sign in). */
+    currentPassword?: string;
     newPassword: string;
 }
 

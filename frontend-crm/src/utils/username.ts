@@ -33,3 +33,37 @@ export function usernameIssue(value: string): string | null {
     if (RESERVED_USERNAMES.includes(username)) return `"${username}" is reserved by the CRM. Choose another username.`;
     return null;
 }
+
+/** One name part as a username piece: accents dropped, lower-cased, inner spaces and other characters removed ("Mary Ann" → "maryann", "D'Souza" → "dsouza"). */
+function usernamePiece(part: string | null | undefined): string {
+    return (part ?? '')
+        .normalize('NFKD')
+        .replace(/[̀-ͯ]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9-]+/g, '')
+        .replace(/-+/g, '-')
+        .replace(/^-+|-+$/g, '');
+}
+
+/**
+ * The username Add user suggests from the names: `firstname.lastname` ("Rajesh", "Kumar" → "rajesh.kumar"), or just the
+ * first name without a last name. Fits USERNAME_MAX_LENGTH and starts with a letter or digit; '' when the names give
+ * nothing usable. The admin can still change it.
+ */
+export function suggestUsername(firstName: string | null | undefined, lastName: string | null | undefined): string {
+    const joined = [usernamePiece(firstName), usernamePiece(lastName)].filter(Boolean).join('.');
+    return joined.slice(0, USERNAME_MAX_LENGTH).replace(/[._-]+$/, '');
+}
+
+/**
+ * `base` when nobody has it (`taken`: lower-cased usernames in use), else the first free `base2`, `base3`, …
+ * (shortened to fit USERNAME_MAX_LENGTH).
+ */
+export function firstFreeUsername(base: string, taken: ReadonlySet<string>): string {
+    if (!base || !taken.has(base)) return base;
+    for (let n = 2; ; n++) {
+        const suffix = String(n);
+        const candidate = base.slice(0, USERNAME_MAX_LENGTH - suffix.length).replace(/[._-]+$/, '') + suffix;
+        if (!taken.has(candidate)) return candidate;
+    }
+}

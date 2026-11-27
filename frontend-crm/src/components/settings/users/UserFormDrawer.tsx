@@ -3,6 +3,7 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Controller, FormProvider, useForm, useWatch, type Path } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useQuery } from '@tanstack/react-query';
 import {
     Alert,
     Autocomplete,
@@ -35,7 +36,9 @@ import { errorMessage, secondaryButtonSx } from '@/components/settings/form-cust
 import { useLeaveGuard } from '@/components/settings/useLeaveGuard';
 import { FIELD_MAX_LENGTH as L } from '@/config/fieldLimits';
 import { useAuth } from '@/context/AuthContext';
+import { queryKeys } from '@/hooks/queries/queryKeys';
 import { useCreateAdminUser, useUpdateAdminUser } from '@/hooks/queries/useUserAdmin';
+import { userAdminService } from '@/services/userAdmin.service';
 import {
     DEPARTMENT_MAX_LENGTH,
     JOB_TITLE_MAX_LENGTH,
@@ -47,9 +50,9 @@ import {
     type CreateAdminUserResult,
     type UpdateAdminUserPayload,
 } from '@/types/userAdmin.types';
-import { ROLE_NAME_MAX_LENGTH } from '@/utils/roleAccess';
+import { isSuperAdminRole, ROLE_NAME_MAX_LENGTH } from '@/utils/roleAccess';
 import { adminPasswordIssue } from '@/utils/passwordPolicy';
-import { USERNAME_MAX_LENGTH } from '@/utils/username';
+import { firstFreeUsername, normalizeUsername, suggestUsername, USERNAME_MAX_LENGTH, USERNAME_MIN_LENGTH } from '@/utils/username';
 import { needsOtherDomain, userFormSchema, type UserFormData, type UserFormOutput } from '@/validations/userAdmin.schema';
 import { getFirstErrorMessage } from '@/validations/common';
 import { formatPersonName } from '@/utils/personName';
@@ -73,6 +76,67 @@ const FORM_FIELDS = [
     'isGroupUser',
     'onLeave',
 ] as const;
+
+/** Wait after the last keystroke before checking which usernames are taken. */
+const USERNAME_CHECK_DEBOUNCE_MS = 300;
+
+function useDebouncedValue<V>(value: V, delayMs: number): V {
+    const [debounced, setDebounced] = useState(value);
+    useEffect(() => {
+        const timer = setTimeout(() => setDebounced(value), delayMs);
+        return () => clearTimeout(timer);
+    }, [value, delayMs]);
+    return debounced;
+}
+
+/**
+ * Add user: the username follows the names as `firstname.lastname` (the next free `…2`, `…3` when it is taken) until the
+ * admin types in the Username field; from then on it is theirs. Also says when a typed username is already taken (the
+ * API refuses it with 409 anyway). Usernames in use come from the users list (any status), searched by the username.
+ */
+function useUsernameSuggestion({
+    enabled,
+    firstName,
+    lastName,
+    username,
+    setUsername,
+}: {
+    enabled: boolean;
+    firstName: string;
+    lastName: string;
+    username: string;
+    setUsername: (value: string) => void;
+}): { onUsernameTyped: () => void; takenHint: string | null } {
+    const [edited, setEdited] = useState(false);
+    const base = enabled ? suggestUsername(firstName, lastName) : '';
+    const typed = normalizeUsername(username);
+    // What to look up: the suggestion while it is automatic, the typed username once the admin took over.
+    const lookup = useDebouncedValue(edited ? typed : base, USERNAME_CHECK_DEBOUNCE_MS);
+    const params = { search: lookup, status: 'all' as const, pageSize: 100 };
+    const { data } = useQuery({
+        queryKey: queryKeys.users.adminList(params),
+        queryFn: () => userAdminService.list(params),
+        enabled: enabled && lookup.length >= USERNAME_MIN_LENGTH,
+        staleTime: 15 * 1000,
+    });
+    const current = (edited ? typed : base) === lookup;
+    const taken = useMemo(() => new Set((data?.data ?? []).map((u) => u.username.toLowerCase())), [data]);
+    const suggestion = current ? firstFreeUsername(base, taken) : base;
+
+    useEffect(() => {
+        if (!enabled || edited || suggestion === username) return;
+        setUsername(suggestion);
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- only the suggestion drives the field
+    }, [enabled, edited, suggestion]);
+
+    const takenHint =
+        enabled && edited && current && typed && taken.has(typed)
+            ? `"${typed}" is already taken. Try ${firstFreeUsername(typed, taken)}.`
+            : enabled && !edited && suggestion !== base && base
+              ? `"${base}" is already taken, so ${suggestion} is suggested.`
+              : null;
+    return { onUsernameTyped: () => setEdited(true), takenHint };
+}
 
 const LEAVE_MESSAGE = 'You have unsaved changes to this user. Leave without saving?';
 
@@ -237,9 +301,17 @@ export function UserFormDrawer({
         setError,
         formState: { isDirty },
     } = methods;
-    const [email, allowOtherDomain, passwordMode, password, username, role] = useWatch({
+    const [email, allowOtherDomain, passwordMode, password, username, role, firstName, lastName] = useWatch({
         control,
-        name: ['email', 'allowOtherDomain', 'passwordMode', 'password', 'username', 'role'],
+        name: ['email', 'allowOtherDomain', 'passwordMode', 'password', 'username', 'role', 'firstName', 'lastName'],
+    });
+    const { onUsernameTyped, takenHint } = useUsernameSuggestion({
+        enabled: !user,
+        firstName: firstName ?? '',
+        lastName: lastName ?? '',
+        username: username ?? '',
+        setUsername: (value) =>
+            methods.setValue('username', value, { shouldDirty: true, shouldValidate: methods.getFieldState('username').isTouched }),
     });
     const showOtherDomain = needsOtherDomain(email ?? '', companyDomains) || Boolean(allowOtherDomain && email);
 
@@ -259,7 +331,12 @@ export function UserFormDrawer({
     const holdDraft = open && isDirty;
     useEffect(() => (holdDraft ? holdUnsavedWork() : undefined), [holdDraft]);
 
-    const roleOptions = useMemo(() => (meta?.roles ?? []).map((r) => r.name), [meta?.roles]);
+    // Only a Super Admin may give the Super Admin role (the API answers 403 SUPER_ADMIN_ONLY otherwise).
+    const mayGrantSuperAdmin = isSuperAdminRole(me?.role);
+    const roleOptions = useMemo(
+        () => (meta?.roles ?? []).map((r) => r.name).filter((name) => mayGrantSuperAdmin || !isSuperAdminRole(name)),
+        [meta?.roles, mayGrantSuperAdmin],
+    );
     const roleCounts = useMemo(() => new Map((meta?.roles ?? []).map((r) => [r.name, r.userCount])), [meta?.roles]);
     const departmentOptions = useMemo(() => (meta?.departments ?? []).map((d) => d.name), [meta?.departments]);
     const departmentCounts = useMemo(() => new Map((meta?.departments ?? []).map((d) => [d.name, d.userCount])), [meta?.departments]);
@@ -299,6 +376,7 @@ export function UserFormDrawer({
                 const fields = apiFieldErrors(err);
                 // Role guards (your own admin role, the last admin) and an invalid manager belong to those inputs.
                 if (!fields.role && (code === 'SELF_LOCKOUT' || code === 'LAST_ADMIN')) fields.role = message;
+                // SUPER_ADMIN_ONLY without a field (editing a Super Admin) falls through to the form error below.
                 if (!fields.reportsToId && code === 'INVALID_MANAGER') fields.reportsToId = message;
                 const known = Object.entries(fields).filter(([key]) => (FORM_FIELDS as readonly string[]).includes(key));
                 known.forEach(([key, text]) => setError(key as Path<UserFormData>, { type: 'server', message: text }, { shouldFocus: true }));
@@ -420,9 +498,13 @@ export function UserFormDrawer({
                                             lowercase
                                             maxLength={USERNAME_MAX_LENGTH}
                                             placeholder="e.g. rajesh.kumar"
-                                            hint="Used to sign in. Letters, numbers, dots, hyphens and underscores. It can't be changed later."
+                                            hint={
+                                                takenHint ??
+                                                "Filled in from the name as firstname.lastname; you can change it. Used to sign in. Letters, numbers, dots, hyphens and underscores. It can't be changed later."
+                                            }
                                             fieldSize="full"
                                             disabled={saving}
+                                            onChange={onUsernameTyped}
                                             slotProps={{ htmlInput: { autoComplete: 'off', spellCheck: false, autoCapitalize: 'none' } }}
                                         />
                                     )}
