@@ -787,7 +787,7 @@ Role Management partial (fixed role names in code, admin panel and "sees every r
 Management partial (fixed policy in code, change password, invite and reset links, sign-in rate limit per IP);
 Security Groups and Security Settings missing.
 
-- [x] **Role Management** (2026-11-27) — `Roles` table (migration `20261220090000_roles`) seeded at start-up from the
+- [x] **Role Management** (2026-11-27) — `Roles` table (migration `20261220100000_roles`) seeded at start-up from the
       role names in use with the access they had, so nothing changes on deploy. `/api/admin/roles` (list, create,
       edit, delete moving the users to another role; Super Admin locked; guards against removing your own or the
       last admin panel). Per-module View / Create / Edit / Delete / Export / Import at All, Own or None for leads,
