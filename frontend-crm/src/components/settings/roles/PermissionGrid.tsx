@@ -155,7 +155,7 @@ export function PermissionGrid({ value, onChange, disabled }: PermissionGridProp
         <Typography sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)', lineHeight: 1.6 }}>
             <b>All</b>: every record. <b>Group</b>: records assigned to or created by anyone in the user’s security groups (and their sub-groups;
             set up in Admin › Security Groups). <b>Own</b>: records the user is assigned to or created. <b>None</b>: hidden. Create, Export and
-            Import are Yes or No. Products and Partner Companies have no owner, so they are All or None.
+            Import are Yes or No. Products and Partner Companies have no owner, so they are All or None. Documents are read-only: View and Export only.
         </Typography>
     );
 

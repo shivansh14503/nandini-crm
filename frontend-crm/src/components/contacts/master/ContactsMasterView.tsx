@@ -9,7 +9,7 @@ import ScheduleIcon from '@mui/icons-material/Schedule';
 import AccountCircleOutlinedIcon from '@mui/icons-material/AccountCircleOutlined';
 import { CommonMasterView } from '../../common/CommonMasterView';
 import { useTableFilter } from '../../common/TableFilter';
-import { MasterHeaderActions } from '../../common/MasterHeaderActions';
+import { MasterHeaderActions, type MasterExportConfig } from '../../common/MasterHeaderActions';
 import { buildExtendedSearchConfig } from '../../common/buildExtendedSearchConfig';
 import { AppToast } from '../../common/AppToast';
 import { useSaveFlash } from '@/utils/saveFlash';
@@ -17,20 +17,64 @@ import { DataImportModal } from '../../common/import';
 import { type DataTableFilterItem } from '../../common/DataTable';
 import { ROUTES } from '@/config/constants';
 import { useAuth } from '@/context/AuthContext';
-import { useContacts, useBulkDeleteContacts } from '@/hooks/queries';
+import { useContacts, useBulkDeleteContacts, useMasterData } from '@/hooks/queries';
 import type { Contact } from '@/types/contact.types';
 import type { ContactFilterTab } from './types';
 import { ContactDetailDrawer } from '../ContactDetailDrawer';
 import { useSearchScope, useSearchScopedRows } from '../../search/SearchScope';
-import { useContactColumns } from './contactColumns';
+import { contactPhoneText, contactPrimaryEmail, useContactColumns, useContactLocation } from './contactColumns';
+import { wasModified } from '../../common/Drawer/RecordAuditFooter';
+import type { CsvColumn } from '@/utils/csvExport';
+import { exportDateTime, exportList, exportUser, exportYesNo, selectedOrAll } from '@/utils/exportCells';
 import { ModuleScorecardSummary, useModuleScorecard } from '../../common/scorecard/useModuleScorecard';
 
 /** Stable empty list while the first page loads (keeps memoized filters from recomputing). */
 const NO_RECORDS: Contact[] = [];
+
+/**
+ * The header Export's CSV columns: the table's columns first (same headers, same text as the cells), then the other
+ * contact fields under their form labels. `locationOf` is the table's Location reader (organization billing City, State).
+ */
+function contactCsvColumns(locationOf: (c: Contact) => string): CsvColumn<Contact>[] {
+    return [
+        { header: 'Contact No.', value: (c) => c.contactCode },
+        { header: 'Name', value: (c) => c.name },
+        { header: 'Job Title', value: (c) => c.designation },
+        { header: 'Organization Name', value: (c) => c.organizationName },
+        { header: 'Mobile', value: (c) => contactPhoneText(c.mobile) },
+        { header: 'Office Phone', value: (c) => contactPhoneText(c.officePhone) },
+        { header: 'Email', value: contactPrimaryEmail },
+        { header: 'Location', value: locationOf },
+        // Blank when never edited after creation, as the table's "- - -".
+        { header: 'Date Modified', value: (c) => (wasModified(c) ? exportDateTime(c.updatedAt) : '') },
+        { header: 'Date Created', value: (c) => exportDateTime(c.createdAt) },
+        // Fields the table doesn't show, under the form's labels.
+        {
+            header: 'Other Emails',
+            value: (c) => {
+                const primary = contactPrimaryEmail(c);
+                return exportList((c.emailAddress ?? []).map((e) => e.email).filter((e) => e !== primary), ', ');
+            },
+        },
+        { header: 'Phone 3', value: (c) => contactPhoneText(c.phone3) },
+        { header: 'Phone 4', value: (c) => contactPhoneText(c.phone4) },
+        { header: 'Phone 5', value: (c) => contactPhoneText(c.phone5) },
+        { header: 'Department', value: (c) => c.department },
+        { header: 'Assigned to', value: (c) => exportUser(c.assignedTo) },
+        { header: 'Is Primary Contact', value: (c) => exportYesNo(c.isPrimaryContact) },
+        { header: 'Left Job', value: (c) => c.leftJob },
+        { header: 'Communication Type', value: (c) => exportList(c.communicationType, ', ') },
+        { header: 'Do Not Call (DND)', value: (c) => exportYesNo(c.doNotCall) },
+        { header: 'Created By', value: (c) => exportUser(c.createdBy) },
+    ];
+}
+
 export function ContactsMasterView() {
     const router = useRouter();
     const { user } = useAuth();
     const currentUsername = user?.username || '';
+    // Re-renders once the user directory loads, so the export's "Assigned to" / "Created By" show full names.
+    useMasterData();
 
     // On the global search results page the table shows the matched records (any owner) instead of this list.
     const embeddedInSearch = Boolean(useSearchScope());
@@ -51,6 +95,8 @@ export function ContactsMasterView() {
     // ── Declarative Column Definitions ──────────────────────────────────────
     const openDrawerRecord = useCallback((record: Contact) => setDrawerContactId(record.id), []);
     const columns = useContactColumns(openDrawerRecord);
+    const locationOf = useContactLocation();
+    const csvColumns = useMemo(() => contactCsvColumns(locationOf), [locationOf]);
     const tableFilter = useTableFilter<Contact>({
         module: 'contacts',
         rows: allContacts,
@@ -222,6 +268,15 @@ export function ContactsMasterView() {
         }
     };
 
+    // Header Export (Admin › Roles: Contacts › Export): selected rows, else everything matching the tab / filter / search.
+    const exportConfig: MasterExportConfig<Contact> = {
+        fileName: 'contacts',
+        noun: { singular: 'contact', plural: 'contacts' },
+        rows: () => selectedOrAll(filteredContacts, selectedIds, allContacts),
+        columns: csvColumns,
+        onNotify: (message, severity) => setToast({ open: true, message, severity }),
+    };
+
     // Row clicks only open the drawer; its eye button leads on to the detail page with the related modules.
     const closeDrawer = useCallback(() => setDrawerContactId(null), []);
 
@@ -253,6 +308,7 @@ export function ContactsMasterView() {
                     onNewClick={() => router.push(ROUTES.CONTACT_NEW)}
                     newButtonLabel="New Contact"
                     onImportClick={() => setImportOpen(true)}
+                    exportConfig={exportConfig}
                 />
             )}
             searchConfig={buildExtendedSearchConfig({

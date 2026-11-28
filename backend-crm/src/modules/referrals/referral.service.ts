@@ -9,6 +9,7 @@ import { daysAgo } from '../../utils/mappers.js';
 import { parsePagination } from '../../utils/pagination.js';
 import { asPayload, checkModulePayload, loadModuleFieldConfig, validateModulePayload } from '../form-configs/customFieldValidator.js';
 import { assertAssigneeValid, assertRecordAccess, buildAccessScopeWhere } from '../shared/accessControl.js';
+import type { PrefetchedLookups } from '../shared/prefetch.js';
 import { emailsInclude, normalizeEmails, replaceEmails } from '../shared/entityEmails.js';
 import { assertEmailsDeliverable, queueEmailVerification } from '../email-verification/emailVerification.service.js';
 import { invalidateSyncedCaches, propagateReferralName, type NameSyncCounts } from '../shared/nameSync.js';
@@ -41,6 +42,23 @@ async function assertUniqueMobile(tx: TransactionClient, mobile: string, exclude
 /** Referral lists feed the Referred By picker; leads and opportunities show the referral's name. */
 async function invalidateReferralCaches(synced?: NameSyncCounts): Promise<void> {
     await Promise.all([cacheService.invalidateEntityCaches('referrals'), invalidateSyncedCaches(synced)]);
+}
+
+/**
+ * Inserts a referral (mobile uniqueness, Assigned to check, emails, CREATE audit entry) inside the caller's
+ * transaction. Used by `create` and by bulk import; cache invalidation and email verification are the caller's job.
+ */
+export async function createReferralRecord(tx: TransactionClient, input: ReferralInput, user: AuthUser, lookups: PrefetchedLookups = {}): Promise<ReferralDto> {
+    await assertUniqueMobile(tx, input.mobile);
+    const assignedTo = (await assertAssigneeValid(tx, input.assignedTo, { activeUsernames: lookups.activeUsernames })) ?? user.username;
+    const row = await tx.referral.create({
+        data: { ...toReferralData({ ...input, assignedTo }), createdBy: user.username },
+    });
+    await replaceEmails(tx, { referralId: row.id }, normalizeEmails(input.emailAddress));
+
+    const dto = toReferralDto(await tx.referral.findUniqueOrThrow({ where: { id: row.id }, include }));
+    await auditService.record(tx, { entityType: 'Referral', entityId: row.id, action: 'CREATE', changedBy: user.username, changes: dto });
+    return dto;
 }
 
 // ── Service ──────────────────────────────────────────────────────────────────
@@ -92,18 +110,7 @@ export const referralService = {
         input.customFields = await validateModulePayload('referrals', asPayload(body), input.customFields);
         await assertEmailsDeliverable(input.emailAddress, 'emailAddress');
 
-        const created = await runInTransaction(async (tx) => {
-            await assertUniqueMobile(tx, input.mobile);
-            const assignedTo = (await assertAssigneeValid(tx, input.assignedTo)) ?? user.username;
-            const row = await tx.referral.create({
-                data: { ...toReferralData({ ...input, assignedTo }), createdBy: user.username },
-            });
-            await replaceEmails(tx, { referralId: row.id }, normalizeEmails(input.emailAddress));
-
-            const dto = toReferralDto(await tx.referral.findUniqueOrThrow({ where: { id: row.id }, include }));
-            await auditService.record(tx, { entityType: 'Referral', entityId: row.id, action: 'CREATE', changedBy: user.username, changes: dto });
-            return dto;
-        });
+        const created = await runInTransaction((tx) => createReferralRecord(tx, input, user));
         await invalidateReferralCaches();
         queueEmailVerification({ referralId: created.id });
         return created;

@@ -10,7 +10,7 @@ import PriorityHighIcon from '@mui/icons-material/PriorityHigh';
 import NewReleasesOutlinedIcon from '@mui/icons-material/NewReleasesOutlined';
 import { CommonMasterView } from '../../common/CommonMasterView';
 import { useTableFilter } from '../../common/TableFilter';
-import { MasterHeaderActions } from '../../common/MasterHeaderActions';
+import { MasterHeaderActions, type MasterExportConfig } from '../../common/MasterHeaderActions';
 import { buildExtendedSearchConfig } from '../../common/buildExtendedSearchConfig';
 import { AppToast } from '../../common/AppToast';
 import { useSaveFlash } from '@/utils/saveFlash';
@@ -19,7 +19,11 @@ import { type DataTableFilterItem } from '../../common/DataTable';
 import { ROUTES } from '@/config/constants';
 import { useAuth } from '@/context/AuthContext';
 import { findCrmUser } from '@/services/masterData.store';
-import { TICKET_PRIORITIES, TICKET_STATUSES, isTicketOpen, type Ticket } from '@/types/ticket.types';
+import { TICKET_PRIORITIES, TICKET_STATUSES, isTicketOpen, isTicketOverdue, type Ticket } from '@/types/ticket.types';
+import type { CsvColumn } from '@/utils/csvExport';
+import { exportDateTime, exportUser, exportYesNo, selectedOrAll } from '@/utils/exportCells';
+import { DEFAULT_DISPLAY_FORMATS, formatWallClock } from '@/lib/display-formats/displayFormats';
+import { isWallClock } from '@/utils/zonedTime';
 import { useTickets, useBulkDeleteTickets } from '@/hooks/queries';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import type { TicketFilterTab, TicketSortField } from './types';
@@ -52,6 +56,45 @@ const sortValue = (t: Ticket, field: TicketSortField): string | number => {
             return (t[field] || '').toString().toLowerCase();
     }
 };
+
+/**
+ * Due date export cell: a `YYYY-MM-DDTHH:mm` wall clock is written as it is (it is already business-clock time, so it
+ * must not be re-read in the browser's zone); an ISO instant goes through the shared export formatter.
+ */
+const exportTicketDue = (value: string | undefined): string =>
+    isWallClock(value) ? formatWallClock(value, DEFAULT_DISPLAY_FORMATS, { legacyTime: 'hh:mm A' }) : exportDateTime(value);
+
+/**
+ * CSV export columns: the list table's columns in the same order and with the same headers (Ticket No. only while
+ * ticket numbers are shown), then the ticket's other scalar fields. Long text fields (problem, resolution, RCA…) are
+ * left out.
+ */
+const ticketCsvColumns = (showTicketNumber: boolean, now: number): CsvColumn<Ticket>[] => [
+    ...(showTicketNumber ? [{ header: 'Ticket No.', value: (t: Ticket) => t.ticketNumber }] : []),
+    { header: 'Subject', value: (t) => t.ticketSubject || t.problemReported },
+    { header: 'Organization', value: (t) => t.organizationName },
+    { header: 'Contact', value: (t) => t.contact },
+    { header: 'Contact Number', value: (t) => t.contactNumber },
+    { header: 'Priority', value: (t) => t.ticketPriority },
+    { header: 'Status', value: (t) => t.ticketStatus },
+    { header: 'Nature of Call', value: (t) => t.natureOfCall },
+    { header: 'Due Date', value: (t) => exportTicketDue(t.dueDate) },
+    { header: 'Overdue', value: (t) => exportYesNo(isTicketOverdue(t, now)) },
+    { header: 'Assigned To', value: (t) => exportUser(t.assignedTo) },
+    { header: 'Contact Email', value: (t) => t.contactEmail },
+    { header: 'Source', value: (t) => t.source },
+    { header: 'Support Type', value: (t) => t.supportType },
+    { header: 'Support Mode', value: (t) => t.supportMode },
+    { header: 'Active AMC', value: (t) => exportYesNo(t.amcFlag) },
+    { header: 'Active Cloud', value: (t) => exportYesNo(t.cloudFlag) },
+    { header: 'Left Job', value: (t) => t.leftJob },
+    { header: 'Account Address', value: (t) => t.accountAddress },
+    { header: 'Partner Company', value: (t) => t.partnerCompany },
+    { header: 'Partner Company Contact', value: (t) => t.partnerCompanyContact },
+    { header: 'Created By', value: (t) => exportUser(t.createdBy) },
+    { header: 'Date Created', value: (t) => exportDateTime(t.createdAt) },
+    { header: 'Last Updated', value: (t) => exportDateTime(t.updatedAt) },
+];
 
 /** Stable empty list while the first page loads (keeps memoized filters from recomputing). */
 const NO_RECORDS: Ticket[] = [];
@@ -217,6 +260,15 @@ export function TicketsMasterView() {
         ];
     }, [tickets, matchesTab]);
 
+    // Export: the selected tickets, else every ticket in the current tab / search / filter (all pages), in table order.
+    const exportConfig: MasterExportConfig<Ticket> = {
+        fileName: 'tickets',
+        noun: { singular: 'ticket', plural: 'tickets' },
+        rows: () => selectedOrAll(sortedTickets, selectedIds, allTickets),
+        columns: ticketCsvColumns(showNumber('ticket'), now),
+        onNotify: (message, severity) => setToast({ open: true, message, severity }),
+    };
+
     // Row clicks only open the drawer; its eye button leads on to the detail page with the related modules.
     const closeDrawer = useCallback(() => setDrawerTicketId(null), []);
 
@@ -248,6 +300,7 @@ export function TicketsMasterView() {
                     onNewClick={() => router.push(ROUTES.TICKET_NEW)}
                     newButtonLabel="New Ticket"
                     onImportClick={() => setImportOpen(true)}
+                    exportConfig={exportConfig}
                 />
             )}
             searchConfig={buildExtendedSearchConfig({

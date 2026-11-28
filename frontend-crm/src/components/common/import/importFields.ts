@@ -20,9 +20,13 @@ export const CUSTOM_FIELD_PREFIX = `${CUSTOM_FIELDS_KEY}.`;
 const NOT_IMPORTABLE_TYPES = new Set(['file']);
 /**
  * Built-in fields a spreadsheet can't set, per module: a product's Status (Admin only, Inactive needs a reason), so
- * imported products start Active. Mirrors NOT_IMPORTABLE_FIELDS of backend-crm/src/modules/imports/importValues.ts.
+ * imported products start Active; an activity's Video meeting (made by the owner's calendar) and Attendees (picked on
+ * the form). Mirrors NOT_IMPORTABLE_FIELDS of backend-crm/src/modules/imports/importValues.ts.
  */
-const NOT_IMPORTABLE_FIELDS: Partial<Record<CrmModuleKey, ReadonlySet<string>>> = { products: new Set(['status']) };
+const NOT_IMPORTABLE_FIELDS: Partial<Record<CrmModuleKey, ReadonlySet<string>>> = {
+    products: new Set(['status']),
+    activities: new Set(['videoMeeting', 'attendees']),
+};
 
 /**
  * Built-in dropdowns you can type a new value into (pick or type): a cell naming no option is kept as written, and
@@ -39,6 +43,10 @@ const ENTITY_MODULE: Record<ImportEntityType, CrmModuleKey> = {
     opportunities: 'opportunities',
     tickets: 'tickets',
     'partner-companies': 'partner-companies',
+    quotations: 'quotations',
+    contracts: 'contracts',
+    referrals: 'referrals',
+    activities: 'activities',
 };
 
 const YOU = 'you (the importer)';
@@ -86,6 +94,57 @@ export const IMPORT_DEFAULTS: Record<ImportEntityType, Record<string, string>> =
         assignedTo: YOU,
     },
     'partner-companies': { natureOfPartner: 'Other', assignedTo: YOU },
+    // Mirrors backend-crm/src/modules/imports/builders/quotations.ts: what the form pre-fills from the opportunity.
+    quotations: {
+        quotationTitle: "the opportunity's name",
+        company: "the dropdown's default option (else the first one)",
+        quoteStage: "the dropdown's default option (else the first one)",
+        quotationDate: 'today',
+        validationPeriod: "the dropdown's default option",
+        validUntil: 'Quotation Date + Validation Period (30 days)',
+        preparedFor: 'Customer',
+        assignedTo: "the opportunity's Assigned to (else you)",
+        termsAndCondition: "the dropdown's default option",
+        termsAndConditionDescription: "the chosen option's description",
+        paymentTerms: "the dropdown's default option",
+        paymentTermsDescription: "the chosen option's description",
+        remarks: "the opportunity's remarks",
+        organizationName: "the opportunity's organization",
+        mailingName: "the organization's",
+        gstNumber: "the organization's",
+        contact: "the opportunity's contact",
+        contactNumber: "the contact's",
+        contactEmail: "the contact's",
+        billingAddress: "the organization's",
+        billingCity: "the organization's",
+        billingState: "the organization's",
+        billingPostalCode: "the organization's",
+        billingCountry: "the organization's (else India)",
+    },
+    // Mirrors backend-crm/src/modules/imports/builders/contracts.ts (CONTRACT_IMPORT_DEFAULTS): what the form pre-fills.
+    // Contract Title stays required here: the backend fills it only when the admin marked a default option.
+    contracts: {
+        status: "the dropdown's default option (else Not Started)",
+        assignedTo: YOU,
+        organizationName: "the Opportunity's organization",
+        contact: "the Opportunity's contact",
+        tallySerialNo: "the Opportunity's",
+        startDate: 'today',
+        endDate: 'Start Date + Contract Period (1 year when it names no length)',
+        contractPeriod: "the dropdown's default option",
+        renewalReminderDate: '15 days before the End Date at 11:00 (blank if already past)',
+        contractType: "the dropdown's default options",
+    },
+    // Mirrors REFERRAL_IMPORT_DEFAULTS of backend-crm/src/modules/imports/builders/referrals.values.ts (as the form pre-fills).
+    referrals: { status: 'Active', assignedTo: YOU },
+    // Mirrors ACTIVITY_IMPORT_DEFAULTS of backend-crm/src/modules/imports/builders/activities.values.ts.
+    activities: {
+        followupType: "the dropdown's default option (else Call)",
+        status: 'Planned (Completed when the Start has passed)',
+        assignedTo: YOU,
+        organizationName: "the Related To record's organization",
+        contact: "the Related To record's contact",
+    },
 };
 
 /** Lookup fields that take a person's username. */
@@ -346,6 +405,39 @@ function samplesFor(
 
 const sameText = (a: string | undefined, b: string) => (a ?? '').trim().toLowerCase() === b.toLowerCase();
 
+/** Record numbers whose prefix tells an activity's Related To Type (the backend's `relatedModuleOf`). */
+const RELATED_RECORD_NUMBER = /^(LD|OPP|CON|ORG|QT|TKT|CTR)-\d+$/i;
+const MAX_ACTIVITY_DURATION_MINUTES = 31 * 24 * 60;
+
+/**
+ * An activity row's cross-cell rules, as backend-crm/src/modules/imports/builders/activities.values.ts applies them:
+ * Related To Type and Related To go together (the type may be left out for a record number), a timed Start / End needs
+ * a time, End is not before Start, Duration is whole minutes, and a Note needs Remarks.
+ */
+function activityRowIssues(values: Record<string, string>): string[] {
+    const errors: string[] = [];
+    const record = (values.relatedTo ?? '').trim();
+    if (values.relatedModule && !record) errors.push('Related To is required when Related To Type is given: the record number or exact name');
+    if (record && !values.relatedModule && !RELATED_RECORD_NUMBER.test(record)) errors.push('Related To Type is required when Related To names a record by name');
+    const [startDate, startTime] = (values.startAt ?? '').split('T');
+    const [endDate, endTime] = (values.endAt ?? '').split('T');
+    const allDay = values.allDay ? sameText(values.allDay, 'Yes') : Boolean(startDate && !startTime);
+    if (!allDay) {
+        if (startDate && !startTime) errors.push('Start needs a time (DD-MM-YYYY HH:mm), or set All Day to Yes');
+        if (endDate && !endTime) errors.push('End needs a time (DD-MM-YYYY HH:mm), or set All Day to Yes');
+    }
+    // `YYYY-MM-DD[THH:mm]` once read, so string order is time order.
+    const isNote = sameText(values.followupType, 'Note');
+    if (!isNote && startDate && endDate && (allDay ? endDate < startDate : startTime && endTime && values.endAt < values.startAt)) errors.push('End cannot be before Start');
+    const duration = (values.durationMinutes ?? '').trim();
+    if (duration && !(/^\d+$/.test(duration) && Number(duration) <= MAX_ACTIVITY_DURATION_MINUTES)) {
+        errors.push(`Duration (minutes) must be a whole number of minutes, at most ${MAX_ACTIVITY_DURATION_MINUTES}`);
+    }
+    if (isNote && !(values.remarks ?? '').trim()) errors.push('Remarks is required for a note');
+    if (!isNote && !startDate) errors.push('Start is required');
+    return errors;
+}
+
 /** The row's conditional rules, as the creation form applies them (only for fields the form has). */
 function rowRulesFor(entity: ImportEntityType, keys: ReadonlySet<string>): ImportEntityConfig['rowRules'] {
     return (values) => {
@@ -359,6 +451,18 @@ function rowRulesFor(entity: ImportEntityType, keys: ReadonlySet<string>): Impor
         if (entity === 'organizations' && keys.has('customerType') && isPartnerCustomerType(values.customerType) && !values.natureOfPartner) {
             errors.push(NATURE_OF_PARTNER_REQUIRED_MESSAGE.replace(/\.$/, ''));
         }
+        if (entity === 'quotations') {
+            const lineKeys = ['lineQuantity', 'lineRate', 'lineDiscount', 'lineDiscountType', 'lineTaxRate', 'lineDescription', 'lineNote'];
+            if (!values.lineProduct && lineKeys.some((key) => values[key])) errors.push('Product is required when the row has line item values');
+            if (values.lineDiscount && !/^\d+(\.\d+)?%?$/.test(values.lineDiscount.replace(/[,₹\s]/g, ''))) errors.push('Discount must be a number, or a percentage such as 10%');
+        }
+        if (entity === 'contracts') {
+            if (!values.organizationName && !values.opportunity) errors.push('Organization Name is required (or an Opportunity to take it from)');
+            if (!values.contact && !values.opportunity) errors.push('Contact Person is required (or an Opportunity to take it from)');
+            // Both are `YYYY-MM-DD` once read, so string order is date order.
+            if (values.startDate && values.endDate && values.endDate < values.startDate) errors.push('Contract End Date cannot be before the Contract Start Date');
+        }
+        if (entity === 'activities') errors.push(...activityRowIssues(values));
         if (entity === 'opportunities') {
             if (sameText(values.commission, 'Yes') && !values.commissionAmount) errors.push('Commission Amount is required when Commission is Yes');
             if (sameText(values.addDocument, 'Yes')) errors.push('Add Document Yes needs an uploaded document: import it as No and attach the document on the record');
@@ -418,5 +522,7 @@ export function buildImportConfig(entity: ImportEntityType, configs: FormConfigs
             section: f.sectionLabel,
         };
     });
-    return { ...base, fields, rowRules: rowRulesFor(entity, new Set(ordered.filter((f) => f.isSystem).map((f) => f.fieldKey))) };
+    // Columns the import reads beyond the form (a quotation's line item), after the form's fields.
+    const importOnly = base.fields.filter((f) => f.importOnly && !fields.some((field) => field.key === f.key));
+    return { ...base, fields: [...fields, ...importOnly], rowRules: rowRulesFor(entity, new Set(ordered.filter((f) => f.isSystem).map((f) => f.fieldKey))) };
 }

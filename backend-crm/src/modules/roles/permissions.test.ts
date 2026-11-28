@@ -33,7 +33,7 @@ describe('normalizePermissions', () => {
         assert.equal(p.leads.edit, 'own');
         assert.equal(p.leads.delete, 'own');
         assert.equal(p.leads.create, 'all');
-        assert.deepEqual(p.contacts, { view: 'none', create: 'none', edit: 'none', delete: 'none', import: 'none' });
+        assert.deepEqual(p.contacts, { view: 'none', create: 'none', edit: 'none', delete: 'none', export: 'none', import: 'none' });
     });
 
     it('turns Own into All where the action has no Own level', () => {
@@ -61,6 +61,18 @@ describe('normalizePermissions', () => {
         assert.equal(uniformPermissions('group').leads.view, 'group');
         assert.equal(uniformPermissions('group').partnerCompanies.view, 'all');
         assert.equal(levelLabel('view', 'group'), 'Group');
+    });
+});
+
+describe('PERMISSION_MODULES', () => {
+    it('gives every module Export, every module but read-only Documents Import, in column order', () => {
+        for (const m of PERMISSION_MODULES) {
+            assert.ok(m.actions.includes('export'), m.key);
+            assert.equal(m.actions.includes('import'), m.key !== 'documents', m.key);
+            assert.equal(FULL_PERMISSIONS[m.key].export, 'all', m.key);
+        }
+        assert.deepEqual(PERMISSION_MODULE_BY_KEY.documents.actions, ['view', 'export']);
+        assert.deepEqual(PERMISSION_MODULE_BY_KEY.quotations.actions, ['view', 'create', 'edit', 'delete', 'export', 'import']);
     });
 });
 
@@ -113,8 +125,9 @@ describe('describeModulePermissions', () => {
     it('reads as the editor shows it', () => {
         assert.equal(
             describeModulePermissions(PERMISSION_MODULE_BY_KEY.leads, OWN_RECORDS_PERMISSIONS.leads),
-            'View: Own · Create: Yes · Edit: Own · Delete: Own · Import: Yes',
+            'View: Own · Create: Yes · Edit: Own · Delete: Own · Export: Yes · Import: Yes',
         );
-        assert.equal(describeModulePermissions(PERMISSION_MODULE_BY_KEY.products, FULL_PERMISSIONS.products), 'View: All · Create: Yes · Edit: All · Delete: All · Import: Yes');
+        assert.equal(describeModulePermissions(PERMISSION_MODULE_BY_KEY.products, FULL_PERMISSIONS.products), 'View: All · Create: Yes · Edit: All · Delete: All · Export: Yes · Import: Yes');
+        assert.equal(describeModulePermissions(PERMISSION_MODULE_BY_KEY.documents, FULL_PERMISSIONS.documents), 'View: All · Export: Yes');
     });
 });

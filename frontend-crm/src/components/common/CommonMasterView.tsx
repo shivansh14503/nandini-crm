@@ -71,7 +71,7 @@ export interface CommonMasterViewProps<T = unknown, TFilter extends string = str
     tableId?: string;
     /**
      * Admin › Roles module whose permissions shape the page (default: the module `tableId` names; null for none):
-     * New / Import (via MasterHeaderActions), row Edit / Delete, Bulk delete and the empty state's create button
+     * New / Import / Export (via MasterHeaderActions), row Edit / Delete, Bulk delete and the empty state's create button
      * show only when the role allows them (Own: only on the user's own or created rows), and a role with View None
      * sees a notice instead of the list.
      */

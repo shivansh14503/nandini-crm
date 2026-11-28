@@ -3,18 +3,17 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { useResetTab } from '@/hooks/useResetTab';
 import { useRouter } from 'next/navigation';
-import { Box, Button, Chip, Typography } from '@mui/material';
+import { Box, Chip, Typography } from '@mui/material';
 import HandshakeOutlinedIcon from '@mui/icons-material/HandshakeOutlined';
 import AccountCircleOutlinedIcon from '@mui/icons-material/AccountCircleOutlined';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
 import EmailOutlinedIcon from '@mui/icons-material/EmailOutlined';
-import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 
 import { RecordLink } from '../common/RecordLink';
 import { CommonMasterView } from '../common/CommonMasterView';
 import { useTableFilter } from '../common/TableFilter';
-import { MasterHeaderActions, outlinedHeaderButtonSx } from '../common/MasterHeaderActions';
+import { MasterHeaderActions, type MasterExportConfig } from '../common/MasterHeaderActions';
 import { buildExtendedSearchConfig } from '../common/buildExtendedSearchConfig';
 import { AppToast } from '../common/AppToast';
 import { useSaveFlash } from '@/utils/saveFlash';
@@ -27,10 +26,9 @@ import { useBulkDeletePartnerCompanies, useMasterData, usePartnerCompanies } fro
 import { findCrmUser } from '@/services/masterData.store';
 import type { ExtendedPartnerCompany } from '@/types/partner.types';
 import { telHref } from '@/utils/contactLinks';
-import { downloadCsv, type CsvColumn } from '@/utils/csvExport';
-import { usePermissions } from '@/hooks/usePermissions';
+import type { CsvColumn } from '@/utils/csvExport';
+import { exportDateTime, selectedOrAll } from '@/utils/exportCells';
 import { formatDateTime } from '@/utils/date';
-import { fmtExportDateTime } from '@/utils/formats';
 import { PartnerCompanyDetailDrawer } from './PartnerCompanyDetailDrawer';
 import { useSearchScope, useSearchScopedRows } from '../search/SearchScope';
 import { ModuleScorecardSummary, useModuleScorecard } from '../common/scorecard/useModuleScorecard';
@@ -70,7 +68,7 @@ const CSV_COLUMNS: CsvColumn<ExtendedPartnerCompany>[] = [
     { header: 'Billing Country', value: countryOf },
     { header: 'Assigned to', value: assigneeOf },
     // Export cells keep one fixed format whatever the company display formats.
-    { header: 'Date Created', value: (p) => (p.createdAt ? fmtExportDateTime(p.createdAt) : '') },
+    { header: 'Date Created', value: (p) => exportDateTime(p.createdAt) },
 ];
 
 const cellTextSx = { fontSize: '0.8rem', color: 'var(--crm-slate-600)' } as const;
@@ -78,7 +76,6 @@ const cellTextSx = { fontSize: '0.8rem', color: 'var(--crm-slate-600)' } as cons
 export function PartnerCompaniesMasterView() {
     const router = useRouter();
     const { user } = useAuth();
-    const permissions = usePermissions();
     const currentUsername = user?.username || '';
     // Re-renders once the user directory loads, so "Assigned to" shows full names.
     useMasterData();
@@ -300,19 +297,14 @@ export function PartnerCompaniesMasterView() {
         }
     };
 
-    // Admin › Roles: Partner Companies › Export.
-    const canExport = permissions.can('partnerCompanies', 'export');
-    const handleExport = () => {
-        // Selected rows when there is a selection, otherwise everything matching the current filter / search.
-        const rows = selectedIds.length > 0 ? filtered.filter((p) => selectedIds.includes(p.id)) : filtered;
-        if (rows.length === 0) {
-            setToast({ open: true, message: 'There are no partner companies to export.', severity: 'info' });
-            return;
-        }
-        downloadCsv(`partner-companies-${new Date().toISOString().slice(0, 10)}.csv`, rows, CSV_COLUMNS);
-        setToast({ open: true, message: `Exported ${rows.length} partner compan${rows.length === 1 ? 'y' : 'ies'}.`, severity: 'success' });
+    // Header Export (Admin › Roles: Partner Companies › Export): selected rows, else everything matching the filter / search.
+    const exportConfig: MasterExportConfig<ExtendedPartnerCompany> = {
+        fileName: 'partner-companies',
+        noun: { singular: 'partner company', plural: 'partner companies' },
+        rows: () => selectedOrAll(filtered, selectedIds, allPartners),
+        columns: CSV_COLUMNS,
+        onNotify: (message, severity) => setToast({ open: true, message, severity }),
     };
-
 
     const closeDrawer = useCallback(() => setDrawerId(null), []);
 
@@ -345,19 +337,8 @@ export function PartnerCompaniesMasterView() {
                     onNewClick={() => router.push(ROUTES.PARTNER_COMPANY_NEW)}
                     newButtonLabel="New Partner Company"
                     onImportClick={() => setImportOpen(true)}
-                >
-                    {canExport && (
-                        <Button
-                            variant="outlined"
-                            size="small"
-                            startIcon={<FileDownloadOutlinedIcon sx={{ fontSize: 16 }} />}
-                            onClick={handleExport}
-                            sx={outlinedHeaderButtonSx}
-                        >
-                            Export
-                        </Button>
-                    )}
-                </MasterHeaderActions>
+                    exportConfig={exportConfig}
+                />
             )}
             searchConfig={buildExtendedSearchConfig({
                 searchQuery,

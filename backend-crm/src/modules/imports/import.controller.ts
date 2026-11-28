@@ -16,6 +16,10 @@ const IMPORT_PERMISSION_MODULE: Record<ImportEntity, PermissionModule> = {
     opportunities: 'opportunities',
     tickets: 'tickets',
     'partner-companies': 'partnerCompanies',
+    quotations: 'quotations',
+    contracts: 'contracts',
+    referrals: 'referrals',
+    activities: 'activities',
 };
 
 export const importController = {

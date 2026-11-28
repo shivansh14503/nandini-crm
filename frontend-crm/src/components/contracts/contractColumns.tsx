@@ -11,6 +11,10 @@ import type { Contract } from '@/types/contract.types';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import { formatDateTime } from '@/utils/date';
 import { fmtMoney } from '@/utils/formats';
+import type { CsvColumn } from '@/utils/csvExport';
+import { exportDate, exportDateTime, exportList, exportMoney, exportUser } from '@/utils/exportCells';
+import { isWallClock } from '@/utils/zonedTime';
+import { DEFAULT_DISPLAY_FORMATS, formatWallClock } from '@/lib/display-formats/displayFormats';
 import { ContractStatusPill } from './ContractBadges';
 import { formatContractDate } from './contractDates';
 
@@ -169,4 +173,43 @@ export function useContractColumns(openRecord: (record: Contract) => void): Data
         ],
         [showNumber, openRecord]
     );
+}
+
+/**
+ * The renewal reminder is a wall clock (`YYYY-MM-DDTHH:mm`, no time zone), so it is written as stored in the fixed
+ * export format (`28-Nov-2026, 11:00 AM`) instead of being read as an instant; an ISO timestamp falls back to the
+ * business clock.
+ */
+const exportWallClock = (value: string | null | undefined): string =>
+    isWallClock(value) ? formatWallClock(value, DEFAULT_DISPLAY_FORMATS, { legacyTime: 'hh:mm A' }) : exportDateTime(value);
+
+/**
+ * Columns of the Contracts list CSV export: the table's built-in columns in the same order (Contract Number only
+ * while the company shows contract numbers), then the other contract fields with their form labels. Cells use the
+ * fixed export formats (`utils/exportCells`): user names, plain amounts, `28-Nov-2026` days.
+ */
+export function contractCsvColumns(showContractNumber: boolean): CsvColumn<Contract>[] {
+    return [
+        ...(showContractNumber ? [{ header: 'Contract Number', value: (c: Contract) => c.contractNumber }] : []),
+        { header: 'Contract Title', value: (c) => c.contractTitle },
+        { header: 'Status', value: (c) => c.status },
+        { header: 'Contract Manager', value: (c) => exportUser(c.assignedTo) },
+        { header: 'Organization', value: (c) => c.organizationName },
+        { header: 'Opportunity', value: (c) => c.opportunity },
+        { header: 'Contract Value', value: (c) => exportMoney(c.contractValue) },
+        { header: 'Start Date', value: (c) => exportDate(c.startDate) },
+        { header: 'End Date', value: (c) => exportDate(c.endDate) },
+        { header: 'Contract Period', value: (c) => c.contractPeriod },
+        { header: 'Renewal Reminder', value: (c) => exportWallClock(c.renewalReminderDate) },
+        { header: 'Date Created', value: (c) => exportDateTime(c.createdAt) },
+        { header: 'Created By', value: (c) => exportUser(c.createdBy) },
+        // Not in the table, but part of the record: labels as on the contract form.
+        { header: 'Contact Person', value: (c) => c.contact },
+        { header: 'Contract Type', value: (c) => exportList(c.contractType, ', ') },
+        { header: 'Tally Serial Number', value: (c) => c.tallySerialNo },
+        { header: 'Bill Number', value: (c) => c.billNumber },
+        { header: 'Bill Date', value: (c) => exportDate(c.billDate) },
+        { header: 'Bill Amount', value: (c) => exportMoney(c.billAmount) },
+        { header: 'Description', value: (c) => c.description },
+    ];
 }

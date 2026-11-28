@@ -1,5 +1,6 @@
 import type { ColumnMapping, ImportEntityConfig, ImportEntityType, MappedRow, ParsedFile } from './types';
 import { normalizeImportCell } from './importFields';
+import { ACTIVITY_RELATED_MODULE_LABELS, ACTIVITY_RELATED_MODULES } from '@/types/activity.types';
 
 /**
  * Familiar spreadsheet columns of each import: the header aliases auto-mapping recognizes and the sample cells of the
@@ -136,6 +137,129 @@ export const IMPORT_CONFIGS: Record<ImportEntityType, ImportEntityConfig> = {
             { key: 'billingPostalCode', label: 'Billing PIN Code', required: false, aliases: ['pin', 'pincode', 'postal code', 'zip'], sample: ['110019', '400001'] },
             { key: 'gstNumber', label: 'GST Number', required: false, aliases: ['gst', 'gstin', 'gst no'], sample: ['07ABCDE1234F1Z5', '27ABCDE1234F1Z5'] },
             { key: 'principalCompany', label: 'Principal Company', required: false, aliases: ['principal'], sample: ['Tally Solutions Pvt Ltd', 'Tally Solutions Pvt Ltd'] },
+        ],
+    },
+    // One row = one quotation for an opportunity with one line item (backend imports/builders/quotations.ts). The line
+    // item columns are import-only: Product / Quantity / Rate / Discount / GST, labelled as on the Line Items editor.
+    quotations: {
+        entity: 'quotations',
+        singular: 'Quotation',
+        plural: 'Quotations',
+        fields: [
+            // Its number (OPP-0042 or the Document Series format), or its exact name.
+            { key: 'opportunity', label: 'Opportunity', required: true, aliases: ['opportunity name', 'opportunity number', 'opportunity no', 'opportunity code', 'deal', 'deal name'], sample: ['OPP-0001', 'Annual cloud renewal'] },
+            { key: 'quotationTitle', label: 'Quotation Title', required: false, aliases: ['title', 'quote title', 'subject', 'quotation subject'], sample: ['TallyPrime Silver licences', ''] },
+            { key: 'company', label: 'Company', required: false, aliases: ['issuing company'], sample: ['Nandini Infosystems', ''] },
+            { key: 'quotationDate', label: 'Quotation Date', required: false, aliases: ['quote date', 'date'], sample: ['28-11-2026', ''] },
+            { key: 'validationPeriod', label: 'Validation Period', required: false, aliases: ['validity', 'validity period'], sample: ['30 Days', '15 Days'] },
+            { key: 'validUntil', label: 'Valid Until', required: false, aliases: ['valid till', 'expiry date', 'valid until date'], sample: ['', ''] },
+            { key: 'quoteStage', label: 'Quote Stage', required: false, aliases: ['stage', 'status', 'quotation stage'], sample: ['Draft', 'Negotiation'] },
+            { key: 'preparedFor', label: 'Prepared For', required: false, aliases: [], sample: ['Customer', ''] },
+            { key: 'otherRef', label: 'Other Ref.', required: false, aliases: ['other ref', 'reference', 'po number', 'ref'], sample: ['PO-4512', ''] },
+            { key: 'remarks', label: 'Remarks', required: false, aliases: ['notes', 'comments'], sample: ['Price valid for 5 users', ''] },
+            { key: 'organizationName', label: 'Organization Name', required: false, aliases: ['organization', 'company name', 'account', 'customer'], sample: ['', ''] },
+            { key: 'contact', label: 'Contact', required: false, aliases: ['contact name', 'contact person'], sample: ['', ''] },
+            { key: 'lineProduct', label: 'Product', required: false, importOnly: true, aliases: ['product name', 'item', 'item name', 'product code'], sample: ['TallyPrime Silver', 'Cloud hosting'], section: 'Line Item', hint: 'Product code or Product Catalog name (any other name is a typed product) · Blank → the opportunity\'s line items' },
+            { key: 'lineQuantity', label: 'Quantity', required: false, importOnly: true, fieldType: 'number', aliases: ['qty', 'units'], sample: ['5', '1'], section: 'Line Item', hint: 'Blank → 1' },
+            { key: 'lineRate', label: 'Rate', required: false, importOnly: true, fieldType: 'amount', aliases: ['unit price', 'price', 'mrp', 'rate per unit'], sample: ['', '12000'], section: 'Line Item', hint: 'A catalog product with an MRP always uses its MRP · needed for a typed product or one without an MRP' },
+            { key: 'lineDiscount', label: 'Discount', required: false, importOnly: true, aliases: ['discount %', 'line discount'], sample: ['10%', ''], section: 'Line Item', hint: '10% or a number (its type below) · Blank → none' },
+            { key: 'lineDiscountType', label: 'Discount Type', required: false, importOnly: true, fieldType: 'select', options: [{ value: 'percentage', label: 'Percentage' }, { value: 'amount', label: 'Amount' }], aliases: [], sample: ['', ''], section: 'Line Item', hint: 'Percentage or Amount · Blank → Percentage' },
+            { key: 'lineTaxRate', label: 'GST', required: false, importOnly: true, fieldType: 'percentage', aliases: ['tax rate', 'gst rate', 'gst %', 'tax'], sample: ['', '18'], section: 'Line Item', hint: 'e.g. 18 · A catalog product with a Tax Rate always uses it · needed for a typed product' },
+            { key: 'lineDescription', label: 'Description', required: false, importOnly: true, aliases: ['line description', 'item description'], sample: ['', 'Monthly hosting, 2 users'], section: 'Line Item', hint: 'Blank → the product\'s description' },
+            { key: 'lineNote', label: 'Note', required: false, importOnly: true, aliases: ['line note', 'item note'], sample: ['', ''], section: 'Line Item' },
+        ],
+    },
+    // One row = one contract (backend imports/builders/contracts.ts). Organization, contact and opportunity are named by
+    // their human value and linked to the live records; an Opportunity brings its organization and contact.
+    contracts: {
+        entity: 'contracts',
+        singular: 'Contract',
+        plural: 'Contracts',
+        fields: [
+            { key: 'contractTitle', label: 'Contract Title', required: true, aliases: ['title', 'contract', 'contract name'], sample: ['AMC', 'TSS Renewal'] },
+            { key: 'status', label: 'Status', required: false, aliases: ['contract status', 'stage'], sample: ['Active', 'Not Started'] },
+            { key: 'contractValue', label: 'Contract Value', required: false, aliases: ['value', 'amount', 'contract amount'], sample: ['45000', '18000'] },
+            { key: 'assignedTo', label: 'Contract Manager', required: false, aliases: ['manager', 'owner', 'assigned to', 'account manager'], sample: ['', ''] },
+            { key: 'organizationName', label: 'Organization Name', required: false, aliases: ['organization', 'company', 'company name', 'account', 'customer'], sample: ['Acme Traders Pvt Ltd', ''] },
+            { key: 'contact', label: 'Contact Person', required: false, aliases: ['contact', 'contact name'], sample: ['Rahul Sharma', ''] },
+            // Its number (OPP-0042 or the Document Series format), or its exact name.
+            { key: 'opportunity', label: 'Opportunity', required: false, aliases: ['opportunity name', 'opportunity number', 'opportunity no', 'opportunity code', 'deal'], sample: ['', 'OPP-0001'] },
+            { key: 'tallySerialNo', label: 'Tally Serial Number', required: false, aliases: ['tally serial', 'serial number', 'serial no', 'tally serial no'], sample: ['712345678', ''] },
+            { key: 'startDate', label: 'Contract Start Date', required: false, aliases: ['start date', 'start', 'from'], sample: ['01-04-2026', ''] },
+            { key: 'endDate', label: 'Contract End Date', required: false, aliases: ['end date', 'end', 'to', 'expiry date'], sample: ['31-03-2027', ''] },
+            { key: 'contractPeriod', label: 'Contract Period', required: false, aliases: ['period', 'term', 'duration'], sample: ['1 Year', '6 Months'] },
+            { key: 'renewalReminderDate', label: 'Renewal Reminder Date', required: false, aliases: ['renewal reminder', 'reminder date', 'renewal date'], sample: ['', ''] },
+            { key: 'contractType', label: 'Contract Type', required: false, aliases: ['type', 'contract types'], sample: ['', ''] },
+            { key: 'billNumber', label: 'Bill Number', required: false, aliases: ['bill no', 'invoice number', 'invoice no'], sample: ['INV-2026-041', ''] },
+            { key: 'billDate', label: 'Bill Date', required: false, aliases: ['invoice date'], sample: ['01-04-2026', ''] },
+            { key: 'billAmount', label: 'Bill Amount', required: false, aliases: ['invoice amount'], sample: ['53100', ''] },
+            { key: 'description', label: 'Description', required: false, aliases: ['notes', 'remarks', 'details'], sample: ['Annual maintenance for 5 users', ''] },
+        ],
+    },
+    // One row = one referral (backend imports/builders/referrals.ts). A referral links to no other record: Company Name
+    // is free text. A Mobile already used by a live referral fails the row.
+    referrals: {
+        entity: 'referrals',
+        singular: 'Referral',
+        plural: 'Referrals',
+        fields: [
+            { key: 'name', label: 'Name', required: true, aliases: ['full name', 'referral name', 'referrer', 'referrer name', 'contact name'], sample: ['Rajesh Kumar', 'Sunita Khanna'] },
+            { key: 'mobile', label: 'Mobile', required: true, aliases: ['phone', 'mobile no', 'mobile_no', 'mobile number', 'telephone', 'cell', 'contact number'], sample: ['9876543210', '9123456780'] },
+            { key: 'officePhone', label: 'Office Phone', required: false, aliases: ['office', 'landline', 'work phone'], sample: ['01123456789', ''] },
+            { key: 'companyName', label: 'Company Name', required: false, aliases: ['company', 'firm', 'firm name', 'organization', 'organization name'], sample: ['KUMAR & CO', 'KHANNA & ASSOCIATES'] },
+            { key: 'status', label: 'Status', required: false, aliases: ['referral status'], sample: ['Active', 'Active'] },
+            { key: 'emailAddress', label: 'Email Address', required: false, aliases: ['email', 'e-mail', 'mail', 'email id'], sample: ['rajesh@kumarco.in', 'sunita@khanna.in'] },
+            { key: 'designation', label: 'Designation', required: false, aliases: ['title', 'job title', 'role', 'position'], sample: ['Director / Partner', 'Proprietor / Owner'] },
+            { key: 'department', label: 'Department', required: false, aliases: ['dept'], sample: ['Executive Management', 'Finance & Accounts'] },
+            { key: 'assignedTo', label: 'Assigned to', required: false, aliases: ['assigned to', 'owner', 'representative', 'assigned representative'], sample: ['', ''] },
+        ],
+    },
+    // One row = one activity (backend imports/builders/activities.ts). Related To names a record by its number or exact
+    // name, with its type in the import-only Related To Type column (blank when the number tells it: OPP-0042). Video
+    // meeting, Attendees and recurrence are not imported.
+    activities: {
+        entity: 'activities',
+        singular: 'Activity',
+        plural: 'Activities',
+        fields: [
+            { key: 'followupType', label: 'Followup Type', required: false, aliases: ['type', 'activity type', 'follow up type', 'followup'], sample: ['Meeting', 'Call'] },
+            { key: 'subject', label: 'Subject', required: true, aliases: ['title', 'activity', 'activity subject', 'name'], sample: ['Product demo', 'Renewal reminder call'] },
+            { key: 'status', label: 'Status', required: false, aliases: ['activity status', 'state'], sample: ['Planned', 'Completed'] },
+            { key: 'assignedTo', label: 'Assigned to', required: false, aliases: ['owner', 'assigned', 'user', 'activity owner'], sample: ['', ''] },
+            // Its number (OPP-0042 or the Document Series format), or its exact name.
+            { key: 'relatedTo', label: 'Related To', required: false, aliases: ['related record', 'record', 'regarding', 'related to record'], sample: ['OPP-0001', 'Acme Traders Pvt Ltd'] },
+            { key: 'organizationName', label: 'Organization Name', required: false, aliases: ['organization', 'company', 'company name', 'account', 'customer'], sample: ['', 'Acme Traders Pvt Ltd'] },
+            { key: 'contact', label: 'Contact', required: false, aliases: ['contact name', 'contact person'], sample: ['', 'Rahul Sharma'] },
+            { key: 'startAt', label: 'Start', required: false, aliases: ['start date', 'start time', 'date', 'from', 'scheduled at', 'start date time'], sample: ['05-12-2026 10:30', '20-11-2026 15:00'] },
+            { key: 'endAt', label: 'End', required: false, aliases: ['end date', 'end time', 'to', 'end date time'], sample: ['05-12-2026 11:30', ''] },
+            { key: 'allDay', label: 'All Day', required: false, aliases: ['all day event', 'full day'], sample: ['No', 'No'] },
+            { key: 'reminder', label: 'Reminder', required: false, aliases: ['remind', 'alert'], sample: ['15 minutes before', ''] },
+            { key: 'location', label: 'Location', required: false, aliases: ['venue', 'place', 'address'], sample: ['Client office, Andheri', ''] },
+            { key: 'customerResponse', label: 'Customer Response', required: false, aliases: ['response', 'outcome'], sample: ['', ''] },
+            { key: 'remarks', label: 'Remarks', required: false, aliases: ['notes', 'description', 'comments', 'details'], sample: ['Demo for 5 users', 'Customer asked for the renewal quote'] },
+            {
+                key: 'relatedModule',
+                label: 'Related To Type',
+                required: false,
+                importOnly: true,
+                fieldType: 'select',
+                options: ACTIVITY_RELATED_MODULES.map((value) => ({ value, label: ACTIVITY_RELATED_MODULE_LABELS[value] })),
+                aliases: ['related type', 'related module', 'record type', 'related to module'],
+                sample: ['Opportunity', 'Organization'],
+                section: 'Activity Details',
+                hint: `One of: ${ACTIVITY_RELATED_MODULES.map((m) => ACTIVITY_RELATED_MODULE_LABELS[m]).join(', ')} · Blank when Related To is a record number (OPP-0042)`,
+            },
+            {
+                key: 'durationMinutes',
+                label: 'Duration (minutes)',
+                required: false,
+                importOnly: true,
+                fieldType: 'number',
+                aliases: ['duration', 'duration mins', 'length', 'minutes'],
+                sample: ['', '20'],
+                section: 'Schedule',
+                hint: "Used when End is blank (not on Tasks) · Blank → the Followup Type's default length",
+            },
         ],
     },
 };

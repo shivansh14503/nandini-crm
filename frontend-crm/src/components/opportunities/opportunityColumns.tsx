@@ -37,6 +37,34 @@ function YesNo({ value }: { value: boolean }) {
 const NO_QUOTES: Quotation[] = [];
 const NO_PRODUCTS: Product[] = [];
 
+/** The quotations linked to each deal (by opportunity id), for the Quote Created / Quote Sent columns and the CSV export. */
+export function useQuotesByOpportunity({ enabled = true }: { enabled?: boolean } = {}): Map<string, Quotation[]> {
+    const { data: quotations = NO_QUOTES } = useQuotations(undefined, { enabled });
+    return useMemo(() => {
+        const map = new Map<string, Quotation[]>();
+        for (const q of quotations) {
+            if (!q.opportunityId) continue;
+            map.set(q.opportunityId, [...(map.get(q.opportunityId) ?? []), q]);
+        }
+        return map;
+    }, [quotations]);
+}
+
+/** Quote Created: the deal has at least one quotation linked to it. */
+export function isQuoteCreated(quotes: readonly Quotation[] | undefined): boolean {
+    return (quotes?.length ?? 0) > 0;
+}
+
+/** Quote Sent: a linked quotation has moved past Draft. */
+export function isQuoteSent(quotes: readonly Quotation[] | undefined): boolean {
+    return (quotes ?? []).some((q) => q.quoteStage && q.quoteStage !== 'Draft');
+}
+
+/** The catalogue product names on the deal's line items, without repeats (the Products column). */
+export function opportunityProductNames(o: Opportunity): string[] {
+    return [...new Set((o.lineItems ?? []).map((li) => li.productName).filter(Boolean))];
+}
+
 /**
  * The Opportunity table's columns (built-in ones; form-field columns are added by the table). Shared by the
  * module's list page and the related-records table in other records' drawers, so both offer the same columns.
@@ -45,15 +73,7 @@ const NO_PRODUCTS: Product[] = [];
 export function useOpportunityColumns(openRecord: (record: Opportunity) => void, { enabled = true }: { enabled?: boolean } = {}): DataTableColumn<Opportunity>[] {
     const showNumber = useShowRecordNumber();
     // Quotations per deal, for the Quote Created / Quote Sent columns.
-    const { data: quotations = NO_QUOTES } = useQuotations(undefined, { enabled });
-    const quotesByOpp = useMemo(() => {
-        const map = new Map<string, Quotation[]>();
-        for (const q of quotations) {
-            if (!q.opportunityId) continue;
-            map.set(q.opportunityId, [...(map.get(q.opportunityId) ?? []), q]);
-        }
-        return map;
-    }, [quotations]);
+    const quotesByOpp = useQuotesByOpportunity({ enabled });
     const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
     // Catalogue products, for the Products filter (a product's usage counts link here filtered by its id).
     const { data: products = NO_PRODUCTS } = useProducts(undefined, { enabled });
@@ -76,9 +96,9 @@ export function useOpportunityColumns(openRecord: (record: Opportunity) => void,
                 id: 'quoteCreated',
                 label: 'QUOTE CREATED',
                 sortable: false,
-                filter: { kind: 'boolean', getValue: (o) => (quotesByOpp.get(o.id)?.length ?? 0) > 0 },
+                filter: { kind: 'boolean', getValue: (o) => isQuoteCreated(quotesByOpp.get(o.id)) },
                 minWidth: 120,
-                render: (o) => <YesNo value={(quotesByOpp.get(o.id)?.length ?? 0) > 0} />,
+                render: (o) => <YesNo value={isQuoteCreated(quotesByOpp.get(o.id))} />,
             },
             ...(showNumber('opportunity')
                 ? [
@@ -174,7 +194,7 @@ export function useOpportunityColumns(openRecord: (record: Opportunity) => void,
                 minWidth: 200,
                 filter: { kind: 'options', label: 'Product', options: productOptions, getValue: (o) => (o.lineItems ?? []).map((li) => li.productId).filter(Boolean) },
                 render: (o) => {
-                    const names = [...new Set((o.lineItems ?? []).map((li) => li.productName).filter(Boolean))];
+                    const names = opportunityProductNames(o);
                     return <Typography sx={plainCellSx}>{names.length ? names.join(', ') : '-'}</Typography>;
                 },
             },
@@ -317,9 +337,9 @@ export function useOpportunityColumns(openRecord: (record: Opportunity) => void,
                 id: 'quoteSent',
                 label: 'QUOTE SENT',
                 sortable: false,
-                filter: { kind: 'boolean', getValue: (o) => (quotesByOpp.get(o.id) ?? []).some((q) => q.quoteStage && q.quoteStage !== 'Draft') },
+                filter: { kind: 'boolean', getValue: (o) => isQuoteSent(quotesByOpp.get(o.id)) },
                 minWidth: 110,
-                render: (o) => <YesNo value={(quotesByOpp.get(o.id) ?? []).some((q) => q.quoteStage && q.quoteStage !== 'Draft')} />,
+                render: (o) => <YesNo value={isQuoteSent(quotesByOpp.get(o.id))} />,
             },
             {
                 id: 'createdAt',

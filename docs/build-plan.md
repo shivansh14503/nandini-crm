@@ -24,11 +24,11 @@
 
 | Area | State |
 | --- | --- |
-| Leads, Opportunities, Quotations, Organizations, Contacts | ✅ CRUD, list filters, row-level access, audit, import (not quotations), lead conversion; one line items model on opportunities and quotations (Product, Quantity, Rate from the catalog MRP, Gross Amount, Discount as a Percentage or an Amount, GST from the product's Tax Rate, Taxable Amount, Description, Note; drag to reorder; currency on quotations only) in the forms, view pages, drawers, scorecards and PDFs (Jira CRM-111, 2026-11-27); Summary Breakdown: Total Taxable Amount, Lump Sum Discount, Actual (Before Tax), GST per rate as IGST or CGST + SGST by the Company State (Admin › Company Details), Round Off checkbox, Grand Total, to the paisa, with a one-time recalculation of saved records; line item columns left-aligned (Jira CRM-111, 2026-11-27) |
-| Tickets, Products, Partner Companies | ✅ CRUD, import; product Status (Active / Inactive, Admin only, reason dialog, Inactive Since (date + time) on the view page and drawer, Status pills; inactive products are not offered on new line items) (2026-11-27) |
-| Contracts | ✅ CRUD, list filters, status cards, row-level access, audit (no import) |
-| Referrals | ✅ CRUD, Active / Inactive status, audit, drawer layout, Form Builder (no import); Referred By on leads, opportunities and Convert Lead is picked from the active referrals (2026-11-25); free-text Company Name instead of the Organization picker, one form section, and Create Referral Contact inside the Referral Search picker, whose filters are Name, Any Number and Any Email (2026-11-26) |
-| Activities & calendar | ✅ data model, API, Form Builder fields; Activities list, form, quick create, drawer, record Activities tabs and the Calendar page (FullCalendar v7, business timezone, drag to reschedule); reminders, assignment / invitation and contract renewal notifications in the navbar bell; 9 AM morning summary email (off until SMTP is set up). Google / Microsoft 365 sync is Phase 2 |
+| Leads, Opportunities, Quotations, Organizations, Contacts | ✅ CRUD, list filters, row-level access, audit, import (quotations too since 2026-11-28: one row = one quotation for an opportunity, with one line item or the opportunity's), CSV export of every list (2026-11-28), lead conversion; one line items model on opportunities and quotations (Product, Quantity, Rate from the catalog MRP, Gross Amount, Discount as a Percentage or an Amount, GST from the product's Tax Rate, Taxable Amount, Description, Note; drag to reorder; currency on quotations only) in the forms, view pages, drawers, scorecards and PDFs (Jira CRM-111, 2026-11-27); Summary Breakdown: Total Taxable Amount, Lump Sum Discount, Actual (Before Tax), GST per rate as IGST or CGST + SGST by the Company State (Admin › Company Details), Round Off checkbox, Grand Total, to the paisa, with a one-time recalculation of saved records; line item columns left-aligned (Jira CRM-111, 2026-11-27) |
+| Tickets, Products, Partner Companies | ✅ CRUD, import, CSV export (Tickets and Products since 2026-11-28); product Status (Active / Inactive, Admin only, reason dialog, Inactive Since (date + time) on the view page and drawer, Status pills; inactive products are not offered on new line items) (2026-11-27) |
+| Contracts | ✅ CRUD, list filters, status cards, row-level access, audit, import and CSV export (2026-11-28) |
+| Referrals | ✅ CRUD, Active / Inactive status, audit, drawer layout, Form Builder, import and CSV export (2026-11-28); Referred By on leads, opportunities and Convert Lead is picked from the active referrals (2026-11-25); free-text Company Name instead of the Organization picker, one form section, and Create Referral Contact inside the Referral Search picker, whose filters are Name, Any Number and Any Email (2026-11-26) |
+| Activities & calendar | ✅ data model, API, Form Builder fields; Activities list, form, quick create, drawer, record Activities tabs and the Calendar page (FullCalendar v7, business timezone, drag to reschedule); reminders, assignment / invitation and contract renewal notifications in the navbar bell; 9 AM morning summary email (off until SMTP is set up); activity import and CSV export of the Activities list (2026-11-28). Google / Microsoft 365 sync is Phase 2 |
 | Documents | ✅ read-only list (filters, export / file download), drawer and detail page of the opportunities' documents |
 | Quotation PDF | ✅ templates, builder, preview, cached render |
 | Admin: forms, dropdowns, document series, cities, PDF templates, holidays, company formats | ✅ |
@@ -56,7 +56,7 @@ Each phase lists exit criteria so "done" is unambiguous.
 - [ ] **CI pipeline** — on every PR: `npm ci`, `prisma validate`, backend `typecheck` + `test`, frontend `lint` + `build`.
 - [ ] **Deployment artefacts** — Dockerfile for API (with Chromium, see README) and frontend; env checklist.
 - [ ] **Backups & migration runbook** — how `db:deploy` runs, rollback approach, Azure SQL backup retention.
-- [ ] **Fix stale docs** — README PDF section (Handlebars → block documents); `SequenceCounter` comment path; import route comment lists 4 entities but 7 are supported.
+- [ ] **Fix stale docs** — README PDF section (Handlebars → block documents); `SequenceCounter` comment path; (the import route comment now lists all 11 import entities, 2026-11-28).
 
 Exit: an admin can manage users from the UI; CI is green on main; a fresh server can be deployed from the repo docs alone.
 
@@ -75,7 +75,9 @@ Exit: the critical flows above run in CI.
 - [ ] `GET /api/dashboard/*` aggregates (pipeline by stage, follow-ups due today/overdue, open tickets by priority,
       conversion rate, quotations this month), cached under `cache:dashboard:*` (invalidation already wired).
 - [ ] Dashboard page with charts; respects row-level scope.
-- [ ] List export (CSV/XLSX) honouring filters and scope.
+- [x] List export (CSV) honouring filters and scope (2026-11-28): every CRM list has an Export button (Admin › Roles
+      Export permission) that writes the selected rows, else every row matching the filters, from the rows the role may
+      view. Not yet: XLSX, a server-side export for lists larger than what the browser holds.
 
 ### Phase 9 — Sales workflow depth (P2)
 
@@ -105,7 +107,8 @@ Exit: the critical flows above run in CI.
       `backend-crm/src/services/mail.service.ts` over the Google Workspace SMTP relay, with an `EmailLog` row per send
       (add a `quotation` kind and a dedupe key per send); it still needs the attachment, the compose dialog and the
       decision on who may send.
-- [ ] Quotation import (currently excluded).
+- [x] Quotation import (2026-11-28): one row = one quotation for an opportunity, with one line item from the
+      `line*` cells or the opportunity's line items; contracts, referrals and activities import too.
 
 ### Phase 10 — Scale & operations (P3)
 
@@ -244,7 +247,7 @@ only (not the full record page); Save goes live straight away; Leads first.
       the Contract Manager in the navbar bell once the Renewal Reminder Date has come (window of 7 days, not for
       Expired contracts; a changed date notifies again), and the morning summary email lists contracts whose
       reminder is today or that end within 30 days. Renewal reminders also show on the calendar feed (PR1).
-- [ ] Left out of the first version: contract import, contract PDF, creating a contract from an opportunity or product.
+- [ ] Left out of the first version: contract PDF, creating a contract from an opportunity or product.
 
 ### Phase 14 — Activities & Calendar (P2, started 2026-11-25)
 
@@ -826,8 +829,10 @@ Security Groups and Security Settings missing.
       Not yet: a user's groups shown and edited in Admin › Users; per-record sharing with a group regardless of owner.
 - [ ] **Security Settings** — company switches: inherit the creator's / assignee's groups on new records, who may
       assign to whom, session timeout, sign-in IP allow-list.
-- [ ] Not yet: export permission on modules other than Partner Companies (their lists have no export today);
-      field-level permissions.
+- [x] Export and Import on every module (2026-11-28): every module has View / Create / Edit / Delete / Export / Import
+      except Documents (View and Export); stored roles read a module's new Export / Import as No until an admin
+      turns it on.
+- [ ] Not yet: field-level permissions.
 
 Exit: an admin can create a role, limit it to own records or no access per module, assign it in Admin › Users, and
 the API refuses (403) and the app hides everything the role doesn't allow.

@@ -9,18 +9,20 @@ import PauseCircleOutlineIcon from '@mui/icons-material/PauseCircleOutlineOutlin
 import AccountCircleOutlinedIcon from '@mui/icons-material/AccountCircleOutlined';
 import { CommonMasterView } from '../../common/CommonMasterView';
 import { useTableFilter } from '../../common/TableFilter';
-import { MasterHeaderActions } from '../../common/MasterHeaderActions';
+import { MasterHeaderActions, type MasterExportConfig } from '../../common/MasterHeaderActions';
+import { DataImportModal } from '../../common/import';
 import { buildExtendedSearchConfig } from '../../common/buildExtendedSearchConfig';
 import { AppToast } from '../../common/AppToast';
 import { useSaveFlash } from '@/utils/saveFlash';
 import { type DataTableFilterItem } from '../../common/DataTable';
 import { ROUTES } from '@/config/constants';
 import { useAuth } from '@/context/AuthContext';
-import { useReferrals, useBulkDeleteReferrals } from '@/hooks/queries';
+import { useReferrals, useBulkDeleteReferrals, useMasterData } from '@/hooks/queries';
 import { ACTIVE_REFERRAL_STATUS, type Referral } from '@/types/referral.types';
 import { ReferralDetailDrawer } from '../ReferralDetailDrawer';
 import { useSearchScope, useSearchScopedRows } from '../../search/SearchScope';
-import { useReferralColumns } from './referralColumns';
+import { REFERRAL_CSV_COLUMNS, useReferralColumns } from './referralColumns';
+import { selectedOrAll } from '@/utils/exportCells';
 import { ModuleScorecardSummary, useModuleScorecard } from '../../common/scorecard/useModuleScorecard';
 
 export type ReferralFilterTab = 'all' | 'active' | 'inactive' | 'my_referrals';
@@ -32,6 +34,8 @@ export function ReferralsMasterView() {
     const router = useRouter();
     const { user } = useAuth();
     const currentUsername = user?.username || '';
+    // Re-renders once the user directory loads, so Assigned To (table and export) shows full names.
+    useMasterData();
 
     // On the global search results page the table shows the matched records instead of this list.
     const embeddedInSearch = Boolean(useSearchScope());
@@ -47,6 +51,7 @@ export function ReferralsMasterView() {
     const [sortField, setSortField] = useState<string>('createdAt');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
     const [drawerId, setDrawerId] = useState<string | null>(null);
+    const [importOpen, setImportOpen] = useState(false);
     const openDrawerRecord = useCallback((record: Referral) => setDrawerId(record.id), []);
     const columns = useReferralColumns(openDrawerRecord);
     const tableFilter = useTableFilter<Referral>({
@@ -153,6 +158,15 @@ export function ReferralsMasterView() {
 
     const closeDrawer = useCallback(() => setDrawerId(null), []);
 
+    /** Export button: the selected referrals, otherwise every referral in the current tab, search and Filter dialog view. */
+    const exportConfig: MasterExportConfig<Referral> = {
+        fileName: 'referrals',
+        noun: { singular: 'referral', plural: 'referrals' },
+        rows: () => selectedOrAll(filteredReferrals, selectedIds, allReferrals),
+        columns: REFERRAL_CSV_COLUMNS,
+        onNotify: (message, severity) => setToast({ open: true, message, severity }),
+    };
+
     return (
         <CommonMasterView<Referral, ReferralFilterTab>
             loading={listLoading}
@@ -166,6 +180,7 @@ export function ReferralsMasterView() {
                 },
             }}
             tableId="referrals"
+            importEntity="referrals"
             tableFilter={tableFilter}
             headerActions={() => (
                 <MasterHeaderActions
@@ -179,6 +194,8 @@ export function ReferralsMasterView() {
                     }}
                     onNewClick={() => router.push(ROUTES.REFERRAL_NEW)}
                     newButtonLabel="New Referral"
+                    onImportClick={() => setImportOpen(true)}
+                    exportConfig={exportConfig}
                 />
             )}
             searchConfig={buildExtendedSearchConfig({
@@ -240,6 +257,8 @@ export function ReferralsMasterView() {
                     onClose={() => setToast((prev) => ({ ...prev, open: false }))}
                 />
             }
-        />
+        >
+            <DataImportModal open={importOpen} entity="referrals" onClose={() => setImportOpen(false)} />
+        </CommonMasterView>
     );
 }

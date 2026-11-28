@@ -22,6 +22,12 @@ import { activityOnlyTypeIssues } from '../shared/followupTypes.js';
 import { applyFollowUpPlan, assertDocumentation, assertPayeeBank, clearedKeys, createOpportunityRecord } from '../opportunities/opportunity.service.js';
 import { loadResponseRules, planOpportunityFollowUp, type ResponseRules } from '../opportunities/opportunity.followUp.js';
 import { buildImportPayload, splitDateTime } from './importValues.js';
+import { buildQuotationImportRow, loadQuotationDropdownDefaults } from './builders/quotations.js';
+import type { QuotationDropdownDefaults } from './builders/quotations.values.js';
+import { buildContractImportRow, loadContractDropdownDefaults } from './builders/contracts.js';
+import type { ContractDropdownDefaults } from './builders/contracts.values.js';
+import { buildReferralImportRow } from './builders/referrals.js';
+import { buildActivityImportRow } from './builders/activities.js';
 import { opportunityInputSchema, opportunityNotApplicableKeys } from '../opportunities/opportunity.validator.js';
 import { createPartnerCompanyRecord, invalidatePartnerCaches } from '../partner-companies/partnerCompany.service.js';
 import { partnerCompanyImportSchema } from '../partner-companies/partnerCompany.validator.js';
@@ -34,7 +40,7 @@ import { createTicketRecord, resolveImportNatureOfCall } from '../tickets/ticket
 import { ticketInputSchema } from '../tickets/ticket.validator.js';
 import { prisma, type TransactionClient } from '../../config/prisma.js';
 import { loadFollowUpContext, type FollowUpContext } from '../activities/activity.system.js';
-import type { ActivityCommitRow } from '../activities/activity.service.js';
+import { loadActivityConfig, type ActivityCommitRow, type ActivityConfig } from '../activities/activity.service.js';
 import { afterFollowUpCommit, retryOnceOnUniqueViolation } from '../activities/activity.followUp.js';
 
 /** Entities and field keys of the frontend's import wizard (frontend-crm/src/components/common/import). */
@@ -46,6 +52,10 @@ export const IMPORT_ENTITIES = [
     'opportunities',
     'tickets',
     'partner-companies',
+    'quotations',
+    'contracts',
+    'referrals',
+    'activities',
 ] as const;
 export type ImportEntity = (typeof IMPORT_ENTITIES)[number];
 
@@ -147,7 +157,7 @@ const remarksOr = (value: unknown, fallback: string): string => (text(value).tri
 
 type RowWriter = (tx: TransactionClient) => Promise<unknown>;
 
-/** What a lead / opportunity row's write returns: the follow-up activity writes to run after its commit. */
+/** What a lead / opportunity row's write returns: the follow-up activity writes to run after its commit (activity rows: the activity itself). */
 interface FollowUpRows {
     followUpRows: ActivityCommitRow[];
 }
@@ -169,10 +179,16 @@ interface ImportContext {
     followUp?: FollowUpContext;
     /** Opportunity imports: the Customer Response rules (Sales Stages a response is allowed at, no follow-up). */
     responseRules?: ResponseRules;
+    /** Quotation imports: the admin's dropdown defaults of the quotation form (builders/quotations.ts). */
+    quotationDefaults?: QuotationDropdownDefaults;
+    /** Contract imports: the admin's dropdown defaults of the contract form (builders/contracts.ts). */
+    contractDefaults?: ContractDropdownDefaults;
+    /** Activity imports: the activity configuration (field rules, Followup Type durations) the create path reads. */
+    activityConfig?: ActivityConfig;
 }
 
 /** Entities whose rows link to an organization by name. */
-const LINKS_ORGANIZATION_BY_NAME: ReadonlySet<ImportEntity> = new Set(['contacts', 'opportunities', 'tickets']);
+const LINKS_ORGANIZATION_BY_NAME: ReadonlySet<ImportEntity> = new Set(['contacts', 'opportunities', 'tickets', 'quotations', 'contracts', 'activities']);
 
 /**
  * Loads the per-import context in a few batch queries before the row loop. Organizations are only looked up by the
@@ -187,7 +203,10 @@ async function loadImportContext(data: ImportJobData): Promise<ImportContext> {
     const ratingConfig = data.entity === 'leads' ? await loadRatingConfig(prisma) : undefined;
     const followUp = data.entity === 'leads' || data.entity === 'opportunities' ? await loadFollowUpContext() : undefined;
     const responseRules = data.entity === 'opportunities' ? await loadResponseRules(prisma) : undefined;
-    return { fieldConfig, lookups: { activeUsernames, organizationsByName }, ratingConfig, followUp, responseRules };
+    const quotationDefaults = data.entity === 'quotations' ? await loadQuotationDropdownDefaults() : undefined;
+    const contractDefaults = data.entity === 'contracts' ? await loadContractDropdownDefaults() : undefined;
+    const activityConfig = data.entity === 'activities' ? await loadActivityConfig() : undefined;
+    return { fieldConfig, lookups: { activeUsernames, organizationsByName }, ratingConfig, followUp, responseRules, quotationDefaults, contractDefaults, activityConfig };
 }
 
 /**
@@ -347,10 +366,37 @@ const rowBuilders: Record<ImportEntity, (v: Record<string, string>, user: AuthUs
         input.customFields = checkRow(ctx, raw, customFields);
         return (tx) => createPartnerCompanyRecord(tx, input, user);
     },
+    // One row = one quotation for an opportunity, with one line item (or the opportunity's lines): builders/quotations.ts.
+    quotations: (v, user, ctx) => {
+        if (!ctx.quotationDefaults) throw new Error('Quotation import context has no dropdown defaults.');
+        return buildQuotationImportRow(v, user, { fieldConfig: ctx.fieldConfig, lookups: ctx.lookups, dropdownDefaults: ctx.quotationDefaults }, (raw, customFields) =>
+            checkRow(ctx, raw, customFields),
+        );
+    },
+    // One row = one contract, linked to its organization / contact / opportunity by name or number: builders/contracts.ts.
+    contracts: (v, user, ctx) => {
+        if (!ctx.contractDefaults) throw new Error('Contract import context has no dropdown defaults.');
+        return buildContractImportRow(v, user, { fieldConfig: ctx.fieldConfig, lookups: ctx.lookups, dropdownDefaults: ctx.contractDefaults }, (raw, customFields) =>
+            checkRow(ctx, raw, customFields),
+        );
+    },
+    // One row = one referral (no linked records; Status / Assigned to default as on the form): builders/referrals.ts.
+    referrals: (v, user, ctx) =>
+        buildReferralImportRow(v, user, { fieldConfig: ctx.fieldConfig, lookups: ctx.lookups }, (raw, customFields) => checkRow(ctx, raw, customFields)),
+    // One row = one activity, linked to its related record / organization / contact by number or name: builders/activities.ts.
+    // Its write returns the activity as `followUpRows` (notify: false): reminders and calendar push run after the rows.
+    activities: (v, user, ctx) => {
+        if (!ctx.activityConfig) throw new Error('Activity import context has no activity configuration.');
+        return buildActivityImportRow(v, user, { fieldConfig: ctx.fieldConfig, lookups: ctx.lookups, activityConfig: ctx.activityConfig });
+    },
 };
 
 /** Entities whose caches reach beyond the shared lookup / search / dashboard keys. */
 const cacheInvalidators: Partial<Record<ImportEntity, () => Promise<void>>> = {
+    // A new quotation moves an open opportunity to "Proposal/Price Quote" (createQuotationRecord).
+    quotations: async () => {
+        await Promise.all([cacheService.invalidateEntityCaches('quotations'), cacheService.invalidateEntityCaches('opportunities')]);
+    },
     'partner-companies': invalidatePartnerCaches,
     // Imported products add their new manufacturers to the Manufacturer dropdown (createProductRecord).
     products: async () => {
@@ -421,7 +467,8 @@ async function importRows(data: ImportJobData, { onProgress, shouldCancel }: Imp
     if (cancelled) await report(true);
 
     if (created > 0) await (cacheInvalidators[data.entity]?.() ?? cacheService.invalidateEntityCaches(data.entity));
-    // Reminders of the imported records' follow-up activities (notify: false, so nobody is told about each row).
+    // Reminders and calendar push of the imported activities / records' follow-up activities (notify: false, so nobody
+    // is told about each row); also invalidates the activity caches.
     await afterFollowUpCommit(followUpRows, data.user);
     const result: ImportResult = { importId: data.importId, entity: data.entity, total, processed, created, failed, cancelled };
     await auditService.enqueue({

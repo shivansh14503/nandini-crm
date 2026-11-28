@@ -5,7 +5,11 @@ export type ImportEntityType =
     | 'leads'
     | 'opportunities'
     | 'tickets'
-    | 'partner-companies';
+    | 'partner-companies'
+    | 'quotations'
+    | 'contracts'
+    | 'referrals'
+    | 'activities';
 
 export interface ImportFieldDef {
     /** The form's field key (custom fields: `customFields.<key>`), which is also the key the row values are sent under. */
@@ -25,6 +29,11 @@ export interface ImportFieldDef {
     hint?: string;
     /** Form section the field sits in (groups the mapping step). */
     section?: string;
+    /**
+     * A column the import reads that isn't a field of the module's form (a quotation's line item Product, Quantity …):
+     * `buildImportConfig` keeps it after the form's fields instead of dropping it.
+     */
+    importOnly?: boolean;
 }
 
 export interface ImportEntityConfig {

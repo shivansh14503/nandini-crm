@@ -10,12 +10,14 @@ import EventBusyOutlinedIcon from '@mui/icons-material/EventBusyOutlined';
 import { ModuleScorecardSummary, useModuleScorecard } from '../common/scorecard/useModuleScorecard';
 import { CommonMasterView } from '../common/CommonMasterView';
 import { useTableFilter } from '../common/TableFilter';
-import { MasterHeaderActions } from '../common/MasterHeaderActions';
+import { MasterHeaderActions, type MasterExportConfig } from '../common/MasterHeaderActions';
+import { DataImportModal } from '../common/import';
 import { buildExtendedSearchConfig } from '../common/buildExtendedSearchConfig';
 import { AppToast } from '../common/AppToast';
 import { type DataTableFilterItem } from '../common/DataTable';
 import { useSaveFlash } from '@/utils/saveFlash';
 import { localToday } from '@/utils/pastDates';
+import { selectedOrAll } from '@/utils/exportCells';
 import { ROUTES } from '@/config/constants';
 import { useAuth } from '@/context/AuthContext';
 import { findCrmUser } from '@/services/masterData.store';
@@ -24,7 +26,7 @@ import { useContracts, useDeleteContract, useBulkDeleteContracts } from '@/hooks
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import { useSearchScope, useSearchScopedRows } from '../search/SearchScope';
 import { ContractDetailDrawer } from './ContractDetailDrawer';
-import { useContractColumns } from './contractColumns';
+import { contractCsvColumns, useContractColumns } from './contractColumns';
 import { isContractExpiringSoon } from './contractDates';
 
 /** Quick-view pills ('all' = none picked); the status lives on the status cards. */
@@ -82,6 +84,7 @@ export function ContractsMasterView({ view }: ContractsMasterViewProps) {
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
     // Tracked by id so the drawer always shows the cached copy and closes if the contract is deleted.
     const [drawerContractId, setDrawerContractId] = useState<string | null>(null);
+    const [importOpen, setImportOpen] = useState(false);
     // ── Columns ───────────────────────────────────────────────────────────────
     const openDrawerRecord = useCallback((record: Contract) => setDrawerContractId(record.id), []);
     const columns = useContractColumns(openDrawerRecord);
@@ -214,6 +217,16 @@ export function ContractsMasterView({ view }: ContractsMasterViewProps) {
     }, [filteredContracts, page, rowsPerPage]);
 
 
+    // ── Export ────────────────────────────────────────────────────────────────
+    // The selected contracts, else every contract in the current pill / status card / search / Filter view (all pages).
+    const exportConfig: MasterExportConfig<Contract> = {
+        fileName: 'contracts',
+        noun: { singular: 'contract', plural: 'contracts' },
+        rows: () => selectedOrAll(filteredContracts, selectedIds, allContracts),
+        columns: contractCsvColumns(showNumber('contract')),
+        onNotify: (message, severity) => setToast({ open: true, message, severity }),
+    };
+
     const handleSort = (field: string) => {
         const isAsc = sortField === field && sortOrder === 'asc';
         setSortOrder(isAsc ? 'desc' : 'asc');
@@ -222,6 +235,7 @@ export function ContractsMasterView({ view }: ContractsMasterViewProps) {
 
     return (
         <CommonMasterView<Contract, ContractFilterTab>
+            importEntity="contracts"
             loading={listLoading}
             breadcrumbItems={[{ label: 'Support' }, { label: 'Contracts' }]}
             summary={<ModuleScorecardSummary state={scorecard} loading={listLoading} />}
@@ -247,6 +261,8 @@ export function ContractsMasterView({ view }: ContractsMasterViewProps) {
                     }}
                     onNewClick={() => router.push(ROUTES.CONTRACT_NEW)}
                     newButtonLabel="New Contract"
+                    onImportClick={() => setImportOpen(true)}
+                    exportConfig={exportConfig}
                 />
             )}
             searchConfig={buildExtendedSearchConfig({
@@ -319,6 +335,11 @@ export function ContractsMasterView({ view }: ContractsMasterViewProps) {
                 />
             }
         >
+            <DataImportModal
+                open={importOpen}
+                entity="contracts"
+                onClose={() => setImportOpen(false)}
+            />
         </CommonMasterView>
     );
 }
