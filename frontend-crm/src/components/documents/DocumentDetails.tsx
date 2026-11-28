@@ -15,6 +15,7 @@ import { fetchWithSession } from '@/services/apiClient';
 import type { Document } from '@/types/document.types';
 import { formatFileSize, type RecordFile } from '@/types/recordFile.types';
 import { DOCUMENT_LABELS as L, FILE_KIND_LABELS, FileKindIcon, SalesStagePill, fileKind, userName } from './documentDisplay';
+import { pdfViewerUrl } from '@/utils/pdfViewerUrl';
 
 const labelSx: SxProps<Theme> = {
     fontSize: '0.68rem',
@@ -235,7 +236,7 @@ export function DocumentPreview({ file, sx }: { file: RecordFile | null; sx?: Sx
     return (
         <Box sx={frameSx}>
             {kind === 'pdf' ? (
-                <Box component="iframe" title={file.fileName} src={current.url} sx={{ width: '100%', height: '100%', minHeight: 'inherit', border: 0, alignSelf: 'stretch' }} />
+                <Box component="iframe" title={file.fileName} src={pdfViewerUrl(current.url)} sx={{ width: '100%', height: '100%', minHeight: 'inherit', border: 0, alignSelf: 'stretch' }} />
             ) : (
                 <Box component="img" src={current.url} alt={file.fileName} sx={{ maxWidth: '100%', maxHeight: { xs: 480, md: 720 }, objectFit: 'contain', display: 'block' }} />
             )}
