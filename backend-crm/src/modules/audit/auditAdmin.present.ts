@@ -179,6 +179,7 @@ const MODULE_LABELS: Record<string, string> = {
     'list-scorecards': 'List Scorecards',
     'audit-log': 'Audit Log',
     'admin-integrations': 'API Integrations',
+    'security-groups': 'Security Groups',
 };
 /** `partner-companies` → `Partner Companies`. */
 export const moduleLabel = (key: string) => MODULE_LABELS[key] ?? humanize(key.replace(/-/g, ' '));

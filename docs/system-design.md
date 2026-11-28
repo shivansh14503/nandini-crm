@@ -316,9 +316,11 @@ A user's role is the name in `Users.role`; what it allows is the matching row of
   config records). It replaced the hard-coded `Admin` / `Administrator` / `Super Admin` list.
 - **Module permissions** (`Roles.permissionsJson`, `roles/permissions.ts`): for each of 12 modules (leads, contacts,
   organizations, opportunities, quotations, contracts, tickets, referrals, activities, documents, products, partner
-  companies) the levels of View, Create, Edit, Delete, Export and Import: **All** (every record), **Own** (records the
-  user is assigned to, `assignedTo`, or created, `createdBy`) or **None**. Create, Export and Import are Yes / No;
-  products and partner companies have no owner, so All or None. Edit / Delete never exceed View, and View None
+  companies) the levels of View, Create, Edit, Delete, Export and Import: **All** (every record), **Group** (records
+  assigned to or created by anyone who shares a security group with the user, see *Security groups* below), **Own**
+  (records the user is assigned to, `assignedTo`, or created, `createdBy`) or **None**. Create, Export and Import are Yes / No;
+  products and partner companies have no owner, so All or None. Edit / Delete never exceed View (All > Group > Own >
+  None), and View None
   allows nothing (the module leaves the menu and its list shows a notice).
 - **Super Admin** (`isSystem`): always full access and the admin panel; it can't be edited or deleted, and only a
   Super Admin can add, edit, deactivate, activate or reset the password of a Super Admin user, give / take the role,
@@ -327,10 +329,10 @@ A user's role is the name in `Users.role`; what it allows is the matching row of
 | Where | Rule |
 | --- | --- |
 | Routes | `requirePermission(module, action)`: 403 unless the role allows the action at some level. `registerCrudRoutes(router, controller, module)` maps GET → view, POST → create, PUT / PATCH → edit, DELETE / bulk-delete → delete; custom routes name their action (lead convert: leads edit + opportunities create; imports: import + create) |
-| Lists | `buildAccessScopeWhere(user, 'assignedTo', module, 'view')`: nothing at All, owner or creator at Own, a filter nobody matches at None (`#no-access#`, which no username can be) |
+| Lists | `buildAccessScopeWhere(user, 'assignedTo', module, 'view')`: nothing at All, owner or creator in the user's teammates at Group (`assignedTo IN (…) OR createdBy IN (…)`), owner or creator at Own, a filter nobody matches at None (`#no-access#`, which no username can be). Exports, scorecards, the calendar, product usage counts (`product.usage.ts`, raw SQL with the same rule), documents and the morning summary all read the same scope |
 | Records | `assertRecordAccess(user, row, module, action)` (403) on reads, edits and deletes; `canAccessRecord` / `hasGlobalAccess` for checks that don't throw |
 | Activities (`modules/activities/activity.access.ts`) | The same rule **plus attendees**: a colleague invited to an activity (`ActivityAttendee.username`) can see it (lists, calendar, record, its audit trail) and reply to it (`POST /api/activities/:id/response`), but changing or deleting needs the role's Activities Edit / Delete. Linking an activity to a record (Related To, and the `link-targets` picker) needs access to that record under its own module's rule (403 otherwise); an unchanged link is kept even if the editor can't see the record. The calendar's lead / opportunity follow-ups and contract renewals follow their modules' rules. Activities are not in global search |
-| Global search | Results are cached unscoped as before; the categories the role can't view are emptied per request (`hideUnviewable`) |
+| Global search | Results are cached unscoped as before; the categories the role can't view are emptied per request (`hideUnviewable`). Not row-scoped at Own or Group (unchanged); opening a result still checks the record |
 | Referrals | Follow the role like every module. Roles seeded from the old names keep Referrals View **All** (they were never scoped; the Referred By pickers read the lookups anyway) |
 | Export | Partner Companies' CSV export is built in the browser; the button shows only with the Export permission |
 | Inactive organizations | Only roles with the admin panel (`isAdminUser`) can open an Inactive organization for editing; others get the view page. Enforced in the app only (`OrganizationForm`, `OrganizationsMasterView`); the API doesn't check it |
@@ -341,6 +343,28 @@ refreshed every 15 s (`ensureFresh` in `authenticate`) and at once after a role 
 a renamed, changed or deleted role (whose users moved) applies on the next request without signing anyone out; other
 API instances catch up within 15 s. Until the first load succeeds, roles get the access their names gave before
 (`legacyRole`); a role missing from a loaded snapshot gets own-records access and no admin panel.
+
+**Security groups** (Admin › Security Groups; `modules/security-groups`, tables `SecurityGroups` /
+`SecurityGroupMembers`, [database design §4.1d](database-design.md)): teams and branches, the equivalent of SuiteCRM's
+Security Suite groups. A user can be in several groups; a group can sit under a parent group (any depth, never a loop:
+`400 GROUP_CYCLE`). A user's **teammates** are the members of every active group they are in, plus the members of
+those groups' active sub-groups (a regional group sees its branches, a branch doesn't see its region), plus
+themselves (`securityGroup.tree.ts teammatesByUser`). An archived group grants nothing and cuts off its sub-groups.
+A role's **Group** level (offered wherever Own is) covers records whose `assignedTo` or `createdBy` is a teammate; a
+user in no group gets Own. Groups only widen what a role allows: nobody sees anything new until an admin both sets a
+module to Group in Admin › Roles and adds people to groups, so existing roles and data are unchanged on deploy.
+
+- **Where it is read:** the role registry snapshot holds every user's teammates (`teammatesOf(username)`), so the
+  checks stay synchronous; `ownersFor(user, level)` in `accessControl.ts` turns a level into the owners it covers
+  (null = anyone) and both `buildAccessScopeWhere` and `canAccessRecord` use it. `GET /api/auth/me` returns
+  `access.teammates` so the app hides Edit / Delete on records outside the group (`usePermissions().canRecord`).
+- **Performance:** one extra in-memory map, rebuilt with the role snapshot (two small queries). A Group list query is
+  `assignedTo IN (teammates) OR createdBy IN (teammates)` on indexed owner columns, the same plan shape as Own; a
+  single teammate stays a plain equality. SQL Server allows about 2,100 parameters per query, so one person's
+  teammates must stay well under 1,000 (the query uses the list twice); a company-wide group should be All instead.
+- **Writes** (`securityGroup.service.ts`) run one at a time (lock `security-groups`), are audited (entity
+  `SecurityGroup`, module `security-groups`, CONFIG, admin-only; member changes as `membersAdded` /
+  `membersRemoved`), and refresh the snapshot at once (other API instances within 15 s).
 
 **Seeding** (`roles/roleSeed.ts`, at start-up): an empty table is filled with the old role names and every role a
 user holds, each with the access its name gave before (`legacyRole`: `Super Admin` and `Admin` open the admin panel
@@ -1729,6 +1753,23 @@ kept its time (`warning`; the API returns that note for 7 days after the calenda
 - **Data:** `services/role.service.ts`, `hooks/queries/useRoles.ts` (key `['roles']`); writes also refresh the users
   queries, the master data and the signed-in user (`refreshUser`), so a change to your own role shows at once.
 - **Admin › Users** picks a role from the roles of this page only (no free text).
+- **Group level:** the grid offers All / Group / Own / None on modules with an owner and a "Group records" preset (Own
+  records widened to the user's security groups); Group shows in emerald, Own in amber.
+
+### 8.7b Admin › Security Groups (`/admin/security-groups`)
+
+- **Page:** `app/admin/security-groups/page.tsx` in `AdminPageShell`, content in `components/settings/security-groups/`;
+  the "Security Groups" card on the admin landing page. Not registered in Form Builder (admin page).
+- **List** (`SecurityGroupsView`): the groups as a tree of cards (sub-groups indented under their parent, less on
+  phones), each with its name, an Archived badge, its parent, description (2 lines) and up to six members ("+N
+  more"; inactive members struck through); actions Edit, Add sub-group, Archive / Restore and Delete (refused while
+  sub-groups sit under it). Cards stack their actions under the text below `md`.
+- **Editor** (`SecurityGroupDialog`, full screen on phones): Group Name, Parent Group (the group itself and its
+  sub-groups are not offered), Description (long text) and Members (a multi-select of active users showing each
+  person's role and current groups; members who were deactivated stay listed until removed). Saving an existing group
+  sends the settings, then the member list if it changed.
+- **Data:** `services/securityGroup.service.ts`, `hooks/queries/useSecurityGroups.ts` (key `['securityGroups']`);
+  writes re-read the signed-in user so the admin's own teammates update at once.
 
 ### 8.8 Display formats (Admin › Company formats, Profile Phase 5)
 

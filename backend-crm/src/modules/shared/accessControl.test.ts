@@ -196,3 +196,27 @@ describe('assertAssigneeValid', () => {
         assert.equal(calls.length, 0);
     });
 });
+
+describe('Group access level (Admin › Security Groups)', () => {
+    afterEach(() => setSnapshotForTests(null));
+    const teamLead = { name: 'Team Lead', adminPanel: false, permissions: { leads: { view: 'group', edit: 'group', delete: 'own' } } };
+
+    it('scopes lists to the teammates with IN, and to the user alone when they are in no group', () => {
+        setSnapshotForTests([teamLead], [], [['palak', ['mittal', 'palak', 'ravi']]]);
+        const teammates = { in: ['mittal', 'palak', 'ravi'] };
+        assert.deepEqual(buildAccessScopeWhere(user('Team Lead'), 'assignedTo', 'leads'), { OR: [{ assignedTo: teammates }, { createdBy: teammates }] });
+        assert.deepEqual(buildAccessScopeWhere(user('Team Lead'), 'assignedTo', 'leads', 'delete'), { OR: [{ assignedTo: 'palak' }, { createdBy: 'palak' }] });
+        assert.deepEqual(buildAccessScopeWhere(user('Team Lead', 'sneha'), 'assignedTo', 'leads'), { OR: [{ assignedTo: 'sneha' }, { createdBy: 'sneha' }] });
+    });
+
+    it('lets a member open and edit a teammate’s record, any case, but not an outsider’s', () => {
+        setSnapshotForTests([teamLead], [], [['palak', ['Mittal', 'palak']]]);
+        const u = user('Team Lead');
+        assert.equal(canAccessRecord(u, { assignedTo: 'mittal' }, 'leads'), true);
+        assert.equal(canAccessRecord(u, { createdBy: 'MITTAL' }, 'leads', 'edit'), true);
+        assert.equal(canAccessRecord(u, { assignedTo: 'mittal' }, 'leads', 'delete'), false);
+        assert.equal(canAccessRecord(u, { assignedTo: 'ravi', createdBy: 'ravi' }, 'leads'), false);
+        assert.equal(canAccessRecord(u, { assignedTo: 'palak' }, 'leads', 'delete'), true);
+        assert.throws(() => assertRecordAccess(u, { assignedTo: 'ravi' }, 'leads'), isForbidden);
+    });
+});

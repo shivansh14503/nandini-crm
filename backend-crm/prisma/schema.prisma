@@ -84,6 +84,7 @@ model User {
   photo         UserPhoto?
   preference    UserPreference?
   invites       UserInvite[]
+  securityGroups SecurityGroupMember[]
   reportsTo     User?           @relation("UserReportsTo", fields: [reportsToId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   directReports User[]          @relation("UserReportsTo")
 
@@ -113,6 +114,47 @@ model Role {
   updatedBy       String?  @db.NVarChar(50)
 
   @@map("Roles")
+}
+
+/// Admin › Security Groups: teams / branches for record visibility. A role's "Group" level (roles/permissions.ts) lets a
+/// user see records owned or created by anyone who shares a group with them; a group's members also see the records of
+/// its sub-groups' members (any depth, never a cycle: checked by the API). A user can be in several groups. Archived
+/// groups (`isActive = false`) keep their members but grant nothing. Read through the in-process snapshot in
+/// roles/roleRegistry.ts so the access checks stay synchronous.
+model SecurityGroup {
+  id          Int       @id @default(autoincrement())
+  /// Unique among all groups, any case (checked by the API; SQL Server's collation compares case-insensitively).
+  name        String    @unique @db.NVarChar(100)
+  description String?   @db.NVarChar(Max)
+  /// The group this one sits under (a branch under a region). NO ACTION: a group with sub-groups can't be deleted.
+  parentId    Int?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  createdBy   String?   @db.NVarChar(50)
+  updatedAt   DateTime  @default(now()) @updatedAt
+  updatedBy   String?   @db.NVarChar(50)
+
+  parent   SecurityGroup?        @relation("SecurityGroupParent", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  children SecurityGroup[]       @relation("SecurityGroupParent")
+  members  SecurityGroupMember[]
+
+  @@index([parentId])
+  @@map("SecurityGroups")
+}
+
+/// A user's membership of a security group. Deleting the group or the user removes it.
+model SecurityGroupMember {
+  groupId Int
+  userId  Int
+  addedAt DateTime @default(now())
+  addedBy String?  @db.NVarChar(50)
+
+  group SecurityGroup @relation(fields: [groupId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user  User          @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([groupId, userId])
+  @@index([userId])
+  @@map("SecurityGroupMembers")
 }
 
 /// One-time set-password links (Admin › Users: the invite sent when a user is added, "Resend invite", "Send password

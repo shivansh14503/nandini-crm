@@ -104,6 +104,7 @@ export const ROUTES = {
     PDF_TEMPLATE_NEW: '/admin/pdf-templates/new',
     PDF_TEMPLATE_EDIT: (id: string) => `/admin/pdf-templates/${id}`,
     ADMIN_ROLES: '/admin/roles',
+    ADMIN_SECURITY_GROUPS: '/admin/security-groups',
     ADMIN_USERS: '/admin/users',
 };
 

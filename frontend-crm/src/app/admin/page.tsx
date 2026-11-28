@@ -17,6 +17,7 @@ import HubOutlinedIcon from '@mui/icons-material/HubOutlined';
 import AlternateEmailOutlinedIcon from '@mui/icons-material/AlternateEmailOutlined';
 import ManageAccountsOutlinedIcon from '@mui/icons-material/ManageAccountsOutlined';
 import SecurityOutlinedIcon from '@mui/icons-material/SecurityOutlined';
+import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
 import { useAuth } from '@/context/AuthContext';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
@@ -146,11 +147,21 @@ const ADMIN_MODULES: AdminModule[] = [
         key: 'roles',
         title: 'Roles',
         description:
-            'Create roles and set what each may view, create, edit, delete, export and import in every module, for all records or only their own, and who opens the admin panel.',
+            'Create roles and set what each may view, create, edit, delete, export and import in every module, for all records, their group’s or only their own, and who opens the admin panel.',
         icon: <AccountTreeOutlinedIcon />,
         href: ROUTES.ADMIN_ROLES,
         badge: BADGES.available,
-        highlights: ['Module permissions', 'All or own records', 'Admin panel access'],
+        highlights: ['Module permissions', 'All, group or own records', 'Admin panel access'],
+    },
+    {
+        key: 'security-groups',
+        title: 'Security Groups',
+        description:
+            'Group people into teams and branches, with sub-groups under a parent. Roles set to Group see the records of everyone in their groups.',
+        icon: <GroupsOutlinedIcon />,
+        href: ROUTES.ADMIN_SECURITY_GROUPS,
+        badge: BADGES.available,
+        highlights: ['Teams & branches', 'Sub-groups', 'Members', 'Group record access'],
     },
     {
         key: 'users',

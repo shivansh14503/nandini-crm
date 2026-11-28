@@ -1,5 +1,5 @@
 import type { RolePermissions } from '../roles/permissions.js';
-import { resolveRole } from '../roles/roleRegistry.js';
+import { resolveRole, teammatesOf } from '../roles/roleRegistry.js';
 import type { SessionRecord } from '../auth/sessionRecord.js';
 import { describeUserAgent } from './userAgent.js';
 
@@ -179,11 +179,16 @@ export interface UserAccessDto {
     /** Super Admin (manages Super Admin users). */
     superAdmin: boolean;
     permissions: RolePermissions;
+    /**
+     * Usernames a "Group" level covers (Admin › Security Groups): everyone who shares a group with the user, themselves
+     * included. The app hides Edit / Delete on records outside it; the API enforces the same rule.
+     */
+    teammates: string[];
 }
 
-export function accessDtoOf(role: string): UserAccessDto {
+export function accessDtoOf(role: string, username: string): UserAccessDto {
     const resolved = resolveRole(role);
-    return { adminPanel: resolved.adminPanel, superAdmin: resolved.superAdmin, permissions: resolved.permissions };
+    return { adminPanel: resolved.adminPanel, superAdmin: resolved.superAdmin, permissions: resolved.permissions, teammates: teammatesOf(username) };
 }
 
 export const toAuthMeDto = (row: Omit<AuthMeDto, 'photoUrl' | 'access'> & { photo: { id: string } | null }): AuthMeDto => ({
@@ -193,7 +198,7 @@ export const toAuthMeDto = (row: Omit<AuthMeDto, 'photoUrl' | 'access'> & { phot
     fullName: row.fullName,
     ...resolveNameParts(row),
     photoUrl: photoUrlOf(row.photo?.id),
-    access: accessDtoOf(row.role),
+    access: accessDtoOf(row.role, row.username),
 });
 
 // ── Sessions ─────────────────────────────────────────────────────────────────

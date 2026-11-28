@@ -78,6 +78,8 @@ const LOADERS: Partial<Record<AuditEntityType, Loader>> = {
         ]),
     Role: async (c, ids) =>
         (await c.role.findMany({ where: { id: { in: intIds(ids) } }, select: { id: true, name: true } })).map((r) => [String(r.id), { label: r.name }]),
+    SecurityGroup: async (c, ids) =>
+        (await c.securityGroup.findMany({ where: { id: { in: intIds(ids) } }, select: { id: true, name: true } })).map((r) => [String(r.id), { label: r.name }]),
     City: async (c, ids) =>
         (await c.city.findMany({ where: { id: { in: intIds(ids) } }, select: { id: true, cityName: true } })).map((r) => [String(r.id), { label: r.cityName }]),
     DropdownCategory: async (c, ids) =>

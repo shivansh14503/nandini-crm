@@ -55,7 +55,7 @@ export async function getMe(req: Request, res: Response): Promise<void> {
             firstName: null,
             lastName: null,
             photoUrl: null,
-            access: accessDtoOf(authUser.role),
+            access: accessDtoOf(authUser.role, authUser.username),
         };
     }
     res.status(StatusCodes.OK).json({ status: 'ok', user });

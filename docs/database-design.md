@@ -21,7 +21,7 @@
 
 | Domain | Tables |
 | --- | --- |
-| Identity | `Users` (model `User`), `Roles` (Admin › Roles), `UserPhoto` (profile photos), `UserPreference` (My Profile › Notifications), `UserInvites` (set-password links) |
+| Identity | `Users` (model `User`), `Roles` (Admin › Roles), `SecurityGroups` / `SecurityGroupMembers` (Admin › Security Groups), `UserPhoto` (profile photos), `UserPreference` (My Profile › Notifications), `UserInvites` (set-password links) |
 | CRM core | `Organization`, `Contact`, `Lead`, `Opportunity`, `Quotation`, `Ticket`, `Contract`, `Document`, `Product` |
 | Activities & calendar | `Activity`, `ActivityAttendee`, `ActivityExternalLink` (an activity's copy in a connected calendar + push outbox, P2-3b), `ActivitySeries` (a recurring activity's rule; its occurrences are `Activity` rows, Calendar Phase 4) |
 | Owned children | `EntityEmail`, `OpportunityLineItem`, `QuotationLineItem` |
@@ -212,7 +212,7 @@ role a user can hold; `Users.Role` stores the role's `name`.
 | `name` | NVARCHAR(50) UNIQUE | Shown everywhere a role is shown. Unique also by `normalizeRole` (checked in code: `Sales-Executive` clashes with `Sales Executive`) |
 | `description` | NVARCHAR(MAX) NULL | Shown on the role card (2 lines); long text, no limit |
 | `adminPanel` | BIT NOT NULL, default 0 | Opens the admin panel (`requireAdmin`: forms and dropdowns, users, roles, PDF templates, audit log, settings) |
-| `permissionsJson` | NVARCHAR(MAX) NOT NULL | `{ "<module>": { "<action>": "all" \| "own" \| "none" } }` for the 12 modules of `PERMISSION_MODULES` (leads, contacts, organizations, opportunities, quotations, contracts, tickets, referrals, activities, documents, products, partnerCompanies) and the actions each offers (view, create, edit, delete, export, import). Read through `normalizePermissions`: a missing or unknown value is `none`, Create / Export / Import are only `all` or `none`, modules without an owner (products, partner companies) only `all` or `none`, Edit / Delete never exceed View, and a module at View `none` allows nothing |
+| `permissionsJson` | NVARCHAR(MAX) NOT NULL | `{ "<module>": { "<action>": "all" \| "group" \| "own" \| "none" } }` (`group` since migration `20261230090000_security_groups`; offered wherever `own` is) for the 12 modules of `PERMISSION_MODULES` (leads, contacts, organizations, opportunities, quotations, contracts, tickets, referrals, activities, documents, products, partnerCompanies) and the actions each offers (view, create, edit, delete, export, import). Read through `normalizePermissions`: a missing or unknown value is `none`, Create / Export / Import are only `all` or `none`, modules without an owner (products, partner companies) only `all` or `none`, Edit / Delete never exceed View, and a module at View `none` allows nothing |
 | `isSystem` | BIT NOT NULL, default 0 | Super Admin: always full access and the admin panel whatever the row says; can't be edited, renamed or deleted |
 | `createdAt`, `createdBy`, `updatedAt`, `updatedBy` | | |
 
@@ -223,6 +223,34 @@ roles of `GLOBAL_ACCESS_ROLES` (every action on every record, no admin panel) an
 and Import yes; referrals stay viewable by all, as before). After that only `Super Admin` and roles that users hold
 but no row matches are added; a role an admin deleted is not brought back. Writes are audited (entity `Role`, module
 `roles`, category CONFIG, admin-only in the audit log).
+
+### 4.1d `SecurityGroups` and `SecurityGroupMembers` (Admin › Security Groups)
+
+Migration `20261230090000_security_groups` (models `SecurityGroup`, `SecurityGroupMember`; new tables only, no
+backfill). Module `backend-crm/src/modules/security-groups`. Teams / branches read by a role's **Group** level
+([system design](system-design.md) › Authorization › Security groups).
+
+`SecurityGroups`
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | INT IDENTITY PK | |
+| `name` | NVARCHAR(100) UNIQUE | Also unique in any case (checked in code) |
+| `description` | NVARCHAR(MAX) NULL | Long text, no limit |
+| `parentId` | INT NULL FK → `SecurityGroups.id` (NO ACTION) | The group this one sits under; never a loop (`400 GROUP_CYCLE`). A group with sub-groups can't be deleted (`400 HAS_SUB_GROUPS`). Index `SecurityGroups_parentId_idx` |
+| `isActive` | BIT NOT NULL, default 1 | 0 = archived: keeps its members, grants nothing, and cuts off its sub-groups |
+| `createdAt`, `createdBy`, `updatedAt`, `updatedBy` | | |
+
+`SecurityGroupMembers`
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `groupId` | INT FK → `SecurityGroups.id` (CASCADE) | PK (`groupId`, `userId`) |
+| `userId` | INT FK → `Users.Id` (CASCADE) | Index `SecurityGroupMembers_userId_idx`. A user can be in several groups |
+| `addedAt`, `addedBy` | DATETIME2, NVARCHAR(50) NULL | |
+
+Writes are audited (entity `SecurityGroup`, module `security-groups`, CONFIG, admin-only). Both tables are read whole
+into the role registry snapshot (a few hundred rows at most), never per request.
 
 ### 4.1b `UserInvites` (set-password links)
 

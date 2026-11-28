@@ -31,7 +31,7 @@ const ROW_SCOPED_OWNERS: Partial<Record<AuditEntityType, { module: PermissionMod
 };
 
 /** Admin-area trails (sign-ins carry IP addresses; templates are admin-managed). A user may read their own. */
-const ADMIN_ONLY: ReadonlySet<AuditEntityType> = new Set(['User', 'Role', 'PdfTemplate', 'Scorecard']);
+const ADMIN_ONLY: ReadonlySet<AuditEntityType> = new Set(['User', 'Role', 'SecurityGroup', 'PdfTemplate', 'Scorecard']);
 
 /**
  * Who may read one record's trail. Admins read every trail. Otherwise: row-scoped records need access to the

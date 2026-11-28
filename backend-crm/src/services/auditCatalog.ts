@@ -27,6 +27,11 @@ export type AuditEntityType =
     | 'User'
     /** A role of Admin › Roles: its name, description, admin panel switch and per-module permissions. */
     | 'Role'
+    /**
+     * A team / branch of Admin › Security Groups: CREATE / UPDATE / DELETE with its name, description, parent and
+     * archived state; member changes are an UPDATE with `membersAdded` / `membersRemoved` (usernames).
+     */
+    | 'SecurityGroup'
     | 'Import'
     | 'DropdownCategory'
     | 'DropdownOption'
@@ -166,6 +171,7 @@ const MODULE_BY_ENTITY: Record<AuditEntityType, string> = {
     Referral: 'referrals',
     User: 'users',
     Role: 'roles',
+    SecurityGroup: 'security-groups',
     Import: 'imports',
     DropdownCategory: 'form-customization',
     DropdownOption: 'form-customization',
@@ -195,6 +201,7 @@ const MODULE_BY_ENTITY: Record<AuditEntityType, string> = {
 
 const CONFIG_ENTITIES: ReadonlySet<AuditEntityType> = new Set([
     'Role',
+    'SecurityGroup',
     'DropdownCategory',
     'DropdownOption',
     'FormField',
