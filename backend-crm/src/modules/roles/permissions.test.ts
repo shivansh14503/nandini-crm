@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import {
     accessSummary,
     describeModulePermissions,
+    EXPORT_FOLLOWS_VIEW,
     FULL_PERMISSIONS,
     levelLabel,
     levelsFor,
@@ -61,6 +62,23 @@ describe('normalizePermissions', () => {
         assert.equal(uniformPermissions('group').leads.view, 'group');
         assert.equal(uniformPermissions('group').partnerCompanies.view, 'all');
         assert.equal(levelLabel('view', 'group'), 'Group');
+    });
+});
+
+describe('Export of a stored role saved before Export was a permission', () => {
+    it('keeps Organizations and Documents exporting while they can be viewed', () => {
+        assert.deepEqual([...EXPORT_FOLLOWS_VIEW].sort(), ['documents', 'organizations']);
+        const p = normalizePermissions({ organizations: { view: 'own', create: 'all' }, documents: { view: 'all' }, leads: { view: 'all' } });
+        assert.equal(p.organizations.export, 'all');
+        assert.equal(p.documents.export, 'all');
+        // Modules that never exported before read an unset Export as No.
+        assert.equal(p.leads.export, 'none');
+    });
+
+    it('follows an explicit Export, and View None turns it off', () => {
+        assert.equal(normalizePermissions({ organizations: { view: 'all', export: 'none' } }).organizations.export, 'none');
+        assert.equal(normalizePermissions({ documents: { view: 'none' } }).documents.export, 'none');
+        assert.equal(normalizePermissions({}).organizations.export, 'none');
     });
 });
 

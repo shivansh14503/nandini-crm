@@ -99,9 +99,17 @@ export function minLevel(a: AccessLevel, b: AccessLevel): AccessLevel {
 }
 
 /**
+ * Modules whose list exported for everyone who could view it before Export became a permission (2026-11-28): a stored
+ * role without an Export value for them keeps exporting while it can view (Yes), instead of reading it as No. Once an
+ * admin saves the role, its explicit Export applies.
+ */
+export const EXPORT_FOLLOWS_VIEW: ReadonlySet<PermissionModule> = new Set<PermissionModule>(['organizations', 'documents']);
+
+/**
  * A complete, consistent permission set from anything (stored JSON, a request body): every module and action is
- * present; an unknown or missing value is `none`; `own` / `group` become `all` where the action has no such level; and
- * nothing goes beyond View (a module that can't be viewed allows nothing, Edit / Delete never exceed View).
+ * present; an unknown or missing value is `none` (except a missing Export of `EXPORT_FOLLOWS_VIEW`); `own` / `group`
+ * become `all` where the action has no such level; and nothing goes beyond View (a module that can't be viewed allows
+ * nothing, Edit / Delete never exceed View).
  */
 export function normalizePermissions(input: unknown): RolePermissions {
     const source = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
@@ -111,7 +119,9 @@ export function normalizePermissions(input: unknown): RolePermissions {
         const out: ModulePermissions = {};
         for (const action of module.actions) {
             const value = raw[action];
-            let level: AccessLevel = isLevel(value) ? value : 'none';
+            const unsetExportFollowsView = value === undefined && action === 'export' && EXPORT_FOLLOWS_VIEW.has(module.key);
+            // An unset Export of these modules is Yes; the View rule below turns it off when the module can't be viewed.
+            let level: AccessLevel = isLevel(value) ? value : unsetExportFollowsView ? 'all' : 'none';
             if ((level === 'own' || level === 'group') && !levelsFor(module, action).includes(level)) level = 'all';
             out[action] = level;
         }

@@ -8,6 +8,7 @@ import { createContractRecord } from '../../contracts/contract.service.js';
 import { contractInputSchema, contractPastChecks } from '../../contracts/contract.validator.js';
 import type { ContractDto } from '../../contracts/contract.mapper.js';
 import type { ModuleFieldConfig } from '../../form-configs/customFieldValidator.js';
+import { buildAccessScopeWhere } from '../../shared/accessControl.js';
 import { opportunityLabel } from '../../shared/opportunityLabel.js';
 import { findOrganizationByName, type PrefetchedLookups } from '../../shared/prefetch.js';
 import { buildImportPayload } from '../importValues.js';
@@ -19,9 +20,10 @@ import { onlyMatch } from './quotations.values.js';
  * New does (ContractForm):
  *
  * - **Organization Name** names a live organization (exact name); **Contact Person** a live contact of that
- *   organization; **Opportunity** (optional) an opportunity by its number (`OPP-0042`) or its exact name. A name that
- *   matches nothing, or several records, fails the row with a message naming the cell. (Only when the organization
- *   comes from an opportunity whose organization is no longer on file are both kept as typed names, unlinked.)
+ *   organization; **Opportunity** (optional) an opportunity the importer may view, by its number (`OPP-0042`) or its
+ *   exact name. A name that matches nothing, or several records, fails the row with a message naming the cell. (Only
+ *   when the organization comes from an opportunity whose organization is no longer on file are both kept as typed
+ *   names, unlinked.)
  * - An Opportunity brings what picking it on the form brings: its organization, its contact and (when blank) its Tally
  *   Serial Number. An Opportunity of another organization than the row's fails the row.
  * - Blank cells take what the form pre-fills: Contract Title, Status, Contract Period and Contract Type from the
@@ -72,11 +74,16 @@ const OPPORTUNITY_SELECT = {
 
 const CONTACT_SELECT = { id: true, name: true } as const;
 
-/** The live opportunity a row names: by number first, else by its exact name. */
-async function findOpportunity(tx: TransactionClient, cell: string) {
-    const byCode = await tx.opportunity.findFirst({ where: { opportunityCode: cell, isDeleted: false }, select: OPPORTUNITY_SELECT });
+/**
+ * The live opportunity a row names: by number first, else by its exact name. Only opportunities the importer may view
+ * count (as the quotations import decides), so one they can't see fails as not found and none of its details (Tally
+ * Serial Number, organization, contact) reach the contract.
+ */
+async function findOpportunity(tx: TransactionClient, user: AuthUser, cell: string) {
+    const scope = buildAccessScopeWhere(user, 'assignedTo', 'opportunities', 'view');
+    const byCode = await tx.opportunity.findFirst({ where: { opportunityCode: cell, isDeleted: false, AND: [scope] }, select: OPPORTUNITY_SELECT });
     if (byCode) return byCode;
-    const byName = await tx.opportunity.findMany({ where: { opportunityName: cell, isDeleted: false }, select: OPPORTUNITY_SELECT, take: 2 });
+    const byName = await tx.opportunity.findMany({ where: { opportunityName: cell, isDeleted: false, AND: [scope] }, select: OPPORTUNITY_SELECT, take: 2 });
     return onlyMatch(byName, { label: 'Opportunity', plural: 'opportunities', hint: 'give its Opportunity number instead.', path: 'opportunity' }, cell);
 }
 
@@ -161,7 +168,7 @@ export function buildContractImportRow(
 
     return async (tx) => {
         const opportunityCell = text(payload.opportunity);
-        const opportunity = opportunityCell ? await findOpportunity(tx, opportunityCell) : null;
+        const opportunity = opportunityCell ? await findOpportunity(tx, user, opportunityCell) : null;
         const organization = await findOrganization(tx, text(payload.organizationName), opportunity, ctx.lookups);
         const contact = await findContact(tx, text(payload.contact), opportunity, organization);
 

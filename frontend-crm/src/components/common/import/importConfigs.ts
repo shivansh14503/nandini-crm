@@ -215,7 +215,7 @@ export const IMPORT_CONFIGS: Record<ImportEntityType, ImportEntityConfig> = {
         ],
     },
     // One row = one activity (backend imports/builders/activities.ts). Related To names a record by its number or exact
-    // name, with its type in the import-only Related To Type column (blank when the number tells it: OPP-0042). Video
+    // name, with its type in the import-only Related To Type column (blank when the number is in the default form, OPP-0042; a custom Document Series number needs the type). Video
     // meeting, Attendees and recurrence are not imported.
     activities: {
         entity: 'activities',
@@ -247,7 +247,7 @@ export const IMPORT_CONFIGS: Record<ImportEntityType, ImportEntityConfig> = {
                 aliases: ['related type', 'related module', 'record type', 'related to module'],
                 sample: ['Opportunity', 'Organization'],
                 section: 'Activity Details',
-                hint: `One of: ${ACTIVITY_RELATED_MODULES.map((m) => ACTIVITY_RELATED_MODULE_LABELS[m]).join(', ')} · Blank when Related To is a record number (OPP-0042)`,
+                hint: `One of: ${ACTIVITY_RELATED_MODULES.map((m) => ACTIVITY_RELATED_MODULE_LABELS[m]).join(', ')} · Blank only when Related To is a record number like OPP-0042 (a custom Document Series number needs the type)`,
             },
             {
                 key: 'durationMinutes',

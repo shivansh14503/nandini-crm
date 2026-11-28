@@ -8,6 +8,7 @@ import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 import { CreateSplitButton } from './CreateSplitButton';
 import { useMasterPermissions } from './masterPermissions';
 import { downloadCsv, type CsvColumn } from '@/utils/csvExport';
+import { businessWallClock } from '@/utils/formats';
 
 /**
  * A list's CSV export (the header's Export button). The list only declares what to write; the button, the file name
@@ -15,7 +16,7 @@ import { downloadCsv, type CsvColumn } from '@/utils/csvExport';
  * (Admin › Roles, via CommonMasterView).
  */
 export interface MasterExportConfig<T> {
-    /** File name base, e.g. `'leads'` → `leads-2026-11-28.csv`. */
+    /** File name base, e.g. `'leads'` → `leads-2026-11-28.csv` (today in the business timezone). */
     fileName: string;
     /** What a row is called in the messages: `{ singular: 'lead', plural: 'leads' }` → "Exported 3 leads.". */
     noun: { singular: string; plural: string };
@@ -42,7 +43,10 @@ export function runMasterExport<T>(config: MasterExportConfig<T>): void {
         config.onNotify(`There are no ${config.noun.plural} to export.`, 'info');
         return;
     }
-    downloadCsv(`${config.fileName}-${new Date().toISOString().slice(0, 10)}.csv`, rows, config.columns);
+    // Today on the business clock (not UTC): an export just after midnight in India is named for the new day.
+    const now = new Date();
+    const today = (businessWallClock(now) ?? now.toISOString()).slice(0, 10);
+    downloadCsv(`${config.fileName}-${today}.csv`, rows, config.columns);
     config.onNotify(`Exported ${rows.length} ${rows.length === 1 ? config.noun.singular : config.noun.plural}.`, 'success');
 }
 
