@@ -92,7 +92,7 @@ model User {
 model Role {
   id              Int      @id @default(autoincrement())
   name            String   @unique @db.NVarChar(50)
-  description     String?  @db.NVarChar(500)
+  description     String?  @db.NVarChar(Max)
   /// Opens the admin panel (forms, users, roles, PDF templates, …).
   adminPanel      Boolean  @default(false)
   /// JSON `{ [module]: { view, create, edit, delete, export, import: 'all' | 'own' | 'none' } }` (roles/permissions.ts).
@@ -1662,7 +1662,7 @@ model PdfTemplate {
   name         String    @db.NVarChar(120)
   /// QUOTATION (PDF_MODULES in src/modules/pdf/pdf.types.ts)
   module       String    @db.NVarChar(30)
-  description  String?   @db.NVarChar(500)
+  description  String?   @db.NVarChar(Max)
   isSystem     Boolean   @default(false)
   isDefault    Boolean   @default(false)
   isActive     Boolean   @default(true)
