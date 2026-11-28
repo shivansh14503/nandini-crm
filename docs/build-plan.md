@@ -802,6 +802,13 @@ Security Groups and Security Settings missing.
       per IP, 3 links / hour per account). 5 wrong passwords within 15 min lock the account for 15 min (`423
       ACCOUNT_LOCKED`), cleared by a sign-in, a password reset or Admin › Users **Unlock account**; locks and unlocks
       audited. Defaults in `auth/accountLockout.ts` (`DEFAULT_LOCKOUT_POLICY`, read through `getLockoutPolicy()`).
+- [x] **Company email: Gmail sender, email queue and templates** (2026-11-28, CRM-121) — Admin › Email: Outbound
+      Email (Gmail API through the Google Workspace service account of API Integrations with domain-wide delegation
+      and `gmail.send`, or the SMTP environment settings; sender, display name, reply-to, daily limit, Check
+      connection, Send test email), Templates (invite, admin reset, Forgot password reset; account locked and morning
+      email reserved; merge fields, preview, reset to default), Email Queue (every email, retry). One mail service with
+      a background queue, retries with backoff and a daily limit (system-design §5.2a). Not yet: the morning email on
+      templates, inbound email, campaigns, the account-locked email itself.
 - [ ] **Password Management** — admin-set password rules (length, character classes, expiry, reuse history), an
       admin screen for the lockout policy (attempts, window, lock length: today the defaults in `accountLockout.ts`),
       forced change on expiry.

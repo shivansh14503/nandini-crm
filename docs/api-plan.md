@@ -512,6 +512,24 @@ document schema is `backend-crm/src/modules/drawer-layouts/document/schema.ts` (
 
 ### 2.7 Administration 🔐
 
+**Email** — `/admin/email` (admins only; Admin › Email, CRM-121; system-design §5.2a). Nothing returns a credential:
+the Google key shows as its service account email and client ID, SMTP as its host and port.
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/outbound` | `OutboundEmailDto`: `{ provider, enabled, senderEmail, senderName, replyTo, dailyLimit, maxDailyLimit, updatedBy, updatedAt, status: { ready, reason, lastTestAt, lastTestOk, lastTestMessage, sentToday, queued, failed }, gmail: { keyConfigured, serviceAccountEmail, clientId, scope }, smtp: { configured, host, port, from } }` |
+| PUT | `/outbound` | Any of `{ provider: gmail\|smtp, enabled, senderEmail, senderName, replyTo, dailyLimit (1–2000) }` → `OutboundEmailDto`; 400 per field; unknown keys refused; audited `EmailSettings` UPDATE |
+| POST | `/outbound/check` | Gmail: mints a token as the sender with `gmail.send` (sends nothing); SMTP: connects and logs in → `{ ok, message, outbound }` (saved as the last check). Rate limited 10 / min per admin |
+| POST | `/outbound/test` | `{ to }` → `{ ok, message, outbound }`: a short test email through the mail service (`EmailLog.kind` `outbound_test`); 400 while mail is off |
+| GET | `/templates` | `TemplateDto[]`: `{ key, name, description, status: active\|reserved, hasLink, mergeFields[{ key, label, sample }], content, defaults, customised, updatedBy, updatedAt }` |
+| GET | `/templates/:key` | One `TemplateDto`; 404 unknown key |
+| PUT | `/templates/:key` | `{ subject (≤ 200), heading (≤ 200), body, buttonLabel? (≤ 80), afterButton?, footer? }` (long parts unlimited) → `TemplateDto`; 400 for a merge field the template doesn't offer, or no button label on a link template; audited `EmailTemplate` UPDATE |
+| POST | `/templates/:key/reset` | Back to the built-in wording → `TemplateDto`; audited `EmailTemplate` DELETE |
+| POST | `/templates/:key/preview` | Unsaved wording (or `{}` for the saved one) → `{ subject, html, text }` with sample values |
+| POST | `/templates/:key/test` | Sends it with sample values to the admin's own address → `{ ok, message }` |
+| GET | `/queue` | `?status&kind&q&page&limit (≤ 100)` → `{ data: EmailLogDto[], total, page, limit, summary: { counts, sentToday, dailyLimit, kinds } }`; `EmailLogDto.retry` = `send` \| `resend_link` \| null |
+| POST | `/queue/:id/retry` | `send`: sends the kept message now (past the attempt cap); `resend_link`: emails the user a fresh set-password link → `{ ok, message, email }`; 409 when there is nothing to retry or it is being sent |
+
 **Form & dropdown customisation** — `/form-configs` (`GET /` is open to every signed-in user)
 
 | Method | Path | Description |

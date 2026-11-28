@@ -88,6 +88,8 @@ export const ROUTES = {
     COMPANY_FORMATS: '/admin/company-formats',
     COMPANY_DETAILS: '/admin/company-details',
     EMAIL_VALIDATION: '/admin/email-validation',
+    /** Admin › Email: Outbound Email, Templates, Email Queue (`?tab=outbound|templates|queue`). */
+    ADMIN_EMAIL: '/admin/email',
     HOLIDAYS: '/admin/holidays',
     /**
      * Admin › API Integrations: Google / Microsoft 365 / Zoom set-up, calendar sync settings, People. `calendar_sync_issue`

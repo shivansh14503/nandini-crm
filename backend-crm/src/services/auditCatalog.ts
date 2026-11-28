@@ -48,6 +48,10 @@ export type AuditEntityType =
     | 'City'
     /** A provider's company set-up on Admin › API Integrations (Google, Microsoft 365, Zoom); id = provider key. */
     | 'IntegrationProvider'
+    /** Admin › Email › Outbound Email (how the CRM sends email); one entity, id `outbound-email`, action UPDATE. */
+    | 'EmailSettings'
+    /** A system email template of Admin › Email › Templates; id = template key (UPDATE, DELETE = reset to default). */
+    | 'EmailTemplate'
     /** An employee's company calendar sync row (Calendar Phase 2 P2-2b): ENROL / STOP (P2-2's CONNECT / DISCONNECT remain in history). */
     | 'CalendarConnection'
     /** An admin's calendar choice for one person (Admin › API Integrations › People): provider override, exclusion. */
@@ -179,6 +183,8 @@ const MODULE_BY_ENTITY: Record<AuditEntityType, string> = {
     Holiday: 'holidays',
     City: 'cities',
     IntegrationProvider: 'admin-integrations',
+    EmailSettings: 'admin-email',
+    EmailTemplate: 'admin-email',
     CalendarConnection: 'calendar',
     CalendarSyncUser: 'admin-integrations',
     BookingLink: 'booking-links',
@@ -205,6 +211,8 @@ const CONFIG_ENTITIES: ReadonlySet<AuditEntityType> = new Set([
     'Holiday',
     'City',
     'IntegrationProvider',
+    'EmailSettings',
+    'EmailTemplate',
     'CalendarSyncUser',
     'LoggedEmailMailbox',
 ]);
@@ -396,6 +404,10 @@ export function labelFromChanges(entityType: AuditEntityType, entityId: string, 
             return pick('occasion');
         case 'IntegrationProvider':
             return INTEGRATION_PROVIDER_LABELS[entityId] ?? entityId;
+        case 'EmailSettings':
+            return 'Outbound Email';
+        case 'EmailTemplate':
+            return pick('name') ?? entityId;
         case 'CalendarConnection':
             return pick('accountEmail');
         case 'CalendarSyncUser':

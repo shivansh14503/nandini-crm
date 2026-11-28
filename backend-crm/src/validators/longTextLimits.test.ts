@@ -23,6 +23,7 @@ const HUGE = 'Clause. '.repeat(6_000);
 const LONG_TEXT_COLUMNS: Record<string, string[]> = {
     Organization: ['inactivityReason', 'addDescriptionAndScope'],
     Contact: ['addDescription'],
+    EmailTemplate: ['body', 'afterButton', 'footer'],
     Lead: ['remarks', 'description'],
     Product: ['description', 'termsAndConditions', 'inactivityReason'],
     Opportunity: ['remarks', 'description'],

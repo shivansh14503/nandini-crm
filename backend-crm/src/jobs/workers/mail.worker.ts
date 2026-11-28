@@ -4,12 +4,15 @@ import { logger } from '../../config/logger.js';
 import { redis } from '../../config/redis.js';
 import { catchUpMorningSummary, missedMorningSummaryDay, runMorningSummary } from '../../modules/notifications/morningSummary.service.js';
 import { runWithAuditOrigin } from '../../services/auditContext.js';
+import { deliverDueEmails } from '../../services/mail.service.js';
 import { zonedDayOf } from '../../utils/zonedTime.js';
 import { createQueueConnection, isQueueAvailable, mailQueue, QUEUE_NAMES } from '../queues.js';
 import { throttledLogger } from './throttledLogger.js';
 
 /**
  * Outgoing email (docs/system-design.md §5.2): the `crm-mail` queue.
+ *   deliver  scheduler 'mail-queue' every minute, and a one-off job whenever an email is queued: sends queued emails
+ *            and retries failed ones whose backoff is over (mail.service.ts deliverDueEmails, daily limit held)
  *   morning  scheduler 'morning-summary', MORNING_SUMMARY_CRON (default 09:00 Mon–Sat, business timezone);
  *            a missed run is added as a one-off `morning` job (id `morning-catchup-<day>`)
  * Kept apart from `crm-reminders`: a run sends to every user with 20 s SMTP timeouts and is retried while sends fail,
@@ -21,6 +24,7 @@ import { throttledLogger } from './throttledLogger.js';
  */
 
 const MORNING_SCHEDULER = 'morning-summary';
+const QUEUE_SCHEDULER = 'mail-queue';
 /** The no-Redis fallback checks this often. */
 const FALLBACK_TICK_MS = 60_000;
 
@@ -40,6 +44,7 @@ export const isStaleMorningJob = (data: MorningJobData | undefined, now: Date, t
 
 async function processJob(job: Job): Promise<unknown> {
     return runWithAuditOrigin(ORIGIN, async () => {
+        if (job.name === 'deliver') return deliverDueEmails();
         if (job.name !== 'morning') {
             logger.warn({ job: job.name }, 'Unknown mail job');
             return null;
@@ -58,6 +63,7 @@ async function processJob(job: Job): Promise<unknown> {
 /** Creates or updates the scheduler (one occurrence for every API / worker process), or removes it while turned off. */
 async function scheduleJobs(): Promise<void> {
     const queue = mailQueue();
+    await queue.upsertJobScheduler(QUEUE_SCHEDULER, { every: 60_000 }, { name: 'deliver', opts: { removeOnComplete: { count: 10 }, removeOnFail: { count: 50 } } });
     if (ENV.NOTIFICATIONS.MORNING_SUMMARY_ENABLED) {
         await queue.upsertJobScheduler(MORNING_SCHEDULER, { pattern: ENV.NOTIFICATIONS.MORNING_SUMMARY_CRON, tz: ENV.BUSINESS_TIMEZONE }, { name: 'morning' });
     } else {
@@ -99,11 +105,12 @@ async function recover(): Promise<void> {
 
 let ticking = false;
 
-/** Without Redis: make up a missed morning summary inline (no job can be queued); with Redis: nothing. */
+/** Without Redis: send the email queue and make up a missed morning summary inline (no job can be queued); with Redis: nothing. */
 async function fallbackTick(): Promise<void> {
     if (ticking || isQueueAvailable()) return;
     ticking = true;
     try {
+        await runWithAuditOrigin(ORIGIN, () => step('Email queue run failed', () => deliverDueEmails()));
         await runWithAuditOrigin(ORIGIN, () => step('Morning summary catch-up failed', () => catchUpMorningSummary()));
     } finally {
         ticking = false;

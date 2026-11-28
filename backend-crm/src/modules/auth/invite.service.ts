@@ -10,10 +10,13 @@ import { HttpError } from '../../utils/httpError.js';
 import { AUTH_ME_SELECT, toAuthMeDto } from '../profile/profile.dto.js';
 import { acquireLocks, runInTransaction } from '../shared/transactions.js';
 import { hashPassword, verifyPassword, type LoginResult } from './auth.service.js';
-import { formatExpiry, renderSetPasswordEmail } from './inviteEmail.render.js';
+import { EMAIL_TEMPLATES, renderEmailTemplate, type EmailTemplateKey } from '../email/email.templates.js';
+import { loadTemplateOverride, personVars } from '../email/email.templateStore.js';
+import { formatExpiry } from './inviteEmail.render.js';
 import {
     generateInviteToken,
     hashInviteToken,
+    INVITE_TTL_HOURS,
     INVITE_TTL_MS,
     isInviteUsable,
     isWellFormedToken,
@@ -98,7 +101,13 @@ async function findUsable(token: unknown, now: Date) {
 }
 
 /** The mail calls, behind an object so tests can stand in for SMTP. */
-export const inviteMail = { sendMail, isMailConfigured };
+export const inviteMail = { sendMail, isMailConfigured, loadTemplate: loadTemplateOverride };
+
+/** The template of each set-password email (Admin › Email › Templates). */
+export function templateFor(purpose: InvitePurpose, selfService: boolean): EmailTemplateKey {
+    if (purpose === 'invite') return 'user_invite';
+    return selfService ? 'password_reset_self' : 'password_reset';
+}
 
 export interface SendOptions {
     /**
@@ -156,16 +165,17 @@ export const inviteService = {
         }
 
         const admin = selfService ? null : await prisma.user.findUnique({ where: { id: actor.id }, select: { fullName: true } }).catch(() => null);
-        const email = renderSetPasswordEmail({
-            purpose,
-            recipientName: user.firstName?.trim() || user.fullName.trim().split(/\s+/)[0] || user.username,
-            username: user.username,
-            url: setPasswordUrl(ENV.MAIL.APP_PUBLIC_URL, token),
-            expiresLabel: formatExpiry(expiresAt, ENV.BUSINESS_TIMEZONE),
-            sentBy: admin?.fullName?.trim() || null,
-            requestedBySelf: selfService,
+        // Admin › Email › Templates: the admin's wording of the template, or the built-in one.
+        const templateKey = templateFor(purpose, selfService);
+        const email = renderEmailTemplate(EMAIL_TEMPLATES[templateKey], (await inviteMail.loadTemplate(templateKey)) ?? EMAIL_TEMPLATES[templateKey].defaults, {
+            ...personVars(user),
+            link: setPasswordUrl(ENV.MAIL.APP_PUBLIC_URL, token),
+            expiresAt: formatExpiry(expiresAt, ENV.BUSINESS_TIMEZONE),
+            linkValidHours: String(INVITE_TTL_HOURS),
+            sentBy: admin?.fullName?.trim() || 'Your administrator',
         });
-        // A one-off send (unique dedupe key): EmailLog keeps the subject and recipient, never the body (or the link).
+        // A one-off send (unique dedupe key): EmailLog keeps the subject and recipient, never the body (the link is a
+        // credential), so a failed link email is not retried in the background: the link is dropped below instead.
         const result = await inviteMail.sendMail({
             to: sentTo,
             toUsername: user.username,
@@ -173,7 +183,10 @@ export const inviteService = {
             html: email.html,
             text: email.text,
             kind: MAIL_KIND[purpose],
+            templateKey,
             dedupeKey: `${MAIL_KIND[purpose]}:${user.id}:${randomUUID()}`,
+            retainBody: false,
+            essential: true,
         });
 
         if (result.status === 'sent') {

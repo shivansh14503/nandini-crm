@@ -374,7 +374,7 @@ export function runMorningSummary(now = new Date()): Promise<MorningSummaryRunRe
     if (!isMailConfigured()) {
         if (!loggedMailOff) {
             loggedMailOff = true;
-            logger.warn('Morning summary emails are not sent: outgoing email is turned off (MAIL_ENABLED / SMTP_HOST)');
+            logger.warn('Morning summary emails are not sent: outgoing email is turned off (Admin › Email › Outbound Email)');
         }
         return Promise.resolve({ day, users: 0, sent: 0, skipped: 0, failed: 0, empty: 0, optedOut: 0, outOfOffice: 0, disabled: 'mail' });
     }
@@ -458,7 +458,7 @@ export async function previewMorningSummary(user: AuthUser, now = new Date()): P
 }
 
 export interface MorningSummaryTestResult {
-    status: 'sent' | 'failed' | 'skipped' | 'duplicate';
+    status: 'sent' | 'failed' | 'skipped' | 'duplicate' | 'queued';
     error?: string;
     /** Where it went. */
     email: string;
@@ -485,6 +485,7 @@ export async function sendTestMorningSummary(user: AuthUser, now = new Date()): 
         html: email.html,
         text: email.text,
         kind: MORNING_SUMMARY_TEST_KIND,
+        essential: true,
     });
     const message =
         result.status === 'sent'

@@ -10,7 +10,9 @@ import {
     tokenMatchesHash,
 } from './invite.token.js';
 import { escapeHtml } from '../notifications/morningSummary.render.js';
-import { formatExpiry, renderSetPasswordEmail } from './inviteEmail.render.js';
+import { formatExpiry } from './inviteEmail.render.js';
+import { EMAIL_TEMPLATES, renderEmailTemplate } from '../email/email.templates.js';
+import { templateFor } from './invite.service.js';
 
 describe('set-password link tokens', () => {
     it('are 256 random bits as 43 base64url characters, different every time', () => {
@@ -54,15 +56,22 @@ describe('set-password link tokens', () => {
 
 describe('set-password email', () => {
     const base = {
-        recipientName: 'Asha',
+        appName: 'Nandini CRM',
+        firstName: 'Asha',
+        fullName: 'Asha Kulkarni',
         username: 'asha.k',
-        url: 'https://crm.example.com/set-password?token=tok_en-1',
-        expiresLabel: 'Mon, 30 Nov 2026, 3:30 pm IST',
+        link: 'https://crm.example.com/set-password?token=tok_en-1',
+        expiresAt: 'Mon, 30 Nov 2026, 3:30 pm IST',
+        linkValidHours: String(INVITE_TTL_HOURS),
         sentBy: 'Rahul Mehta',
+    };
+    const render = (purpose: 'invite' | 'reset', vars: Record<string, string> = {}, selfService = false) => {
+        const def = EMAIL_TEMPLATES[templateFor(purpose, selfService)];
+        return renderEmailTemplate(def, def.defaults, { ...base, ...vars });
     };
 
     it('invites a new user with a button, the username, the expiry and a plain-link fallback', () => {
-        const email = renderSetPasswordEmail({ ...base, purpose: 'invite' });
+        const email = render('invite');
         assert.equal(email.subject, 'You’re invited to Nandini CRM');
         assert.match(email.html, /Welcome to Nandini CRM, Asha/);
         assert.match(email.html, /Rahul Mehta added you/);
@@ -70,20 +79,24 @@ describe('set-password email', () => {
         assert.match(email.html, /asha\.k/);
         assert.match(email.html, /Mon, 30 Nov 2026, 3:30 pm IST/);
         // The button's href, the fallback link's href and its text.
-        assert.equal(email.html.split(escapeHtml(base.url)).length - 1, 3);
+        assert.equal(email.html.split(escapeHtml(base.link)).length - 1, 3);
         assert.match(email.text, /Set your password: https:\/\/crm\.example\.com\/set-password\?token=tok_en-1/);
         assert.match(email.text, /Your username: asha\.k/);
+        assert.match(email.text, /Never forward this email/);
     });
 
-    it('words a reset link differently', () => {
-        const email = renderSetPasswordEmail({ ...base, purpose: 'reset', sentBy: null });
+    it('words an admin-sent and a self-service reset link differently', () => {
+        const email = render('reset', { sentBy: 'Your administrator' });
         assert.equal(email.subject, 'Reset your Nandini CRM password');
-        assert.match(email.html, /You were sent a link to choose a new password/);
+        assert.match(email.html, /Your administrator sent you a link to choose a new password/);
         assert.match(email.text, /current password keeps working/);
+        const self = render('reset', {}, true);
+        assert.match(self.text, /We received a request to reset the password/);
+        assert.doesNotMatch(self.text, /Rahul Mehta/);
     });
 
     it('escapes every value', () => {
-        const email = renderSetPasswordEmail({ ...base, purpose: 'invite', recipientName: '<b>x</b>', sentBy: '"Eve" <eve>' });
+        const email = render('invite', { firstName: '<b>x</b>', sentBy: '"Eve" <eve>' });
         assert.doesNotMatch(email.html, /<b>x<\/b>/);
         assert.match(email.html, /&lt;b&gt;x&lt;\/b&gt;/);
         assert.match(email.html, /&quot;Eve&quot; &lt;eve&gt;/);
