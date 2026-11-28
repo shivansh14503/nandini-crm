@@ -4,16 +4,57 @@ import React from 'react';
 import { Box, Button } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 import { CreateSplitButton } from './CreateSplitButton';
 import { useMasterPermissions } from './masterPermissions';
+import { downloadCsv, type CsvColumn } from '@/utils/csvExport';
 
-export interface MasterHeaderActionsProps {
+/**
+ * A list's CSV export (the header's Export button). The list only declares what to write; the button, the file name
+ * (`<fileName>-YYYY-MM-DD.csv`) and the messages are shared. Shown only with the list module's Export permission
+ * (Admin › Roles, via CommonMasterView).
+ */
+export interface MasterExportConfig<T> {
+    /** File name base, e.g. `'leads'` → `leads-2026-11-28.csv`. */
+    fileName: string;
+    /** What a row is called in the messages: `{ singular: 'lead', plural: 'leads' }` → "Exported 3 leads.". */
+    noun: { singular: string; plural: string };
+    /**
+     * The rows to write, read when the button is pressed: the selected rows when any are selected, otherwise every
+     * row matching the current filters and search (all pages). `selectedOrAll(filtered, selectedIds, allRows)` from
+     * `@/utils/exportCells` does exactly that (selected rows come from the whole loaded list, so a selection hidden by
+     * a later pill or search change is still exported).
+     */
+    rows: () => readonly T[];
+    /** The CSV columns, in order (cell helpers in `@/utils/exportCells`). */
+    columns: readonly CsvColumn<T>[];
+    /**
+     * Shows the result to the user through the list's own toast: `success` "Exported 3 leads." after the download,
+     * `info` "There are no leads to export." when there is nothing to write (no file then).
+     */
+    onNotify: (message: string, severity: 'success' | 'info') => void;
+}
+
+/** Writes `config`'s rows as a CSV download and reports the result through `config.onNotify`. */
+export function runMasterExport<T>(config: MasterExportConfig<T>): void {
+    const rows = config.rows();
+    if (rows.length === 0) {
+        config.onNotify(`There are no ${config.noun.plural} to export.`, 'info');
+        return;
+    }
+    downloadCsv(`${config.fileName}-${new Date().toISOString().slice(0, 10)}.csv`, rows, config.columns);
+    config.onNotify(`Exported ${rows.length} ${rows.length === 1 ? config.noun.singular : config.noun.plural}.`, 'success');
+}
+
+export interface MasterHeaderActionsProps<T = unknown> {
     onRefresh?: () => void;
     onNewClick?: () => void;
     newButtonLabel?: string;
     /** When provided, the New button becomes a split button with import options. */
     onImportClick?: () => void;
-    /** Extra buttons rendered between Refresh and the New button (e.g. Export). */
+    /** When provided (and the role may export), an Export button after Refresh downloads the list as CSV. */
+    exportConfig?: MasterExportConfig<T>;
+    /** Extra buttons rendered between Refresh / Export and the New button. */
     children?: React.ReactNode;
 }
 
@@ -36,17 +77,19 @@ export const outlinedHeaderButtonSx = {
 } as const;
 
 /**
- * Standard right-aligned header action row shared by the entity master views. New and Import show only when the
- * user's role may create / import in the page's module (Admin › Roles, via CommonMasterView).
+ * Standard right-aligned header action row shared by the entity master views. New, Import and Export show only when
+ * the user's role may create / import / export in the page's module (Admin › Roles, via CommonMasterView). The row
+ * wraps on narrow screens.
  */
-export function MasterHeaderActions({
+export function MasterHeaderActions<T = unknown>({
     onRefresh,
     onNewClick: onNewClickProp,
     newButtonLabel = 'New Record',
     onImportClick: onImportClickProp,
+    exportConfig,
     children,
-}: MasterHeaderActionsProps) {
-    const { canCreate, canImport } = useMasterPermissions();
+}: MasterHeaderActionsProps<T>) {
+    const { canCreate, canImport, canExport } = useMasterPermissions();
     const onNewClick = canCreate ? onNewClickProp : undefined;
     const onImportClick = canCreate && canImport ? onImportClickProp : undefined;
     return (
@@ -60,6 +103,18 @@ export function MasterHeaderActions({
                     sx={outlinedHeaderButtonSx}
                 >
                     Refresh
+                </Button>
+            )}
+
+            {exportConfig && canExport && (
+                <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<FileDownloadOutlinedIcon sx={{ fontSize: 16 }} />}
+                    onClick={() => runMasterExport(exportConfig)}
+                    sx={outlinedHeaderButtonSx}
+                >
+                    Export
                 </Button>
             )}
 

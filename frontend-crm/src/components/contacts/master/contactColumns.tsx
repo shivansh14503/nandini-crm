@@ -20,15 +20,12 @@ import type { Contact } from '@/types/contact.types';
 const NO_ORGANIZATIONS: ExtendedOrganization[] = [];
 const plainCellSx = { fontSize: '0.78rem', color: 'var(--crm-slate-700)' } as const;
 /**
- * The Contact table's columns (built-in ones; form-field columns are added by the table). Shared by the
- * module's list page and the related-records table in other records' drawers, so both offer the same columns.
- * `openRecord` runs on a plain click of the record link.
+ * The Location column's text for a contact: its organization's billing "City, State" (matched by id, else by name),
+ * '' when unknown. Shared by the table column and the list's CSV export so both read the same.
  */
-export function useContactColumns(openRecord: (record: Contact) => void, { enabled = true }: { enabled?: boolean } = {}): DataTableColumn<Contact>[] {
-    const showNumber = useShowRecordNumber();
-    // Location column: the contact's organization's billing city and state.
+export function useContactLocation({ enabled = true }: { enabled?: boolean } = {}): (contact: Contact) => string {
     const { data: organizations = NO_ORGANIZATIONS } = useOrganizations(undefined, { enabled });
-    const locationOf = useMemo(() => {
+    return useMemo(() => {
         const byId = new Map(organizations.map((o) => [o.id, o]));
         const byName = new Map(organizations.map((o) => [o.organizationName.trim().toLowerCase(), o]));
         return (c: Contact) => {
@@ -36,6 +33,27 @@ export function useContactColumns(openRecord: (record: Contact) => void, { enabl
             return org ? [org.billingCity, org.billingState].filter(Boolean).join(', ') : '';
         };
     }, [organizations]);
+}
+
+/** A phone number as the table shows it (formatted, else as stored); '' when empty. */
+export function contactPhoneText(value: string | null | undefined): string {
+    return value ? formatPhoneDisplay(value) || value : '';
+}
+
+/** The email the table's Email column shows: the primary address, else the first one; '' when none. */
+export function contactPrimaryEmail(c: Contact): string {
+    return (c.emailAddress?.find((e) => e.isPrimary) ?? c.emailAddress?.[0])?.email ?? '';
+}
+
+/**
+ * The Contact table's columns (built-in ones; form-field columns are added by the table). Shared by the
+ * module's list page and the related-records table in other records' drawers, so both offer the same columns.
+ * `openRecord` runs on a plain click of the record link.
+ */
+export function useContactColumns(openRecord: (record: Contact) => void, { enabled = true }: { enabled?: boolean } = {}): DataTableColumn<Contact>[] {
+    const showNumber = useShowRecordNumber();
+    // Location column: the contact's organization's billing city and state.
+    const locationOf = useContactLocation({ enabled });
 
     return useMemo(
         () => [
@@ -128,7 +146,7 @@ export function useContactColumns(openRecord: (record: Contact) => void, { enabl
                 render: (c) => (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
                         <PhoneOutlinedIcon sx={{ fontSize: 14, color: 'var(--mui-palette-text-muted)' }} />
-                        <Typography sx={plainCellSx}>{c.mobile ? formatPhoneDisplay(c.mobile) || c.mobile : '-'}</Typography>
+                        <Typography sx={plainCellSx}>{contactPhoneText(c.mobile) || '-'}</Typography>
                     </Box>
                 ),
             },
@@ -138,7 +156,7 @@ export function useContactColumns(openRecord: (record: Contact) => void, { enabl
                 sortable: true,
                 minWidth: 140,
                 render: (c) => (
-                    <Typography sx={plainCellSx}>{c.officePhone ? formatPhoneDisplay(c.officePhone) || c.officePhone : '-'}</Typography>
+                    <Typography sx={plainCellSx}>{contactPhoneText(c.officePhone) || '-'}</Typography>
                 ),
             },
             {
@@ -148,7 +166,7 @@ export function useContactColumns(openRecord: (record: Contact) => void, { enabl
                 sortable: false,
                 minWidth: 180,
                 render: (c) => {
-                    const email = (c.emailAddress?.find((e) => e.isPrimary) ?? c.emailAddress?.[0])?.email;
+                    const email = contactPrimaryEmail(c);
                     return (
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
                             <EmailOutlinedIcon sx={{ fontSize: 14, color: 'var(--mui-palette-text-muted)' }} />

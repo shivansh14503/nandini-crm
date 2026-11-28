@@ -13,9 +13,15 @@ import { wasModified } from '../../common/Drawer/RecordAuditFooter';
 import { formatDateTime } from '@/utils/date';
 import { formatPhoneDisplay } from '@/utils/phone';
 import { findCrmUser } from '@/services/masterData.store';
+import type { CsvColumn } from '@/utils/csvExport';
+import { exportDateTime, exportList, exportUser } from '@/utils/exportCells';
 import { ACTIVE_REFERRAL_STATUS, type Referral } from '@/types/referral.types';
 
 const assigneeName = (username: string) => findCrmUser(username)?.name || username;
+/** A phone number as the table shows it (formatted, or as stored when it can't be formatted). */
+const phoneText = (phone?: string) => (phone ? formatPhoneDisplay(phone) || phone : '');
+/** Email addresses with the primary one first. */
+const emailsOf = (r: Referral) => [...(r.emailAddress ?? [])].sort((a, b) => Number(Boolean(b.isPrimary)) - Number(Boolean(a.isPrimary)));
 const plainCellSx = { fontSize: '0.78rem', color: 'var(--crm-slate-700)' } as const;
 
 /** Active / Inactive pill: success tint for Active, warning tint for Inactive. */
@@ -91,7 +97,7 @@ export function useReferralColumns(openRecord: (record: Referral) => void): Data
                 render: (r) => (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
                         <PhoneOutlinedIcon sx={{ fontSize: 14, color: 'var(--mui-palette-text-muted)' }} />
-                        <Typography sx={plainCellSx}>{r.mobile ? formatPhoneDisplay(r.mobile) || r.mobile : '-'}</Typography>
+                        <Typography sx={plainCellSx}>{phoneText(r.mobile) || '-'}</Typography>
                     </Box>
                 ),
             },
@@ -101,7 +107,7 @@ export function useReferralColumns(openRecord: (record: Referral) => void): Data
                 sortable: true,
                 minWidth: 140,
                 defaultHidden: true,
-                render: (r) => <Typography sx={plainCellSx}>{r.officePhone ? formatPhoneDisplay(r.officePhone) || r.officePhone : '-'}</Typography>,
+                render: (r) => <Typography sx={plainCellSx}>{phoneText(r.officePhone) || '-'}</Typography>,
             },
             {
                 id: 'email',
@@ -156,3 +162,24 @@ export function useReferralColumns(openRecord: (record: Referral) => void): Data
         [openRecord]
     );
 }
+
+/**
+ * Columns of the Referrals list CSV export: the table's columns (same headers and display text: formatted phones,
+ * user names, Date Modified only once the record was edited) plus Department and Created By. Emails are all of the
+ * referral's addresses, primary first, joined with ', '.
+ */
+export const REFERRAL_CSV_COLUMNS: CsvColumn<Referral>[] = [
+    { header: 'Name', value: (r) => r.name },
+    { header: 'Status', value: (r) => r.status },
+    { header: 'Company Name', value: (r) => r.companyName },
+    { header: 'Mobile', value: (r) => phoneText(r.mobile) },
+    { header: 'Office Phone', value: (r) => phoneText(r.officePhone) },
+    { header: 'Email', value: (r) => exportList(emailsOf(r).map((e) => e.email), ', ') },
+    { header: 'Designation', value: (r) => r.designation },
+    { header: 'Department', value: (r) => r.department },
+    { header: 'Assigned To', value: (r) => exportUser(r.assignedTo) },
+    { header: 'Created By', value: (r) => exportUser(r.createdBy) },
+    // Export cells keep one fixed format whatever the company display formats.
+    { header: 'Date Modified', value: (r) => (wasModified(r) ? exportDateTime(r.updatedAt) : '') },
+    { header: 'Date Created', value: (r) => exportDateTime(r.createdAt) },
+];

@@ -703,15 +703,25 @@ export interface ActivityMeta {
     maxDurationDays: number;
 }
 
+/** Options of `parseCrmCreate`. */
+export interface CrmCreateParseOptions {
+    /**
+     * Accept custom date fields before today (bulk import carries historical data, imports/builders/activities.ts).
+     * The past-start rule of Planned activities still applies.
+     */
+    allowPastDates?: boolean;
+}
+
 /**
  * A CRM create request parsed and checked as `POST /` does (form configuration, schedule, past start), before any
- * transaction. Shared with the series create (activity.series.ts).
+ * transaction. Shared with the series create (activity.series.ts) and the bulk import (imports/builders/activities.ts).
  */
-export function parseCrmCreate(body: unknown, config: ActivityConfig): { input: ActivityInput; schedule: Schedule; now: Date } {
+export function parseCrmCreate(body: unknown, config: ActivityConfig, opts: CrmCreateParseOptions = {}): { input: ActivityInput; schedule: Schedule; now: Date } {
     const input = activityInputSchema.parse(body);
     input.customFields = checkModulePayload(config.fields, configPayload(asPayload(body), input), input.customFields, {
         notApplicableKeys: notApplicableFor(input.followupType),
         notRequired: ACTIVITY_NEVER_REQUIRED,
+        allowPastDates: opts.allowPastDates,
     });
     const schedule = scheduleOf(input, config);
     const now = new Date();

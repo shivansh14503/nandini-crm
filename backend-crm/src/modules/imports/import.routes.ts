@@ -6,7 +6,8 @@ import { importBodySchema, importEntityParamSchema, importIdParamSchema } from '
 
 /**
  * /api/import
- *   POST /:entity          { rows: [{ rowNumber, values }], fileName? }  entity = organizations|contacts|products|leads
+ *   POST /:entity          { rows: [{ rowNumber, values }], fileName? }  entity = organizations|contacts|products|leads|
+ *                          opportunities|tickets|partner-companies|quotations|contracts|referrals|activities
  *                          → 202 queued (poll the job) or 200 completed (no Redis; ≤ 500 rows run inline)
  *   GET  /jobs/:importId   → state, live counts (processed / created / failed), progress % and per-row results (owner only)
  *   POST /jobs/:importId/cancel → removes a queued import, or stops a running one before its next row (owner only)

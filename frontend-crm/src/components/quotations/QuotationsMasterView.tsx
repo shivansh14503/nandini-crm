@@ -5,19 +5,27 @@ import { useResetTab } from '@/hooks/useResetTab';
 import { useRouter } from 'next/navigation';
 import AccountCircleOutlinedIcon from '@mui/icons-material/AccountCircleOutlined';
 import WorkspacePremiumOutlinedIcon from '@mui/icons-material/WorkspacePremiumOutlined';
+import FileUploadOutlinedIcon from '@mui/icons-material/FileUploadOutlined';
+import { Button } from '@mui/material';
 
 import { ModuleScorecardSummary, useModuleScorecard } from '../common/scorecard/useModuleScorecard';
 import { CommonMasterView } from '../common/CommonMasterView';
 import { useTableFilter } from '../common/TableFilter';
-import { MasterHeaderActions } from '../common/MasterHeaderActions';
+import { MasterHeaderActions, outlinedHeaderButtonSx, type MasterExportConfig } from '../common/MasterHeaderActions';
+import { useMasterPermissions } from '../common/masterPermissions';
 import { buildExtendedSearchConfig } from '../common/buildExtendedSearchConfig';
 import { AppToast } from '../common/AppToast';
+import { DataImportModal } from '../common/import';
+import { wasModified } from '../common/Drawer/RecordAuditFooter';
 import { useSaveFlash } from '@/utils/saveFlash';
+import type { CsvColumn } from '@/utils/csvExport';
+import { exportDate, exportDateTime, exportList, exportMoney, exportUser, exportYesNo, selectedOrAll } from '@/utils/exportCells';
+import { getCountryNameByCode } from '@/data/addressMaster';
 import { type DataTableFilterItem } from '../common/DataTable';
 import { ROUTES } from '@/config/constants';
 import { useAuth } from '@/context/AuthContext';
 import type { Quotation } from '@/types/quotation.types';
-import { useQuotations, useDeleteQuotation, useBulkDeleteQuotations } from '@/hooks/queries';
+import { useQuotations, useDeleteQuotation, useBulkDeleteQuotations, useMasterData } from '@/hooks/queries';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import { QuotationDetailDrawer } from './QuotationDetailDrawer';
 import { useSearchScope, useSearchScopedRows } from '../search/SearchScope';
@@ -32,10 +40,89 @@ export type QuotationSortField = string;
 const NO_RECORDS: Quotation[] = [];
 /** "High Value" pill: Grand Total of ₹1 lakh or more, as on Opportunities. */
 const HIGH_VALUE = 100000;
+
+/** Assigned users (one username or several, comma-separated) by display name, joined with ', '. */
+const exportAssignees = (value: string | null | undefined): string =>
+    exportList((value || '').split(',').map((v) => exportUser(v.trim())), ', ');
+
+/** A billing / shipping country (stored as an ISO code, older rows by name) by its name. */
+const exportCountry = (value: string | null | undefined): string => (value ? getCountryNameByCode(value) || value : '');
+
+/**
+ * The quotations CSV: the table's columns first (same headers, same text: Title falls back to the subject,
+ * Opportunity to its number, Quote Stage to the legacy status), then the other useful scalar fields of the quote.
+ * The number columns follow the document series' "show number" setting, as the table does.
+ */
+function buildQuotationCsvColumns(showQuoteNumber: boolean, showOpportunityNumber: boolean): CsvColumn<Quotation>[] {
+    return [
+        ...(showQuoteNumber ? [{ header: 'Quotation Number', value: (q: Quotation) => q.quotationCode }] : []),
+        { header: 'Title', value: (q) => q.quotationTitle || q.quotationSubject || '' },
+        { header: 'Opportunity', value: (q) => q.opportunity || (showOpportunityNumber ? q.opportunityCode : '') || '' },
+        ...(showOpportunityNumber ? [{ header: 'Opportunity Number', value: (q: Quotation) => q.opportunityCode }] : []),
+        { header: 'Revised', value: (q) => exportYesNo(wasModified(q)) },
+        { header: 'Quote Stage', value: (q) => String(q.quoteStage || q.status || 'Draft') },
+        { header: 'Contact', value: (q) => q.contact },
+        { header: 'Organization', value: (q) => q.organizationName },
+        { header: 'Grand Total', value: (q) => exportMoney(q.grandTotal) },
+        { header: 'Valid Until', value: (q) => exportDate(q.validUntil) },
+        { header: 'User', value: (q) => exportAssignees(q.assignedTo) },
+        // Export cells keep one fixed format whatever the company display formats.
+        { header: 'Date Created', value: (q) => exportDateTime(q.createdAt) },
+        { header: 'Quotation Date', value: (q) => exportDate(q.quotationDate || q.quoteDate) },
+        { header: 'Company', value: (q) => q.company },
+        { header: 'Validation Period', value: (q) => q.validationPeriod },
+        { header: 'Prepared For', value: (q) => q.preparedFor },
+        { header: 'Payment Terms', value: (q) => q.paymentTerms },
+        { header: 'Terms and Conditions', value: (q) => q.termsAndCondition || q.termsAndConditions },
+        { header: 'Other Reference', value: (q) => q.otherRef },
+        { header: 'Currency', value: (q) => q.currency },
+        { header: 'Gross Amount', value: (q) => exportMoney(q.totalAmount) },
+        { header: 'Total Discount', value: (q) => exportMoney(q.totalDiscount) },
+        { header: 'Total Taxable Amount', value: (q) => exportMoney(q.subtotal) },
+        { header: 'Lump Sum Discount', value: (q) => exportMoney(q.lumpSumDiscount) },
+        { header: 'Total Tax', value: (q) => exportMoney(q.totalTax) },
+        { header: 'Round Off', value: (q) => exportMoney(q.roundOffAmount) },
+        { header: 'Contact Number', value: (q) => q.contactNumber },
+        { header: 'Contact Email', value: (q) => q.contactEmail },
+        { header: 'GST Number', value: (q) => q.gstNumber },
+        { header: 'Billing City', value: (q) => q.billingCity },
+        { header: 'Billing State', value: (q) => q.billingState },
+        { header: 'Billing Country', value: (q) => exportCountry(q.billingCountry) },
+        { header: 'Shipping City', value: (q) => q.shippingCity },
+        { header: 'Shipping State', value: (q) => q.shippingState },
+        { header: 'Shipping Country', value: (q) => exportCountry(q.shippingCountry) },
+        { header: 'Created By', value: (q) => exportUser(q.createdBy) },
+        { header: 'Last Modified', value: (q) => exportDateTime(q.updatedAt) },
+    ];
+}
+
+/**
+ * Import button for the quotations list. Quotations have no New button (they are created from an opportunity), so
+ * MasterHeaderActions' New / Import split button never shows here; this outlined button takes its place, shown only
+ * when the role may both create and import quotations (the same rule as the split button).
+ */
+function QuotationImportButton({ onClick }: { onClick: () => void }) {
+    const { canCreate, canImport } = useMasterPermissions();
+    if (!canCreate || !canImport) return null;
+    return (
+        <Button
+            variant="outlined"
+            size="small"
+            startIcon={<FileUploadOutlinedIcon sx={{ fontSize: 16 }} />}
+            onClick={onClick}
+            sx={outlinedHeaderButtonSx}
+        >
+            Import
+        </Button>
+    );
+}
+
 export function QuotationsMasterView() {
     const router = useRouter();
     const { user } = useAuth();
     const currentUsername = user?.username || '';
+    // Re-renders once the user directory loads, so the export writes users by full name.
+    useMasterData();
 
     // On the global search results page the table shows the matched records (any owner) instead of this list.
     const embeddedInSearch = Boolean(useSearchScope());
@@ -48,6 +135,7 @@ export function QuotationsMasterView() {
     const [activeTab, setActiveTab] = useResetTab<QuotationFilterTab>('all');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
+    const [importOpen, setImportOpen] = useState(false);
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [sortField, setSortField] = useState<QuotationSortField>('createdAt');
@@ -213,6 +301,18 @@ export function QuotationsMasterView() {
     }, [filteredQuotations, page, rowsPerPage]);
 
 
+    const csvColumns = useMemo(
+        () => buildQuotationCsvColumns(showNumber('quotation'), showNumber('opportunity')),
+        [showNumber]
+    );
+    const exportConfig: MasterExportConfig<Quotation> = {
+        fileName: 'quotations',
+        noun: { singular: 'quotation', plural: 'quotations' },
+        rows: () => selectedOrAll(filteredQuotations, selectedIds, allQuotations),
+        columns: csvColumns,
+        onNotify: (message, severity) => setToast({ open: true, message, severity }),
+    };
+
     const handleSort = (field: string) => {
         const isAsc = sortField === field && sortOrder === 'asc';
         setSortOrder(isAsc ? 'desc' : 'asc');
@@ -236,6 +336,7 @@ export function QuotationsMasterView() {
                 },
             }}
             tableId="quotations"
+            importEntity="quotations"
             tableFilter={tableFilter}
             headerActions={() => (
                 <MasterHeaderActions
@@ -247,7 +348,10 @@ export function QuotationsMasterView() {
                                 : { open: true, message: 'Quotations refreshed.', severity: 'info' }
                         );
                     }}
-                />
+                    exportConfig={exportConfig}
+                >
+                    <QuotationImportButton onClick={() => setImportOpen(true)} />
+                </MasterHeaderActions>
             )}
             searchConfig={buildExtendedSearchConfig({
                 searchQuery,
@@ -330,6 +434,11 @@ export function QuotationsMasterView() {
                 />
             }
         >
+            <DataImportModal
+                open={importOpen}
+                entity="quotations"
+                onClose={() => setImportOpen(false)}
+            />
         </CommonMasterView>
     );
 }

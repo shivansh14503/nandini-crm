@@ -13,7 +13,7 @@ import { localToday } from '@/utils/pastDates';
 import { ModuleScorecardSummary, useModuleScorecard } from '../common/scorecard/useModuleScorecard';
 import { CommonMasterView } from '../common/CommonMasterView';
 import { useTableFilter } from '../common/TableFilter';
-import { MasterHeaderActions } from '../common/MasterHeaderActions';
+import { MasterHeaderActions, type MasterExportConfig } from '../common/MasterHeaderActions';
 import { buildExtendedSearchConfig } from '../common/buildExtendedSearchConfig';
 import { AppToast } from '../common/AppToast';
 import { useSaveFlash } from '@/utils/saveFlash';
@@ -23,12 +23,14 @@ import { ROUTES } from '@/config/constants';
 import { useAuth } from '@/context/AuthContext';
 import type { Opportunity } from '@/types/opportunity.types';
 import { opportunityAmountBeforeTax } from './master/stageScorecard';
-import { useOpportunities, useBulkDeleteOpportunities, useDropdownOptionLabel } from '@/hooks/queries';
+import { useOpportunities, useBulkDeleteOpportunities, useDropdownOptionLabel, useMasterData } from '@/hooks/queries';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import type { OpportunityFilterTab, OpportunitySortField } from './master';
 import { OpportunityDetailDrawer } from './OpportunityDetailDrawer';
 import { useSearchScope, useSearchScopedRows } from '../search/SearchScope';
-import { useOpportunityColumns } from './opportunityColumns';
+import { isQuoteCreated, isQuoteSent, opportunityProductNames, useOpportunityColumns, useQuotesByOpportunity } from './opportunityColumns';
+import type { CsvColumn } from '@/utils/csvExport';
+import { exportDate, exportDateTime, exportList, exportMoney, exportUser, selectedOrAll } from '@/utils/exportCells';
 import { ProductLinkFilter } from './master/ProductLinkFilter';
 
 /** Stable empty list while the first page loads (keeps memoized filters from recomputing). */
@@ -36,11 +38,18 @@ const NO_RECORDS: Opportunity[] = [];
 /** Still in the pipeline (not closed won / lost). */
 /** Closed Won / Closed Lost are system Sales Stage options (they can't be removed), shared with the form. */
 const isOpen = (o: Opportunity) => !CLOSED_STAGES.has(o.salesStage);
+/** One or more CRM users (a username, or several comma-separated) by display name, joined with ', '. */
+const exportUserNames = (value: string | null | undefined) => exportList((value ?? '').split(',').map((v) => exportUser(v.trim())), ', ');
 export function OpportunitiesMasterView() {
     const router = useRouter();
     const { user } = useAuth();
     const currentUsername = user?.username || '';
     const leadSourceLabel = useDropdownOptionLabel('shared_lead_source');
+    const customerResponseLabel = useDropdownOptionLabel('opportunity_customer_response');
+    // Re-renders once the user directory loads, so the export writes users' full names.
+    useMasterData();
+    // Same cached query as the table's Quote Created / Quote Sent columns.
+    const quotesByOpp = useQuotesByOpportunity();
 
     // On the global search results page the table shows the matched records (any owner) instead of this list.
     const embeddedInSearch = Boolean(useSearchScope());
@@ -272,6 +281,61 @@ export function OpportunitiesMasterView() {
         }
     };
 
+    // ── CSV Export ────────────────────────────────────────────────────────────
+    // The table's columns first (same headers, same text), then the deal's other details.
+    const csvColumns = useMemo<CsvColumn<Opportunity>[]>(
+        () => [
+            { header: 'User', value: (o) => exportUserNames(o.assignedTo) },
+            { header: 'Quote Created', value: (o) => (isQuoteCreated(quotesByOpp.get(o.id)) ? 'Yes' : 'No') },
+            ...(showNumber('opportunity') ? [{ header: 'Opp Number', value: (o: Opportunity) => o.opportunityCode }] : []),
+            { header: 'Name', value: (o) => o.opportunityName || o.organizationName || (showNumber('opportunity') ? o.opportunityCode : '') },
+            { header: 'Organization Name', value: (o) => o.organizationName },
+            { header: 'Product Category', value: (o) => exportList(o.productCategory, ', ') },
+            { header: 'Products', value: (o) => exportList(opportunityProductNames(o), ', ') },
+            { header: 'Type', value: (o) => o.type },
+            { header: 'Next Followup Date', value: (o) => exportDate(o.nextFollowupDate) },
+            { header: 'Next Followup Time', value: (o) => o.nextFollowupTime },
+            { header: 'Followup Type', value: (o) => o.followupType },
+            { header: 'Sales Stage', value: (o) => o.salesStage },
+            { header: 'Actual (Before Tax)', value: (o) => exportMoney(opportunityAmountBeforeTax(o)) },
+            { header: 'Latest Remarks', value: (o) => o.remarks },
+            { header: 'Quote Sent', value: (o) => (isQuoteSent(quotesByOpp.get(o.id)) ? 'Yes' : 'No') },
+            { header: 'Date Created', value: (o) => exportDateTime(o.createdAt) },
+            { header: 'Contact', value: (o) => o.contact },
+            { header: 'Contact Number', value: (o) => o.contactNumber },
+            { header: 'Contact Email', value: (o) => o.contactEmail },
+            { header: 'Lead Source', value: (o) => leadSourceLabel(o.leadSource) },
+            { header: 'Lead Given By', value: (o) => exportUser(o.leadGivenBy) },
+            { header: 'Referred By', value: (o) => o.referredBy },
+            { header: 'Partner Company', value: (o) => o.partnerCompany },
+            { header: 'Customer Response', value: (o) => customerResponseLabel(o.customerResponse) },
+            { header: 'Gross Amount', value: (o) => exportMoney(o.totalAmount) },
+            { header: 'Total Discount', value: (o) => exportMoney(o.totalDiscount) },
+            { header: 'Lump Sum Discount', value: (o) => exportMoney(o.lumpSumDiscount) },
+            { header: 'Total Tax', value: (o) => exportMoney(o.totalTax) },
+            { header: 'Grand Total', value: (o) => exportMoney(o.grandTotal) },
+            { header: 'Tally Serial No', value: (o) => o.tallySerialNo },
+            { header: 'Invoice No', value: (o) => o.invoiceNo },
+            { header: 'Invoice Date', value: (o) => exportDate(o.invoiceDate) },
+            { header: 'Commission', value: (o) => o.commission },
+            { header: 'Commission Amount', value: (o) => (o.commission === 'Yes' ? exportMoney(o.commissionAmount) : '') },
+            { header: 'Commission Type', value: (o) => o.commissionType },
+            { header: 'Add Document', value: (o) => o.addDocument },
+            { header: 'Document No', value: (o) => o.documentNo },
+            { header: 'Document Date', value: (o) => exportDate(o.documentDate) },
+            { header: 'Created By', value: (o) => exportUser(o.createdBy) },
+            { header: 'Last Updated', value: (o) => exportDateTime(o.updatedAt) },
+        ],
+        [quotesByOpp, showNumber, leadSourceLabel, customerResponseLabel]
+    );
+    const exportConfig: MasterExportConfig<Opportunity> = {
+        fileName: 'opportunities',
+        noun: { singular: 'opportunity', plural: 'opportunities' },
+        rows: () => selectedOrAll(sortedOpportunities, selectedIds, allOpportunities),
+        columns: csvColumns,
+        onNotify: (message, severity) => setToast({ open: true, message, severity }),
+    };
+
     // Row clicks only open the drawer; its eye button leads on to the detail page with the related modules.
     const closeDrawer = useCallback(() => setDrawerOppId(null), []);
 
@@ -303,6 +367,7 @@ export function OpportunitiesMasterView() {
                     onNewClick={() => router.push(ROUTES.OPPORTUNITY_NEW)}
                     newButtonLabel="New Opportunity"
                     onImportClick={() => setImportOpen(true)}
+                    exportConfig={exportConfig}
                 />
             )}
             searchConfig={buildExtendedSearchConfig({

@@ -205,15 +205,15 @@ role a user can hold; `Users.Role` stores the role's `name`.
 | `name` | NVARCHAR(50) UNIQUE | Shown everywhere a role is shown. Unique also by `normalizeRole` (checked in code: `Sales-Executive` clashes with `Sales Executive`) |
 | `description` | NVARCHAR(500) NULL | Shown on the role card |
 | `adminPanel` | BIT NOT NULL, default 0 | Opens the admin panel (`requireAdmin`: forms and dropdowns, users, roles, PDF templates, audit log, settings) |
-| `permissionsJson` | NVARCHAR(MAX) NOT NULL | `{ "<module>": { "<action>": "all" \| "own" \| "none" } }` for the 12 modules of `PERMISSION_MODULES` (leads, contacts, organizations, opportunities, quotations, contracts, tickets, referrals, activities, documents, products, partnerCompanies) and the actions each offers (view, create, edit, delete, export, import). Read through `normalizePermissions`: a missing or unknown value is `none`, Create / Export / Import are only `all` or `none`, modules without an owner (products, partner companies) only `all` or `none`, Edit / Delete never exceed View, and a module at View `none` allows nothing |
+| `permissionsJson` | NVARCHAR(MAX) NOT NULL | `{ "<module>": { "<action>": "all" \| "own" \| "none" } }` for the 12 modules of `PERMISSION_MODULES` (leads, contacts, organizations, opportunities, quotations, contracts, tickets, referrals, activities, documents, products, partnerCompanies) and the actions each offers (view, create, edit, delete, export, import: every module has all six except documents, which has view and export; as of 2026-11-28 a stored role that predates a module's export / import reads it as `none` until an admin turns it on). Read through `normalizePermissions`: a missing or unknown value is `none`, Create / Export / Import are only `all` or `none`, modules without an owner (products, partner companies) only `all` or `none`, Edit / Delete never exceed View, and a module at View `none` allows nothing |
 | `isSystem` | BIT NOT NULL, default 0 | Super Admin: always full access and the admin panel whatever the row says; can't be edited, renamed or deleted |
 | `createdAt`, `createdBy`, `updatedAt`, `updatedBy` | | |
 
 **Seeding** (`roleSeed.ts`, at API start-up, idempotent). When the table is empty it is filled with the role names
 the CRM used to hard-code plus every role a user holds, each with the access its name gave before: `Super Admin`
 (system), `Admin` (admin panel, every record), `Administrator` (admin panel, own records), the other every-record
-roles of `GLOBAL_ACCESS_ROLES` (every action on every record, no admin panel) and every other name (own records: View / Edit / Delete own, Create
-and Import yes; referrals stay viewable by all, as before). After that only `Super Admin` and roles that users hold
+roles of `GLOBAL_ACCESS_ROLES` (every action on every record, no admin panel) and every other name (own records: View / Edit / Delete own, Create,
+Export and Import yes; referrals stay viewable by all, as before). After that only `Super Admin` and roles that users hold
 but no row matches are added; a role an admin deleted is not brought back. Writes are audited (entity `Role`, module
 `roles`, category CONFIG, admin-only in the audit log).
 

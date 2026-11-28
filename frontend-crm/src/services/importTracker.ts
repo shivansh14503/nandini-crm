@@ -130,9 +130,13 @@ function schedule(importId: string, delay: number) {
     timers.set(importId, setTimeout(() => void poll(importId), delay));
 }
 
+/** Other lists an import changes: a new quotation moves its opportunity to "Proposal/Price Quote". */
+const ALSO_REFRESHES: Partial<Record<string, readonly string[]>> = { quotations: ['/api/opportunities'] };
+
 /** Refreshes the module's lists (and everything that follows them) once the import has written rows. */
 function refreshLists(item: TrackedImport) {
     notifyCrmUpdate(`/api/${item.entity}`);
+    ALSO_REFRESHES[item.entity]?.forEach((endpoint) => notifyCrmUpdate(endpoint));
 }
 
 function finish(importId: string, changes: Partial<TrackedImport>) {

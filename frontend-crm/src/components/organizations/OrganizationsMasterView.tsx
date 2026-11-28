@@ -4,8 +4,6 @@ import React, { useState, useMemo, useCallback } from 'react';
 import { isAdminUser } from '@/utils/adminRoles';
 import { useResetTab } from '@/hooks/useResetTab';
 import { useRouter } from 'next/navigation';
-import { Button } from '@mui/material';
-import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 import HistoryIcon from '@mui/icons-material/History';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 
@@ -16,11 +14,15 @@ import { useTableFilter } from '../common/TableFilter';
 import { AppToast } from '../common/AppToast';
 import { useSaveFlash } from '@/utils/saveFlash';
 import { fmtCount, useDisplayFormats } from '@/utils/formats';
-import { MasterHeaderActions, outlinedHeaderButtonSx } from '../common/MasterHeaderActions';
+import { MasterHeaderActions, type MasterExportConfig } from '../common/MasterHeaderActions';
 import { DataImportModal } from '../common/import';
 import { type DataTableFilterItem } from '../common/DataTable';
 import { organizationService } from '@/services';
-import { useOrganizations, useBulkDeleteOrganizations } from '@/hooks/queries';
+import { useOrganizations, useBulkDeleteOrganizations, useDropdownOptionLabel, useMasterData } from '@/hooks/queries';
+import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
+import { getCountryNameByCode } from '@/data/addressMaster';
+import type { CsvColumn } from '@/utils/csvExport';
+import { exportDateTime, exportUser, exportYesNo, selectedOrAll } from '@/utils/exportCells';
 import type { ExtendedOrganization } from '@/types/organization.types';
 import { OrganizationDetailDrawer } from './OrganizationDetailDrawer';
 import type { FilterTab, SortField } from './master';
@@ -31,6 +33,43 @@ import { sameOption, useDropdownPillOptions } from '../common/filterPills/useDro
 
 /** Stable empty list while the first page loads (keeps memoized filters from recomputing). */
 const NO_RECORDS: ExtendedOrganization[] = [];
+
+/**
+ * The Export CSV columns after the optional Organization No.: the table's columns first (same headers and text as the
+ * cells, with full user names), then the other scalar fields a user expects in a spreadsheet. Dropdown values are
+ * written as their labels (`leadSourceLabel` maps the stored Lead Source to the admin's label).
+ */
+function buildCsvColumns(leadSourceLabel: (value: string | null | undefined) => string): CsvColumn<ExtendedOrganization>[] {
+    return [
+        { header: 'Name', value: (o) => o.organizationName },
+        { header: 'Nature of Business', value: (o) => o.natureOfBusiness },
+        { header: 'Customer Type', value: (o) => o.customerType },
+        { header: 'Status', value: (o) => o.accountStatus },
+        { header: 'Billing Street', value: (o) => o.billingStreet || o.billingAddress || '' },
+        { header: 'Billing City', value: (o) => o.billingCity || '' },
+        { header: 'Billing State', value: (o) => o.billingState || '' },
+        { header: 'GST Number', value: (o) => o.gstNumber || '' },
+        { header: 'No. of Employees', value: (o) => o.numberOfEmployees },
+        { header: 'Turnover', value: (o) => o.annualTurnover },
+        { header: 'User', value: (o) => exportUser(o.assignedTo) },
+        // Export cells keep one fixed format whatever the company display formats.
+        { header: 'Date Created', value: (o) => exportDateTime(o.createdAt) },
+        { header: 'Trade Name', value: (o) => o.tradeName || '' },
+        { header: 'Type of Entity', value: (o) => o.typeOfEntity },
+        { header: 'Lead Source', value: (o) => leadSourceLabel(o.leadSource) },
+        { header: 'Verified', value: (o) => exportYesNo(o.accountVerified) },
+        { header: 'Billing Postal Code', value: (o) => o.billingPostalCode || '' },
+        { header: 'Billing Country', value: (o) => getCountryNameByCode(o.billingCountry) },
+        { header: 'Shipping City', value: (o) => o.shippingCity || '' },
+        { header: 'Shipping State', value: (o) => o.shippingState || '' },
+        { header: 'PAN Number', value: (o) => o.panNumber || '' },
+        { header: 'Date Modified', value: (o) => exportDateTime(o.updatedAt) },
+    ];
+}
+
+/** The Organization No. column, exported only while the table offers it (document series numbers switched on). */
+const CSV_NUMBER_COLUMN: CsvColumn<ExtendedOrganization> = { header: 'Organization No.', value: (o) => o.accountCode || '' };
+
 export function OrganizationsMasterView() {
     const router = useRouter();
     const { user } = useAuth();
@@ -38,6 +77,11 @@ export function OrganizationsMasterView() {
     const isAdmin = isAdminUser(user);
     // The record totals below follow the company number grouping (Indian until it is changed).
     useDisplayFormats();
+    // Re-renders once the user directory loads, so the export's User column shows full names.
+    useMasterData();
+    const leadSourceLabel = useDropdownOptionLabel('shared_lead_source');
+    const csvColumns = useMemo(() => buildCsvColumns(leadSourceLabel), [leadSourceLabel]);
+    const showNumber = useShowRecordNumber();
 
     // ── State ─────────────────────────────────────────────────────────────────
     // On the global search results page the table shows the matched records (any owner) instead of this list.
@@ -189,42 +233,19 @@ export function OrganizationsMasterView() {
     };
 
     // ── Export CSV ────────────────────────────────────────────────────────────
-    const handleExport = (onlySelected = false) => {
-        const recordsToExport = onlySelected
-            ? organizations.filter((o) => selectedIds.has(o.id))
-            : filteredOrganizations;
-
-        if (recordsToExport.length === 0) {
-            setToast({ open: true, message: 'No organizations to export.', severity: 'info' });
-            return;
-        }
-
-        const headers = ['Organization Name', 'Nature of Business', 'Customer Type', 'Status', 'Billing Street', 'City', 'State', 'GST Number'];
-        const rows = recordsToExport.map((o) => [
-            `"${o.organizationName.replace(/"/g, '""')}"`,
-            `"${o.natureOfBusiness || ''}"`,
-            `"${o.customerType || ''}"`,
-            `"${o.accountStatus || ''}"`,
-            `"${(o.billingStreet || '').replace(/"/g, '""')}"`,
-            `"${o.billingCity || ''}"`,
-            `"${o.billingState || ''}"`,
-            `"${o.gstNumber || ''}"`,
-        ]);
-
-        const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-        const encodedUri = encodeURI(csvContent);
-        const link = document.createElement('a');
-        link.setAttribute('href', encodedUri);
-        link.setAttribute('download', `organizations_export_${Date.now()}.csv`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-
-        setToast({ open: true, message: `Exported ${recordsToExport.length} organizations to CSV.`, severity: 'success' });
+    // The header's Export button (shown with the organizations Export permission) writes the selected rows, or else
+    // every row matching the current pill, scorecard, search and Filter dialog.
+    const exportConfig: MasterExportConfig<ExtendedOrganization> = {
+        fileName: 'organizations',
+        noun: { singular: 'organization', plural: 'organizations' },
+        // Selected rows count even when the pill or search now hides them ("Select all matching" picks across pills).
+        rows: () => selectedOrAll(filteredOrganizations, selectedIds, allOrganizations),
+        columns: showNumber('organization') ? [CSV_NUMBER_COLUMN, ...csvColumns] : csvColumns,
+        onNotify: (message, severity) => setToast({ open: true, message, severity }),
     };
 
     // ── Bulk Actions ──────────────────────────────────────────────────────────
-    const handleBulkAction = async (action: 'active' | 'inactive' | 'delete' | 'export') => {
+    const handleBulkAction = async (action: 'active' | 'inactive' | 'delete') => {
         if (selectedIds.size === 0) {
             setToast({ open: true, message: 'Please select records to perform bulk action.', severity: 'info' });
             return;
@@ -256,8 +277,6 @@ export function OrganizationsMasterView() {
                     severity: 'error',
                 });
             }
-        } else if (action === 'export') {
-            handleExport(true);
         }
     };
 
@@ -302,17 +321,8 @@ export function OrganizationsMasterView() {
             onNewClick={() => router.push(ROUTES.ORGANIZATION_NEW)}
             newButtonLabel="New Organization"
             onImportClick={() => setImportOpen(true)}
-        >
-            <Button
-                variant="outlined"
-                size="small"
-                startIcon={<FileDownloadOutlinedIcon sx={{ fontSize: 16 }} />}
-                onClick={() => handleExport(false)}
-                sx={outlinedHeaderButtonSx}
-            >
-                Export
-            </Button>
-        </MasterHeaderActions>
+            exportConfig={exportConfig}
+        />
     );
 
     return (
@@ -359,7 +369,6 @@ export function OrganizationsMasterView() {
                 bulkActionItems: [
                     { id: 'active', label: 'Mark as Active', onClick: () => handleBulkAction('active') },
                     { id: 'inactive', label: 'Mark as Inactive', onClick: () => handleBulkAction('inactive') },
-                    { id: 'export', label: 'Export Selected to CSV', onClick: () => handleBulkAction('export') },
                     { id: 'delete', label: 'Delete Selected', color: 'error', onClick: () => handleBulkAction('delete') },
                 ],
             }}

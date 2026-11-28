@@ -14,7 +14,7 @@ import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import { StatusSummaryCards, type StatusSummaryItem } from '../common/StatusSummaryCards';
 import { CommonMasterView } from '../common/CommonMasterView';
 import { useTableFilter } from '../common/TableFilter';
-import { MasterHeaderActions } from '../common/MasterHeaderActions';
+import { MasterHeaderActions, type MasterExportConfig } from '../common/MasterHeaderActions';
 import { buildExtendedSearchConfig } from '../common/buildExtendedSearchConfig';
 import { AppToast } from '../common/AppToast';
 import { useSaveFlash } from '@/utils/saveFlash';
@@ -23,7 +23,9 @@ import { type DataTableFilterItem } from '../common/DataTable';
 import { ROUTES } from '@/config/constants';
 import { useAuth } from '@/context/AuthContext';
 import type { Lead } from '@/types/lead.types';
-import { useLeads, useBulkDeleteLeads, useDropdownOptionLabel } from '@/hooks/queries';
+import { useLeads, useBulkDeleteLeads, useDropdownOptionLabel, useMasterData } from '@/hooks/queries';
+import type { CsvColumn } from '@/utils/csvExport';
+import { exportDate, exportDateTime, exportList, exportUser, selectedOrAll } from '@/utils/exportCells';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import { getLeadStatusBucket, type LeadFilterTab, type LeadStatusBucket } from './master';
 import { leadStatusSummaryItems } from './master/leadStatusCards';
@@ -34,11 +36,26 @@ import { useLeadColumns } from './leadColumns';
 
 /** Stable empty list while the first page loads (keeps memoized filters from recomputing). */
 const NO_RECORDS: Lead[] = [];
+
+/** The lead's email addresses for the CSV, primary first, joined with ', '. */
+function leadEmails(l: Lead): string {
+    const emails = [...(l.emailAddress ?? [])].sort((a, b) => Number(Boolean(b.isPrimary)) - Number(Boolean(a.isPrimary)));
+    return exportList(emails.map((e) => e.email), ', ');
+}
+
+/** The lead's assignee(s) by display name; several (comma-separated) are joined with ', '. */
+function leadAssignees(l: Lead): string {
+    return exportList((l.assignedTo || '').split(',').map((u) => exportUser(u.trim())), ', ');
+}
+
 export function LeadsMasterView() {
     const router = useRouter();
     const { user } = useAuth();
     const currentUsername = user?.username || '';
     const leadSourceLabel = useDropdownOptionLabel('shared_lead_source');
+    const customerResponseLabel = useDropdownOptionLabel('lead_customer_response');
+    // Re-renders once the user directory loads, so the export's User column shows full names.
+    useMasterData();
 
     // On the global search results page the table shows the matched records (any owner) instead of this list.
     const embeddedInSearch = Boolean(useSearchScope());
@@ -216,6 +233,56 @@ export function LeadsMasterView() {
         return sortedLeads.slice(start, start + rowsPerPage);
     }, [sortedLeads, page, rowsPerPage]);
 
+    // ── CSV Export ────────────────────────────────────────────────────────────
+    // The table's columns first (same headers, display text), then the other scalar fields of the lead.
+    const csvColumns: CsvColumn<Lead>[] = useMemo(
+        () => [
+            ...(showNumber('lead') ? [{ header: 'Lead Number', value: (l: Lead) => l.leadCode }] : []),
+            { header: 'Name', value: (l) => l.name },
+            { header: 'Rating', value: (l) => l.rating },
+            { header: 'Lead Source', value: (l) => leadSourceLabel(l.leadSource) },
+            { header: 'Product Category', value: (l) => exportList(l.productCategory, ', ') },
+            { header: 'Organization Name', value: (l) => l.organizationName },
+            { header: 'Status', value: (l) => l.status },
+            { header: 'Email', value: leadEmails },
+            { header: 'Mobile', value: (l) => l.mobile },
+            { header: 'Latest Remarks', value: (l) => l.remarks },
+            { header: 'Next Followup Date', value: (l) => exportDate(l.nextFollowupDate) },
+            { header: 'User', value: leadAssignees },
+            // Export cells keep one fixed format whatever the company display formats.
+            { header: 'Date Created', value: (l) => exportDateTime(l.createdAt) },
+            { header: 'Next Followup Time', value: (l) => l.nextFollowupTime },
+            { header: 'Followup Type', value: (l) => l.followupType },
+            { header: 'Customer Response', value: (l) => customerResponseLabel(l.customerResponse) },
+            { header: 'Lead Type', value: (l) => l.leadType },
+            { header: 'Designation', value: (l) => l.designation },
+            { header: 'Department', value: (l) => l.department },
+            { header: 'Other Phone', value: (l) => l.otherPhone },
+            { header: 'Mailing Name', value: (l) => l.mailingName },
+            { header: 'Trade Name', value: (l) => l.tradeName },
+            { header: 'Registration Type', value: (l) => l.registrationType },
+            { header: 'GST Number', value: (l) => l.gstNumber },
+            { header: 'Turnover', value: (l) => l.turnover },
+            { header: 'No of Employee', value: (l) => l.noOfEmployee },
+            { header: 'Referred By', value: (l) => l.referredBy },
+            { header: 'Partner Company', value: (l) => l.partnerCompany },
+            { header: 'City', value: (l) => l.primaryCity },
+            { header: 'State', value: (l) => l.primaryState },
+            { header: 'Postal Code', value: (l) => l.primaryPostalCode },
+            { header: 'Country', value: (l) => l.primaryCountry },
+            { header: 'Created By', value: (l) => exportUser(l.createdBy) },
+        ],
+        [showNumber, leadSourceLabel, customerResponseLabel]
+    );
+    const exportConfig: MasterExportConfig<Lead> = {
+        fileName: 'leads',
+        noun: { singular: 'lead', plural: 'leads' },
+        // Selected rows if any, else every lead matching the current view (all pages), in the table's order.
+        rows: () => selectedOrAll(sortedLeads, selectedIds, leads),
+        columns: csvColumns,
+        onNotify: (message, severity) => setToast({ open: true, message, severity }),
+    };
+
     const handleToggleSelectAll = (checked?: boolean) => {
         if (checked) {
             setSelectedIds(paginatedLeads.map((l) => l.id));
@@ -307,6 +374,7 @@ export function LeadsMasterView() {
                     onNewClick={() => router.push(ROUTES.LEAD_NEW)}
                     newButtonLabel="New Lead"
                     onImportClick={() => setImportOpen(true)}
+                    exportConfig={exportConfig}
                 />
             )}
             searchConfig={buildExtendedSearchConfig({

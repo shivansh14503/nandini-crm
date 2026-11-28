@@ -10,7 +10,7 @@ import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlineOutlin
 import PauseCircleOutlineIcon from '@mui/icons-material/PauseCircleOutlineOutlined';
 import { CommonMasterView } from '../../common/CommonMasterView';
 import { useTableFilter } from '../../common/TableFilter';
-import { MasterHeaderActions } from '../../common/MasterHeaderActions';
+import { MasterHeaderActions, type MasterExportConfig } from '../../common/MasterHeaderActions';
 import { buildExtendedSearchConfig } from '../../common/buildExtendedSearchConfig';
 import { AppToast } from '../../common/AppToast';
 import { useSaveFlash } from '@/utils/saveFlash';
@@ -18,7 +18,7 @@ import { DataImportModal } from '../../common/import';
 import { type DataTableFilterItem } from '../../common/DataTable';
 import { ROUTES } from '@/config/constants';
 import { ACTIVE_PRODUCT_STATUS, PRODUCT_STATUS_CATEGORY, type Product } from '@/types/product.types';
-import { useProducts, useBulkDeleteProducts } from '@/hooks/queries';
+import { useProducts, useBulkDeleteProducts, useMasterData } from '@/hooks/queries';
 import { useShowRecordNumber } from '@/hooks/queries/useDocumentSeries';
 import { productStatusPill, productTypePill, statusOfPill, typeOfPill, type ProductFilterTab } from './types';
 import { ProductDetailDrawer } from '../ProductDetailDrawer';
@@ -26,6 +26,9 @@ import { useSearchScope, useSearchScopedRows } from '../../search/SearchScope';
 import { useProductColumns } from './productColumns';
 import { ModuleScorecardSummary, useModuleScorecard } from '../../common/scorecard/useModuleScorecard';
 import { sameOption, useDropdownPillOptions } from '../../common/filterPills/useDropdownPillOptions';
+import type { CsvColumn } from '@/utils/csvExport';
+import { exportDateTime, exportNumber, exportUser, selectedOrAll } from '@/utils/exportCells';
+import { usageStatusOf } from '@/utils/productUsage';
 
 const RECENTLY_ADDED_DAYS = 7;
 
@@ -33,6 +36,8 @@ const RECENTLY_ADDED_DAYS = 7;
 const NO_RECORDS: Product[] = [];
 export function ProductsMasterView() {
     const router = useRouter();
+    // Re-renders once the user directory loads, so the export's "Created By" shows full names.
+    useMasterData();
 
     // On the global search results page the table shows the matched records (any owner) instead of this list.
     const embeddedInSearch = Boolean(useSearchScope());
@@ -172,6 +177,46 @@ export function ProductsMasterView() {
         );
     };
 
+    // ── CSV Export ────────────────────────────────────────────────────────────
+    // The table's columns in its order, with Title Case headers like the other exports (Product No. only while the number is shown), then the other
+    // catalogue fields. Labels match the cells: the Status as the admin names it, Usage as Used / Unused.
+    const csvColumns = useMemo<CsvColumn<Product>[]>(
+        () => [
+            ...(showNumber('product') ? [{ header: 'Product No.', value: (p: Product) => p.productCode }] : []),
+            { header: 'Product Name', value: (p) => p.productName },
+            { header: 'Product Category', value: (p) => p.productCategory },
+            { header: 'Manufacturer', value: (p) => p.manufacturer },
+            { header: 'HSN Code', value: (p) => p.hsnCode },
+            // Plain digits, kept to the stored precision (the table shows up to 3 decimals).
+            { header: 'MRP (₹)', value: (p) => exportNumber(p.mrp) },
+            { header: 'Tax', value: (p) => p.taxRate },
+            { header: 'Usage', value: (p) => usageStatusOf(p.usage) ?? '' },
+            {
+                header: 'Status',
+                value: (p) => {
+                    const status = p.status || ACTIVE_PRODUCT_STATUS;
+                    return productStatuses.find(status)?.label || status;
+                },
+            },
+            { header: 'Type', value: (p) => p.type },
+            { header: 'Cost (₹)', value: (p) => exportNumber(p.cost) },
+            { header: 'MSP (₹)', value: (p) => exportNumber(p.msp) },
+            { header: 'Discount (%)', value: (p) => exportNumber(p.discount) },
+            { header: 'Contract Create', value: (p) => p.contractCreate },
+            { header: 'Created By', value: (p) => exportUser(p.createdBy) },
+            { header: 'Date Created', value: (p) => exportDateTime(p.createdAt) },
+        ],
+        [showNumber, productStatuses]
+    );
+    /** Export button: the selected products, otherwise every product left by the pill, scorecard, search and Filter dialog. */
+    const exportConfig: MasterExportConfig<Product> = {
+        fileName: 'products',
+        noun: { singular: 'product', plural: 'products' },
+        rows: () => selectedOrAll(sortedProducts, selectedIds, allProducts),
+        columns: csvColumns,
+        onNotify: (message, severity) => setToast({ open: true, message, severity }),
+    };
+
     // Row clicks only open the drawer; its eye button leads on to the detail page with the related modules.
     const closeDrawer = useCallback(() => setDrawerProductId(null), []);
 
@@ -251,6 +296,7 @@ export function ProductsMasterView() {
                     onNewClick={() => router.push(ROUTES.PRODUCT_NEW)}
                     newButtonLabel="New Product"
                     onImportClick={() => setImportOpen(true)}
+                    exportConfig={exportConfig}
                 />
             )}
             searchConfig={buildExtendedSearchConfig({

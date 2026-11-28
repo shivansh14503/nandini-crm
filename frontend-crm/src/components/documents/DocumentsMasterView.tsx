@@ -7,7 +7,7 @@ import AccountCircleOutlinedIcon from '@mui/icons-material/AccountCircleOutlined
 import EventAvailableOutlinedIcon from '@mui/icons-material/EventAvailableOutlined';
 
 import { CommonMasterView } from '../common/CommonMasterView';
-import { MasterHeaderActions } from '../common/MasterHeaderActions';
+import { MasterHeaderActions, type MasterExportConfig } from '../common/MasterHeaderActions';
 import { buildExtendedSearchConfig } from '../common/buildExtendedSearchConfig';
 import { AppToast } from '../common/AppToast';
 import { type DataTableFilterItem } from '../common/DataTable';
@@ -23,7 +23,8 @@ import { recordFileService } from '@/services/recordFile.service';
 import { fetchWithSession } from '@/services/apiClient';
 import type { Document } from '@/types/document.types';
 import { activeOptionValues, findCategory, optionLabelMap } from '@/utils/formConfig';
-import { fmtExportDateTime, fmtExportDay } from '@/utils/formats';
+import type { CsvColumn } from '@/utils/csvExport';
+import { exportDate, exportDateTime, exportUser, selectedOrAll } from '@/utils/exportCells';
 import { useDocumentColumns } from './documentColumns';
 import { DocumentDetailDrawer } from './DocumentDetailDrawer';
 import { DOCUMENT_LABELS as L, FILE_KIND_LABELS, fileKind, userName, type FileKind } from './documentDisplay';
@@ -97,8 +98,28 @@ function useDocumentFilterFields(): ModuleFilterFields {
     }, [configs, users]);
 }
 
-/** `"a"` → `"a"` with quotes doubled, for a CSV cell. */
-const csvCell = (value: string) => `"${value.replace(/"/g, '""')}"`;
+/**
+ * The header Export's CSV columns: the table's columns in its order (headers as the table shows them, by the
+ * Documentation field labels), plus the record's other plain fields. Metadata only: the uploaded file is written as
+ * its file name, never its contents.
+ */
+const CSV_COLUMNS: CsvColumn<Document>[] = [
+    { header: L.documentNo, value: (d) => d.documentNo },
+    { header: L.documentFile, value: (d) => d.documentFile?.fileName ?? '' },
+    { header: 'File Type', value: (d) => (d.documentFile ? FILE_KIND_LABELS[fileKind(d.documentFile)] : '') },
+    // Export cells keep one fixed format whatever the company display formats.
+    { header: L.documentDate, value: (d) => exportDate(d.documentDate) },
+    { header: 'Opportunity Code', value: (d) => d.opportunityCode },
+    { header: L.opportunity, value: (d) => d.opportunity },
+    { header: L.salesStage, value: (d) => d.salesStage },
+    { header: L.organizationName, value: (d) => d.organizationName },
+    { header: L.contact, value: (d) => d.contact },
+    { header: L.assignedTo, value: (d) => exportUser(d.assignedTo) },
+    { header: L.createdBy, value: (d) => exportUser(d.createdBy) },
+    { header: L.createdAt, value: (d) => exportDateTime(d.createdAt) },
+    { header: 'Last Modified By', value: (d) => exportUser(d.updatedBy) },
+    { header: L.updatedAt, value: (d) => exportDateTime(d.updatedAt) },
+];
 
 function downloadBlob(blob: Blob, fileName: string) {
     const url = URL.createObjectURL(blob);
@@ -113,7 +134,7 @@ function downloadBlob(blob: Blob, fileName: string) {
 
 /**
  * Activities › Documents: the documents added on opportunities (Documentation section), as a table with search,
- * the Filter dialog, quick pills, bulk export / download and pagination. A row opens the side drawer; the eye
+ * the Filter dialog, quick pills, CSV export, bulk file download and pagination. A row opens the side drawer; the eye
  * button opens the detail page. There is no create form: documents are added from the opportunity form.
  */
 export function DocumentsMasterView() {
@@ -212,34 +233,13 @@ export function DocumentsMasterView() {
         return documents.filter((d) => ids.has(d.id));
     }, [documents, selectedIds]);
 
-    const handleExport = () => {
-        const records = selectedDocuments();
-        if (records.length === 0) {
-            setToast({ open: true, message: 'Select the documents to export.', severity: 'info' });
-            return;
-        }
-        const headers = [L.documentNo, L.documentFile, L.documentDate, 'Opportunity Code', L.opportunity, L.salesStage, L.organizationName, L.contact, L.assignedTo, L.createdBy, L.createdAt];
-        const rows = records.map((d) =>
-            [
-                d.documentNo,
-                d.documentFile?.fileName ?? '',
-                // Export cells keep one fixed format whatever the company display formats.
-                d.documentDate ? fmtExportDay(d.documentDate) : '',
-                d.opportunityCode,
-                d.opportunity,
-                d.salesStage,
-                d.organizationName,
-                d.contact,
-                userName(d.assignedTo),
-                userName(d.createdBy),
-                fmtExportDateTime(d.createdAt),
-            ]
-                .map((v) => csvCell(v || ''))
-                .join(',')
-        );
-        // BOM so Excel reads the names as UTF-8.
-        downloadBlob(new Blob(['﻿' + [headers.map(csvCell).join(','), ...rows].join('\n')], { type: 'text/csv;charset=utf-8' }), `documents_export_${Date.now()}.csv`);
-        setToast({ open: true, message: `Exported ${records.length} document(s) to CSV.`, severity: 'success' });
+    // Header Export (Admin › Roles: Documents › Export): selected rows, else everything matching the pills / filter / search.
+    const exportConfig: MasterExportConfig<Document> = {
+        fileName: 'documents',
+        noun: { singular: 'document', plural: 'documents' },
+        rows: () => selectedOrAll(filteredDocuments, selectedIds, allDocuments),
+        columns: CSV_COLUMNS,
+        onNotify: (message, severity) => setToast({ open: true, message, severity }),
     };
 
     const handleDownloadFiles = async () => {
@@ -293,8 +293,8 @@ export function DocumentsMasterView() {
             onPageChange: setPage,
         }),
         // Read-only module: no delete (a document is removed by setting Add Document to No on its opportunity).
+        // CSV export is the header's Export button (selected rows, else the filtered list), gated by the Export permission.
         bulkActionItems: [
-            { id: 'export', label: 'Export Selected to CSV', onClick: handleExport },
             { id: 'download', label: 'Download Selected Files', onClick: () => void handleDownloadFiles() },
         ],
     };
@@ -324,6 +324,7 @@ export function DocumentsMasterView() {
                                 : { open: true, message: 'Documents refreshed.', severity: 'info' }
                         );
                     }}
+                    exportConfig={exportConfig}
                 />
             )}
             searchConfig={searchConfig}

@@ -19,7 +19,8 @@ import CheckIcon from '@mui/icons-material/Check';
 import { ModuleScorecardSummary, useModuleScorecard } from '../common/scorecard/useModuleScorecard';
 import { CommonMasterView } from '../common/CommonMasterView';
 import { useTableFilter } from '../common/TableFilter';
-import { MasterHeaderActions, outlinedHeaderButtonSx } from '../common/MasterHeaderActions';
+import { MasterHeaderActions, outlinedHeaderButtonSx, type MasterExportConfig } from '../common/MasterHeaderActions';
+import { DataImportModal } from '../common/import';
 import { buildExtendedSearchConfig } from '../common/buildExtendedSearchConfig';
 import { AppToast } from '../common/AppToast';
 import { type DataTableFilterItem } from '../common/DataTable';
@@ -28,19 +29,23 @@ import { useSaveFlash } from '@/utils/saveFlash';
 import { ROUTES } from '@/config/constants';
 import { useAuth } from '@/context/AuthContext';
 import { findCrmUser } from '@/services/masterData.store';
-import { isFollowUpActivity, NOTE_TYPE, TASK_TYPE, type Activity } from '@/types/activity.types';
+import { isFollowUpActivity, isVideoProvider, NOTE_TYPE, PLANNED_STATUS, TASK_TYPE, VIDEO_PROVIDER_LABELS, type Activity } from '@/types/activity.types';
 import { useActivities, useBulkDeleteActivitiesWithResult, useDeleteActivity, useDeleteActivityScoped } from '@/hooks/queries/useActivities';
 import { calendarRemovalNote } from './ActivitySyncStatus';
 import { useSeriesScopePrompt } from './SeriesScopeDialog';
 import { addDays, instantToZonedWallClock, zonedStartOfDay } from '@/utils/zonedTime';
 import { useSearchScope, useSearchScopedRows } from '../search/SearchScope';
 import { ActivityDetailDrawer } from './ActivityDetailDrawer';
-import { useActivityColumns } from './activityColumns';
+import { activityCalendarLabel, useActivityColumns } from './activityColumns';
+import { relatedModuleLabel } from './activityLinks';
 import { useActivityTypeLabel } from './ActivityBadges';
 import { attendeeLabel } from './RhfAttendeesField';
 import { activitySortTime, isActivityOverdue, useBusinessClock } from './activityTime';
 import { useDropdownPillOptions } from '../common/filterPills/useDropdownPillOptions';
 import { FOLLOWUP_TYPE_CATEGORY_KEY } from '@/utils/formConfig';
+import { type CsvColumn } from '@/utils/csvExport';
+import { exportDate, exportDateTime, exportList, exportUser, exportYesNo, selectedOrAll } from '@/utils/exportCells';
+import { useActivityResponseLabel } from '@/hooks/queries/useFormConfigs';
 
 /** Quick-view pills ('all' = none picked). `type` is a Followup Type the nav asked for that has no pill of its own. */
 export type ActivityFilterTab = 'all' | 'mine' | 'today' | 'overdue' | 'next7' | 'calls' | 'meetings' | 'tasks' | 'notes' | 'type';
@@ -153,6 +158,7 @@ export function ActivitiesMasterView({ mine = false, type = '', status = '' }: A
     const [sortField, setSortField] = useState<string>('startAt');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
     const [drawerId, setDrawerId] = useState<string | null>(null);
+    const [importOpen, setImportOpen] = useState(false);
     const openDrawerRecord = useCallback((record: Activity) => setDrawerId(record.id), []);
     const columns = useActivityColumns(openDrawerRecord);
     const tableFilter = useTableFilter<Activity>({
@@ -380,6 +386,52 @@ export function ActivitiesMasterView({ mine = false, type = '', status = '' }: A
 
     const paginated = useMemo(() => filtered.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage), [filtered, page, rowsPerPage]);
 
+    // ── CSV export ─────────────────────────────────────────────────────────────
+    // The table's columns in its order and words (labels, not stored values; user names, not usernames), then the
+    // other useful fields. Times use the fixed export format on the business clock; notes have no schedule.
+    const responseLabel = useActivityResponseLabel();
+    const csvColumns = useMemo<CsvColumn<Activity>[]>(() => {
+        const isNote = (a: Activity) => a.followupType === NOTE_TYPE;
+        const startCell = (a: Activity) => (isNote(a) ? '' : a.allDay ? exportDate(a.startDay || a.startAt) : exportDateTime(a.startAt));
+        const endCell = (a: Activity) => (isNote(a) ? '' : a.allDay ? exportDate(a.endDay || a.startDay || a.endAt) : exportDateTime(a.endAt));
+        return [
+            { header: 'Type', value: (a) => typeLabel(a.followupType) || a.followupType },
+            { header: 'Subject', value: (a) => a.subject },
+            { header: 'Start', value: startCell },
+            {
+                header: 'Status',
+                value: (a) => (isNote(a) ? 'Note' : a.status === PLANNED_STATUS && isActivityOverdue(a, clock.now()) ? 'Overdue' : a.status),
+            },
+            { header: 'Related To', value: (a) => (a.relatedTo ? `${relatedModuleLabel(a.relatedModule)}${a.relatedModule ? ': ' : ''}${a.relatedTo}` : '') },
+            { header: 'Related Record Number', value: (a) => a.relatedCode },
+            { header: 'Organization', value: (a) => a.organizationName },
+            { header: 'Contact', value: (a) => a.contact },
+            { header: 'Assigned To', value: (a) => exportUser(a.assignedTo) },
+            { header: 'Customer Response', value: (a) => responseLabel(a) },
+            { header: 'End', value: endCell },
+            { header: 'All Day', value: (a) => (isNote(a) ? '' : exportYesNo(a.allDay)) },
+            { header: 'Reminder', value: (a) => a.reminder },
+            { header: 'Location', value: (a) => a.location },
+            { header: 'Video Meeting', value: (a) => (isVideoProvider(a.videoMeeting) ? VIDEO_PROVIDER_LABELS[a.videoMeeting] : '') },
+            { header: 'Attendees', value: (a) => exportList(a.attendees.map(attendeeLabel), ', ') },
+            { header: 'Calendar', value: (a) => activityCalendarLabel(a.calendar) },
+            { header: 'Repeats', value: (a) => a.series?.summary ?? '' },
+            { header: 'Remarks', value: (a) => a.remarks },
+            { header: 'Completed On', value: (a) => exportDateTime(a.completedAt) },
+            { header: 'Completed By', value: (a) => exportUser(a.completedBy) },
+            { header: 'Date Created', value: (a) => exportDateTime(a.createdAt) },
+            { header: 'Created By', value: (a) => exportUser(a.createdBy) },
+        ];
+    }, [typeLabel, clock, responseLabel]);
+    const exportConfig: MasterExportConfig<Activity> = {
+        fileName: 'activities',
+        noun: { singular: 'activity', plural: 'activities' },
+        // Selected rows if any, else every activity matching the current view (loaded window, pill, search, filters; all pages).
+        rows: () => selectedOrAll(filtered, selectedIds, allActivities),
+        columns: csvColumns,
+        onNotify: (message, severity) => setToast({ open: true, message, severity }),
+    };
+
 
     const handleSort = (field: string) => {
         const isAsc = sortField === field && sortOrder === 'asc';
@@ -391,6 +443,7 @@ export function ActivitiesMasterView({ mine = false, type = '', status = '' }: A
 
     return (
         <CommonMasterView<Activity, ActivityFilterTab>
+            importEntity="activities"
             loading={listLoading}
             breadcrumbItems={[{ label: 'Activities', href: pageTitle ? ROUTES.ACTIVITIES : undefined }, ...(pageTitle ? [{ label: pageTitle }] : [])]}
             summary={<ModuleScorecardSummary state={scorecard} loading={listLoading} />}
@@ -417,6 +470,8 @@ export function ActivitiesMasterView({ mine = false, type = '', status = '' }: A
                     }}
                     onNewClick={() => router.push(ROUTES.ACTIVITY_NEW)}
                     newButtonLabel="New Activity"
+                    onImportClick={() => setImportOpen(true)}
+                    exportConfig={exportConfig}
                 >
                     <Button
                         variant="outlined"
@@ -530,6 +585,8 @@ export function ActivitiesMasterView({ mine = false, type = '', status = '' }: A
                     <AppToast open={toast.open} message={toast.message} severity={toast.severity} onClose={() => setToast((prev) => ({ ...prev, open: false }))} />
                 </>
             }
-        />
+        >
+            <DataImportModal open={importOpen} entity="activities" onClose={() => setImportOpen(false)} />
+        </CommonMasterView>
     );
 }

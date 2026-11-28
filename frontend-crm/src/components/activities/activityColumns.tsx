@@ -56,6 +56,11 @@ function calendarCell(calendar: ActivityCalendarState | null | undefined): { ico
     return { icon: <EventAvailableOutlinedIcon sx={{ ...iconSx, color: 'var(--mui-palette-success-main)' }} />, label: 'Synced', title: 'In the owner\'s calendar.' };
 }
 
+/** The Calendar column's word for an activity's calendar copy (`Synced`, `Error` …), '' when it has none (CSV export). */
+export function activityCalendarLabel(calendar: ActivityCalendarState | null | undefined): string {
+    return calendarCell(calendar)?.label ?? '';
+}
+
 const userName = (username: string | undefined) => (username ? findCrmUser(username)?.name || username : '');
 
 const plainCellSx = { fontSize: '0.78rem', color: 'var(--crm-slate-600)' } as const;
@@ -299,7 +304,7 @@ export function useActivityColumns(openRecord: (record: Activity) => void): Data
                 id: 'calendar',
                 label: 'CALENDAR',
                 sortable: false,
-                filter: { kind: 'text', placeholder: 'e.g. Sending, Error...', getValue: (a) => calendarCell(a.calendar)?.label ?? '' },
+                filter: { kind: 'text', placeholder: 'e.g. Sending, Error...', getValue: (a) => activityCalendarLabel(a.calendar) },
                 minWidth: 130,
                 defaultHidden: true,
                 render: (a) => {

@@ -308,7 +308,7 @@ A user's role is the name in `Users.role`; what it allows is the matching row of
 | Activities (`modules/activities/activity.access.ts`) | The same rule **plus attendees**: a colleague invited to an activity (`ActivityAttendee.username`) can see it (lists, calendar, record, its audit trail) and reply to it (`POST /api/activities/:id/response`), but changing or deleting needs the role's Activities Edit / Delete. Linking an activity to a record (Related To, and the `link-targets` picker) needs access to that record under its own module's rule (403 otherwise); an unchanged link is kept even if the editor can't see the record. The calendar's lead / opportunity follow-ups and contract renewals follow their modules' rules. Activities are not in global search |
 | Global search | Results are cached unscoped as before; the categories the role can't view are emptied per request (`hideUnviewable`) |
 | Referrals | Follow the role like every module. Roles seeded from the old names keep Referrals View **All** (they were never scoped; the Referred By pickers read the lookups anyway) |
-| Export | Partner Companies' CSV export is built in the browser; the button shows only with the Export permission |
+| Export | Every CRM list (leads, contacts, organizations, opportunities, quotations, contracts, tickets, referrals, activities, documents, products, partner companies; as of 2026-11-28) has a CSV export built in the browser: the list declares its file name, rows and columns as `exportConfig` (`MasterExportConfig`, passed through `CommonMasterView` to `MasterHeaderActions`, written by `runMasterExport` / `utils/csvExport.ts`; cells in one fixed format via `utils/exportCells.ts`); it writes the selected rows, else every row matching the filters and search (all pages). The Export button shows only with the module's Export permission; there is no export API, so the rows are the ones the role may already view |
 | Inactive organizations | Only roles with the admin panel (`isAdminUser`) can open an Inactive organization for editing; others get the view page. Enforced in the app only (`OrganizationForm`, `OrganizationsMasterView`); the API doesn't check it |
 
 **Role registry** (`roles/roleRegistry.ts`): an in-process snapshot of every role and of each user's current role,
@@ -700,7 +700,11 @@ flowchart LR
 rows client-side, then posts up to 5,000 mapped rows. The worker validates each row with the same Zod schema and
 form-config rules as the API, prefetches active usernames and organization names in bulk, and creates each row in
 its own transaction through the same `create<Entity>Record` function the API uses (so codes, links and audit rows are
-identical). The browser polls `GET /api/import/jobs/:importId` every second until the job ends. Polling lives in an app-wide
+identical). Quotations, contracts, referrals and activities (as of 2026-11-28) read their rows in
+`imports/builders/<entity>.ts`: each row is resolved to the record the form would send (linked opportunity /
+organization / contact found by number or exact name, the form's pre-filled defaults for blank cells; a quotation row
+carries one line item or copies the opportunity's) and saved through `createQuotationRecord`, `createContractRecord`,
+`createReferralRecord` or the activity create path (`insertActivityRow`); see the API plan's `/import/:entity`. The browser polls `GET /api/import/jobs/:importId` every second until the job ends. Polling lives in an app-wide
 tracker (`frontend-crm/src/services/importTracker.ts`), not in the wizard, so closing the wizard mid-import moves it
 to a background card (`BackgroundImports`, kept across reloads in sessionStorage) and the module's lists still refresh
 (`notifyCrmUpdate`) when it finishes. Every finished import raises a snackbar, and the module's list

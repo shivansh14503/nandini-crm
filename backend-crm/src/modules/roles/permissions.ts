@@ -5,7 +5,8 @@
  *   - `all`  every record (for Create / Export / Import: allowed)
  *   - `own`  only records the user owns (`assignedTo`) or created; offered only by modules whose records have an owner
  *   - `none` not allowed
- * A module only lists the actions it has (Documents are read-only, only Partner Companies export today).
+ * A module only lists the actions it has: every module exports (CSV of the list); Documents are read-only (View and
+ * Export only), every other module also has Create, Edit, Delete and Import.
  *
  * Mirrors frontend-crm/src/utils/permissions.ts; src/validators/contractSync.test.ts checks the two agree, so change
  * both together.
@@ -55,22 +56,23 @@ export interface PermissionModuleDef {
 }
 
 const CRUD: readonly PermissionAction[] = ['view', 'create', 'edit', 'delete'];
-const CRUD_IMPORT: readonly PermissionAction[] = [...CRUD, 'import'];
+/** View, Create, Edit, Delete, Export and Import: what every module but Documents has. */
+const ALL_ACTIONS: readonly PermissionAction[] = [...CRUD, 'export', 'import'];
 
 export const PERMISSION_MODULES: readonly PermissionModuleDef[] = [
-    { key: 'leads', label: 'Leads', owned: true, actions: CRUD_IMPORT },
-    { key: 'contacts', label: 'Contacts', owned: true, actions: CRUD_IMPORT },
-    { key: 'organizations', label: 'Organizations', owned: true, actions: CRUD_IMPORT },
-    { key: 'opportunities', label: 'Opportunities', owned: true, actions: CRUD_IMPORT },
-    { key: 'quotations', label: 'Quotations', owned: true, actions: CRUD },
-    { key: 'contracts', label: 'Contracts', owned: true, actions: CRUD },
-    { key: 'tickets', label: 'Tickets', owned: true, actions: CRUD_IMPORT },
-    { key: 'referrals', label: 'Referrals', owned: true, actions: CRUD },
-    { key: 'activities', label: 'Activities', owned: true, actions: CRUD },
+    { key: 'leads', label: 'Leads', owned: true, actions: ALL_ACTIONS },
+    { key: 'contacts', label: 'Contacts', owned: true, actions: ALL_ACTIONS },
+    { key: 'organizations', label: 'Organizations', owned: true, actions: ALL_ACTIONS },
+    { key: 'opportunities', label: 'Opportunities', owned: true, actions: ALL_ACTIONS },
+    { key: 'quotations', label: 'Quotations', owned: true, actions: ALL_ACTIONS },
+    { key: 'contracts', label: 'Contracts', owned: true, actions: ALL_ACTIONS },
+    { key: 'tickets', label: 'Tickets', owned: true, actions: ALL_ACTIONS },
+    { key: 'referrals', label: 'Referrals', owned: true, actions: ALL_ACTIONS },
+    { key: 'activities', label: 'Activities', owned: true, actions: ALL_ACTIONS },
     // Read-only list: documents are written by the opportunity form; ownership follows the opportunity.
-    { key: 'documents', label: 'Documents', owned: true, actions: ['view'] },
-    { key: 'products', label: 'Products', owned: false, actions: CRUD_IMPORT },
-    { key: 'partnerCompanies', label: 'Partner Companies', owned: false, actions: [...CRUD, 'export', 'import'] },
+    { key: 'documents', label: 'Documents', owned: true, actions: ['view', 'export'] },
+    { key: 'products', label: 'Products', owned: false, actions: ALL_ACTIONS },
+    { key: 'partnerCompanies', label: 'Partner Companies', owned: false, actions: ALL_ACTIONS },
 ];
 
 export const PERMISSION_MODULE_BY_KEY: Readonly<Record<PermissionModule, PermissionModuleDef>> = Object.fromEntries(
@@ -138,7 +140,7 @@ export function uniformPermissions(level: AccessLevel): RolePermissions {
 /** Full access: every action on every record (Super Admin, and roles that saw everything before Admin › Roles). */
 export const FULL_PERMISSIONS: RolePermissions = uniformPermissions('all');
 /**
- * Own records only, creating and importing allowed: every other role before Admin › Roles. Referrals were listed to
+ * Own records only, creating, exporting and importing allowed: every other role before Admin › Roles. Referrals were listed to
  * everyone (only editing and deleting were limited to their owner), so their View stays All.
  */
 export const OWN_RECORDS_PERMISSIONS: RolePermissions = normalizePermissions({

@@ -22,9 +22,14 @@ export const CUSTOM_FIELD_PREFIX = 'customFields.';
 const NOT_IMPORTABLE_TYPES = new Set(['file']);
 /**
  * Built-in fields a spreadsheet can't set, per module: a product's Status (Admin only, Inactive needs a reason given
- * in its dialog), so imported products start Active. Mirrored in frontend-crm/src/components/common/import/importFields.ts.
+ * in its dialog), so imported products start Active; an activity's Video meeting (made by the owner's calendar) and
+ * Attendees (colleagues, contacts and emails picked on the form). Mirrored in
+ * frontend-crm/src/components/common/import/importFields.ts.
  */
-export const NOT_IMPORTABLE_FIELDS: Readonly<Record<string, ReadonlySet<string>>> = { products: new Set(['status']) };
+export const NOT_IMPORTABLE_FIELDS: Readonly<Record<string, ReadonlySet<string>>> = {
+    products: new Set(['status']),
+    activities: new Set(['videoMeeting', 'attendees']),
+};
 
 /** Built-in fields the form keeps as a list of email rows. */
 const EMAIL_LIST_KEYS = new Set(['emailAddress']);
