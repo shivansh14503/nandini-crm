@@ -329,7 +329,7 @@ export function PeopleTable({
             )}
 
             <CompanyEmailDialog
-                key={editing?.username ?? 'none'}
+                key={`email-${editing?.username ?? 'none'}`}
                 person={editing}
                 companyDomains={companyDomains}
                 onClose={() => setEditing(null)}
@@ -340,7 +340,7 @@ export function PeopleTable({
             />
 
             <CalendarChoiceDialog
-                key={choosing ?? 'none'}
+                key={`calendar-${choosing ?? 'none'}`}
                 person={choosingPerson}
                 providers={providers}
                 fakeProvider={fakeProvider}
