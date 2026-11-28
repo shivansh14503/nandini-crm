@@ -34,6 +34,7 @@ import { codeSearchPrefix, gstSearchPrefix } from '../shared/searchTerms.js';
 import type { PrefetchedLookups } from '../shared/prefetch.js';
 import { acquireLocks, assertDeletedRow, lockRecords, restoreData, runInTransaction, softDeleteData, type BulkDeleteResult } from '../shared/transactions.js';
 import { toOrganizationDto, type OrganizationDto, type OrganizationRow } from './organization.mapper.js';
+import { assertOrganizationEditable } from './organization.lock.js';
 import { resolveAddressPlaces } from '../cities/cityAddresses.js';
 import {
     ORGANIZATION_SORT_FIELDS,
@@ -567,6 +568,8 @@ export const organizationService = {
             const existing = await tx.organization.findFirst({ where: { id, isDeleted: false }, include });
             if (!existing) throw notFound();
             assertRecordAccess(user, existing, 'organizations', 'edit');
+            // Inactive organizations are locked unless the role opens the admin panel (organization.lock.ts).
+            assertOrganizationEditable(user, existing);
 
             const before = toOrganizationDto(existing, flagsFor(existing));
             const merged: Record<string, unknown> = mergePatch(before, patch);
@@ -689,7 +692,11 @@ export const organizationService = {
                 select: { id: true, accountStatus: true, ...OWNER_SELECT },
             });
             if (targets.length === 0) throw notFound();
-            for (const row of targets) assertRecordAccess(user, row, 'organizations', 'edit');
+            for (const row of targets) {
+                assertRecordAccess(user, row, 'organizations', 'edit');
+                // Reactivating (or touching) an inactive organization needs the admin panel, as editing it does.
+                assertOrganizationEditable(user, row);
+            }
 
             await tx.organization.updateMany({
                 where: { id: { in: targets.map((row) => row.id) } },
