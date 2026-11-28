@@ -953,7 +953,9 @@ template first). Admin › Email has three tabs, modelled on SuiteCRM's Email ad
     mailbox (emails appear in its Sent folder). Check connection mints the token without sending; errors are worded
     for the admin (`gmail.sender.ts`: missing delegation / scope, unknown sender mailbox, bad key, API disabled).
   - **SMTP**: the `SMTP_*` environment settings (§9.3), as before. No row saved yet = SMTP from the environment, so
-    deploying this changes nothing until an admin saves the page (the first save keeps SMTP when it was on).
+    deploying this changes nothing until an admin saves the page (the first save keeps SMTP when it was on). Check
+    connection and Send test email on a never-saved page create the row the same way (`firstSaveDefaults()`), so a
+    first check never switches working SMTP mail off.
   No credential is typed into or returned by the page. Every process keeps a 30 s snapshot of the settings
   (`email.settings.ts`), so `isMailConfigured()` stays synchronous.
 - **Templates** (`EmailTemplate`, a row only when an admin changed the wording): `user_invite`, `password_reset`
@@ -2121,8 +2123,12 @@ the Google Workspace admin:
 `crm@nandiniinfosys.com` mailbox, turn on 2-Step Verification for it, create an **App password**
 (myaccount.google.com › Security › App passwords; the Workspace admin must allow 2-Step Verification for that user),
 then set `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=587`, `SMTP_SECURE=false` (STARTTLS required, so the app password
-never crosses the network unencrypted), `SMTP_USER=crm@nandiniinfosys.com`, `SMTP_PASS=<16-character app password>`. Gmail's sending limits for one mailbox (about 2,000 messages a day) are far
-above one email per user per day.
+never crosses the network unencrypted), `SMTP_USER=crm@nandiniinfosys.com`, `SMTP_PASS=<16-character app password>` (spaces removed). Port 465 works too: `SMTP_PORT=465` with
+`SMTP_SECURE=true` (TLS from the first byte); never 465 with `false` or 587 with `true`, which fail to connect.
+Gmail sends as the logged-in mailbox: a From address (`MAIL_FROM`, or the Sender address on Admin › Email ›
+Outbound Email, which wins over `MAIL_FROM` when set) that is neither that mailbox nor one of its verified "Send mail
+as" aliases is rewritten to the mailbox. `SMTP_*` changes need a backend (API and worker) restart. Gmail's sending
+limits for one mailbox (about 2,000 messages a day) are far above one email per user per day.
 
 The morning summary's schedule and behaviour: `MORNING_SUMMARY_ENABLED` (default true; still needs mail on),
 `MORNING_SUMMARY_CRON` (default `0 9 * * 1-6`, business timezone), `MORNING_SUMMARY_SKIP_EMPTY` (default true).

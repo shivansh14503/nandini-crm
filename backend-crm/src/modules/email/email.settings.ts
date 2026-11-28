@@ -235,6 +235,11 @@ export type OutboundSettingsPatch = z.infer<typeof outboundSettingsPatchSchema>;
 
 const legacySmtpOn = () => ENV.MAIL.ENABLED && Boolean(ENV.MAIL.SMTP_HOST);
 
+/** How the settings row starts when it is first created: the way the server already sent (SMTP when its settings are on). */
+export function firstSaveDefaults(smtpOn = legacySmtpOn()): { provider: OutboundProvider; enabled: boolean } {
+    return { provider: smtpOn ? 'smtp' : 'gmail', enabled: smtpOn };
+}
+
 export const SETTINGS_FIELDS = ['provider', 'enabled', 'senderEmail', 'senderName', 'replyTo', 'dailyLimit'] as const;
 
 /** Saves a patch (creating the row with the current values when it doesn't exist yet). Returns before / after. */
@@ -249,8 +254,7 @@ export async function saveOutboundSettings(patch: OutboundSettingsPatch, usernam
         create: {
             id: SETTINGS_ID,
             // First save: keep sending the way the server did (SMTP when its environment settings are on).
-            provider: before.saved ? before.provider : legacySmtpOn() ? 'smtp' : 'gmail',
-            enabled: before.saved ? before.enabled : legacySmtpOn(),
+            ...(before.saved ? { provider: before.provider, enabled: before.enabled } : firstSaveDefaults()),
             dailyLimit: before.dailyLimit,
             ...data,
             updatedBy: username,
@@ -266,7 +270,9 @@ export async function recordOutboundTest(ok: boolean, message: string, at = new 
     await prisma.outboundEmailSetting
         .upsert({
             where: { id: SETTINGS_ID },
-            create: { id: SETTINGS_ID, provider: 'gmail', enabled: false, lastTestAt: at, lastTestOk: ok, lastTestMessage: message.slice(0, 300) },
+            // No row yet: create it as the first Save would (SMTP and on while the server's SMTP settings are on), so a
+            // check on a never-saved page doesn't switch working SMTP mail off.
+            create: { id: SETTINGS_ID, ...firstSaveDefaults(), lastTestAt: at, lastTestOk: ok, lastTestMessage: message.slice(0, 300) },
             update: { lastTestAt: at, lastTestOk: ok, lastTestMessage: message.slice(0, 300) },
         })
         .catch((err: Error) => logger.warn({ err: err.message }, 'Could not record the outbound email check'));
