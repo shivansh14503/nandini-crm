@@ -24,8 +24,8 @@ import { acceptInviteSchema, changePasswordSchema, forgotPasswordSchema, loginSc
  *                                                                        → { status, message, user } (as /login)
  *                             400 INVALID_INVITE (unknown, expired, used, revoked or deactivated: one message for all)
  *                             400 WEAK_PASSWORD (newPassword) · 429 RATE_LIMITED
- *   POST   /forgot-password   { identifier }   (username or work email)  → { message } always the same 200, whether or not
- *                             an account matched; an active account with a work email is emailed a reset link (as an
+ *   POST   /forgot-password   { identifier }   (username typed on sign-in, or work email)  → 200 { message, sentTo } whether
+ *                             or not an account matched (`sentTo` = masked work email, or a stand-in); an active account with a work email is emailed a reset link (as an
  *                             admin's, 72 h, single use; an Invited user gets the invite again). 5 requests / 15 min per
  *                             IP (429 RATE_LIMITED); at most 3 links per account per hour (more are dropped quietly).
  */

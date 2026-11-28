@@ -3,7 +3,7 @@ import { StatusCodes } from 'http-status-codes';
 import { authService } from './auth.service.js';
 import { readToken, tryVerifyToken } from '../../middlewares/authMiddleware.js';
 import { setAuthCookie, clearAuthCookie } from './cookie.util.js';
-import { inviteService } from './invite.service.js';
+import { decoyResetHint, inviteService } from './invite.service.js';
 import type { AcceptInviteInput, ChangePasswordInput, ForgotPasswordInput, LoginInput, VerifyInviteInput } from './auth.validator.js';
 import { sendSuccess } from '../../utils/apiResponse.js';
 import { HttpError } from '../../utils/httpError.js';
@@ -84,18 +84,25 @@ export async function acceptInvite(req: Request, res: Response): Promise<void> {
     res.status(StatusCodes.OK).json({ status: 'ok', message: 'Password set', user });
 }
 
-/** The one answer of POST /api/auth/forgot-password, whatever happened. */
-export const FORGOT_PASSWORD_MESSAGE =
-    'If an active account matches what you entered, we’ve emailed it a link to choose a new password. The link works once, within 72 hours.';
+/** The answer of POST /api/auth/forgot-password: the same words whether or not the account exists. */
+export const forgotPasswordMessage = (sentTo: string) =>
+    `If this account exists, we’ve emailed a reset link to ${sentTo}. The link works once, within 72 hours.`;
 
 /**
- * POST /api/auth/forgot-password — public. Always the same 200 answer, sent before the account is even looked up, so
- * neither the answer nor its timing says whether the username or email exists. The lookup and email run afterwards.
+ * POST /api/auth/forgot-password — public ("Forgot password?" on the sign-in page, with the username already typed).
+ * Always 200 with `{ message, sentTo }`: `sentTo` is the account's work email masked (`a***@company.com`), or a stand-in
+ * built the same way when nothing matches, so the answer never says whether the account exists. The answer goes out
+ * after one indexed lookup in every case; the reset link itself is created and emailed afterwards.
  */
 export async function forgotPassword(req: Request, res: Response): Promise<void> {
     const { identifier } = req.body as ForgotPasswordInput;
     const ip = req.ip;
-    sendSuccess(res, { message: FORGOT_PASSWORD_MESSAGE }, FORGOT_PASSWORD_MESSAGE);
+    const sentTo = await inviteService.resetRecipientHint(identifier).catch((err: Error) => {
+        logger.warn({ err: err.message }, 'Forgot password: the recipient could not be looked up');
+        return decoyResetHint(identifier);
+    });
+    const message = forgotPasswordMessage(sentTo);
+    sendSuccess(res, { message, sentTo }, message);
     void inviteService.requestPasswordReset(identifier, { ip }).catch((err: Error) => {
         logger.error({ err: err.message }, 'Forgot password: the request could not be handled');
     });

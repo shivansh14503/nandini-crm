@@ -25,6 +25,7 @@ import {
     type InvitePurpose,
 } from './invite.token.js';
 import { LOCKOUT_CLEARED } from './accountLockout.js';
+import { currentMailConfig, parseFromHeader } from '../email/email.settings.js';
 import { passwordPolicyIssue } from './passwordPolicy.js';
 import { normalizeUserEmail } from '../users/userEmail.service.js';
 import { sessionService, type SessionMetadata } from './session.service.js';
@@ -250,6 +251,30 @@ export const inviteService = {
         return outcome.status === 'sent' ? 'sent' : 'skipped';
     },
 
+    /**
+     * The masked address shown after "Forgot password?" (`a***@company.com`). A username of an active account with a
+     * work email shows its real address, masked; anything else (unknown, deactivated, no email, an email that matches
+     * no single person) shows a stand-in built the same way from what was typed and the company's mail domain, so the
+     * answer never says whether the account exists. Same lookup as `requestPasswordReset`.
+     */
+    async resetRecipientHint(identifier: string): Promise<string> {
+        const value = identifier.trim();
+        const decoy = decoyResetHint(value);
+        if (!value) return decoy;
+        const select = { email: true, isActive: true } as const;
+        let user: { email: string | null; isActive: boolean } | null = null;
+        if (value.includes('@')) {
+            const email = normalizeUserEmail(value);
+            if (!email) return decoy;
+            const found = await prisma.user.findMany({ where: { email, isActive: true, isGroupUser: false }, select, take: 2 });
+            user = found.length === 1 ? found[0] : null;
+        } else {
+            user = await prisma.user.findUnique({ where: { username: value }, select });
+        }
+        const email = user?.isActive ? normalizeUserEmail(user.email) : null;
+        return email ? maskEmail(email) : decoy;
+    },
+
     /** POST /api/auth/invite/verify: who the link is for, so the page can greet them. 400 INVALID_INVITE otherwise. */
     async verify(token: unknown, now: Date = new Date()): Promise<InviteCheck> {
         const row = await findUsable(token, now);
@@ -324,3 +349,25 @@ export const inviteService = {
         return { user: toAuthMeDto(me), token: tokenService.generateToken({ id: me.id, username: me.username, role: me.role }, { jti, tracked }) };
     },
 };
+
+/** `asha.k@nandiniinfosys.com` → `a***@nandiniinfosys.com`: the first character and the domain only. */
+export function maskEmail(email: string): string {
+    const at = email.lastIndexOf('@');
+    if (at < 1) return '***';
+    return `${email[0].toLowerCase()}***${email.slice(at).toLowerCase()}`;
+}
+
+/** The company's mail domain (the sender on Admin › Email, else MAIL_FROM), for the stand-in address. */
+export function companyMailDomain(): string {
+    const sender = currentMailConfig().settings.senderEmail || parseFromHeader(ENV.MAIL.FROM).email;
+    const at = sender.lastIndexOf('@');
+    return at >= 0 ? sender.slice(at + 1).toLowerCase() : 'company.com';
+}
+
+/** The stand-in masked address for an identifier that matches no reachable account (see `resetRecipientHint`). */
+export function decoyResetHint(identifier: string, domain: string = companyMailDomain()): string {
+    const value = identifier.trim();
+    if (value.includes('@')) return maskEmail(value);
+    const first = value.match(/[a-z0-9]/i)?.[0]?.toLowerCase() ?? 'u';
+    return `${first}***@${domain}`;
+}

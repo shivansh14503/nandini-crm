@@ -22,8 +22,9 @@ export const authService = {
     },
 
     /**
-     * Public ("Forgot password?"): asks for a password reset link by username or work email. The API answers the same
-     * whether or not an account matched (it never says which); rejects only on 429 RATE_LIMITED or a network failure.
+     * Public ("Forgot password?"): asks for a password reset link for a username. The answer ("If this account exists,
+     * we’ve emailed a reset link to a***@company.com") reads the same whether or not an account matched; rejects only on
+     * 429 RATE_LIMITED or a network failure.
      */
     requestPasswordReset: async (identifier: string): Promise<string> => {
         const res = await apiClient.post<ApiResponse<{ message: string }>>('/api/auth/forgot-password', { identifier });

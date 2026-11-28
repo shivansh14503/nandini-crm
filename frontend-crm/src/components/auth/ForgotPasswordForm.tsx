@@ -11,8 +11,7 @@ import { authService } from '@/services/auth.service';
 import { FIELD_MAX_LENGTH } from '../forms/fieldSizing';
 
 /** Shown when the API's own answer can't be read; the same words the API uses. */
-const SENT_TEXT =
-    'If an active account matches what you entered, we’ve emailed it a link to choose a new password. The link works once, within 72 hours.';
+const SENT_TEXT = 'If this account exists, we’ve emailed a reset link to its company email. The link works once, within 72 hours.';
 
 const solidSx = {
     minHeight: 46,
@@ -41,9 +40,10 @@ const backLinkSx = {
 } as const;
 
 /**
- * "Forgot password?" (`/forgot-password`). Takes a username or work email and asks the API to email a password reset
- * link (single use, 72 hours, the same link an admin sends). The answer is the same whether or not an account matched,
- * so the page never says which usernames or emails exist.
+ * "Forgot password?" (`/forgot-password`), reached only when the sign-in page's username was empty (with a username
+ * typed, the sign-in page sends the link itself). Takes the username and asks the API to email a password reset link to
+ * that account's company email (single use, 72 hours, the same link an admin sends). The answer reads the same whether
+ * or not an account matched, so the page never says which usernames exist.
  */
 export function ForgotPasswordForm() {
     const [identifier, setIdentifier] = useState('');
@@ -55,7 +55,7 @@ export function ForgotPasswordForm() {
         e.preventDefault();
         const value = identifier.trim();
         if (!value) {
-            setError('Enter your username or work email.');
+            setError('Enter your username.');
             return;
         }
         setSubmitting(true);
@@ -114,7 +114,7 @@ export function ForgotPasswordForm() {
                     Forgot your password?
                 </Typography>
                 <Typography sx={{ fontSize: '14px', color: 'var(--mui-palette-text-secondary)', mt: 0.5, lineHeight: 1.6 }}>
-                    Enter your username or work email. We’ll email you a link to choose a new password.
+                    Enter your CRM username. We’ll email a link to choose a new password to your company email.
                 </Typography>
             </Box>
 
@@ -124,13 +124,13 @@ export function ForgotPasswordForm() {
                     htmlFor="forgot-identifier"
                     sx={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--crm-slate-600)', mb: 0.75 }}
                 >
-                    Username or work email
+                    User Name
                 </Typography>
                 <TextField
                     id="forgot-identifier"
                     fullWidth
                     autoFocus
-                    placeholder="e.g. asha.k or asha@company.com"
+                    placeholder="Enter your CRM username"
                     value={identifier}
                     onChange={(e) => {
                         setIdentifier(e.target.value);

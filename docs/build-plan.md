@@ -797,6 +797,10 @@ Security Groups and Security Settings missing.
       admin panel switch) replaced the hard-coded admin role list. Admin › Roles page (card grid, editor with the
       permission grid and presets, duplicate, delete with reassign); Admin › Users picks roles from the table only;
       the app hides New, Import, Edit, Export, Convert, Quick Create items and modules the role can't use.
+- [x] **One-click Forgot password** (2026-11-28, CRM-147) — clicking "Forgot password?" on the sign-in page sends the
+      reset link straight to the typed username's company email and says "If this account exists, we’ve emailed a
+      reset link to a***@company.com" (masked; a stand-in address when nothing matches). With no username typed, the
+      link opens the Forgot password page, which now asks for the username only.
 - [x] **Forgot password and account lockout** (2026-11-28) — "Forgot password?" on the sign-in page emails the same
       single-use 72 h reset link an admin sends (same answer whether or not the account exists; 5 requests / 15 min
       per IP, 3 links / hour per account). 5 wrong passwords within 15 min lock the account for 15 min (`423
