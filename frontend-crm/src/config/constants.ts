@@ -15,6 +15,7 @@ export const APP_CONFIG = {
 export const ROUTES = {
     HOME: '/',
     LOGIN: '/login',
+    FORGOT_PASSWORD: '/forgot-password',
     DASHBOARD: '/dashboard',
     ORGANIZATIONS: '/organizations',
     ORGANIZATION_NEW: '/organizations/new',

@@ -32,6 +32,8 @@ export interface SetPasswordEmailInput {
     expiresLabel: string;
     /** The admin who sent it ("Asha Kulkarni"), when known. */
     sentBy?: string | null;
+    /** The user asked for it ("Forgot password?" on the sign-in page): the email says so instead of naming an admin. */
+    requestedBySelf?: boolean;
 }
 
 /** "Mon 30 Nov 2026, 1:05 pm" in the business timezone (+ its short zone name). */
@@ -55,9 +57,13 @@ function copyFor(input: SetPasswordEmailInput) {
             subject: 'Reset your Nandini CRM password',
             preview: 'Choose a new password for your Nandini CRM account.',
             heading: `Hi ${input.recipientName}, reset your password`,
-            intro: `${input.sentBy ? `${input.sentBy} sent you` : 'You were sent'} a link to choose a new password for your Nandini CRM account.`,
+            intro: input.requestedBySelf
+                ? 'We received a request to reset the password for your Nandini CRM account. Use the link below to choose a new one.'
+                : `${input.sentBy ? `${input.sentBy} sent you` : 'You were sent'} a link to choose a new password for your Nandini CRM account.`,
             button: 'Choose a new password',
-            footer: 'If you didn’t expect this, you can ignore this email: your current password keeps working until you choose a new one.',
+            footer: input.requestedBySelf
+                ? 'If you didn’t ask for this, you can ignore this email: your current password keeps working, and nothing changes unless the link is used.'
+                : 'If you didn’t expect this, you can ignore this email: your current password keeps working until you choose a new one.',
         };
     }
     return {

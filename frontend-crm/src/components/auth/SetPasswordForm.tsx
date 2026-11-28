@@ -16,7 +16,8 @@ import { linkPasswordIssue } from '@/utils/passwordPolicy';
 
 /** The API's one answer for any link that can't be used (unknown, expired, used, revoked, account deactivated). */
 const INVALID_INVITE = 'INVALID_INVITE';
-const INVALID_LINK_TEXT = 'This link is no longer valid. It may have expired or already been used. Ask your administrator to send a new one.';
+const INVALID_LINK_TEXT =
+    'This link is no longer valid. It may have expired or already been used. Request a new one with “Forgot password?” on the sign-in page, or ask your administrator.';
 
 type LinkState = { kind: 'checking' } | { kind: 'ready'; info: SetPasswordLinkInfo } | { kind: 'invalid'; message: string } | { kind: 'error'; message: string };
 
@@ -128,6 +129,15 @@ export function SetPasswordForm() {
                 </Typography>
                 <Typography sx={{ fontSize: '14px', color: 'var(--mui-palette-text-secondary)', lineHeight: 1.6 }}>{link.message}</Typography>
                 <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: 'center', width: '100%', mt: 1 }}>
+                    {invalid && (
+                        <Button
+                            variant="contained"
+                            onClick={() => router.push(ROUTES.FORGOT_PASSWORD)}
+                            sx={{ ...solidSx, flex: { xs: '1 1 100%', sm: 'none' }, px: 3 }}
+                        >
+                            Request a new link
+                        </Button>
+                    )}
                     {!invalid && (
                         <Button
                             variant="contained"

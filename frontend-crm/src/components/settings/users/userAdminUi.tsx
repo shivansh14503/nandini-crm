@@ -55,7 +55,7 @@ export function roleAccessHint(access: RoleAccess | null | undefined): string {
 }
 
 /**
- * Status chips of a user row: Invited (or Invite expired), Inactive, On leave, Out of office (today), Group, Reset link
+ * Status chips of a user row: Invited (or Invite expired), Locked (too many wrong passwords), Inactive, On leave, Out of office (today), Group, Reset link
  * sent, an email issue. "Active" when none apply.
  */
 export function UserStatusChips({ user }: { user: AdminUserDto }) {
@@ -82,6 +82,13 @@ export function UserStatusChips({ user }: { user: AdminUserDto }) {
                 </StatusChip>,
             );
         }
+    }
+    if (user.lockedUntil && user.isActive) {
+        chips.push(
+            <StatusChip key="locked" tone="error" title={`Too many wrong passwords: sign-in is refused until ${formatDateTime(user.lockedUntil)}. Use “Unlock account” in the row menu to let them in now.`}>
+                Locked
+            </StatusChip>,
+        );
     }
     if (!user.isActive) {
         chips.push(

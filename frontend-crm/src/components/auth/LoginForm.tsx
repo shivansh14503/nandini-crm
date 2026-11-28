@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import NextLink from 'next/link';
 import {
     Box,
     TextField,
@@ -10,6 +11,7 @@ import {
     InputAdornment,
     IconButton,
     CircularProgress,
+    Link,
 } from '@mui/material';
 import {
     PersonOutlined as PersonOutlineIcon,
@@ -162,19 +164,23 @@ export function LoginForm() {
                     >
                         Password
                     </Typography>
-                    {/* <Link
-                        href="#"
+                    <Link
+                        id="forgot-password-link"
+                        component={NextLink}
+                        href={ROUTES.FORGOT_PASSWORD}
                         underline="hover"
                         sx={{
                             fontSize: '13px',
                             color: 'var(--crm-text-blue-600)',
                             fontWeight: 500,
                             cursor: 'pointer',
-                            '&:hover': { color: 'primary.dark' },
+                            // A comfortable tap target on phones without moving the label row.
+                            py: 0.5,
+                            '&:hover': { color: 'var(--crm-text-blue-700)' },
                         }}
                     >
                         Forgot password?
-                    </Link> */}
+                    </Link>
                 </Box>
                 <TextField
                     id="password"

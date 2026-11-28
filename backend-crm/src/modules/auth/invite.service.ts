@@ -21,7 +21,9 @@ import {
     tokenMatchesHash,
     type InvitePurpose,
 } from './invite.token.js';
+import { LOCKOUT_CLEARED } from './accountLockout.js';
 import { passwordPolicyIssue } from './passwordPolicy.js';
+import { normalizeUserEmail } from '../users/userEmail.service.js';
 import { sessionService, type SessionMetadata } from './session.service.js';
 import { tokenService } from './token.service.js';
 
@@ -36,7 +38,8 @@ import { tokenService } from './token.service.js';
  * limited per IP (auth.routes.ts).
  */
 
-export const INVALID_INVITE_MESSAGE = 'This link is no longer valid. It may have expired or already been used. Ask your administrator to send a new one.';
+export const INVALID_INVITE_MESSAGE =
+    'This link is no longer valid. It may have expired or already been used. Request a new one with “Forgot password?” on the sign-in page, or ask your administrator.';
 
 export const invalidInvite = () => new HttpError(INVALID_INVITE_MESSAGE, StatusCodes.BAD_REQUEST, { code: 'INVALID_INVITE' });
 
@@ -97,6 +100,19 @@ async function findUsable(token: unknown, now: Date) {
 /** The mail calls, behind an object so tests can stand in for SMTP. */
 export const inviteMail = { sendMail, isMailConfigured };
 
+export interface SendOptions {
+    /**
+     * The user asked for it themselves ("Forgot password?" on the sign-in page): the email says they asked for it
+     * (no admin's name) and the audit entry says `requestedBy: 'self'` with the address it came from.
+     */
+    selfService?: boolean;
+    ip?: string;
+}
+
+/** Self-service links a user may request in this many minutes before further requests are quietly dropped. */
+export const SELF_SERVICE_LIMIT = 3;
+export const SELF_SERVICE_WINDOW_MINUTES = 60;
+
 const purposeOf = (value: string): InvitePurpose => (value === 'reset' ? 'reset' : 'invite');
 
 export const inviteService = {
@@ -105,15 +121,18 @@ export const inviteService = {
      * shows the admin the reason). On success the user's older links stop working; on failure the new link is
      * dropped and the older ones are left as they were. Audited as INVITE_SENT (purpose, expiry, email outcome).
      */
-    async send(actor: AuthUser, user: InviteRecipient, purpose: InvitePurpose, now: Date = new Date()): Promise<InviteSendOutcome> {
+    async send(actor: AuthUser, user: InviteRecipient, purpose: InvitePurpose, now: Date = new Date(), options: SendOptions = {}): Promise<InviteSendOutcome> {
         const sentTo = user.email;
+        const selfService = options.selfService === true;
         const auditSend = (email: 'sent' | 'failed' | 'skipped', expiresAt?: Date) =>
             void auditService.enqueue({
                 entityType: 'User',
                 entityId: String(user.id),
                 action: 'INVITE_SENT',
                 changedBy: actor.username,
-                changes: { purpose, email, ...(expiresAt ? { expiresAt: expiresAt.toISOString() } : {}) },
+                // A self-service request has no signed-in request behind it: say who it was for.
+                ...(selfService ? { actor: { id: actor.id, role: actor.role } } : {}),
+                changes: { purpose, email, ...(selfService ? { requestedBy: 'self', ip: options.ip } : {}), ...(expiresAt ? { expiresAt: expiresAt.toISOString() } : {}) },
             });
 
         if (!inviteMail.isMailConfigured()) {
@@ -136,7 +155,7 @@ export const inviteService = {
             return { status: 'failed', purpose, sentTo, error: 'The link could not be saved. Please try again.' };
         }
 
-        const admin = await prisma.user.findUnique({ where: { id: actor.id }, select: { fullName: true } }).catch(() => null);
+        const admin = selfService ? null : await prisma.user.findUnique({ where: { id: actor.id }, select: { fullName: true } }).catch(() => null);
         const email = renderSetPasswordEmail({
             purpose,
             recipientName: user.firstName?.trim() || user.fullName.trim().split(/\s+/)[0] || user.username,
@@ -144,6 +163,7 @@ export const inviteService = {
             url: setPasswordUrl(ENV.MAIL.APP_PUBLIC_URL, token),
             expiresLabel: formatExpiry(expiresAt, ENV.BUSINESS_TIMEZONE),
             sentBy: admin?.fullName?.trim() || null,
+            requestedBySelf: selfService,
         });
         // A one-off send (unique dedupe key): EmailLog keeps the subject and recipient, never the body (or the link).
         const result = await inviteMail.sendMail({
@@ -171,6 +191,50 @@ export const inviteService = {
         auditSend(result.status === 'skipped' ? 'skipped' : 'failed');
         if (result.status === 'skipped') return { status: 'mail_disabled', purpose, sentTo, error: MAIL_DISABLED_MESSAGE };
         return { status: 'failed', purpose, sentTo, error: result.error ?? 'The mail server did not accept the email.' };
+    },
+
+    /**
+     * POST /api/auth/forgot-password ("Forgot password?" on the sign-in page). Finds the account by username or work
+     * email and emails it a password reset link (the same single-use, 72 hour link an admin sends; an Invited user gets
+     * their invite again). Answers nothing: the route says the same thing whatever happens, so nobody can learn which
+     * usernames or emails exist. Sent only to an active account that has a work email; an email address must belong to
+     * exactly one active person (a shared group login is reached by its username). At most `SELF_SERVICE_LIMIT`
+     * self-service links per account per `SELF_SERVICE_WINDOW_MINUTES` (counted from UserInvites, so it holds without
+     * Redis); more are dropped quietly. The route limits requests per address too.
+     */
+    async requestPasswordReset(identifier: string, context: { ip?: string } = {}, now: Date = new Date()): Promise<'sent' | 'skipped'> {
+        const value = identifier.trim();
+        if (!value) return 'skipped';
+        const select = { id: true, username: true, email: true, firstName: true, fullName: true, role: true, isActive: true, invitePending: true } as const;
+        let user;
+        if (value.includes('@')) {
+            const email = normalizeUserEmail(value);
+            if (!email) return 'skipped';
+            const found = await prisma.user.findMany({ where: { email, isActive: true, isGroupUser: false }, select, take: 2 });
+            if (found.length !== 1) return 'skipped';
+            user = found[0];
+        } else {
+            user = await prisma.user.findUnique({ where: { username: value }, select });
+        }
+        if (!user || !user.isActive) return 'skipped';
+        const email = normalizeUserEmail(user.email);
+        if (!email) return 'skipped';
+
+        const recent = await prisma.userInvite.count({
+            where: { userId: user.id, createdBy: user.username, createdAt: { gt: new Date(now.getTime() - SELF_SERVICE_WINDOW_MINUTES * 60_000) } },
+        });
+        if (recent >= SELF_SERVICE_LIMIT) {
+            logger.info({ userId: user.id }, 'Forgot password: too many self-service links requested; not sent');
+            return 'skipped';
+        }
+
+        const purpose: InvitePurpose = user.invitePending ? 'invite' : 'reset';
+        const outcome = await inviteService.send({ id: user.id, username: user.username, role: user.role }, { ...user, email }, purpose, now, {
+            selfService: true,
+            ip: context.ip,
+        });
+        if (outcome.status !== 'sent') logger.warn({ userId: user.id, status: outcome.status }, 'Forgot password: the reset email could not be sent');
+        return outcome.status === 'sent' ? 'sent' : 'skipped';
     },
 
     /** POST /api/auth/invite/verify: who the link is for, so the page can greet them. 400 INVALID_INVITE otherwise. */
@@ -219,7 +283,8 @@ export const inviteService = {
             const current = await tx.user.findUnique({ where: { id: user.id }, select: { isActive: true } });
             if (!current?.isActive) throw invalidInvite();
             await revokeOutstandingInvites(tx, user.id, { exceptId: row.id, now: passwordChangedAt });
-            await tx.user.update({ where: { id: user.id }, data: { passwordHash, passwordChangedAt, invitePending: false } });
+            // A new password also ends any lockout (the account may have been locked by the guesses that prompted it).
+            await tx.user.update({ where: { id: user.id }, data: { passwordHash, passwordChangedAt, invitePending: false, ...LOCKOUT_CLEARED } });
             await auditService.record(tx, {
                 entityType: 'User',
                 entityId: String(user.id),

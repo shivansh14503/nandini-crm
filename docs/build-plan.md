@@ -797,8 +797,14 @@ Security Groups and Security Settings missing.
       admin panel switch) replaced the hard-coded admin role list. Admin › Roles page (card grid, editor with the
       permission grid and presets, duplicate, delete with reassign); Admin › Users picks roles from the table only;
       the app hides New, Import, Edit, Export, Convert, Quick Create items and modules the role can't use.
-- [ ] **Password Management** — admin-set password rules (length, character classes, expiry, reuse history), account
-      lockout per user after failed sign-ins, forced change on expiry.
+- [x] **Forgot password and account lockout** (2026-11-28) — "Forgot password?" on the sign-in page emails the same
+      single-use 72 h reset link an admin sends (same answer whether or not the account exists; 5 requests / 15 min
+      per IP, 3 links / hour per account). 5 wrong passwords within 15 min lock the account for 15 min (`423
+      ACCOUNT_LOCKED`), cleared by a sign-in, a password reset or Admin › Users **Unlock account**; locks and unlocks
+      audited. Defaults in `auth/accountLockout.ts` (`DEFAULT_LOCKOUT_POLICY`, read through `getLockoutPolicy()`).
+- [ ] **Password Management** — admin-set password rules (length, character classes, expiry, reuse history), an
+      admin screen for the lockout policy (attempts, window, lock length: today the defaults in `accountLockout.ts`),
+      forced change on expiry.
 - [ ] **Security Groups** — groups of users (teams / branches); records shared with a group are visible to its
       members (a "Group" level alongside All / Own / None), group membership in Admin › Users.
 - [ ] **Security Settings** — company switches: inherit the creator's / assignee's groups on new records, who may

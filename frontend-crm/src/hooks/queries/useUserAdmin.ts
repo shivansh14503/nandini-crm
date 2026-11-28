@@ -55,4 +55,6 @@ export const useDeactivateAdminUser = () => useUserAdminMutation((id: number) =>
 
 export const useActivateAdminUser = () => useUserAdminMutation((id: number) => userAdminService.activate(id), (id) => id);
 
+export const useUnlockAdminUser = () => useUserAdminMutation((id: number) => userAdminService.unlock(id), (id) => id);
+
 export const useSendAdminUserInvite = () => useUserAdminMutation((id: number) => userAdminService.sendInvite(id), (id) => id);

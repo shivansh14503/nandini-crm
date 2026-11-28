@@ -37,7 +37,10 @@ import {
  *                                400 INVALID_MANAGER · 400 SELF_LOCKOUT · 400 LAST_ADMIN · 409 DUPLICATE_RECORD (email) · 404
  *   POST   /:id/deactivate      → AdminUserDto + { signedOutSessions }   400 SELF_LOCKOUT · 400 LAST_ADMIN · 404
  *   POST   /:id/activate        → AdminUserDto + { signedOutSessions: null }   409 DUPLICATE_RECORD (email) · 404
- *   Super Admin users (and the Super Admin role) can only be added, edited, deactivated, activated or sent a link by a
+ *   POST   /:id/unlock          ("Unlock account") ends a lock after too many wrong passwords and resets the count
+ *                                → AdminUserDto (lockedUntil: null) + { unlocked } (false: nothing to clear)   404
+ *                                Audited as ACCOUNT_UNLOCKED.
+ *   Super Admin users (and the Super Admin role) can only be added, edited, deactivated, activated, unlocked or sent a link by a
  *   Super Admin: 403 SUPER_ADMIN_ONLY otherwise.
  *   POST   /:id/send-invite     (no body) emails a new set-password link (72 h, single use) and stops the older ones:
  *                                the invite again for an Invited user ("Resend invite"), a password reset link otherwise
@@ -86,6 +89,11 @@ router.post('/:id/deactivate', validateRequest({ params: userIdParamSchema }), a
 
 router.post('/:id/activate', validateRequest({ params: userIdParamSchema }), async (req: Request, res: Response) => {
     sendSuccess(res, await userAdminService.activate(requireUser(req), idOf(req)), 'User activated');
+});
+
+router.post('/:id/unlock', validateRequest({ params: userIdParamSchema }), async (req: Request, res: Response) => {
+    const result = await userAdminService.unlock(requireUser(req), idOf(req));
+    sendSuccess(res, result, result.unlocked ? 'Account unlocked' : 'Account was not locked');
 });
 
 router.post('/:id/send-invite', sendInviteLimiter, validateRequest({ params: userIdParamSchema }), async (req: Request, res: Response) => {

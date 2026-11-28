@@ -23,6 +23,8 @@ const row: AdminUserRow = {
     invitePending: true,
     lastLoginAt: null,
     passwordChangedAt: new Date('2026-11-01T10:00:00.000Z'),
+    failedLoginCount: 0,
+    lockedUntil: null,
     createdAt: new Date('2026-11-26T09:00:00.000Z'),
     createdBy: 'admin',
     deactivatedAt: null,
@@ -62,6 +64,8 @@ describe('toAdminUserDto', () => {
             invite: { purpose: 'invite', sentAt: '2026-11-26T09:00:00.000Z', expiresAt: '2026-11-29T09:00:00.000Z', expired: false },
             lastLoginAt: null,
             passwordChangedAt: '2026-11-01T10:00:00.000Z',
+            lockedUntil: null,
+            failedLoginCount: 0,
             createdAt: '2026-11-26T09:00:00.000Z',
             createdBy: 'admin',
             deactivatedAt: null,
@@ -73,6 +77,11 @@ describe('toAdminUserDto', () => {
         assert.equal(toAdminUserDto({ ...row, invites: [] }, emailRule, today, now).invite, null);
         const reset = { purpose: 'reset', createdAt: new Date('2026-11-26T09:00:00.000Z'), expiresAt: new Date('2026-11-29T09:00:00.000Z') };
         assert.equal(toAdminUserDto({ ...row, invitePending: false, invites: [reset] }, emailRule, today, now).invite?.purpose, 'reset');
+    });
+    it('shows a lock only while it lasts', () => {
+        const lockedUntil = new Date(now.getTime() + 10 * 60_000);
+        assert.equal(toAdminUserDto({ ...row, lockedUntil }, emailRule, today, now).lockedUntil, lockedUntil.toISOString());
+        assert.equal(toAdminUserDto({ ...row, lockedUntil: new Date(now.getTime() - 1000) }, emailRule, today, now).lockedUntil, null);
     });
     it('never exposes a password hash or the raw reportsToId', () => {
         const dto = toAdminUserDto({ ...row, passwordHash: 'x' } as AdminUserRow, emailRule, today) as unknown as Record<string, unknown>;

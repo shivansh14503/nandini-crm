@@ -34,6 +34,7 @@ import ForwardToInboxOutlinedIcon from '@mui/icons-material/ForwardToInboxOutlin
 import PersonOffOutlinedIcon from '@mui/icons-material/PersonOffOutlined';
 import HowToRegOutlinedIcon from '@mui/icons-material/HowToRegOutlined';
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded';
+import LockOpenRoundedIcon from '@mui/icons-material/LockOpenRounded';
 import { AppToast } from '@/components/common/AppToast';
 import { TableSkeleton } from '@/components/common/skeletons';
 import { UserAvatar } from '@/components/common/UserAvatar';
@@ -41,7 +42,7 @@ import { EmptyState, errorMessage, inputSx, panelHeaderSx, primaryButtonSx, seco
 import { formatDateTime } from '@/utils/date';
 import { isSuperAdminRole } from '@/utils/roleAccess';
 import { useAuth } from '@/context/AuthContext';
-import { useAdminUsers, useAdminUsersMeta, useDeactivateAdminUser } from '@/hooks/queries/useUserAdmin';
+import { useAdminUsers, useAdminUsersMeta, useDeactivateAdminUser, useUnlockAdminUser } from '@/hooks/queries/useUserAdmin';
 import type { AdminUserDto, AdminUserListParams, SendInviteResult, UserStatusFilter } from '@/types/userAdmin.types';
 import { SendInviteDialog } from './SendInviteDialog';
 import { UserFormDrawer } from './UserFormDrawer';
@@ -214,6 +215,18 @@ export function UsersView() {
             else showToast(result.signedOutSessions === 0 ? `${name} has no open sessions.` : `${name} signed out.${sessionsText(result.signedOutSessions)}`);
         } catch (err) {
             showToast(errorMessage(err, `Could not sign ${name} out.`), 'error');
+        }
+    };
+
+    // "Unlock account": ends a lock after too many wrong passwords, so the user can sign in at once.
+    const unlockAccount = useUnlockAdminUser();
+    const unlockUser = async (user: AdminUserDto) => {
+        const name = userLabel(user);
+        try {
+            const result = await unlockAccount.mutateAsync(user.id);
+            showToast(result.unlocked ? `${name} unlocked. They can sign in now.` : `${name} wasn't locked.`);
+        } catch (err) {
+            showToast(errorMessage(err, `Could not unlock ${name}.`), 'error');
         }
     };
 
@@ -598,6 +611,22 @@ export function UsersView() {
                         }
                     />
                 </MenuItem>
+                {menuUser?.isActive && menuUser.lockedUntil ? (
+                    <MenuItem
+                        disabled={unlockAccount.isPending || menuLocked}
+                        onClick={() => {
+                            const u = menuUser;
+                            setMenu(null);
+                            if (u) void unlockUser(u);
+                        }}
+                        sx={menuItemSx}
+                    >
+                        <ListItemIcon>
+                            <LockOpenRoundedIcon fontSize="small" />
+                        </ListItemIcon>
+                        <ListItemText primary="Unlock account" secondary={`Locked until ${formatDateTime(menuUser.lockedUntil)}`} />
+                    </MenuItem>
+                ) : null}
                 {menuUser?.isActive ? (
                     <MenuItem
                         disabled={menuIsSelf || menuLocked}

@@ -8,6 +8,7 @@ import { HttpError } from '../../utils/httpError.js';
 import { auditService } from '../../services/audit.service.js';
 import { acquireLocks, runInTransaction } from '../shared/transactions.js';
 import { AUTH_ME_SELECT, toAuthMeDto, type AuthMeDto } from '../profile/profile.dto.js';
+import { accountLocked, afterFailedLogin, getLockoutPolicy, isLocked, LOCKOUT_CLEARED } from './accountLockout.js';
 import { passwordPolicyIssue } from './passwordPolicy.js';
 import { sessionService, type SessionMetadata } from './session.service.js';
 import { tokenService } from './token.service.js';
@@ -78,6 +79,49 @@ const wrongPassword = () => {
     return new HttpError(message, StatusCodes.BAD_REQUEST, { code: 'WRONG_PASSWORD', errors: [{ message, path: ['currentPassword'] }] });
 };
 
+/**
+ * Counts a wrong password against the account (accountLockout.ts) under the user's row lock, so wrong passwords typed at
+ * the same moment are all counted. Returns when the account is locked until if this one locked it (audited once as
+ * ACCOUNT_LOCKED), else null. A database failure is logged and doesn't change the answer (the per-address limit still
+ * applies).
+ */
+async function recordWrongPassword(user: { id: number; username: string; role: string }, ip: string | undefined): Promise<Date | null> {
+    try {
+        const policy = await getLockoutPolicy();
+        return await runInTransaction(async (tx) => {
+            await acquireLocks(tx, [`user:id:${user.id}`]);
+            const now = new Date();
+            const state = await tx.user.findUnique({
+                where: { id: user.id },
+                select: { failedLoginCount: true, lastFailedLoginAt: true, lockedUntil: true },
+            });
+            if (!state) return null;
+            // Locked by a wrong password typed at the same moment: already counted and audited there.
+            if (isLocked(state.lockedUntil, now)) return state.lockedUntil;
+            const outcome = afterFailedLogin(state, policy, now);
+            await tx.user.update({ where: { id: user.id }, data: outcome.next });
+            if (!outcome.locked) return null;
+            await auditService.record(tx, {
+                entityType: 'User',
+                entityId: String(user.id),
+                action: 'ACCOUNT_LOCKED',
+                changedBy: user.username,
+                actor: { id: user.id, role: user.role },
+                changes: {
+                    ip,
+                    failedAttempts: outcome.attempts,
+                    lockMinutes: policy.lockMinutes,
+                    lockedUntil: outcome.next.lockedUntil?.toISOString() ?? null,
+                },
+            });
+            return outcome.next.lockedUntil;
+        });
+    } catch (err) {
+        logger.warn({ err: (err as Error).message, userId: user.id }, 'Could not count a wrong password towards account lockout');
+        return null;
+    }
+}
+
 export const authService = {
     async loginUser(credentials: LoginInput, context: SessionMetadata = {}): Promise<LoginResult> {
         const user = await prisma.user.findUnique({ where: { username: credentials.username }, include: { photo: { select: { id: true } } } });
@@ -86,6 +130,23 @@ export const authService = {
             await bcrypt.compare(credentials.password, await dummyHash());
             await loginRateLimit.recordFailure(context.ip);
             throw new HttpError(INVALID_CREDENTIALS, StatusCodes.UNAUTHORIZED, { code: 'INVALID_CREDENTIALS' });
+        }
+
+        // Locked after too many wrong passwords (accountLockout.ts): refused without checking the password, so guessing
+        // can't go on while it lasts. The dummy compare keeps the answer as slow as a real check.
+        const now = new Date();
+        if (isLocked(user.lockedUntil, now)) {
+            await bcrypt.compare(credentials.password, await dummyHash());
+            await loginRateLimit.recordFailure(context.ip);
+            void auditService.enqueue({
+                entityType: 'User',
+                entityId: String(user.id),
+                action: 'LOGIN_FAILED',
+                changedBy: user.username,
+                actor: { id: user.id, role: user.role },
+                changes: { ip: context.ip, reason: 'Account locked' },
+            });
+            throw accountLocked(user.lockedUntil, now);
         }
 
         const { valid, needsRehash } = await verifyPassword(credentials.password, user.passwordHash);
@@ -100,6 +161,8 @@ export const authService = {
                 actor: { id: user.id, role: user.role },
                 changes: { ip: context.ip, reason: 'Wrong password' },
             });
+            const lockedUntil = await recordWrongPassword(user, context.ip);
+            if (lockedUntil) throw accountLocked(lockedUntil);
             throw new HttpError(INVALID_CREDENTIALS, StatusCodes.UNAUTHORIZED, { code: 'INVALID_CREDENTIALS' });
         }
 
@@ -131,7 +194,8 @@ export const authService = {
         const rehashed = needsRehash ? await hashPassword(credentials.password) : null;
         await prisma.user.update({
             where: { id: user.id },
-            data: { lastLoginAt: new Date(), ...(rehashed ? { passwordHash: rehashed } : {}) },
+            // A successful sign-in ends the run of wrong passwords.
+            data: { lastLoginAt: new Date(), ...LOCKOUT_CLEARED, ...(rehashed ? { passwordHash: rehashed } : {}) },
         });
         if (needsRehash) logger.info({ userId: user.id }, 'Migrated legacy plain-text password to bcrypt');
 
