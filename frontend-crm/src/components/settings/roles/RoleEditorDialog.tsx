@@ -156,8 +156,8 @@ function RoleEditor({ open, role, template, onClose, onSaved }: RoleEditorDialog
                 <Box>
                     <Typography sx={{ fontWeight: 700, fontSize: '0.85rem', color: 'var(--crm-slate-900)', mb: 0.25 }}>Module permissions</Typography>
                     <Typography sx={{ fontSize: '0.78rem', color: 'var(--mui-palette-text-secondary)', mb: 1.25 }}>
-                        All: every record. Own: records the user is assigned to or created. Edit and Delete can’t go beyond View, and a module set to
-                        View None is hidden from the menu.
+                        All: every record. Group: records of anyone in the user’s security groups. Own: records the user is assigned to or created.
+                        Edit and Delete can’t go beyond View, and a module set to View None is hidden from the menu.
                     </Typography>
                     <PermissionGrid value={values.permissions} onChange={(permissions) => set('permissions', permissions)} disabled={readOnly || saving} />
                     {fieldErrors.permissions && <Typography sx={{ fontSize: '0.76rem', color: 'var(--mui-palette-error-main)', mt: 0.75 }}>{fieldErrors.permissions}</Typography>}

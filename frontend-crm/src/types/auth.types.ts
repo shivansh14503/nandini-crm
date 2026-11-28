@@ -20,6 +20,11 @@ export interface UserAccess {
     /** Super Admin (manages Super Admin users). */
     superAdmin: boolean;
     permissions: RolePermissions;
+    /**
+     * Usernames a "Group" level covers (Admin › Security Groups): everyone who shares a security group with the user,
+     * themselves included. Missing from older servers (then Group works like Own).
+     */
+    teammates?: string[];
 }
 
 export interface LoginPayload {

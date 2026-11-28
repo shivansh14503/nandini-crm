@@ -1,7 +1,7 @@
 import { prisma } from '../../config/prisma.js';
 import { Prisma } from '../../generated/prisma/client.js';
 import type { AuthUser } from '../../types/user.types.js';
-import { accessLevel, buildAccessScopeWhere } from '../shared/accessControl.js';
+import { accessLevel, buildAccessScopeWhere, ownersFor } from '../shared/accessControl.js';
 import { CLOSED_SALES_STAGES } from '../opportunities/opportunity.validator.js';
 
 /**
@@ -46,12 +46,12 @@ export async function loadProductUsage(productIds: readonly string[], user: Auth
     const usage = new Map<string, ProductUsage>();
     const ids = [...new Set(productIds)];
     // The opportunities the viewer may see (Admin › Roles: Opportunities › View).
-    const level = accessLevel(user, 'opportunities', 'view');
+    const owners = ownersFor(user, accessLevel(user, 'opportunities', 'view'));
     const scope =
-        level === 'all'
+        owners === null
             ? Prisma.empty
-            : level === 'own'
-              ? Prisma.sql`AND (o.[assignedTo] = ${user.username} OR o.[createdBy] = ${user.username})`
+            : owners.length > 0
+              ? Prisma.sql`AND (o.[assignedTo] IN (${Prisma.join(owners)}) OR o.[createdBy] IN (${Prisma.join(owners)}))`
               : Prisma.sql`AND 1 = 0`;
     for (let i = 0; i < ids.length; i += ID_BATCH) {
         const batch = ids.slice(i, i + ID_BATCH);

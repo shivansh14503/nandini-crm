@@ -4,15 +4,16 @@ import { HttpError } from '../../utils/httpError.js';
 
 import { PERMISSION_ACTION_LABELS, PERMISSION_MODULE_BY_KEY, levelOf, type AccessLevel, type PermissionAction, type PermissionModule } from '../roles/permissions.js';
 import { GLOBAL_ACCESS_ROLES, normalizeRole, type ResolvedRole } from '../roles/roleDefaults.js';
-import { resolveRole } from '../roles/roleRegistry.js';
+import { resolveRole, teammatesOf } from '../roles/roleRegistry.js';
 
 export { GLOBAL_ACCESS_ROLES, normalizeRole };
 export type { PermissionAction, PermissionModule };
 
 /**
  * Row-level access for the CRM modules, decided by the user's role in Admin › Roles (roles/permissions.ts): each
- * module's View / Edit / Delete is `all` (every record), `own` (records the user owns, `assignedTo`, or created) or
- * `none`. Super Admin (the developer role) always has full access. Activities extend the rule with their attendees: an
+ * module's View / Edit / Delete is `all` (every record), `group` (records owned or created by anyone who shares a
+ * security group with the user, Admin › Security Groups: `teammatesOf`), `own` (records the user owns, `assignedTo`, or
+ * created) or `none`. Super Admin (the developer role) always has full access. Activities extend the rule with their attendees: an
  * invited colleague sees the activity but may only reply to it (see activities/activity.access.ts). The route guard
  * (`requirePermission`) answers 403 before a service runs when the level is `none`; the checks here are the record
  * filter behind it.
@@ -59,10 +60,24 @@ export function hasGlobalAccess(user: Pick<AuthUser, 'role'>, module: Permission
 /** Matches no owner: usernames can't contain '#'. */
 const NO_ACCESS_OWNER = '#no-access#';
 
-/** `{}` for `all`, otherwise "owned by or created by the user" (nobody's records for `none`). */
+/** Who a scope matches: one username, or (Group level) any of a list of usernames. */
+export type OwnerMatch = string | { in: string[] };
+
+/** `{}` for `all`, otherwise "owned by or created by the user / their teammates" (nobody's records for `none`). */
 export type AccessScopeWhere<F extends OwnerField> =
     | Record<string, never>
-    | { OR: [{ [K in F]: string }, { createdBy: string }] };
+    | { OR: [{ [K in F]: OwnerMatch }, { createdBy: OwnerMatch }] };
+
+/**
+ * The owners a level covers for `user`: null for `all` (anyone), the user's teammates for `group` (themselves included),
+ * the user for `own`, nobody for `none`.
+ */
+export function ownersFor(user: Pick<AuthUser, 'username'>, level: AccessLevel): string[] | null {
+    if (level === 'all') return null;
+    if (level === 'group') return teammatesOf(user.username);
+    if (level === 'own') return [user.username];
+    return [];
+}
 
 /**
  * Prisma `where` fragment limiting a query to the records `user` may `action` (default View) in `module`. Combine it
@@ -76,10 +91,11 @@ export function buildAccessScopeWhere<F extends OwnerField>(
     module: PermissionModule,
     action: PermissionAction = 'view',
 ): AccessScopeWhere<F> {
-    const level = accessLevel(user, module, action);
-    if (level === 'all') return {};
-    const who = level === 'own' ? user.username : NO_ACCESS_OWNER;
-    return { OR: [{ [ownerField]: who } as { [K in F]: string }, { createdBy: who }] };
+    const owners = ownersFor(user, accessLevel(user, module, action));
+    if (owners === null) return {};
+    // One owner stays a plain equality (the query plan Own always had); Group matches the teammates with IN.
+    const who: OwnerMatch = owners.length === 0 ? NO_ACCESS_OWNER : owners.length === 1 ? owners[0] : { in: owners };
+    return { OR: [{ [ownerField]: who } as { [K in F]: OwnerMatch }, { createdBy: who }] };
 }
 
 const sameUser = (a: string | null | undefined, b: string) => typeof a === 'string' && a.trim().toLowerCase() === b.trim().toLowerCase();
@@ -96,9 +112,11 @@ export function canAccessRecord(
     module: PermissionModule,
     action: PermissionAction = 'view',
 ): boolean {
-    const level = accessLevel(user, module, action);
-    if (level === 'all') return true;
-    return level === 'own' && ownsRecord(user, record);
+    const owners = ownersFor(user, accessLevel(user, module, action));
+    if (owners === null) return true;
+    if (owners.length === 0) return false;
+    if (ownsRecord(user, record)) return true;
+    return owners.some((name) => sameUser(record.assignedTo, name) || sameUser(record.createdBy, name));
 }
 
 /** Throws 403 unless `user` may `action` (default View) `record` of `module`. Call it after the not-found check. */

@@ -4,11 +4,13 @@ import {
     accessSummary,
     describeModulePermissions,
     FULL_PERMISSIONS,
+    levelLabel,
     levelsFor,
     normalizePermissions,
     OWN_RECORDS_PERMISSIONS,
     PERMISSION_MODULE_BY_KEY,
     PERMISSION_MODULES,
+    uniformPermissions,
 } from './permissions.js';
 import { legacyRole } from './roleDefaults.js';
 import { rolesToSeed } from './roleSeed.js';
@@ -41,7 +43,24 @@ describe('normalizePermissions', () => {
         assert.equal(p.leads.create, 'all');
         assert.deepEqual(levelsFor(PERMISSION_MODULE_BY_KEY.products, 'view'), ['all', 'none']);
         assert.deepEqual(levelsFor(PERMISSION_MODULE_BY_KEY.leads, 'create'), ['all', 'none']);
-        assert.deepEqual(levelsFor(PERMISSION_MODULE_BY_KEY.leads, 'edit'), ['all', 'own', 'none']);
+        assert.deepEqual(levelsFor(PERMISSION_MODULE_BY_KEY.leads, 'edit'), ['all', 'group', 'own', 'none']);
+    });
+
+    it('offers Group on owned modules only, keeps it within View, and turns it into All where it is not offered', () => {
+        const p = normalizePermissions({
+            leads: { view: 'group', edit: 'all', delete: 'own' },
+            contacts: { view: 'own', edit: 'group' },
+            products: { view: 'group', edit: 'group' },
+        });
+        assert.equal(p.leads.view, 'group');
+        assert.equal(p.leads.edit, 'group');
+        assert.equal(p.leads.delete, 'own');
+        assert.equal(p.contacts.edit, 'own');
+        assert.equal(p.products.view, 'all');
+        assert.equal(p.products.edit, 'all');
+        assert.equal(uniformPermissions('group').leads.view, 'group');
+        assert.equal(uniformPermissions('group').partnerCompanies.view, 'all');
+        assert.equal(levelLabel('view', 'group'), 'Group');
     });
 });
 

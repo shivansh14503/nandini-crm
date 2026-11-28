@@ -35,6 +35,7 @@ const LONG_TEXT_COLUMNS: Record<string, string[]> = {
     PartnerCompany: ['addDescription', 'description'],
     BookingLink: ['note'],
     Role: ['description'],
+    SecurityGroup: ['description'],
     PdfTemplate: ['description'],
 };
 
