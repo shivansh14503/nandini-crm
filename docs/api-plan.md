@@ -814,7 +814,7 @@ partner companies also have `export`); actions view, create, edit, delete, expor
 | --- | --- | --- |
 | GET | `/` | `RoleDto[]`, Super Admin first, then by name |
 | GET | `/:id` | `RoleDto`; 404 |
-| POST | `/` | `{ name (≤ 50, required), description? (≤ 500), adminPanel?, permissions }` → `201 RoleDto`. `409 DUPLICATE_RECORD` on `name` when another role has the name by `normalizeRole` |
+| POST | `/` | `{ name (≤ 50, required), description? (long text, no limit), adminPanel?, permissions }` → `201 RoleDto`. `409 DUPLICATE_RECORD` on `name` when another role has the name by `normalizeRole` |
 | PATCH | `/:id` | `{ name?, description?, adminPanel?, permissions? }` → `RoleDto`. A rename renames the role on every user holding it. `400 SYSTEM_ROLE` (Super Admin can't be changed); `400 SELF_LOCKOUT` (turning off the admin panel of your own role) / `400 LAST_ADMIN` (no active user would keep the admin panel), on `adminPanel`; 409 / 404 |
 | DELETE | `/:id` | `?reassignTo=<role id>` → `{ id, movedUsers }`. The role's users (active and inactive) move to `reassignTo` in the same transaction (their sessions are not signed out: the new role applies on their next request). `400 ROLE_IN_USE` when the role has users and no `reassignTo`; `400 VALIDATION_ERROR` on `reassignTo` (unknown, or the role itself); `403 SUPER_ADMIN_ONLY` when someone other than a Super Admin moves users to Super Admin; `400 SELF_LOCKOUT` / `LAST_ADMIN` when the move takes the admin panel from you / everyone; `400 SYSTEM_ROLE`; 404 |
 

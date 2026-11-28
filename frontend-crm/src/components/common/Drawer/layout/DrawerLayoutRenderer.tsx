@@ -618,7 +618,7 @@ export function BlockBody({ block, ctx, section, placeholder }: { block: DrawerB
         case 'heading':
             return <Typography sx={{ fontSize: '0.86rem', fontWeight: 800, color: 'var(--crm-slate-900)' }}>{block.text || 'Heading'}</Typography>;
         case 'text':
-            return <Typography sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{block.text}</Typography>;
+            return <ClampedText sx={{ fontSize: '0.8rem', color: 'var(--mui-palette-text-secondary)', lineHeight: 1.5 }}>{block.text}</ClampedText>;
         case 'divider':
             return <Box sx={{ height: '1px', backgroundColor: 'var(--mui-palette-border-main)', my: 0.5 }} />;
         case 'address':

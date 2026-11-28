@@ -6,7 +6,8 @@ import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import { errorMessage, inputSx, primaryButtonSx, secondaryButtonSx } from '@/components/settings/form-customization/builderUi';
 import { apiFieldErrors } from '@/components/settings/users/userAdminUi';
 import { useCreateRole, useUpdateRole } from '@/hooks/queries/useRoles';
-import { ROLE_DESCRIPTION_MAX_LENGTH, type RoleDto, type RolePayload } from '@/types/role.types';
+import { type RoleDto, type RolePayload } from '@/types/role.types';
+import { LongTextInput } from '@/components/forms/LongTextInput';
 import { OWN_RECORDS_PERMISSIONS, normalizePermissions } from '@/utils/permissions';
 import { ROLE_NAME_MAX_LENGTH } from '@/utils/roleAccess';
 import { PermissionGrid } from './PermissionGrid';
@@ -110,17 +111,16 @@ function RoleEditor({ open, role, template, onClose, onSaved }: RoleEditorDialog
                         sx={inputSx}
                         autoFocus={!role}
                     />
-                    <TextField
+                    <LongTextInput
                         label="Description"
-                        size="small"
+                        inputLabel="Description"
+                        name="description"
                         value={values.description ?? ''}
-                        onChange={(e) => set('description', e.target.value)}
-                        error={Boolean(fieldErrors.description)}
-                        helperText={fieldErrors.description || 'What the role is for, shown on the role card.'}
+                        onChange={(v) => set('description', v)}
+                        error={fieldErrors.description || undefined}
+                        helperText="What the role is for, shown on the role card."
                         disabled={readOnly || saving}
-                        multiline
-                        maxRows={3}
-                        slotProps={{ htmlInput: { maxLength: ROLE_DESCRIPTION_MAX_LENGTH } }}
+                        crmFieldStyle={false}
                         sx={inputSx}
                     />
                     <button type="submit" hidden aria-hidden tabIndex={-1} />

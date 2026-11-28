@@ -5,8 +5,6 @@
 import type { RoleAccess } from '../utils/roleAccess';
 import type { RolePermissions } from '../utils/permissions';
 
-export const ROLE_DESCRIPTION_MAX_LENGTH = 500;
-
 export interface RoleDto {
     id: number;
     name: string;

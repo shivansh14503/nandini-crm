@@ -7,6 +7,8 @@ import type { z } from 'zod';
 import { quotationInputSchema } from '../modules/quotations/quotation.validator.js';
 import { convertLeadSchema } from '../modules/leads/lead.validator.js';
 import { ticketInputSchema } from '../modules/tickets/ticket.validator.js';
+import { createRoleSchema } from '../modules/roles/role.validator.js';
+import { templateCreateSchema } from '../modules/pdf/pdfTemplate.validator.js';
 
 /** Whether `schema` reports an issue on `field` for `{ [field]: value }` (other required fields may fail too). */
 function failsOn(schema: z.ZodType, field: string, value: string): boolean {
@@ -32,6 +34,8 @@ const LONG_TEXT_COLUMNS: Record<string, string[]> = {
     Activity: ['remarks'],
     PartnerCompany: ['addDescription', 'description'],
     BookingLink: ['note'],
+    Role: ['description'],
+    PdfTemplate: ['description'],
 };
 
 describe('long text has no character limit', () => {
@@ -52,6 +56,11 @@ describe('long text has no character limit', () => {
             assert.equal(failsOn(ticketInputSchema, field, HUGE), false, field);
         }
         assert.equal(failsOn(ticketInputSchema, 'problemReported', '   '), true);
+    });
+
+    it('admin long text (role and PDF template descriptions) accepts any length', () => {
+        assert.equal(failsOn(createRoleSchema, 'description', HUGE), false);
+        assert.equal(failsOn(templateCreateSchema, 'description', HUGE), false);
     });
 
     it('every long text column is NVARCHAR(MAX)', () => {

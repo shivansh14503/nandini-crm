@@ -3,7 +3,6 @@ import { z } from 'zod';
 /** Request schemas of /api/admin/roles (Admin › Roles). Bodies are strict: an unknown key is refused (400). */
 
 export const ROLE_NAME_MAX_LENGTH = 50;
-export const ROLE_DESCRIPTION_MAX_LENGTH = 500;
 
 const tidy = (value: unknown) => (typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : value);
 
@@ -17,7 +16,8 @@ const name = z.preprocess(
 
 const description = z.preprocess(
     (value) => (typeof value === 'string' ? value.trim() || null : value),
-    z.string().max(ROLE_DESCRIPTION_MAX_LENGTH, { message: `Description cannot exceed ${ROLE_DESCRIPTION_MAX_LENGTH} characters.` }).nullable(),
+    // Long text: no character limit (NVARCHAR(MAX)).
+    z.string().nullable(),
 );
 
 /** Any object; `normalizePermissions` makes it complete and consistent. */

@@ -1756,6 +1756,13 @@ activity remarks, the booking link note and admin-added Long Text (textarea) fie
 on a custom field still applies). Kept on purpose: street addresses (250, shown with a counter), the public booking
 page's visitor message (1,000, an unauthenticated form) and the Out of office message (200, a one-line status).
 
+Admin text boxes follow the same rule (2026-11-28, migration `20261228090000_admin_long_text_unlimited`): the role
+description (Admin › Roles), the PDF template description and the Drawer Layout builder's Text block have no limit,
+and use `LongTextInput` like the Form Builder's option lists (new field / New Dropdown, one option per line) and the
+integrations' service account key box. The key box keeps its 10 KB size cap (a key file, not long text, no counter);
+the PDF builder's company Address keeps its 1,000 cap with a counter. The drawer's Text block is shown through
+`ClampedText`.
+
 Every long text input is one control, `LongTextInput` (`components/forms/LongTextInput.tsx`), reached through
 `RhfTextField multiline` in React Hook Form forms (so Form Builder-rendered textarea fields, built-in or custom, get it
 too) and used directly in dialogs and non-RHF forms. It starts at 3 lines, grows with the text to 10 lines, then

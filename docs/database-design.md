@@ -203,7 +203,7 @@ role a user can hold; `Users.Role` stores the role's `name`.
 | --- | --- | --- |
 | `id` | INT IDENTITY PK | |
 | `name` | NVARCHAR(50) UNIQUE | Shown everywhere a role is shown. Unique also by `normalizeRole` (checked in code: `Sales-Executive` clashes with `Sales Executive`) |
-| `description` | NVARCHAR(500) NULL | Shown on the role card |
+| `description` | NVARCHAR(MAX) NULL | Shown on the role card (2 lines); long text, no limit |
 | `adminPanel` | BIT NOT NULL, default 0 | Opens the admin panel (`requireAdmin`: forms and dropdowns, users, roles, PDF templates, audit log, settings) |
 | `permissionsJson` | NVARCHAR(MAX) NOT NULL | `{ "<module>": { "<action>": "all" \| "own" \| "none" } }` for the 12 modules of `PERMISSION_MODULES` (leads, contacts, organizations, opportunities, quotations, contracts, tickets, referrals, activities, documents, products, partnerCompanies) and the actions each offers (view, create, edit, delete, export, import). Read through `normalizePermissions`: a missing or unknown value is `none`, Create / Export / Import are only `all` or `none`, modules without an owner (products, partner companies) only `all` or `none`, Edit / Delete never exceed View, and a module at View `none` allows nothing |
 | `isSystem` | BIT NOT NULL, default 0 | Super Admin: always full access and the admin panel whatever the row says; can't be edited, renamed or deleted |
@@ -508,7 +508,7 @@ out when the layout is read (the builder says so and the next save drops it).
 
 | Table | Purpose |
 | --- | --- |
-| `PdfTemplate` | `name`, `module` (`QUOTATION`), `isSystem` (seeded, read-only except active/default), `isDefault`, `isActive`, `pageSize`, `orientation`, `documentJson` (block document), `version` (optimistic concurrency), audit/soft-delete. Index `(module, isActive, isDeleted)` |
+| `PdfTemplate` | `name`, `module` (`QUOTATION`), `description` (NVARCHAR(MAX), no limit), `isSystem` (seeded, read-only except active/default), `isDefault`, `isActive`, `pageSize`, `orientation`, `documentJson` (block document), `version` (optimistic concurrency), audit/soft-delete. Index `(module, isActive, isDeleted)` |
 | `PdfAsset` | Logos: `key` UNIQUE, `fileName`, `mimeType` (PNG/JPEG/WebP), `sizeBytes` (≤ 1 MB), `data` VARBINARY(MAX) |
 | `RecordFile` | Files uploaded to a record field (an opportunity's Upload Doc, `Document.documentFileId`): `module`, `fileName`, `mimeType` (PDF, PNG/JPEG/WebP, Word, Excel; checked against the content), `sizeBytes` (≤ 10 MB), `data` VARBINARY(MAX), `createdBy`. Uploaded before the record saves, then linked by id |
 | `PdfSavedItem` | Builder library: a saved `section` or `block` (`contentJson`) shared by a module's templates; soft delete |

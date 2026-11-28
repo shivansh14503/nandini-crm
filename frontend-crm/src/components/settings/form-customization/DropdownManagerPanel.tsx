@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
+import { LongTextInput } from '@/components/forms/LongTextInput';
 import {
     Box,
     Button,
@@ -789,13 +790,12 @@ function CreateCategoryDialog({
             <DialogTitle sx={{ fontWeight: 700, fontSize: '1rem', color: 'var(--crm-slate-900)', borderBottom: '1px solid var(--mui-palette-border-main)' }}>New Dropdown</DialogTitle>
             <DialogContent sx={{ pt: '20px !important', display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <TextField label="Dropdown name" required size="small" value={label} onChange={(e) => setLabel(e.target.value)} sx={inputSx} slotProps={{ htmlInput: { maxLength: 120 } }} autoFocus />
-                <TextField
+                <LongTextInput
                     label="Options (one per line)"
-                    size="small"
-                    multiline
-                    minRows={4}
+                    inputLabel="Options (one per line)"
                     value={options}
-                    onChange={(e) => setOptions(e.target.value)}
+                    onChange={setOptions}
+                    crmFieldStyle={false}
                     sx={inputSx}
                     placeholder={'North\nSouth\nEast\nWest'}
                 />

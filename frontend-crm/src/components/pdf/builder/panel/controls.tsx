@@ -22,6 +22,7 @@ import ExpandMoreRoundedIcon from '@mui/icons-material/ExpandMoreRounded';
 import LinkRoundedIcon from '@mui/icons-material/LinkRounded';
 import LinkOffRoundedIcon from '@mui/icons-material/LinkOffRounded';
 import type { Box as BoxSpacing, Style } from '@/lib/pdf-document';
+import { LongTextInput } from '@/components/forms/LongTextInput';
 
 /** Compact controls for the Styling panel. All are controlled; `disabled` mirrors read-only templates. */
 
@@ -62,8 +63,14 @@ export function Field({ label, children, hint }: { label: string; children: Reac
     );
 }
 
-/** Text input that commits on every keystroke but keeps its own state while focused. */
+/**
+ * Text input that commits on every keystroke. `multiline` uses the shared auto-growing {@link LongTextInput} (3 to 10
+ * lines, expand button); its counter shows only when `maxLength` is set (short multi-line values such as an address).
+ */
 export function TextInput({ value, onChange, disabled, placeholder, multiline, ariaLabel, maxLength }: { value: string; onChange: (v: string) => void; disabled?: boolean; placeholder?: string; multiline?: boolean; ariaLabel: string; maxLength?: number }) {
+    if (multiline) {
+        return <LongTextInput label={ariaLabel} value={value} onChange={onChange} disabled={disabled} placeholder={placeholder} maxLength={maxLength} crmFieldStyle={false} sx={smallInputSx} />;
+    }
     return (
         <TextField
             size="small"
@@ -71,8 +78,6 @@ export function TextInput({ value, onChange, disabled, placeholder, multiline, a
             value={value}
             disabled={disabled}
             placeholder={placeholder}
-            multiline={multiline}
-            minRows={multiline ? 2 : undefined}
             onChange={(e) => onChange(e.target.value)}
             slotProps={{ htmlInput: { 'aria-label': ariaLabel, maxLength } }}
             sx={smallInputSx}

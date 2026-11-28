@@ -105,7 +105,6 @@ export const LIMITS = {
     emptyText: 120,
     badgePrefix: 40,
     heading: 120,
-    text: 500,
     pieceName: 120,
 } as const;
 
@@ -184,7 +183,7 @@ export const fieldBlockSchema = z.object({
 export const blockSchema = z.discriminatedUnion('type', [
     fieldBlockSchema,
     z.object({ id, type: z.literal('heading'), text: text(LIMITS.heading) }),
-    z.object({ id, type: z.literal('text'), text: text(LIMITS.text) }),
+    z.object({ id, type: z.literal('text'), text: z.string() }), // long text: no character limit
     z.object({ id, type: z.literal('divider') }),
     z.object({ id, type: z.literal('address'), prefix: addressPrefix, emptyText: text(LIMITS.emptyText) }),
     /** Every custom field marked "Visible in Drawer" that isn't placed elsewhere on the layout (new ones land here). */
