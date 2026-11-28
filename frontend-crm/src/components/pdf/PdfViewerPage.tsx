@@ -8,6 +8,7 @@ import PictureAsPdfOutlinedIcon from '@mui/icons-material/PictureAsPdfOutlined';
 import RefreshRoundedIcon from '@mui/icons-material/RefreshRounded';
 import { ErrorAlert } from '@/components/common/ErrorAlert';
 import type { PdfTemplateListItem } from '@/types/pdfTemplate.types';
+import { pdfViewerUrl } from '@/utils/pdfViewerUrl';
 
 export interface PdfViewerPageProps {
     title: string;
@@ -137,7 +138,7 @@ export function PdfViewerPage(props: PdfViewerPageProps) {
                     <Box
                         component="iframe"
                         title={`${title} PDF`}
-                        src={pdfUrl}
+                        src={pdfViewerUrl(pdfUrl)}
                         sx={{ flex: 1, width: '100%', border: 0, borderRadius: '8px', backgroundColor: 'var(--mui-palette-background-paper)', boxShadow: '0 4px 16px rgba(15,23,42,0.10)' }}
                     />
                 )}
