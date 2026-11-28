@@ -45,7 +45,10 @@ import {
     customerStateOf,
     currencySymbolOf,
     DEFAULT_CURRENCY,
+    duplicateLineItems,
+    duplicateProductMessage,
     GST_TYPE_LABELS,
+    isSameLineProduct,
     gstTypeFor,
     LINE_ITEM_DISCOUNT_TYPE_LABELS,
     LINE_ITEM_LABELS as LABELS,
@@ -260,13 +263,20 @@ export function CrmLineItemsEditor({ value, onChange, error, lineErrors, withCur
     const { data: productData } = useProducts();
     const allProducts = productData ?? NO_PRODUCTS;
     const products = useMemo(() => allProducts.filter(isActiveProduct), [allProducts]);
-    const productNames = useMemo(() => products.map((p) => p.productName), [products]);
     const productById = useMemo(() => new Map(allProducts.map((p) => [p.id, p])), [allProducts]);
     const productOf = (item: LineItem) => (item.productId ? productById.get(item.productId) : undefined);
     const rateLocked = (item: LineItem) => catalogRate(productOf(item)) > 0;
     const taxLocked = (item: LineItem) => Boolean(catalogTaxRate(productOf(item)));
     // Line whose Product Catalog popup is open.
     const [catalogLine, setCatalogLine] = useState<string | null>(null);
+    // A product may be on only one line: the line (1-based) that already has a product, other than line `id`.
+    const lineWithProduct = (id: string, product: Pick<LineItem, 'productId' | 'productName'>): number | undefined => {
+        const index = lines.findIndex((line) => line.id !== id && isSameLineProduct(line, product));
+        return index >= 0 ? index + 1 : undefined;
+    };
+    const catalogEntry = (product: Product) => ({ productId: product.id, productName: product.productName });
+    // Lines repeating an earlier line's product (records saved before the rule): shown at once, saving is blocked.
+    const duplicateOf = new Map(duplicateLineItems(lines).map(({ index, firstIndex }) => [index, firstIndex + 1]));
 
     // ── Writes: lines and the totals always change together ───────────────────────
     const writeTotals = (items: readonly LineItem[], options: { lumpSum: number; roundOff: boolean; gstType: GstType | null }) => {
@@ -321,7 +331,8 @@ export function CrmLineItemsEditor({ value, onChange, error, lineErrors, withCur
     /** Fills the line from a catalog product: name, Rate (MRP), GST (Tax Rate) and, when empty, the description. */
     const selectProduct = (id: string, product: Product) => {
         const line = lines.find((item) => item.id === id);
-        if (!line) return;
+        // Already on another line: the pickers don't offer it, so this only guards against a stale pick.
+        if (!line || lineWithProduct(id, catalogEntry(product)) !== undefined) return;
         const previous = productOf(line);
         const rate = catalogRate(product);
         const taxRate = catalogTaxRate(product);
@@ -338,7 +349,8 @@ export function CrmLineItemsEditor({ value, onChange, error, lineErrors, withCur
     /** A typed name: a catalog product's exact name fills the line from it; anything else is a typed product. */
     const changeProductName = (id: string, name: string) => {
         const match = products.find((p) => p.productName.trim().toLowerCase() === name.trim().toLowerCase());
-        if (match && name === match.productName) selectProduct(id, match);
+        // A product already on another line keeps the typed name only, which shows the "already on line N" message.
+        if (match && name === match.productName && lineWithProduct(id, catalogEntry(match)) === undefined) selectProduct(id, match);
         else updateLine(id, { productName: name, productId: '' });
     };
 
@@ -379,6 +391,10 @@ export function CrmLineItemsEditor({ value, onChange, error, lineErrors, withCur
                 open={catalogLine !== null}
                 onClose={() => setCatalogLine(null)}
                 selectedValue={catalogLine !== null ? lines.find((item) => item.id === catalogLine)?.productName : undefined}
+                disabledReason={(product) => {
+                    const line = catalogLine !== null ? lineWithProduct(catalogLine, catalogEntry(product)) : undefined;
+                    return line !== undefined ? `Already on line ${line}` : undefined;
+                }}
                 onSelect={(product) => {
                     if (catalogLine !== null) selectProduct(catalogLine, product);
                     setCatalogLine(null);
@@ -467,7 +483,13 @@ export function CrmLineItemsEditor({ value, onChange, error, lineErrors, withCur
 
                         {orderedItems.map((item, idx) => {
                             const index = lines.findIndex((line) => line.id === item.id);
-                            const errs = lineErrors?.[index] ?? {};
+                            const firstLine = duplicateOf.get(index);
+                            const errs = {
+                                ...(lineErrors?.[index] ?? {}),
+                                ...(firstLine !== undefined ? { productName: duplicateProductMessage(item.productName, firstLine) } : {}),
+                            };
+                            // Products already on another line aren't offered again.
+                            const productOptions = products.filter((p) => lineWithProduct(item.id, catalogEntry(p)) === undefined).map((p) => p.productName);
                             const lockedRate = rateLocked(item);
                             const lockedTax = taxLocked(item);
                             const drag = getRowDragProps(item);
@@ -529,7 +551,7 @@ export function CrmLineItemsEditor({ value, onChange, error, lineErrors, withCur
                                             <LookupField
                                                 value={item.productName || ''}
                                                 onChange={(name) => changeProductName(item.id, name)}
-                                                options={productNames}
+                                                options={productOptions}
                                                 placeholder="Type or pick a product"
                                                 onLookupClick={() => setCatalogLine(item.id)}
                                                 lookupTooltip="Open Product Catalog"

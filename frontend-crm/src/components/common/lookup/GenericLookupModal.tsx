@@ -52,6 +52,8 @@ export interface GenericLookupModalProps<T extends { id: string }> {
     /** Receives the filter values and the main search text. Defaults to text match + exact filter match. */
     searchPredicate?: LookupSearchPredicate<T>;
     selectedId?: string;
+    /** Rows that can't be picked: returns why (shown on the row, which is dimmed and not clickable), or undefined. */
+    disabledReason?: (item: T) => string | undefined;
     searchPlaceholder?: string;
     /** Show the main free-text Search box (default true). Presets with a full field form can hide it. */
     showSearchBox?: boolean;
@@ -143,6 +145,7 @@ function LookupDialog<T extends { id: string }>({
     lockedFilterValues,
     searchPredicate,
     selectedId,
+    disabledReason,
     searchPlaceholder = 'Search…',
     showSearchBox = true,
     loading = false,
@@ -238,6 +241,7 @@ function LookupDialog<T extends { id: string }>({
     };
 
     const choose = (row: T) => {
+        if (disabledReason?.(row)) return;
         onSelect(row);
         onClose();
     };
@@ -469,13 +473,16 @@ function LookupDialog<T extends { id: string }>({
                         <TableBody>
                             {visibleRows.map((row, idx) => {
                                 const isSelected = row.id === selectedId;
+                                const disabled = disabledReason?.(row);
                                 return (
                                     <TableRow
                                         key={row.id}
                                         ref={idx === 0 ? firstRowRef : undefined}
-                                        hover
+                                        hover={!disabled}
                                         tabIndex={0}
                                         selected={isSelected}
+                                        aria-disabled={disabled ? true : undefined}
+                                        title={disabled}
                                         onClick={() => choose(row)}
                                         onKeyDown={(e) => {
                                             if (e.key === 'Enter' || e.key === ' ') {
@@ -484,16 +491,23 @@ function LookupDialog<T extends { id: string }>({
                                             }
                                         }}
                                         sx={{
-                                            cursor: 'pointer',
-                                            '&:hover': { backgroundColor: 'var(--mui-palette-background-subtle) !important' },
+                                            cursor: disabled ? 'not-allowed' : 'pointer',
+                                            ...(disabled ? { '& td': { opacity: 0.55 } } : {}),
+                                            '&:hover': { backgroundColor: disabled ? 'transparent !important' : 'var(--mui-palette-background-subtle) !important' },
                                             '&.Mui-selected': { backgroundColor: 'var(--mui-palette-primary-soft)' },
                                             '&:focus-visible': { outline: '2px solid var(--mui-palette-primary-main)', outlineOffset: -2 },
                                             '& td': { borderBottom: '1px solid var(--mui-palette-border-light)' },
                                         }}
                                     >
-                                        {columns.map((c) => (
+                                        {columns.map((c, colIdx) => (
                                             <TableCell key={c.id} align={c.align} sx={{ fontSize: '0.8rem', color: 'var(--crm-slate-600)', py: 1.1, width: c.width }}>
                                                 {c.render ? c.render(row) : cellText(row, c) || '-'}
+                                                {/* Why the row can't be picked, on the row itself so it reads on touch too (no hover). */}
+                                                {disabled && colIdx === 0 && (
+                                                    <Typography component="span" sx={{ display: 'block', fontSize: '0.7rem', fontWeight: 600, color: 'var(--mui-palette-text-secondary)' }}>
+                                                        {disabled}
+                                                    </Typography>
+                                                )}
                                             </TableCell>
                                         ))}
                                     </TableRow>

@@ -349,3 +349,33 @@ export function isBlankLineItem(item: { productName?: unknown; productId?: unkno
     const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
     return !text(item.productName) && !text(item.productId) && !finite(item.rate) && !finite(item.discount) && !text(item.description) && !text(item.note);
 }
+
+/**
+ * Whether two lines hold the same product: the same Product Catalog entry (`productId`), or, when either line has a
+ * typed product (no `productId`), the same name ignoring case and spaces at the ends. Lines without a product never match.
+ */
+export function isSameLineProduct(a: { productId?: unknown; productName?: unknown }, b: { productId?: unknown; productName?: unknown }): boolean {
+    const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
+    const idA = text(a.productId);
+    const idB = text(b.productId);
+    if (idA && idB) return idA === idB;
+    const nameA = text(a.productName).toLowerCase();
+    return Boolean(nameA) && nameA === text(b.productName).toLowerCase();
+}
+
+/** The message on a line that repeats the product of line `firstLine` (1-based). */
+export const duplicateProductMessage = (productName: string, firstLine: number) =>
+    `${productName.trim()} is already on line ${firstLine}. Change the Quantity there instead of adding it again.`;
+
+/**
+ * A product may be on only one line of an opportunity or a quotation. Returns each line that repeats a product an
+ * earlier line already has, with the index of that earlier line. Lines without a product are skipped.
+ */
+export function duplicateLineItems(items: readonly { productId?: unknown; productName?: unknown }[]): { index: number; firstIndex: number }[] {
+    const duplicates: { index: number; firstIndex: number }[] = [];
+    items.forEach((item, index) => {
+        const firstIndex = items.slice(0, index).findIndex((earlier) => isSameLineProduct(earlier, item));
+        if (firstIndex >= 0) duplicates.push({ index, firstIndex });
+    });
+    return duplicates;
+}

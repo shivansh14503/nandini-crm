@@ -167,7 +167,8 @@ export function OpportunityLookupModal({ open, onClose, onSelect, selectedValue,
 const NO_PRODUCTS: Product[] = [];
 
 /** The product catalog (active products) for picking a line item's product. */
-export function ProductLookupModal({ open, onClose, onSelect, selectedValue }: EntityLookupModalProps<Product>) {
+/** Product Catalog picker; `disabledReason` greys out products that can't be picked (already on another line item). */
+export function ProductLookupModal({ open, onClose, onSelect, selectedValue, disabledReason }: EntityLookupModalProps<Product> & { disabledReason?: (product: Product) => string | undefined }) {
     // Shared, cache-invalidated query: products added elsewhere show up without reopening.
     const { data, isLoading } = useProducts(undefined, { enabled: open });
     const products = React.useMemo(() => (data ?? NO_PRODUCTS).filter(isActiveProduct), [data]);
@@ -186,6 +187,7 @@ export function ProductLookupModal({ open, onClose, onSelect, selectedValue }: E
             data={open ? products : NO_PRODUCTS}
             loading={open && isLoading}
             selectedId={selectedId}
+            disabledReason={disabledReason}
             {...PRODUCT_LOOKUP_PRESET}
             filterFields={filterFields}
         />

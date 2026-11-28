@@ -50,7 +50,7 @@ describe('line item math (CRM-111)', () => {
     });
 
     it('Discount is a Percentage (the default) or an Amount off the line, never more than the Gross Amount', () => {
-        const [percentage, amount] = lineItemListSchema.parse([line, { ...line, discount: 250, discountType: 'amount' }]);
+        const [percentage, amount] = lineItemListSchema.parse([line, { ...line, productName: 'TallyPrime Gold', discount: 250, discountType: 'amount' }]);
         assert.equal(percentage.discountType, 'percentage');
         const { items, totals } = calculateLineItems([percentage, amount], {});
         assert.deepEqual(
@@ -197,5 +197,26 @@ describe('prepareLineItems', () => {
         const items = lineItemListSchema.parse([{ ...line, productId: 'p-mrp', rate: 1200, taxRate: '18%' }]);
         const prepared = await prepareLineItems(tx, items, new Set(['p-mrp']));
         assert.deepEqual(prepared.items.map((i) => [i.rate, i.taxRate]), [[1200, '18%']]);
+    });
+});
+
+describe('a product on only one line', () => {
+    const catalogLine = (productId: string, productName: string) => ({ productId, productName, quantity: 1, rate: 100, taxRate: '18%' });
+
+    it('rejects the same catalog product on a second line, naming the first line', () => {
+        const result = requiredLineItemListSchema.safeParse([catalogLine('p1', 'Tally'), catalogLine('p2', 'AMC'), catalogLine('p1', 'Tally')]);
+        assert.equal(result.success, false);
+        const issue = result.error!.issues[0];
+        assert.deepEqual(issue.path, [2, 'productName']);
+        assert.equal(issue.message, 'Tally is already on line 1. Change the Quantity there instead of adding it again.');
+    });
+
+    it('rejects a typed product repeating a line by name, ignoring case and spaces', () => {
+        const result = lineItemListSchema.safeParse([catalogLine('p1', 'Tally'), { ...catalogLine('', ' tally '), productId: undefined }]);
+        assert.equal(result.success, false);
+    });
+
+    it('allows different catalog products sharing a name, and ignores blank lines', () => {
+        assert.equal(lineItemListSchema.safeParse([catalogLine('p1', 'Tally'), catalogLine('p2', 'Tally'), {}, {}]).success, true);
     });
 });

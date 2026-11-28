@@ -122,7 +122,11 @@ user in. Retired: the must-change-password gate, the `mcp` claim and `403 PASSWO
 `grossAmount` (quantity × rate), `discountAmount` (gross × discount %, or the amount) and `taxableAmount` (gross − discount amount).
 `productName` (Product), `quantity` (≥ 1), `rate` (> 0) and `taxRate` (GST, such as `18%`, an option of the
 `product_tax_rate` dropdown) are required, `discount` (default 0) is a percentage 0–100 when `discountType` is `percentage` (the default) or an amount off the line, at most quantity × rate ("Discount cannot exceed the Gross Amount."), when it is `amount`; errors are `400` on
-`lineItems.<n>.<field>`. A line with nothing entered is dropped. A product newly put on a line sets its `rate` from the
+`lineItems.<n>.<field>`. A line with nothing entered is dropped. A product may be on only one line: the same
+`productId`, or the same `productName` (ignoring case and end spaces) when either line has no `productId`, is `400` on
+`lineItems.<n>.productName` ("<Product> is already on line <m>. Change the Quantity there instead of adding it again."),
+also for a quotation made from an opportunity; records saved before this rule still load, and the check runs whenever
+`lineItems` is sent. A product newly put on a line sets its `rate` from the
 catalog MRP (when above 0) and its `taxRate` from the product's Tax Rate (when set); lines that already held the
 product keep their saved values. Lines in the format before CRM-111 are still accepted: `amount` is read as `rate`, a
 `discountType: 'direct'` (per unit) discount becomes an `amount` discount of per unit × quantity, `GST 18%` / `--None--` become `18%` / `0%`,
