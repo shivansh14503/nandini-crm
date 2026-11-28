@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { DEFAULT_DISCOUNT_TYPE, isBlankLineItem, LINE_ITEM_DISCOUNT_TYPES, roundMoney } from '../lib/line-items/lineItemMath';
+import { DEFAULT_DISCOUNT_TYPE, duplicateLineItems, duplicateProductMessage, isBlankLineItem, LINE_ITEM_DISCOUNT_TYPES, roundMoney } from '../lib/line-items/lineItemMath';
 import { optionalLongText, optionalString, zodAmount } from './common';
 
 /**
@@ -45,7 +45,8 @@ export const lineItemsRequiredMessage = (record: string) => `Add at least one pr
 
 /**
  * Line items of a record; `required` asks for at least one filled line (quotations and opportunities; the API
- * checks the same: requiredLineItemListSchema / assertHasLineItems in backend shared/lineItems.ts).
+ * checks the same: requiredLineItemListSchema / assertHasLineItems in backend shared/lineItems.ts). A product may be
+ * on only one line (duplicateLineItems; the API rejects a repeat too).
  */
 export function lineItemListSchema({ required = false, record = 'quotation' }: { required?: boolean; record?: string } = {}) {
     return z.array(lineItemShape).superRefine((items, ctx) => {
@@ -55,6 +56,10 @@ export function lineItemListSchema({ required = false, record = 'quotation' }: {
             filled += 1;
             for (const issue of lineItemIssues(item)) ctx.addIssue({ code: 'custom', path: [index, issue.path], message: issue.message });
         });
+        // A product may be on only one line (the editor shows the same message as soon as it is repeated).
+        for (const { index, firstIndex } of duplicateLineItems(items)) {
+            ctx.addIssue({ code: 'custom', path: [index, 'productName'], message: duplicateProductMessage(items[index].productName, firstIndex + 1) });
+        }
         if (required && filled === 0) {
             // On the (always shown) first line's Product, so the message sits where the product is picked.
             ctx.addIssue({ code: 'custom', path: [0, 'productName'], message: lineItemsRequiredMessage(record) });

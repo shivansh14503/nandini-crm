@@ -8,6 +8,8 @@ import { optionalLongText, optionalText, requiredText } from '../../validators/c
 import { isActiveProductStatus } from '../products/product.validator.js';
 import {
     DEFAULT_DISCOUNT_TYPE,
+    duplicateLineItems,
+    duplicateProductMessage,
     isBlankLineItem,
     LINE_ITEM_DISCOUNT_TYPES,
     lineItemAmounts,
@@ -25,6 +27,9 @@ import {
 
 export {
     customerStateOf,
+    duplicateLineItems,
+    duplicateProductMessage,
+    isSameLineProduct,
     gstTypeFor,
     isBlankLineItem,
     lineItemAmounts,
@@ -49,7 +54,8 @@ export type { GstType, LineItemAmounts, LineItemDiscountType, LineItemSummary, L
  * Fields: Product, Quantity, Rate (the product's MRP; typed only for products without one), Gross Amount
  * (Quantity × Rate), Discount (a percentage or an amount off the line, by `discountType`), Taxable Amount
  * (Gross − Discount), GST (the product's Tax Rate) and the optional Description and Note. Only Discount, Description and Note may be left empty. A line with nothing entered
- * is dropped (the form always shows one empty line). Quotations and opportunities both need at least one line.
+ * is dropped (the form always shows one empty line). Quotations and opportunities both need at least one line, and a
+ * product may be on only one line.
  */
 
 const MAX_LINE_ITEMS = 200;
@@ -123,7 +129,19 @@ export type LineItemInput = z.infer<typeof lineItemInputSchema>;
 const dropBlankLines = (value: unknown): unknown =>
     Array.isArray(value) ? value.filter((item) => !(isRecord(item) && isBlankLineItem(normalizeLineItemInput(item) as Record<string, unknown>))) : value;
 
-const lineItemArray = z.array(lineItemInputSchema).max(MAX_LINE_ITEMS, { message: `At most ${MAX_LINE_ITEMS} line items are allowed.` });
+/**
+ * A product may be on only one line (the same Product Catalog entry, or the same typed name): a repeat is rejected on
+ * its Product, naming the line that already has it. Records saved before this rule still load; saving their lines
+ * asks for the repeat to be removed.
+ */
+const lineItemArray = z
+    .array(lineItemInputSchema)
+    .max(MAX_LINE_ITEMS, { message: `At most ${MAX_LINE_ITEMS} line items are allowed.` })
+    .superRefine((items, ctx) => {
+        for (const { index, firstIndex } of duplicateLineItems(items)) {
+            ctx.addIssue({ code: 'custom', path: [index, 'productName'], message: duplicateProductMessage(items[index].productName, firstIndex + 1) });
+        }
+    });
 
 /**
  * Opportunity line items as stored: may be empty (opportunities made by Convert Lead, imports, or saved before the
