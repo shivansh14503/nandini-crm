@@ -14,6 +14,7 @@ import ApartmentOutlinedIcon from '@mui/icons-material/ApartmentOutlined';
 import MarkEmailReadOutlinedIcon from '@mui/icons-material/MarkEmailReadOutlined';
 import EventBusyOutlinedIcon from '@mui/icons-material/EventBusyOutlined';
 import HubOutlinedIcon from '@mui/icons-material/HubOutlined';
+import AlternateEmailOutlinedIcon from '@mui/icons-material/AlternateEmailOutlined';
 import ManageAccountsOutlinedIcon from '@mui/icons-material/ManageAccountsOutlined';
 import SecurityOutlinedIcon from '@mui/icons-material/SecurityOutlined';
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
@@ -130,6 +131,16 @@ const ADMIN_MODULES: AdminModule[] = [
         href: ROUTES.API_INTEGRATIONS,
         badge: BADGES.available,
         highlights: ['Google', 'Microsoft 365', 'Zoom', 'Who is connected'],
+    },
+    {
+        key: 'email',
+        title: 'Email',
+        description:
+            'Send company email through Google Workspace (Gmail API) or SMTP, edit the wording of invite and password emails with merge fields, and follow every email in the queue, retrying failed ones.',
+        icon: <AlternateEmailOutlinedIcon />,
+        href: ROUTES.ADMIN_EMAIL,
+        badge: BADGES.available,
+        highlights: ['Outbound Email', 'Templates', 'Email Queue', 'Retry'],
     },
     {
         key: 'roles',

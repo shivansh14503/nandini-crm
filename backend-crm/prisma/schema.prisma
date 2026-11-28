@@ -1823,27 +1823,78 @@ model Notification {
 /// than EMAIL_LOG_RETENTION_DAYS are hard-deleted by the nightly job.
 model EmailLog {
   id         String    @id @default(uuid()) @db.NVarChar(50)
-  /// morning_summary | morning_summary_test | …
+  /// user_invite | password_reset_link | morning_summary | outbound_test | …
   kind       String    @db.NVarChar(40)
+  /// The EmailTemplate key the message was rendered from (Admin › Email › Templates), when it was.
+  templateKey String?  @db.NVarChar(40)
   /// Recipient's username when the email goes to a CRM user.
   toUsername String?   @db.NVarChar(50)
   toEmail    String    @db.NVarChar(120)
+  /// The sender address it went out as (Gmail: the delegated mailbox).
+  fromEmail  String?   @db.NVarChar(120)
   subject    String    @db.NVarChar(200)
   /// One send per key, e.g. `morning_summary:<YYYY-MM-DD>:<username>`; one-off sends get a unique key.
   dedupeKey  String    @unique @db.NVarChar(200)
-  /// sending | sent | failed | skipped (mail turned off)
+  /// queued | sending | sent | failed | skipped (mail turned off)
   status     String    @db.NVarChar(20)
-  /// Why the send failed (SMTP response or connection error, never credentials).
+  /// gmail | smtp: how it was (last) sent.
+  provider   String?   @db.NVarChar(20)
+  /// Why the send failed (provider response or connection error, never credentials).
   error      String?   @db.NVarChar(500)
-  /// Message-ID the SMTP server accepted the message under.
+  /// Message id the provider accepted the message under.
   messageId  String?   @db.NVarChar(250)
-  /// Send attempts so far (a failed send is retried by a later run while attempts < 3).
+  /// Send attempts so far (retried with backoff while attempts < MAX_SEND_ATTEMPTS).
   attempts   Int       @default(0)
+  /// The message (sealed JSON { html, text }, AAD "EmailLog:<id>:body") kept until it is sent, so the queue can
+  /// send or retry it. Cleared once sent. Never kept for set-password links (the link is a credential).
+  bodyEnc    String?   @db.NVarChar(Max)
+  /// When the queue may (re)try it next; null = not scheduled.
+  nextAttemptAt DateTime?
+  lastAttemptAt DateTime?
   createdAt  DateTime  @default(now())
   sentAt     DateTime?
 
   @@index([createdAt])
   @@index([kind, createdAt])
+  @@index([status, nextAttemptAt])
+}
+
+/// Admin › Email › Outbound Email: one row (id 1). How the CRM sends email. The credentials are not here: Gmail sends
+/// with the Google Workspace service account key of Admin › API Integrations (sealed in IntegrationProvider), SMTP
+/// with the server's SMTP_* environment settings.
+model OutboundEmailSetting {
+  id              Int       @id
+  /// gmail (Gmail API, service account with domain-wide delegation, scope gmail.send) | smtp (SMTP_* env settings)
+  provider        String    @default("gmail") @db.NVarChar(20)
+  /// Company switch: off = nothing is sent (emails are logged as skipped).
+  enabled         Boolean   @default(false)
+  /// The mailbox the CRM sends as (Gmail: the delegated user, e.g. crm@nandiniinfosys.com).
+  senderEmail     String?   @db.NVarChar(120)
+  senderName      String?   @db.NVarChar(120)
+  replyTo         String?   @db.NVarChar(120)
+  /// Emails sent per business day at most (Google Workspace allows 2,000 per user per day).
+  dailyLimit      Int       @default(1500)
+  lastTestAt      DateTime?
+  lastTestOk      Boolean?
+  lastTestMessage String?   @db.NVarChar(300)
+  updatedBy       String?   @db.NVarChar(50)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+/// Admin › Email › Templates: an admin's wording of a system email (EMAIL_TEMPLATES in email.templates.ts). No row =
+/// the built-in wording. Merge fields are written {{firstName}}; values are escaped when rendered.
+model EmailTemplate {
+  key         String   @id @db.NVarChar(40)
+  subject     String   @db.NVarChar(200)
+  heading     String   @db.NVarChar(200)
+  body        String   @db.NVarChar(Max)
+  buttonLabel String?  @db.NVarChar(80)
+  afterButton String?  @db.NVarChar(Max)
+  footer      String?  @db.NVarChar(Max)
+  updatedBy   String?  @db.NVarChar(50)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 /// Scorecard of a module's list screen (the summary cards above the table): the dropdown field the cards count by,

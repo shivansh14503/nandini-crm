@@ -902,6 +902,56 @@ off), and then it is taken over by a conditional update on the status and attemp
 credentials or message bodies. While `MAIL_ENABLED=false` or `SMTP_HOST` is empty nothing is sent and the
 skip is logged once.
 
+### 5.2a Outgoing email: Gmail API, the email queue and templates (Admin › Email, CRM-121)
+
+One mail service sends every email of the CRM (`src/services/mail.service.ts`: `sendMail` sends now, `queueMail`
+hands it to the queue; `modules/email/email.templateStore.ts` `sendTemplatedMail(key, { to, vars, … })` renders a
+template first). Admin › Email has three tabs, modelled on SuiteCRM's Email admin area:
+
+- **Outbound Email** (`OutboundEmailSetting`, one row): how mail is sent, the sender address, display name, reply-to,
+  the daily send limit and the company switch; **Check connection** and **Send test email**. Two ways to send:
+  - **Gmail API (recommended)**: `POST gmail/v1/users/me/messages/send` as the sender mailbox, with an access token
+    minted from the **Google Workspace service account key already uploaded on Admin › API Integrations** (the same
+    key calendar sync and email logging use; sealed in `IntegrationProvider`, never shown again). The token is for
+    `sub = sender` with the one scope `https://www.googleapis.com/auth/gmail.send` and lives only in process memory
+    (the shared token source, `calendar-sync/tokenSource.ts`). Google-side set-up: enable the Gmail API in the service
+    account's Cloud project; in Admin console › Security › API controls › Domain-wide delegation add `gmail.send` to
+    the entry of the service account's client ID (next to the calendar scopes); the sender must be a real licensed
+    mailbox (emails appear in its Sent folder). Check connection mints the token without sending; errors are worded
+    for the admin (`gmail.sender.ts`: missing delegation / scope, unknown sender mailbox, bad key, API disabled).
+  - **SMTP**: the `SMTP_*` environment settings (§9.3), as before. No row saved yet = SMTP from the environment, so
+    deploying this changes nothing until an admin saves the page (the first save keeps SMTP when it was on).
+  No credential is typed into or returned by the page. Every process keeps a 30 s snapshot of the settings
+  (`email.settings.ts`), so `isMailConfigured()` stays synchronous.
+- **Templates** (`EmailTemplate`, a row only when an admin changed the wording): `user_invite`, `password_reset`
+  (sent by an admin), `password_reset_self` (Forgot password), and reserved for later `account_locked` and
+  `morning_summary` (the morning email keeps its built-in layout for now). A template is plain text in parts
+  (subject, heading, message, button label, text below the button, footer) with merge fields such as
+  `{{firstName}}`, `{{username}}`, `{{link}}`, `{{expiresAt}}`, `{{sentBy}}`; unknown merge fields are refused on save.
+  Never admin HTML: the parts are merged, escaped and laid out in the CRM email layout (`email.templates.ts`); only
+  http(s) links become buttons, and link emails always carry the plain link and a fixed "never forward" line. Preview
+  (sandboxed iframe, sample values), Send test to me, Reset to default (deletes the row). Rows are cached 60 s per
+  process; a read error falls back to the built-in wording.
+- **Email Queue** (`EmailLog`): every email, newest first, filter by status / type / search, with **Retry**.
+
+**Queue and retries.** A send claims its `EmailLog` row by dedupe key (as before). The message is kept sealed in
+`EmailLog.bodyEnc` (secretBox, AAD `EmailLog:<dedupeKey>:body`) until it is sent, then cleared. A failed send whose
+error may pass (network, 429, 5xx, SMTP 4xx) gets `nextAttemptAt` after 1 min, 5 min, 30 min, 2 h (`MAX_SEND_ATTEMPTS`
+5); one that won't (missing scope, refused recipient) waits for an admin. The `crm-mail` worker runs `deliver`
+every minute (scheduler `mail-queue`, plus a one-off job when an email is queued; inline every minute while Redis is
+down): it marks rows a stopped process left `sending` for 15 min as failed (not resent: they may have gone out), then
+sends due `queued` / `failed` rows oldest first, claimed by conditional updates. **Set-password links are never
+kept** (`retainBody: false`: the link is a credential); Retry on such a row sends the user a fresh link through
+`inviteService.send`. Retry on other rows sends the kept message at once, past the attempt cap.
+
+**Daily send limit** (`dailyLimit`, default 1,500, at most Google's 2,000 per mailbox per day): counted from the
+`sent` rows since the start of the business day. Past it, non-essential emails are queued for the start of the next
+business day; essential ones (`essential: true`: set-password links, test emails, security notices) still go out.
+
+While mail is off (switched off, no sender, no Google key, no `INTEGRATIONS_ENCRYPTION_KEY`, or SMTP off) nothing is
+sent and nothing throws: rows are `skipped` with the reason in `error`. Logs name the kind, the recipient's username /
+domain and the outcome, never tokens, links or bodies.
+
 ### 5.3 When background jobs wake the database
 
 Today every periodic job is at night or in business hours, so Azure SQL Serverless can still auto-pause overnight
@@ -1980,6 +2030,10 @@ the credentials it already has.
   can't wake Azure SQL at night); rotating the encryption key invalidates every channel token.
 
 ### 9.3 Outgoing email (Google Workspace SMTP relay)
+
+> Since CRM-121 the recommended way is the **Gmail API** chosen on Admin › Email › Outbound Email (§5.2a), which needs
+> no server IP allow-listing and no SMTP settings. The SMTP set-up below still works and is what the CRM uses until an
+> admin saves that page.
 
 Email is off until `MAIL_ENABLED=true` and `SMTP_HOST` is set; until then the morning summary can still be previewed
 from the bell. The CRM sends from `MAIL_FROM` (default `Nandini CRM <crm@nandiniinfosys.com>`); links in emails use

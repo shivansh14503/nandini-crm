@@ -69,14 +69,14 @@ describe('claimEmailLog', () => {
         }
     });
 
-    it('retries a failed send by a conditional update while attempts < 3', async () => {
+    it('retries a failed send by a conditional update while attempts < MAX_SEND_ATTEMPTS', async () => {
         const { db, rows, updates } = fakeDb({ status: 'failed', attempts: 2 });
         assert.deepEqual(await claimEmailLog(db, logRow), { claimed: true, id: 'log1', attempts: 3 });
         assert.deepEqual(updates[0].where, { id: 'log1', status: 'failed', attempts: 2 });
         assert.equal(rows.get(logRow.dedupeKey)?.status, 'sending');
     });
 
-    it('gives up on a send that failed 3 times', async () => {
+    it('gives up on a send that failed MAX_SEND_ATTEMPTS times', async () => {
         const { db } = fakeDb({ status: 'failed', attempts: MAX_SEND_ATTEMPTS });
         assert.deepEqual(await claimEmailLog(db, logRow), { claimed: false, reason: 'failed' });
     });
@@ -100,7 +100,8 @@ describe('isRetryableEmail', () => {
     it('retries skipped sends and failed ones below the attempt cap', () => {
         assert.equal(isRetryableEmail({ status: 'skipped', attempts: 0 }), true);
         assert.equal(isRetryableEmail({ status: 'failed', attempts: 2 }), true);
-        assert.equal(isRetryableEmail({ status: 'failed', attempts: 3 }), false);
+        assert.equal(isRetryableEmail({ status: 'failed', attempts: MAX_SEND_ATTEMPTS - 1 }), true);
+        assert.equal(isRetryableEmail({ status: 'failed', attempts: MAX_SEND_ATTEMPTS }), false);
         assert.equal(isRetryableEmail({ status: 'sent', attempts: 1 }), false);
         assert.equal(isRetryableEmail({ status: 'sending', attempts: 1 }), false);
     });

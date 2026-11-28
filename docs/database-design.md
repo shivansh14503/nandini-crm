@@ -827,20 +827,43 @@ like `TableFilter`: **not audited**, hard-deleted by the nightly retention job (
 list, keyset-paged on `createdAt`, `id`), `createdAt` (purge). Inserts read the existing keys first and go in chunks of
 150 rows (SQL Server has no `skipDuplicates` and a 2,100-parameter limit); a P2002 race counts as already sent.
 
-`EmailLog`: one row per outgoing email, the idempotency claim and audit trail of what the CRM mailed whom (the
-morning summary today, quotation emails later). `id` (uuid), `kind` (`morning_summary` | `morning_summary_test` | `user_invite` | `password_reset_link` | …),
-`toUsername` (nullable, when the recipient is a CRM user), `toEmail` (≤ 120), `subject` (≤ 200), `dedupeKey`
-(**UNIQUE**, ≤ 200, e.g. `morning_summary:<YYYY-MM-DD>:<username>`; one-off sends get a unique key), `status`
-(`sending` | `sent` | `failed` | `skipped`, the last when mail was turned off), `error` (≤ 500, the SMTP / connection
-message, never credentials), `messageId` (≤ 250, the id the SMTP server accepted the message under), `attempts`
-(INT, default 0), `createdAt`, `sentAt`. Indexes: `createdAt` (purge), `(kind, createdAt)`. **Claim:** a send inserts
-its row as `sending`; when the key exists (P2002) the send belongs to another run unless that row is `failed` with
-fewer than 3 attempts or `skipped`, which is taken over by a conditional update on the status and attempts read; the
-row then becomes `sent` or `failed`.
+`EmailLog`: one row per outgoing email, the idempotency claim, the email queue and the log of what the CRM mailed
+whom (Admin › Email › Email Queue). `id` (uuid), `kind` (`morning_summary` | `morning_summary_test` | `user_invite` |
+`password_reset_link` | `outbound_test` | `template_test` | …), `templateKey` (≤ 40, nullable: the `EmailTemplate`
+it was rendered from), `toUsername` (nullable, when the recipient is a CRM user), `toEmail` (≤ 120), `fromEmail`
+(≤ 120, nullable: the sender it went out as), `subject` (≤ 200), `dedupeKey` (**UNIQUE**, ≤ 200, e.g.
+`morning_summary:<YYYY-MM-DD>:<username>`; one-off sends get a unique key), `status` (`queued` | `sending` | `sent` |
+`failed` | `skipped`, the last when mail was turned off), `provider` (`gmail` | `smtp`, nullable), `error` (≤ 500, the
+provider / connection message or why it was skipped / held, never credentials), `messageId` (≤ 250), `attempts` (INT,
+default 0), `bodyEnc` (NVARCHAR(MAX), nullable: the message sealed with secretBox, AAD `EmailLog:<dedupeKey>:body`,
+kept until sent so it can be retried; never kept for set-password links), `nextAttemptAt` (nullable: when the queue
+may send or retry it), `lastAttemptAt`, `createdAt`, `sentAt`. Indexes: `createdAt` (purge), `(kind, createdAt)`,
+`(status, nextAttemptAt)` (the queue; migration `20261229100000_outbound_email`). **Claim:** a send inserts its row
+as `sending`; when the key exists (P2002) the send belongs to another run unless that row is `failed` with fewer than
+`MAX_SEND_ATTEMPTS` (5) attempts or `skipped`, which is taken over by a conditional update on the status and attempts
+read; the row then becomes `sent` or `failed` (with `nextAttemptAt` after 1 min, 5 min, 30 min, 2 h when the error may
+pass). The queue claims `queued` / `failed` rows the same way. See system-design §5.2a.
 
 **Retention** (env, read by the nightly job): `Notification` rows that are read and older than
 `NOTIFICATION_RETENTION_DAYS` (default 90), and any row older than twice that; `EmailLog` rows older than
 `EMAIL_LOG_RETENTION_DAYS` (default 180).
+
+### 4.26a `OutboundEmailSetting` and `EmailTemplate` (Admin › Email)
+
+Migration `20261229100000_outbound_email`. Module `backend-crm/src/modules/email`. Admin settings: changes are
+audited (`EmailSettings` / `EmailTemplate`, CONFIG).
+
+`OutboundEmailSetting`: one row (`id` 1). `provider` (`gmail` | `smtp`, default `gmail`), `enabled` (BIT, default 0:
+the company switch), `senderEmail` / `senderName` / `replyTo` (≤ 120, nullable), `dailyLimit` (INT, default 1500,
+1–2000), `lastTestAt` / `lastTestOk` / `lastTestMessage` (≤ 300: the last Check connection / Send test email),
+`updatedBy`, `createdAt`, `updatedAt`. **No credential column**: Gmail uses the Google service account key sealed in
+`IntegrationProvider` (`google`), SMTP the server's `SMTP_*` environment settings. No row = SMTP from the environment.
+
+`EmailTemplate`: an admin's wording of a system email; no row = the built-in wording (`email.templates.ts`). `key`
+(PK, ≤ 40: `user_invite` | `password_reset` | `password_reset_self` | `account_locked` | `morning_summary`),
+`subject` (≤ 200), `heading` (≤ 200), `body`, `afterButton`, `footer` (NVARCHAR(MAX), long text: no limit),
+`buttonLabel` (≤ 80), `updatedBy`, `createdAt`, `updatedAt`. Plain text with `{{mergeField}}` tags, escaped when
+rendered.
 
 ### 4.27 `Holiday` (Admin › Holidays)
 

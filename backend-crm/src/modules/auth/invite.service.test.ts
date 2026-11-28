@@ -130,6 +130,7 @@ function install() {
 
 function mailReturns(result: MailResult, configured = true) {
     mock.method(inviteMail, 'isMailConfigured', () => configured);
+    mock.method(inviteMail, 'loadTemplate', async () => null);
     mock.method(inviteMail, 'sendMail', async (input: MailInput) => {
         mails.push(input);
         return result;
@@ -206,7 +207,7 @@ describe('inviteService.send', () => {
         mailReturns({ status: 'skipped' }, false);
         const outcome = await inviteService.send(admin, recipient, 'reset');
         assert.equal(outcome.status, 'mail_disabled');
-        assert.match('error' in outcome ? outcome.error : '', /MAIL_ENABLED/);
+        assert.match('error' in outcome ? outcome.error : '', /Outbound Email/);
         assert.equal(invites.length, 0);
         assert.equal(mails.length, 0);
     });
