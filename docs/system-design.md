@@ -271,13 +271,18 @@ SQL Server is the only source of truth; Redis only ever holds derived or disposa
     `invitePending`, audits `PASSWORD_SET`; after commit it revokes every session of the user, opens a new one (cookie,
     `LOGIN` audited `via: set_password_link`), and the page opens the dashboard.
   - *Forgot password* (2026-11-28, public `POST /api/auth/forgot-password { identifier }`, the login page's
-    "Forgot password?" → `app/forgot-password`): `inviteService.requestPasswordReset` finds the account by username, or
+    "Forgot password?" link; one click since 2026-11-28, CRM-147): with a username typed, the sign-in page sends it
+    straight away and shows the answer inline; with the username empty, the link opens `app/forgot-password`, which asks
+    for the username only and sends it. `inviteService.requestPasswordReset` finds the account by username, or
     by work email when the text has an `@` (the address must belong to exactly one active non-group user), and sends
     the same link through `inviteService.send(…, { selfService: true })`: purpose `reset` (an Invited user gets their
     invite again), the email says the user asked for it instead of naming an admin, and `INVITE_SENT` carries
-    `requestedBy: 'self'` and the IP. Sent only to an active account with a work email. The answer is always the same
-    200 message and is sent **before** the lookup runs, so neither the words nor the timing reveal whether an account
-    exists. Limits: 5 requests / 15 min per IP (`ratelimit:forgot-password:ip:{ip}`, `429 RATE_LIMITED`, in-process
+    `requestedBy: 'self'` and the IP. Sent only to an active account with a work email. The answer is always 200 "If this account exists, we’ve emailed a reset link to
+    a***@company.com": `inviteService.resetRecipientHint` masks the account's work email (first character + domain),
+    and for an unknown / deactivated / email-less account shows a stand-in built the same way (first letter typed +
+    the company mail domain from Admin › Email's sender, else `MAIL_FROM`), so the words don't reveal whether an
+    account exists. The answer goes out after that one indexed lookup in every case; the link is created and emailed
+    afterwards. Limits: 5 requests / 15 min per IP (`ratelimit:forgot-password:ip:{ip}`, `429 RATE_LIMITED`, in-process
     fallback), and at most 3 self-service links per account per hour (counted from `UserInvites` rows the user created,
     so it holds without Redis; more are dropped quietly). Using the link also clears an account lockout.
   - *Revoked* also by an email change (Admin › Users, People) and a deactivation. A reset link doesn't touch the

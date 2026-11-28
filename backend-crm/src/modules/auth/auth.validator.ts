@@ -32,9 +32,9 @@ export type VerifyInviteInput = z.infer<typeof verifyInviteSchema>;
 export const acceptInviteSchema = z.strictObject({ token: inviteToken, newPassword });
 export type AcceptInviteInput = z.infer<typeof acceptInviteSchema>;
 
-/** POST /api/auth/forgot-password: a username or a work email (the service tells them apart by the `@`). */
+/** POST /api/auth/forgot-password: the username (typed on the sign-in page, or on the Forgot password page when it was empty). A work email still works (told apart by the `@`). */
 export const forgotPasswordSchema = z.strictObject({
-    identifier: z.string({ error: 'Enter your username or work email.' }).trim().min(1, 'Enter your username or work email.').max(120, 'That is too long.'),
+    identifier: z.string({ error: 'Enter your username.' }).trim().min(1, 'Enter your username.').max(120, 'That is too long.'),
 });
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 

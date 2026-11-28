@@ -5,7 +5,7 @@ import { prisma } from '../../config/prisma.js';
 import { auditService, type AuditEntry } from '../../services/audit.service.js';
 import type { MailInput, MailResult } from '../../services/mail.service.js';
 import { HttpError } from '../../utils/httpError.js';
-import { INVALID_INVITE_MESSAGE, inviteMail, inviteService } from './invite.service.js';
+import { decoyResetHint, INVALID_INVITE_MESSAGE, inviteMail, inviteService, maskEmail } from './invite.service.js';
 import { hashInviteToken } from './invite.token.js';
 
 /** UserInvite / User doubles on the real Prisma client (restored after each test). */
@@ -359,5 +359,30 @@ describe('inviteService.requestPasswordReset (Forgot password)', () => {
         assert.equal(mails.length, 3);
         // An hour later it works again.
         assert.equal(await inviteService.requestPasswordReset('vikram.s', {}, new Date(now.getTime() + 61 * 60_000)), 'sent');
+    });
+});
+
+describe('Forgot password: the masked address in the answer', () => {
+    beforeEach(() => {
+        users.push({ id: 9, username: 'vikram.s', firstName: 'Vikram', fullName: 'Vikram Shah', role: 'Sales Executive', isActive: true, invitePending: false, passwordHash: 'x', passwordChangedAt: null, lastLoginAt: null, email: 'vikram@nandiniinfosys.com' });
+        users.push({ id: 10, username: 'gone', firstName: null, fullName: 'Gone', role: 'Sales Executive', isActive: false, invitePending: false, passwordHash: 'x', passwordChangedAt: null, lastLoginAt: null, email: 'zed@nandiniinfosys.com' });
+    });
+
+    it('masks an email to its first character and domain', () => {
+        assert.equal(maskEmail('asha.k@company.com'), 'a***@company.com');
+        assert.equal(maskEmail('nope'), '***');
+    });
+
+    it('shows the account’s real work email, masked', async () => {
+        assert.equal(await inviteService.resetRecipientHint('vikram.s'), 'v***@nandiniinfosys.com');
+        assert.equal(await inviteService.resetRecipientHint(' vikram@nandiniinfosys.com '), 'v***@nandiniinfosys.com');
+    });
+
+    it('shows a stand-in shaped the same way for an unknown or deactivated account', async () => {
+        assert.equal(decoyResetHint('nobody', 'nandiniinfosys.com'), 'n***@nandiniinfosys.com');
+        assert.match(await inviteService.resetRecipientHint('nobody'), /^n\*\*\*@[a-z0-9.-]+$/);
+        // Deactivated: the stand-in from what was typed, not the account's own address (zed@…).
+        assert.match(await inviteService.resetRecipientHint('gone'), /^g\*\*\*@/);
+        assert.equal(await inviteService.resetRecipientHint('who@else.com'), 'w***@else.com');
     });
 });
