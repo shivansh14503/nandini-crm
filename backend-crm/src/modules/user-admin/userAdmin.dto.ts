@@ -3,6 +3,7 @@ import { isoOrNull, photoUrlOf, resolveNameParts, USER_REF_SELECT } from '../pro
 import { emailIssueFor, holdsAddress, type UserEmailIssue } from '../users/userEmail.service.js';
 import { roleAccess, type RoleAccess } from './roles.js';
 import type { InvitePurpose } from '../auth/invite.token.js';
+import { isLocked } from '../auth/accountLockout.js';
 
 /**
  * What /api/admin/users returns about a user. No database access here, so pure code and tests can use it. Mirrored by
@@ -29,6 +30,8 @@ export const ADMIN_USER_SELECT = {
     invitePending: true,
     lastLoginAt: true,
     passwordChangedAt: true,
+    failedLoginCount: true,
+    lockedUntil: true,
     createdAt: true,
     createdBy: true,
     deactivatedAt: true,
@@ -61,6 +64,8 @@ export interface AdminUserRow {
     invitePending: boolean;
     lastLoginAt: Date | null;
     passwordChangedAt: Date | null;
+    failedLoginCount: number;
+    lockedUntil: Date | null;
     createdAt: Date;
     createdBy: string | null;
     deactivatedAt: Date | null;
@@ -115,6 +120,13 @@ export interface AdminUserDto {
     invite: AdminUserInviteDto | null;
     lastLoginAt: string | null;
     passwordChangedAt: string | null;
+    /**
+     * "Locked": sign-in is refused until then after too many wrong passwords (auth/accountLockout.ts); null when not
+     * locked (never set, or already past). "Unlock account" in the row menu clears it.
+     */
+    lockedUntil: string | null;
+    /** Wrong passwords in the current run (0 after a successful sign-in, a lock, or an unlock). */
+    failedLoginCount: number;
     createdAt: string;
     createdBy: string | null;
     deactivatedAt: string | null;
@@ -166,6 +178,8 @@ export function toAdminUserDto(row: AdminUserRow, emailRule: EmailRuleContext, t
             : null,
         lastLoginAt: isoOrNull(row.lastLoginAt),
         passwordChangedAt: isoOrNull(row.passwordChangedAt),
+        lockedUntil: isLocked(row.lockedUntil, now) ? row.lockedUntil.toISOString() : null,
+        failedLoginCount: row.failedLoginCount,
         createdAt: row.createdAt.toISOString(),
         createdBy: row.createdBy,
         deactivatedAt: isoOrNull(row.deactivatedAt),

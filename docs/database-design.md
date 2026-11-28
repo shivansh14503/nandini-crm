@@ -164,6 +164,9 @@ Pre-existing table kept for compatibility (columns `Id`, `Username`, `Password`,
 | `jobTitle` | NVARCHAR(100) NULL | Free text set in Admin › Users (read-only on My Profile). Not an access rule |
 | `reportsToId` | INT NULL, FK → `Users.Id` (NO ACTION / NO ACTION), indexed | The user's manager (Admin › Users "Reports to"). The API refuses the user themselves, anyone below them (no cycles; chain walked up to 50 levels, writers serialise on an application lock), an inactive or group login. Kept when the manager is deactivated. NO ACTION: a user with direct reports can't be deleted |
 | `invitePending` | BIT NOT NULL, default 0 | **Invited**: added in Admin › Users and hasn't set a password from the emailed link yet (the stored hash is of a random value nobody knows; sign-in answers `403 INVITE_PENDING`). Cleared when a set-password link is used (`POST /api/auth/invite/accept`). Replaced `mustChangePassword` (2026-11-27) |
+| `failedLoginCount` | INT NOT NULL, default 0 | Account lockout (`auth/accountLockout.ts`): wrong passwords in the current run. Back to 0 on a successful sign-in, a password set from a link, an admin unlock, and when a lock is applied |
+| `lastFailedLoginAt` | DATETIME2 NULL | When the last wrong password was typed; a run older than the policy window (15 min) starts again from 1 |
+| `lockedUntil` | DATETIME2 NULL | Sign-in refused (`423 ACCOUNT_LOCKED`) until then; shown as **Locked** in Admin › Users. NULL or past = not locked. Cleared by "Unlock account" |
 | `createdBy` | NVARCHAR(50) NULL | Username of the admin who added the user in Admin › Users; NULL for older users (seed, SQL) |
 | `deactivatedAt` | DATETIME2 NULL | When an admin last deactivated the user; NULL again on activation |
 | `isActive`, `isGroupUser`, `onLeave`, `lastLoginAt` | | Inactive users can't sign in or be assigned. Set in Admin › Users (`onLeave` is a plain switch). Out-of-office dates live in `UserPreference` (§4.30, set by the user in My Profile); a user is **effectively on leave** when `onLeave` is set or today (business timezone) is in their out-of-office range |
@@ -179,6 +182,10 @@ and the self foreign key `Users_reportsToId_fkey`), `mustChangePassword` (NOT NU
 `deactivatedAt`. Nothing is backfilled: existing users keep `mustChangePassword = 0` and NULL elsewhere. Writes from
 Admin › Users are audited as the acting admin: `CREATE` (a snapshot without any password), `UPDATE` (diff),
 `STATUS_CHANGE` (`isActive`) and `PASSWORD_RESET` (retired with temporary passwords; old entries stay readable).
+
+Migration `20261229090000_account_lockout` (2026-11-28) adds `failedLoginCount` (NOT NULL, default 0, constraint
+`Users_failedLoginCount_df`), `lastFailedLoginAt` and `lockedUntil` (both NULL). No backfill: every account starts
+unlocked. Locks and unlocks are audited (`ACCOUNT_LOCKED`, `ACCOUNT_UNLOCKED`).
 
 Migration `20261217090000_user_invites` (2026-11-27) replaces `mustChangePassword` with `invitePending` (NOT NULL,
 default 0, constraint `Users_invitePending_df`): users who still had `mustChangePassword = 1` (a temporary password

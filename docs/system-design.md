@@ -190,6 +190,20 @@ SQL Server is the only source of truth; Redis only ever holds derived or disposa
   `INVALID_CREDENTIALS`). A user still **Invited** (`Users.invitePending`: never set a password from their link) gets
   403 `INVITE_PENDING` after a correct password (only a user who still had a temporary password when those were
   retired can have one).
+- **Account lockout** (2026-11-28, `modules/auth/accountLockout.ts`): besides the per-address limit
+  (`ratelimit:login:{ip}`), the account itself is locked after too many wrong passwords in a row, from any address.
+  Defaults in one place, `DEFAULT_LOCKOUT_POLICY`: **5** wrong passwords within **15 minutes** lock it for
+  **15 minutes**; callers read them through `getLockoutPolicy()` (async) so a later Admin › Password rules screen can
+  store them without touching sign-in. State lives on `Users` (`failedLoginCount`, `lastFailedLoginAt`, `lockedUntil`),
+  not Redis, so it survives restarts and admins can see it. A wrong password is counted under the `user:id:<id>` lock
+  (simultaneous guesses all count); the one that reaches the limit sets `lockedUntil`, starts the count again from 0
+  and audits `ACCOUNT_LOCKED` once (WARNING). While locked, sign-in answers `423 ACCOUNT_LOCKED` ("… locked for N more
+  minutes. Try again later, use “Forgot password?” …, or ask your administrator to unlock it.") **without checking the
+  password** (a dummy bcrypt compare keeps the timing), audited as `LOGIN_FAILED` (`reason: Account locked`). A
+  successful sign-in, a password set from an emailed link, and an admin's **Unlock account** (Admin › Users row menu,
+  `POST /api/admin/users/:id/unlock`, audited `ACCOUNT_UNLOCKED`, NOTICE) clear all three columns. A database failure
+  while counting is logged and the sign-in still answers `401` (the per-address limit still applies). The lock message
+  names the account only after five wrong passwords, a deliberate trade-off for a clear message.
 - On success the API signs a **JWT** (HS256, `JWT_SECRET`, expiry = `SESSION_TTL_SECONDS`, default 8 h) with
   `{ id, username, role, tracked, jti }` and sets it as an **httpOnly cookie** named `token`
   (`secure` + `SameSite=None` in production, `Lax` in dev). A `Bearer` header is accepted as a fallback.
@@ -256,6 +270,16 @@ SQL Server is the only source of truth; Redis only ever holds derived or disposa
     conditional update (single use even with two tabs), revokes the user's other links, stores the hash, clears
     `invitePending`, audits `PASSWORD_SET`; after commit it revokes every session of the user, opens a new one (cookie,
     `LOGIN` audited `via: set_password_link`), and the page opens the dashboard.
+  - *Forgot password* (2026-11-28, public `POST /api/auth/forgot-password { identifier }`, the login page's
+    "Forgot password?" → `app/forgot-password`): `inviteService.requestPasswordReset` finds the account by username, or
+    by work email when the text has an `@` (the address must belong to exactly one active non-group user), and sends
+    the same link through `inviteService.send(…, { selfService: true })`: purpose `reset` (an Invited user gets their
+    invite again), the email says the user asked for it instead of naming an admin, and `INVITE_SENT` carries
+    `requestedBy: 'self'` and the IP. Sent only to an active account with a work email. The answer is always the same
+    200 message and is sent **before** the lookup runs, so neither the words nor the timing reveal whether an account
+    exists. Limits: 5 requests / 15 min per IP (`ratelimit:forgot-password:ip:{ip}`, `429 RATE_LIMITED`, in-process
+    fallback), and at most 3 self-service links per account per hour (counted from `UserInvites` rows the user created,
+    so it holds without Redis; more are dropped quietly). Using the link also clears an account lockout.
   - *Revoked* also by an email change (Admin › Users, People) and a deactivation. A reset link doesn't touch the
     current password until it is used. Sessions still carrying the retired `mcp` claim are refused by `verifyToken`.
   - *Page*: `app/set-password` (public, `noindex`, `Referrer-Policy: no-referrer`) reads the token once and drops it
@@ -562,6 +586,7 @@ commands fail immediately instead of hanging, and reconnects in the background (
 | `ratelimit:set-password-link:ip:{ip}` | counter | 15 min | `POST /api/auth/invite/verify`, `/invite/accept` | 30 requests / 15 min / IP (every request counts; in-process counter while Redis can't count) |
 | `ratelimit:change-password:user:{id}` | counter | 15 min | `POST /api/auth/change-password` | 10 password changes (right or wrong) / 15 min / user |
 | `ratelimit:session-revoke:user:{id}` | counter | 10 min | `DELETE /api/me/sessions[/:id]` | 30 session sign-outs / 10 min / user |
+| `ratelimit:forgot-password:ip:{ip}` | counter | 15 min | `POST /api/auth/forgot-password` | 5 requests / 15 min / IP (every request counts; in-process counter while Redis can't count) |
 | `ratelimit:login:{ip}` | counter | `LOGIN_RATE_LIMIT_WINDOW_SECONDS` (15 min) | failed logins only | Brute-force protection (default 10 failures / window); reset on success |
 | `ratelimit:pdf:{module}:user:{id}` | counter | 60 s | `GET /:id/pdf` | 30 PDF renders / min / user |
 | `ratelimit:pdf-preview:user:{id}` | counter | 60 s | `POST /api/pdf-templates/preview` | 20 previews / min / user |

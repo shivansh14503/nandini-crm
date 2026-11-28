@@ -67,6 +67,13 @@ model User {
   lastLoginAt        DateTime?
   /// Set when the user changes their own password (POST /api/auth/change-password). NULL = never changed in this CRM.
   passwordChangedAt  DateTime?
+  /// Account lockout (auth/accountLockout.ts): wrong passwords in the current run. Back to 0 on a successful sign-in,
+  /// a password set from an emailed link, an admin's "Unlock account", and when a lock is applied.
+  failedLoginCount   Int       @default(0)
+  /// When the last wrong password was typed: a run older than the policy's window starts again from 1.
+  lastFailedLoginAt  DateTime?
+  /// Sign-in is refused until then after too many wrong passwords ("Locked" in Admin › Users). NULL or past = not locked.
+  lockedUntil        DateTime?
   createdAt          DateTime  @default(now())
   /// Username of the admin who added the user in Admin › Users. NULL for users created before it (seed, SQL).
   createdBy          String?   @db.NVarChar(50)

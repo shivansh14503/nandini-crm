@@ -4,7 +4,7 @@ import { authService } from './auth.service.js';
 import { readToken, tryVerifyToken } from '../../middlewares/authMiddleware.js';
 import { setAuthCookie, clearAuthCookie } from './cookie.util.js';
 import { inviteService } from './invite.service.js';
-import type { AcceptInviteInput, ChangePasswordInput, LoginInput, VerifyInviteInput } from './auth.validator.js';
+import type { AcceptInviteInput, ChangePasswordInput, ForgotPasswordInput, LoginInput, VerifyInviteInput } from './auth.validator.js';
 import { sendSuccess } from '../../utils/apiResponse.js';
 import { HttpError } from '../../utils/httpError.js';
 import { requireUser } from '../../utils/requestContext.js';
@@ -82,4 +82,21 @@ export async function acceptInvite(req: Request, res: Response): Promise<void> {
     const { user, token } = await inviteService.accept(body.token, body.newPassword, { ip: req.ip, userAgent: req.get('user-agent') });
     setAuthCookie(res, token);
     res.status(StatusCodes.OK).json({ status: 'ok', message: 'Password set', user });
+}
+
+/** The one answer of POST /api/auth/forgot-password, whatever happened. */
+export const FORGOT_PASSWORD_MESSAGE =
+    'If an active account matches what you entered, we’ve emailed it a link to choose a new password. The link works once, within 72 hours.';
+
+/**
+ * POST /api/auth/forgot-password — public. Always the same 200 answer, sent before the account is even looked up, so
+ * neither the answer nor its timing says whether the username or email exists. The lookup and email run afterwards.
+ */
+export async function forgotPassword(req: Request, res: Response): Promise<void> {
+    const { identifier } = req.body as ForgotPasswordInput;
+    const ip = req.ip;
+    sendSuccess(res, { message: FORGOT_PASSWORD_MESSAGE }, FORGOT_PASSWORD_MESSAGE);
+    void inviteService.requestPasswordReset(identifier, { ip }).catch((err: Error) => {
+        logger.error({ err: err.message }, 'Forgot password: the request could not be handled');
+    });
 }

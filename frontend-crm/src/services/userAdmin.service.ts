@@ -6,6 +6,7 @@ import type {
     AdminUserListResponse,
     AdminUsersMeta,
     AdminUserStatusResult,
+    AdminUserUnlockResult,
     AdminUserUpdateResult,
     CreateAdminUserPayload,
     CreateAdminUserResult,
@@ -59,6 +60,12 @@ export const userAdminService = {
     },
     async activate(id: number): Promise<AdminUserStatusResult> {
         const res = await apiClient.post<ApiResponse<AdminUserStatusResult>>(`${BASE}/${enc(id)}/activate`);
+        broadcast();
+        return res.data;
+    },
+    /** Ends a lock after too many wrong passwords and resets the count, so the user can sign in at once. */
+    async unlock(id: number): Promise<AdminUserUnlockResult> {
+        const res = await apiClient.post<ApiResponse<AdminUserUnlockResult>>(`${BASE}/${enc(id)}/unlock`);
         broadcast();
         return res.data;
     },

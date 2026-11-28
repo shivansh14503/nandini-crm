@@ -129,6 +129,8 @@ const ACTION_TITLES: Record<string, { title: string; tag: string }> = {
     PASSWORD_RESET: { title: 'Password reset by an admin', tag: 'Security' },
     INVITE_SENT: { title: 'Set-password link emailed', tag: 'Security' },
     PASSWORD_SET: { title: 'Password set from an emailed link', tag: 'Security' },
+    ACCOUNT_LOCKED: { title: 'Account locked after wrong passwords', tag: 'Security' },
+    ACCOUNT_UNLOCKED: { title: 'Account unlocked by an admin', tag: 'Security' },
     SESSION_REVOKE: { title: 'Session signed out', tag: 'Security' },
     SEND_INVITES: { title: 'Calendar invitations sent', tag: 'Invitations' },
     PURGE: { title: 'Logged emails deleted', tag: 'Purged' },

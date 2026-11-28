@@ -57,6 +57,10 @@ export interface AdminUserDto {
     invite: AdminUserInvite | null;
     lastLoginAt: string | null;
     passwordChangedAt: string | null;
+    /** "Locked" after too many wrong passwords: sign-in refused until then. null when not locked. */
+    lockedUntil: string | null;
+    /** Wrong passwords in the current run (0 after a sign-in, a lock or an unlock). */
+    failedLoginCount: number;
     createdAt: string;
     createdBy: string | null;
     deactivatedAt: string | null;
@@ -177,6 +181,9 @@ export type AdminUserStatusResult = AdminUserDto & {
     /** Sessions signed out by a deactivation; null when they could not be counted (Redis down). */
     signedOutSessions?: number | null;
 };
+
+/** POST /:id/unlock ("Unlock account"): `unlocked` is false when there was nothing to clear. */
+export type AdminUserUnlockResult = AdminUserDto & { unlocked: boolean };
 
 /** POST /:id/send-invite: the invite again (Invited user) or a password reset link (active account). */
 export interface SendInviteResult {
