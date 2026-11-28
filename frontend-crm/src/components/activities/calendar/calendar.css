@@ -111,6 +111,23 @@
     box-shadow: none;
 }
 
+/*
+ * Clickable things show a pointer: events open their activity or record (every view, the "+N more" popover and the
+ * agenda included), "+N more" opens the popover, and day / date links open that day. Holidays open nothing.
+ */
+.crm-calendar .crm-cal-event,
+.crm-cal-event,
+.crm-cal-event *,
+.crm-cal-more.crm-cal-more,
+.crm-cal-navlink.crm-cal-navlink {
+    cursor: pointer;
+}
+.crm-calendar .crm-cal-holiday,
+.crm-cal-holiday,
+.crm-cal-holiday * {
+    cursor: default;
+}
+
 /* Phones: wide time grids scroll inside the calendar, never the page. */
 @media (max-width: 599.95px) {
     .crm-calendar {
