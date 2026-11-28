@@ -831,7 +831,8 @@ Security Groups and Security Settings missing.
       assign to whom, session timeout, sign-in IP allow-list.
 - [x] Export and Import on every module (2026-11-28): every module has View / Create / Edit / Delete / Export / Import
       except Documents (View and Export); stored roles read a module's new Export / Import as No until an admin
-      turns it on.
+      turns it on, except Organizations and Documents, whose lists exported for everyone before: an unset Export there
+      is Yes while the role can view (`EXPORT_FOLLOWS_VIEW`, 2026-11-28).
 - [ ] Not yet: field-level permissions.
 
 Exit: an admin can create a role, limit it to own records or no access per module, assign it in Admin › Users, and

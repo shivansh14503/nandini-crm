@@ -297,7 +297,8 @@ export function buildQuotationImportRow(
             roundOff: opportunity.roundOff,
             status: QUOTATION_IMPORT_DEFAULTS.status,
             quotationSubject: firstOf(payload.quotationTitle, title),
-            notes: text(opportunity.remarks) || undefined,
+            // The legacy notes column holds the same text as Remarks (the row's, else the opportunity's).
+            notes: remarks || undefined,
             termsAndConditions: termsDescription || undefined,
             customFields,
         };

@@ -674,6 +674,7 @@ describe('backend ↔ frontend contract', { skip }, () => {
         assert.deepEqual(frontend.PERMISSION_MODULES, be.PERMISSION_MODULES);
         assert.deepEqual(frontend.FULL_PERMISSIONS, be.FULL_PERMISSIONS);
         assert.deepEqual(frontend.OWN_RECORDS_PERMISSIONS, be.OWN_RECORDS_PERMISSIONS);
+        assert.deepEqual([...frontend.EXPORT_FOLLOWS_VIEW].sort(), [...be.EXPORT_FOLLOWS_VIEW].sort());
         for (const level of be.ACCESS_LEVELS) assert.deepEqual(frontend.uniformPermissions(level), be.uniformPermissions(level), level);
 
         for (const def of be.PERMISSION_MODULES) {
@@ -690,6 +691,7 @@ describe('backend ↔ frontend contract', { skip }, () => {
             { leads: { view: 'own', edit: 'all', delete: 'all', create: 'own', import: 'all' } },
             { contacts: { view: 'none', edit: 'all', create: 'all' }, products: { view: 'own', edit: 'own' } },
             { partnerCompanies: { view: 'all', export: 'own' }, documents: { view: 'all', edit: 'all' }, bogus: { view: 'all' } },
+            { organizations: { view: 'own' }, documents: { view: 'none' } },
             { referrals: { view: 'all', edit: 'own', delete: 'sometimes' } },
         ];
         for (const sample of samples) {

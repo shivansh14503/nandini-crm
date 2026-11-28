@@ -33,7 +33,9 @@ import { onlyMatch } from './quotations.values.js';
  *   and **Duration (minutes)** (a timed activity's length when End is blank; else the Followup Type's default).
  * - **Related To** names a live record of that type by its number (`OPP-0042`, or the Document Series format) or its
  *   exact name (lead / contact name, opportunity name, organization name, quotation title, ticket subject, contract
- *   title), among the records the importer may view. The type may be left blank when the cell is a record number.
+ *   title), among the records the importer may view. The type may be left blank when the cell is a record number in
+ *   the default `PREFIX-0001` form (`OPP-0042` → Opportunity); a number in a custom Document Series format is found
+ *   only with its type, since the type can't be told from it.
  *   The record brings its organization and contact, as picking it on the form does: blank Organization Name / Contact
  *   cells take them, so a required field is met by the record.
  * - **Organization Name** names a live organization (exact name); **Contact** a live contact of the row's (or the

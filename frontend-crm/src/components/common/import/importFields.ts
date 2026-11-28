@@ -405,7 +405,10 @@ function samplesFor(
 
 const sameText = (a: string | undefined, b: string) => (a ?? '').trim().toLowerCase() === b.toLowerCase();
 
-/** Record numbers whose prefix tells an activity's Related To Type (the backend's `relatedModuleOf`). */
+/**
+ * Record numbers whose prefix tells an activity's Related To Type (the backend's `relatedModuleOf`): only the default
+ * `PREFIX-0001` form. A number in a custom Document Series format needs the Related To Type column.
+ */
 const RELATED_RECORD_NUMBER = /^(LD|OPP|CON|ORG|QT|TKT|CTR)-\d+$/i;
 const MAX_ACTIVITY_DURATION_MINUTES = 31 * 24 * 60;
 
@@ -418,7 +421,9 @@ function activityRowIssues(values: Record<string, string>): string[] {
     const errors: string[] = [];
     const record = (values.relatedTo ?? '').trim();
     if (values.relatedModule && !record) errors.push('Related To is required when Related To Type is given: the record number or exact name');
-    if (record && !values.relatedModule && !RELATED_RECORD_NUMBER.test(record)) errors.push('Related To Type is required when Related To names a record by name');
+    if (record && !values.relatedModule && !RELATED_RECORD_NUMBER.test(record)) {
+        errors.push('Related To Type is required unless Related To is a record number like OPP-0042');
+    }
     const [startDate, startTime] = (values.startAt ?? '').split('T');
     const [endDate, endTime] = (values.endAt ?? '').split('T');
     const allDay = values.allDay ? sameText(values.allDay, 'Yes') : Boolean(startDate && !startTime);

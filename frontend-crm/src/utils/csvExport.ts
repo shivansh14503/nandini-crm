@@ -4,12 +4,18 @@ export interface CsvColumn<T> {
     value: (row: T) => string | number | boolean | null | undefined;
 }
 
+/** Characters a spreadsheet may start a formula with (OWASP CSV injection list). */
+const FORMULA_START = /^[=+\-@\t\r]/;
+/** A plain number or phone number (`-1234.50`, `+91 98112 34567`, `(011) 2345-6789`): digits and separators only. */
+const PLAIN_NUMBER = /^[+-]?[\d\s().-]*\d[\d\s().-]*$/;
+
 /**
- * Neutralizes spreadsheet formula injection (cells starting with =, @, or +/- not followed by a digit), so a
- * phone number like +919811234567 stays as-is but "=HYPERLINK(...)" is exported as text.
+ * Neutralizes spreadsheet formula injection: a cell starting with =, +, -, @, a tab or a carriage return is written
+ * with a leading `'` so it opens as text, unless it is only a number or phone number (`-1234.5`, `+919811234567`),
+ * which has nothing a spreadsheet could run. `+1+cmd|'/C calc'!A0` and `-2+3` are escaped.
  */
 function safeCell(text: string): string {
-    return /^[=@]/.test(text) || /^[+-][^\d]/.test(text) ? `'${text}` : text;
+    return FORMULA_START.test(text) && !PLAIN_NUMBER.test(text) ? `'${text}` : text;
 }
 
 function escapeCell(raw: string | number | boolean | null | undefined): string {
