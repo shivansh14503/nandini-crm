@@ -289,6 +289,7 @@ export function EntityDetailDrawer({
     const overviewTabIndex = Math.max(0, allTabs.findIndex((t) => t.id === 'overview'));
 
     const effectiveHideBackdrop = hideBackdrop || isCollapsed;
+    const modalOpen = open && (persistent || !isCollapsed);
 
     // Resolve responsive width objects to a concrete value for the bookmark's `right` offset
     const resolvedDrawerWidth =
@@ -349,7 +350,11 @@ export function EntityDetailDrawer({
             <Drawer
                 anchor="right"
                 variant={persistent ? 'persistent' : 'temporary'}
-                open={open}
+                // A collapsed temporary drawer closes its modal (backdrop, focus trap, scroll lock and the full-screen
+                // root that catches clicks) so the page underneath works; keepMounted holds the record and tab until
+                // it is expanded again. A persistent drawer has no modal and only slides aside.
+                open={modalOpen}
+                keepMounted={open && !persistent}
                 onClose={onClose}
                 hideBackdrop={effectiveHideBackdrop}
                 slotProps={{
@@ -362,6 +367,8 @@ export function EntityDetailDrawer({
                         },
                     },
                     paper: {
+                        // Off screen while collapsed: keep its buttons and links out of the Tab order too.
+                        inert: isCollapsed,
                         sx: {
                             width,
                             // Floating glass panel inset from the viewport edges, matching the navbar and dock.

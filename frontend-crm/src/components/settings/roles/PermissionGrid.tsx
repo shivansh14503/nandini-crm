@@ -20,12 +20,18 @@ import {
     type RolePermissions,
 } from '@/utils/permissions';
 
-const RANK: Record<AccessLevel, number> = { none: 0, own: 1, all: 2 };
+const RANK: Record<AccessLevel, number> = { none: 0, own: 1, group: 2, all: 3 };
 
 /** One-click starting points for the whole grid. */
 const PRESETS: { key: string; label: string; build: () => RolePermissions }[] = [
     { key: 'full', label: 'Full access', build: () => FULL_PERMISSIONS },
     { key: 'own', label: 'Own records', build: () => OWN_RECORDS_PERMISSIONS },
+    // Like Own records, widened to the user's security groups (Admin › Security Groups).
+    {
+        key: 'group',
+        label: 'Group records',
+        build: () => normalizePermissions({ ...uniformPermissions('group'), referrals: { ...uniformPermissions('group').referrals, view: 'all' } }),
+    },
     {
         key: 'view',
         label: 'View only',
@@ -45,9 +51,15 @@ const headCellSx = {
     py: 1,
 } as const;
 
-/** Text colour of a level in the select: brand for All / Yes, amber for Own, muted for None / No. */
+/** Text colour of a level in the select: brand for All / Yes, emerald for Group, amber for Own, muted for None / No. */
 const levelColor = (level: AccessLevel) =>
-    level === 'all' ? 'var(--crm-text-blue-700)' : level === 'own' ? 'var(--crm-amber-700)' : 'var(--mui-palette-text-muted)';
+    level === 'all'
+        ? 'var(--crm-text-blue-700)'
+        : level === 'group'
+          ? 'var(--crm-emerald-700)'
+          : level === 'own'
+            ? 'var(--crm-amber-700)'
+            : 'var(--mui-palette-text-muted)';
 
 interface LevelSelectProps {
     module: PermissionModuleDef;
@@ -141,8 +153,9 @@ export function PermissionGrid({ value, onChange, disabled }: PermissionGridProp
 
     const legend = (
         <Typography sx={{ fontSize: '0.75rem', color: 'var(--mui-palette-text-secondary)', lineHeight: 1.6 }}>
-            <b>All</b>: every record. <b>Own</b>: records the user is assigned to or created. <b>None</b>: hidden. Create, Export and Import are Yes or No.
-            Products and Partner Companies have no owner, so they are All or None. Documents are read-only: View and Export only.
+            <b>All</b>: every record. <b>Group</b>: records assigned to or created by anyone in the user’s security groups (and their sub-groups;
+            set up in Admin › Security Groups). <b>Own</b>: records the user is assigned to or created. <b>None</b>: hidden. Create, Export and
+            Import are Yes or No. Products and Partner Companies have no owner, so they are All or None. Documents are read-only: View and Export only.
         </Typography>
     );
 

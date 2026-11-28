@@ -3,6 +3,8 @@
  *
  * Every module has six actions (View, Create, Edit, Delete, Export, Import), each set to a level:
  *   - `all`  every record (for Create / Export / Import: allowed)
+ *   - `group` records owned (`assignedTo`) or created by anyone who shares a security group with the user (Admin ›
+ *            Security Groups; a parent group's members also see its sub-groups' records); offered where `own` is
  *   - `own`  only records the user owns (`assignedTo`) or created; offered only by modules whose records have an owner
  *   - `none` not allowed
  * A module only lists the actions it has: every module exports (CSV of the list); Documents are read-only (View and
@@ -12,7 +14,7 @@
  * both together.
  */
 
-export const ACCESS_LEVELS = ['all', 'own', 'none'] as const;
+export const ACCESS_LEVELS = ['all', 'group', 'own', 'none'] as const;
 export type AccessLevel = (typeof ACCESS_LEVELS)[number];
 
 export const PERMISSION_ACTIONS = ['view', 'create', 'edit', 'delete', 'export', 'import'] as const;
@@ -27,7 +29,7 @@ export const PERMISSION_ACTION_LABELS: Record<PermissionAction, string> = {
     import: 'Import',
 };
 
-/** Actions that are simply allowed or not (no "own records" level). */
+/** Actions that are simply allowed or not (no "own records" / "group records" level). */
 export const YES_NO_ACTIONS: ReadonlySet<PermissionAction> = new Set(['create', 'export', 'import']);
 
 export const PERMISSION_MODULE_KEYS = [
@@ -49,7 +51,7 @@ export type PermissionModule = (typeof PERMISSION_MODULE_KEYS)[number];
 export interface PermissionModuleDef {
     key: PermissionModule;
     label: string;
-    /** Records have an owner (`assignedTo` / `createdBy`), so View / Edit / Delete can be limited to "Own". */
+    /** Records have an owner (`assignedTo` / `createdBy`), so View / Edit / Delete can be limited to "Group" or "Own". */
     owned: boolean;
     /** The actions this module has, in column order. */
     actions: readonly PermissionAction[];
@@ -82,7 +84,7 @@ export const PERMISSION_MODULE_BY_KEY: Readonly<Record<PermissionModule, Permiss
 export type ModulePermissions = Partial<Record<PermissionAction, AccessLevel>>;
 export type RolePermissions = Record<PermissionModule, ModulePermissions>;
 
-const RANK: Record<AccessLevel, number> = { none: 0, own: 1, all: 2 };
+const RANK: Record<AccessLevel, number> = { none: 0, own: 1, group: 2, all: 3 };
 const isLevel = (value: unknown): value is AccessLevel => typeof value === 'string' && (ACCESS_LEVELS as readonly string[]).includes(value);
 
 /** The levels the editor offers for one action of one module. */
@@ -98,7 +100,7 @@ export function minLevel(a: AccessLevel, b: AccessLevel): AccessLevel {
 
 /**
  * A complete, consistent permission set from anything (stored JSON, a request body): every module and action is
- * present; an unknown or missing value is `none`; `own` becomes `all` where the action has no "own" level; and
+ * present; an unknown or missing value is `none`; `own` / `group` become `all` where the action has no such level; and
  * nothing goes beyond View (a module that can't be viewed allows nothing, Edit / Delete never exceed View).
  */
 export function normalizePermissions(input: unknown): RolePermissions {
@@ -110,7 +112,7 @@ export function normalizePermissions(input: unknown): RolePermissions {
         for (const action of module.actions) {
             const value = raw[action];
             let level: AccessLevel = isLevel(value) ? value : 'none';
-            if (level === 'own' && !levelsFor(module, action).includes('own')) level = 'all';
+            if ((level === 'own' || level === 'group') && !levelsFor(module, action).includes(level)) level = 'all';
             out[action] = level;
         }
         const view = out.view ?? 'none';
@@ -125,13 +127,13 @@ export function normalizePermissions(input: unknown): RolePermissions {
     return result;
 }
 
-/** Every action on every module at `level` (`own` only where offered, else `all`). */
+/** Every action on every module at `level` (`own` / `group` only where offered, else `all`). */
 export function uniformPermissions(level: AccessLevel): RolePermissions {
     const raw: Record<string, Record<string, AccessLevel>> = {};
     for (const module of PERMISSION_MODULES) {
         raw[module.key] = {};
         for (const action of module.actions) {
-            raw[module.key][action] = level === 'own' && !levelsFor(module, action).includes('own') ? 'all' : level;
+            raw[module.key][action] = (level === 'own' || level === 'group') && !levelsFor(module, action).includes(level) ? 'all' : level;
         }
     }
     return normalizePermissions(raw);
@@ -158,10 +160,10 @@ export function samePermissions(a: unknown, b: unknown): boolean {
     return JSON.stringify(normalizePermissions(a)) === JSON.stringify(normalizePermissions(b));
 }
 
-/** How the editor names a level: Yes / No for Create, Export and Import; All / Own / None otherwise. */
+/** How the editor names a level: Yes / No for Create, Export and Import; All / Group / Own / None otherwise. */
 export function levelLabel(action: PermissionAction, level: AccessLevel): string {
     if (YES_NO_ACTIONS.has(action)) return level === 'none' ? 'No' : 'Yes';
-    return level === 'all' ? 'All' : level === 'own' ? 'Own' : 'None';
+    return level === 'all' ? 'All' : level === 'group' ? 'Group' : level === 'own' ? 'Own' : 'None';
 }
 
 /** Readable audit text for one module's levels, e.g. "View: All · Create: Yes · Edit: Own · Delete: None". */

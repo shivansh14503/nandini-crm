@@ -1,5 +1,6 @@
 import { logger } from '../../config/logger.js';
 import { prisma } from '../../config/prisma.js';
+import { teammatesByUser } from '../security-groups/securityGroup.tree.js';
 import { FULL_PERMISSIONS, normalizePermissions } from './permissions.js';
 import { isSuperAdminRole, LEGACY_ADMIN_ROLES, legacyRole, normalizeRole, type ResolvedRole } from './roleDefaults.js';
 
@@ -11,6 +12,9 @@ import { isSuperAdminRole, LEGACY_ADMIN_ROLES, legacyRole, normalizeRole, type R
  *
  * Reading the user's role from here (not from the session token) means a renamed role or a changed permission applies
  * to signed-in users without signing them out.
+ *
+ * The snapshot also holds Admin › Security Groups as each user's teammates (security-groups/securityGroup.tree.ts), which
+ * a role's "Group" level reads. Saving a group or its members refreshes it the same way.
  */
 
 const REFRESH_MS = 15_000;
@@ -19,6 +23,8 @@ interface Snapshot {
     loadedAt: number;
     roles: Map<string, ResolvedRole>;
     userRoles: Map<number, string>;
+    /** Lower-cased username → usernames their "Group" level covers (themselves included); absent = in no active group. */
+    teammates: Map<string, string[]>;
 }
 
 let snapshot: Snapshot | null = null;
@@ -41,14 +47,20 @@ function toResolved(row: { name: string; adminPanel: boolean; permissionsJson: s
 }
 
 async function load(): Promise<void> {
-    const [roles, users] = await Promise.all([
+    const [roles, users, groups, members] = await Promise.all([
         prisma.role.findMany({ select: { name: true, adminPanel: true, permissionsJson: true } }),
         prisma.user.findMany({ select: { id: true, role: true } }),
+        prisma.securityGroup.findMany({ select: { id: true, parentId: true, isActive: true } }),
+        prisma.securityGroupMember.findMany({ select: { groupId: true, user: { select: { username: true } } } }),
     ]);
     snapshot = {
         loadedAt: Date.now(),
         roles: new Map(roles.map((r) => [normalizeRole(r.name), toResolved(r)])),
         userRoles: new Map(users.map((u) => [u.id, u.role])),
+        teammates: teammatesByUser(
+            groups,
+            members.map((m) => ({ groupId: m.groupId, username: m.user.username })),
+        ),
     };
 }
 
@@ -91,6 +103,15 @@ export function currentRoleOf(userId: number, fallback: string): string {
     return snapshot?.userRoles.get(userId) ?? fallback;
 }
 
+/**
+ * The usernames a "Group" access level covers for `username`: everyone who shares an active security group with them
+ * (and the members of those groups' sub-groups), themselves included. Just `[username]` when they are in no group, so
+ * Group then works like Own.
+ */
+export function teammatesOf(username: string): string[] {
+    return snapshot?.teammates.get(username.trim().toLowerCase()) ?? [username];
+}
+
 /** Names of the roles that open the admin panel (for "notify the admins" queries). */
 export function adminRoleNames(): string[] {
     if (!snapshot) return [...LEGACY_ADMIN_ROLES];
@@ -98,12 +119,17 @@ export function adminRoleNames(): string[] {
 }
 
 /** Test hook: replaces the snapshot (null clears it). */
-export function setSnapshotForTests(roles: { name: string; adminPanel: boolean; permissions: unknown }[] | null, userRoles: [number, string][] = []): void {
+export function setSnapshotForTests(
+    roles: { name: string; adminPanel: boolean; permissions: unknown }[] | null,
+    userRoles: [number, string][] = [],
+    teammates: [string, string[]][] = [],
+): void {
     snapshot = roles
         ? {
               loadedAt: Date.now(),
               roles: new Map(roles.map((r) => [normalizeRole(r.name), toResolved({ name: r.name, adminPanel: r.adminPanel, permissionsJson: JSON.stringify(r.permissions) })])),
               userRoles: new Map(userRoles),
+              teammates: new Map(teammates.map(([user, names]) => [user.toLowerCase(), names])),
           }
         : null;
 }

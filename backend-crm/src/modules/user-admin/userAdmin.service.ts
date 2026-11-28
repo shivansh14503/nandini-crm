@@ -10,6 +10,7 @@ import { hashPassword } from '../auth/auth.service.js';
 import { inviteService, revokeOutstandingInvites, type InviteSendOutcome } from '../auth/invite.service.js';
 import type { InvitePurpose } from '../auth/invite.token.js';
 import { sessionService } from '../auth/session.service.js';
+import { hasLockoutState, isLocked, LOCKOUT_CLEARED } from '../auth/accountLockout.js';
 import { loadCalendarSettings } from '../integrations/integration.settings.js';
 import { joinFullName, photoUrlOf, resolveNameParts } from '../profile/profile.dto.js';
 import { acquireLocks, runInTransaction } from '../shared/transactions.js';
@@ -205,6 +206,9 @@ export interface SendInviteResult {
 }
 
 export type StatusChangeResult = AdminUserDto & { signedOutSessions: number | null };
+
+/** POST /:id/unlock: the user, and whether there was a lock (or a count of wrong passwords) to clear. */
+export type UnlockResult = AdminUserDto & { unlocked: boolean };
 
 /** PATCH answer; `signedOutSessions` only when the role changed (the user's sessions were signed out). */
 export type UpdateUserResult = AdminUserDto & { signedOutSessions?: number | null };
@@ -482,6 +486,37 @@ export const userAdminService = {
         const dto = await loadDto(id);
         if (changed) await reconcileUserQuietly(dto.username, 'user_activated', { actor: actor.username });
         return { ...dto, signedOutSessions: null };
+    },
+
+    /**
+     * POST /:id/unlock ("Unlock account"): ends a lock after too many wrong passwords (auth/accountLockout.ts) and
+     * starts the count of wrong passwords again, so the user can sign in at once. Audited as ACCOUNT_UNLOCKED (with the
+     * lock it ended). Nothing to clear: no change, `unlocked: false`. 403 SUPER_ADMIN_ONLY · 404.
+     */
+    async unlock(actor: AuthUser, id: number): Promise<UnlockResult> {
+        const unlocked = await runInTransaction(async (tx) => {
+            await acquireLocks(tx, [userLock(id)]);
+            const now = new Date();
+            const before = await tx.user.findUnique({ where: { id }, select: { role: true, failedLoginCount: true, lockedUntil: true } });
+            if (!before) throw userNotFound();
+            assertSuperAdminRule(actor, before.role, null);
+            if (!hasLockoutState(before, now)) return false;
+            const wasLocked = isLocked(before.lockedUntil, now);
+            await tx.user.update({ where: { id }, data: LOCKOUT_CLEARED });
+            await auditService.record(tx, {
+                entityType: 'User',
+                entityId: String(id),
+                action: 'ACCOUNT_UNLOCKED',
+                changedBy: actor.username,
+                changes: {
+                    wasLocked,
+                    lockedUntil: wasLocked ? before.lockedUntil?.toISOString() ?? null : null,
+                    failedAttempts: before.failedLoginCount,
+                },
+            });
+            return true;
+        });
+        return { ...(await loadDto(id)), unlocked };
     },
 
     /**

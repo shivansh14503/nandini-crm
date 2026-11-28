@@ -69,6 +69,7 @@ function actionTone(action: string): Tone {
             return TONES.error;
         case 'LOGIN_FAILED':
         case 'ACCESS_DENIED':
+        case 'ACCOUNT_LOCKED':
             return TONES.warning;
         case 'REVERT':
         case 'CONVERT':

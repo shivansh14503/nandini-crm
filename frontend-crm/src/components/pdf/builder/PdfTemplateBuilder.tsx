@@ -49,6 +49,7 @@ import { LeftPanel } from './panel/LeftPanel';
 import type { TemplateMeta } from './panel/StylingTab';
 import { BuilderProvider, useBuilder, useBuilderEnv, type BuilderEnv } from './state/builderState';
 import { duplicateBlock, duplicateSection, removeSelected } from './state/docOps';
+import { pdfViewerUrl } from '@/utils/pdfViewerUrl';
 
 type Severity = 'success' | 'error' | 'info' | 'warning';
 const toastClosed = { open: false, message: '', severity: 'success' as Severity };
@@ -519,7 +520,7 @@ function BuilderLayout({ module, template, initialMeta, contextLoading, record, 
                             <ErrorAlert error={preview.error} />
                         </Box>
                     )}
-                    {preview.url && <Box component="iframe" title="PDF preview" src={preview.url} sx={{ flex: 1, border: 0, width: '100%' }} />}
+                    {preview.url && <Box component="iframe" title="PDF preview" src={pdfViewerUrl(preview.url)} sx={{ flex: 1, border: 0, width: '100%' }} />}
                 </DialogContent>
                 <DialogActions sx={{ px: 3, pb: 2 }}>
                     <Button variant="outlined" onClick={closePreview} sx={secondaryButtonSx}>

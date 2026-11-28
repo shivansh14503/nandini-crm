@@ -27,6 +27,11 @@ export type AuditEntityType =
     | 'User'
     /** A role of Admin › Roles: its name, description, admin panel switch and per-module permissions. */
     | 'Role'
+    /**
+     * A team / branch of Admin › Security Groups: CREATE / UPDATE / DELETE with its name, description, parent and
+     * archived state; member changes are an UPDATE with `membersAdded` / `membersRemoved` (usernames).
+     */
+    | 'SecurityGroup'
     | 'Import'
     | 'DropdownCategory'
     | 'DropdownOption'
@@ -48,6 +53,10 @@ export type AuditEntityType =
     | 'City'
     /** A provider's company set-up on Admin › API Integrations (Google, Microsoft 365, Zoom); id = provider key. */
     | 'IntegrationProvider'
+    /** Admin › Email › Outbound Email (how the CRM sends email); one entity, id `outbound-email`, action UPDATE. */
+    | 'EmailSettings'
+    /** A system email template of Admin › Email › Templates; id = template key (UPDATE, DELETE = reset to default). */
+    | 'EmailTemplate'
     /** An employee's company calendar sync row (Calendar Phase 2 P2-2b): ENROL / STOP (P2-2's CONNECT / DISCONNECT remain in history). */
     | 'CalendarConnection'
     /** An admin's calendar choice for one person (Admin › API Integrations › People): provider override, exclusion. */
@@ -116,6 +125,13 @@ export type AuditAction =
     | 'INVITE_SENT'
     /** A user set their password from an emailed link (`{ purpose, passwordChangedAt }`); never the password or token. */
     | 'PASSWORD_SET'
+    /**
+     * Too many wrong passwords locked the account (auth/accountLockout.ts): `{ ip, failedAttempts, lockMinutes,
+     * lockedUntil }`. Recorded once per lock, by the wrong password that caused it.
+     */
+    | 'ACCOUNT_LOCKED'
+    /** An admin ended a lock ("Unlock account", Admin › Users): `{ wasLocked, lockedUntil, failedAttempts }`. */
+    | 'ACCOUNT_UNLOCKED'
     /** A user signed out one of their other sessions (`scope: 'one'`, `sessionId`) or all of them (`scope: 'others'`). */
     | 'SESSION_REVOKE'
     /** A person's company calendar started syncing (enrolled or re-enrolled by the admin-managed set-up, P2-2b). */
@@ -155,6 +171,7 @@ const MODULE_BY_ENTITY: Record<AuditEntityType, string> = {
     Referral: 'referrals',
     User: 'users',
     Role: 'roles',
+    SecurityGroup: 'security-groups',
     Import: 'imports',
     DropdownCategory: 'form-customization',
     DropdownOption: 'form-customization',
@@ -172,6 +189,8 @@ const MODULE_BY_ENTITY: Record<AuditEntityType, string> = {
     Holiday: 'holidays',
     City: 'cities',
     IntegrationProvider: 'admin-integrations',
+    EmailSettings: 'admin-email',
+    EmailTemplate: 'admin-email',
     CalendarConnection: 'calendar',
     CalendarSyncUser: 'admin-integrations',
     BookingLink: 'booking-links',
@@ -182,6 +201,7 @@ const MODULE_BY_ENTITY: Record<AuditEntityType, string> = {
 
 const CONFIG_ENTITIES: ReadonlySet<AuditEntityType> = new Set([
     'Role',
+    'SecurityGroup',
     'DropdownCategory',
     'DropdownOption',
     'FormField',
@@ -198,6 +218,8 @@ const CONFIG_ENTITIES: ReadonlySet<AuditEntityType> = new Set([
     'Holiday',
     'City',
     'IntegrationProvider',
+    'EmailSettings',
+    'EmailTemplate',
     'CalendarSyncUser',
     'LoggedEmailMailbox',
 ]);
@@ -213,6 +235,8 @@ const SECURITY_ACTIONS: ReadonlySet<AuditAction> = new Set([
     'PASSWORD_RESET',
     'INVITE_SENT',
     'PASSWORD_SET',
+    'ACCOUNT_LOCKED',
+    'ACCOUNT_UNLOCKED',
     'SESSION_REVOKE',
     'ENROL',
     'STOP',
@@ -247,11 +271,11 @@ export function categoryFor(entityType: AuditEntityType, action: AuditAction): A
 /**
  * INFO: everyday creates, edits, sign-ins. NOTICE: deletes, restores, undo, conversions, imports, any admin setting,
  * password changes, set-password links sent and used, and sessions signed out from My Profile.
- * WARNING: failed sign-ins and refused access. CRITICAL is reserved for integrity alarms.
+ * WARNING: failed sign-ins, accounts locked by wrong passwords, and refused access. Unlocks are NOTICE. CRITICAL is reserved for integrity alarms.
  */
 export function severityFor(action: AuditAction, category: AuditCategory): AuditSeverity {
-    if (action === 'LOGIN_FAILED' || action === 'ACCESS_DENIED') return 'WARNING';
-    if (['DELETE', 'RESTORE', 'REVERT', 'CONVERT', 'IMPORT', 'EXPORT', 'PASSWORD_CHANGE', 'PASSWORD_RESET', 'INVITE_SENT', 'PASSWORD_SET', 'SESSION_REVOKE', 'ENROL', 'STOP', 'CONNECT', 'DISCONNECT', 'TEST_AS_USER', 'PURGE'].includes(action) || category === 'CONFIG') {
+    if (action === 'LOGIN_FAILED' || action === 'ACCESS_DENIED' || action === 'ACCOUNT_LOCKED') return 'WARNING';
+    if (['DELETE', 'RESTORE', 'REVERT', 'CONVERT', 'IMPORT', 'EXPORT', 'PASSWORD_CHANGE', 'PASSWORD_RESET', 'INVITE_SENT', 'PASSWORD_SET', 'ACCOUNT_UNLOCKED', 'SESSION_REVOKE', 'ENROL', 'STOP', 'CONNECT', 'DISCONNECT', 'TEST_AS_USER', 'PURGE'].includes(action) || category === 'CONFIG') {
         return 'NOTICE';
     }
     return 'INFO';
@@ -387,6 +411,10 @@ export function labelFromChanges(entityType: AuditEntityType, entityId: string, 
             return pick('occasion');
         case 'IntegrationProvider':
             return INTEGRATION_PROVIDER_LABELS[entityId] ?? entityId;
+        case 'EmailSettings':
+            return 'Outbound Email';
+        case 'EmailTemplate':
+            return pick('name') ?? entityId;
         case 'CalendarConnection':
             return pick('accountEmail');
         case 'CalendarSyncUser':

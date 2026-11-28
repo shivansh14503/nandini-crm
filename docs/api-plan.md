@@ -91,15 +91,16 @@ Modules marked **CRUD** expose (`modules/shared/crud.ts` → `registerCrudRoutes
 | Method | Path | Auth | Description |
 | --- | --- | --- | --- |
 | GET | `/health` | – | `{ status: 'ok', redis: 'connected' \| 'unavailable' }` |
-| POST | `/auth/login` | – | `{ username, password }` → `{ status: 'ok', message, user }` + sets cookie. `user` has the same shape as `/auth/me`; the JWT is `{ id, username, role, tracked, jti }`. A user who hasn't set a password from their invite link yet (`Users.invitePending`) gets `403 INVITE_PENDING` "Your account isn’t set up yet. Use the link in your invite email to set your password, or ask your administrator to send a new invite." (only after a correct password; audited as `LOGIN_FAILED`). The user row is read again after the session is recorded, so a deactivation that commits during the sign-in still applies (`403 ACCOUNT_INACTIVE` / `401 INVALID_CREDENTIALS`, the new session deleted). Tokens that still carry the retired `mcp` claim (temporary-password sessions) are refused (`401`). 429 after `LOGIN_RATE_LIMIT_MAX` failures per IP per window |
+| POST | `/auth/login` | – | `{ username, password }` → `{ status: 'ok', message, user }` + sets cookie. `user` has the same shape as `/auth/me`; the JWT is `{ id, username, role, tracked, jti }`. A user who hasn't set a password from their invite link yet (`Users.invitePending`) gets `403 INVITE_PENDING` "Your account isn’t set up yet. Use the link in your invite email to set your password, or ask your administrator to send a new invite." (only after a correct password; audited as `LOGIN_FAILED`). The user row is read again after the session is recorded, so a deactivation that commits during the sign-in still applies (`403 ACCOUNT_INACTIVE` / `401 INVALID_CREDENTIALS`, the new session deleted). Tokens that still carry the retired `mcp` claim (temporary-password sessions) are refused (`401`). 429 after `LOGIN_RATE_LIMIT_MAX` failures per IP per window. **Account lockout**: 5 wrong passwords in a row (within 15 min of each other) lock the account for 15 min (`auth/accountLockout.ts`, `DEFAULT_LOCKOUT_POLICY`); the fifth and every attempt while locked answer `423 ACCOUNT_LOCKED` "Too many wrong passwords. This account is locked for N more minutes. Try again later, use “Forgot password?” to choose a new one, or ask your administrator to unlock it." (the password isn't checked while locked). The lock is audited `ACCOUNT_LOCKED`; a successful sign-in resets the count |
 | POST | `/auth/logout` | – | Revokes the Redis session (if tracked), clears cookie → `{ status: 'ok', message }` |
-| GET | `/auth/me` | ✔ | `{ status: 'ok', user: { id, username, role, fullName, firstName, lastName, photoUrl, access } }`, with `access` = `{ adminPanel, superAdmin, permissions }`: what the role allows (Admin › Roles; `permissions` = `{ <module>: { <action>: all\|own\|none } }`, see §2.7 Roles). The app hides what it doesn't allow; the API enforces the same rules. Read read from the database (not the JWT) so a name or photo change shows at once; `photoUrl` is `/api/user-photos/<id>` or `null`. `firstName` / `lastName` are split from `fullName` when the stored parts are missing or out of date (users created or renamed outside the app). `401` when the account no longer exists; when the database can't answer, `200` with the token's `{ id, username, role }`, that role's `access` and `fullName: ''`, `firstName` / `lastName` / `photoUrl` `null` (a database outage never signs the user out) |
+| GET | `/auth/me` | ✔ | `{ status: 'ok', user: { id, username, role, fullName, firstName, lastName, photoUrl, access } }`, with `access` = `{ adminPanel, superAdmin, permissions, teammates }`: what the role allows (Admin › Roles; `permissions` = `{ <module>: { <action>: all\|group\|own\|none } }`, see §2.7 Roles; `teammates` = the usernames a Group level covers, Admin › Security Groups, the user included). The app hides what it doesn't allow; the API enforces the same rules. Read read from the database (not the JWT) so a name or photo change shows at once; `photoUrl` is `/api/user-photos/<id>` or `null`. `firstName` / `lastName` are split from `fullName` when the stored parts are missing or out of date (users created or renamed outside the app). `401` when the account no longer exists; when the database can't answer, `200` with the token's `{ id, username, role }`, that role's `access` and `fullName: ''`, `firstName` / `lastName` / `photoUrl` `null` (a database outage never signs the user out) |
 | POST | `/auth/change-password` | ✔ | `{ currentPassword, newPassword }` (strings, ≤ 128, both required) → `{ success, data: { passwordChangedAt, signedOutSessions }, message }`; `signedOutSessions` is `null` when the other sessions could not be signed out (Redis down or failing; the password is still changed, and the UI asks the user to sign them out from My Profile). Checks the current password (bcrypt or a legacy plain-text row), then the password rules (`modules/auth/passwordPolicy.ts`: 8–128 characters, a letter and a digit, not the username in any case, not the current password), stores the bcrypt hash and `passwordChangedAt` under the per-user lock `user:id:<id>` (the stored hash is re-checked inside it, so two concurrent changes from the same old password can't both succeed: the second gets `WRONG_PASSWORD`), audits `PASSWORD_CHANGE` (only the timestamp), then signs out every **other** session of the user (this one stays). `403 ACCOUNT_INACTIVE` for a deactivated user whose session is still valid (nothing is changed); `400 WRONG_PASSWORD` "Current password is incorrect." (path `currentPassword`); `400 WEAK_PASSWORD` with the rule's message (path `newPassword`); 429 after 10 requests per 15 min per user ("Too many password attempts. Please wait a few minutes.") |
-| POST | `/auth/invite/verify` | – | `{ token }` → `{ success, data: { username, name, purpose: 'invite' \| 'reset', expiresAt } }`: checks an emailed set-password link without using it (`name` = the first name, or the full name / username). `400 INVALID_INVITE` "This link is no longer valid. It may have expired or already been used. Ask your administrator to send a new one." for every bad link (malformed, unknown, expired, used, revoked, account deactivated): one answer, so it says nothing about which. `Cache-Control: no-store`, `Referrer-Policy: no-referrer`. Shares the per-IP limit below |
-| POST | `/auth/invite/accept` | – | `{ token, newPassword }` → `{ status: 'ok', message: 'Password set', user }` + sets cookie (as `/login`). Checks the password rules with the username (a reset link also refuses the current password), then in one transaction under `user:id:<id>`: burns the link (`usedAt`, a conditional update, so two tabs can't both use it), revokes the user's other outstanding links, stores the hash and `passwordChangedAt`, clears `invitePending`, audits `PASSWORD_SET` (`{ purpose }`, never the password). After commit every existing session of the user is revoked, a new session is opened, `lastLoginAt` set and `LOGIN` audited (`via: set_password_link`). `400 INVALID_INVITE` (as verify); `400 WEAK_PASSWORD` (path `newPassword`; the link keeps working). Both link routes: 30 requests / 15 min per IP, counted for every request (`ratelimit:set-password-link:ip:<ip>`; an in-process counter while Redis can't count, so never unlimited), `429 RATE_LIMITED` "Too many attempts. Please wait a few minutes and try again."; the token is compared as a SHA-256 hash in constant time and never logged |
+| POST | `/auth/invite/verify` | – | `{ token }` → `{ success, data: { username, name, purpose: 'invite' \| 'reset', expiresAt } }`: checks an emailed set-password link without using it (`name` = the first name, or the full name / username). `400 INVALID_INVITE` "This link is no longer valid. It may have expired or already been used. Request a new one with “Forgot password?” on the sign-in page, or ask your administrator." for every bad link (malformed, unknown, expired, used, revoked, account deactivated): one answer, so it says nothing about which. `Cache-Control: no-store`, `Referrer-Policy: no-referrer`. Shares the per-IP limit below |
+| POST | `/auth/invite/accept` | – | `{ token, newPassword }` → `{ status: 'ok', message: 'Password set', user }` + sets cookie (as `/login`). Checks the password rules with the username (a reset link also refuses the current password), then in one transaction under `user:id:<id>`: burns the link (`usedAt`, a conditional update, so two tabs can't both use it), revokes the user's other outstanding links, stores the hash and `passwordChangedAt`, clears `invitePending` and any account lockout, audits `PASSWORD_SET` (`{ purpose }`, never the password). After commit every existing session of the user is revoked, a new session is opened, `lastLoginAt` set and `LOGIN` audited (`via: set_password_link`). `400 INVALID_INVITE` (as verify); `400 WEAK_PASSWORD` (path `newPassword`; the link keeps working). Both link routes: 30 requests / 15 min per IP, counted for every request (`ratelimit:set-password-link:ip:<ip>`; an in-process counter while Redis can't count, so never unlimited), `429 RATE_LIMITED` "Too many attempts. Please wait a few minutes and try again."; the token is compared as a SHA-256 hash in constant time and never logged |
 
 The auth endpoints use the older `{ status: 'ok', … }` envelope rather than `{ success, data }`; the frontend's
 `auth.service.ts` expects it. `change-password` and `invite/verify` are the exceptions: they are newer and use `{ success, data }`.
+| POST | `/auth/forgot-password` | – | `{ identifier }` (the username typed on the sign-in page, or on the Forgot password page when it was empty; a work email also works; 1–120, empty → `400 VALIDATION_ERROR` "Enter your username.") → always `{ success, data: { message, sentTo }, message }` "If this account exists, we’ve emailed a reset link to a***@company.com. The link works once, within 72 hours." `sentTo` is the account's work email masked (first character + domain), or a stand-in built the same way (first letter typed + the company mail domain) for an unknown, deactivated or email-less account, so the answer never reveals whether the account exists. An active account with a work email (found by username, or by an email held by exactly one active non-group user) is emailed a reset link (§ Set-password links; an Invited user gets the invite again), audited `INVITE_SENT` with `requestedBy: 'self'`. 5 requests / 15 min per IP (`429 RATE_LIMITED` "Too many reset requests. Please wait a few minutes and try again."); at most 3 self-service links per account per hour (further requests are dropped quietly). `Cache-Control: no-store` |
 
 **Set-password links** (no temporary passwords). A user added in Admin › Users, or sent a password reset link, gets
 an email with `${APP_PUBLIC_URL}/set-password?token=<43 base64url characters>` (256 random bits). Only the token's
@@ -511,6 +512,24 @@ document schema is `backend-crm/src/modules/drawer-layouts/document/schema.ts` (
 
 ### 2.7 Administration 🔐
 
+**Email** — `/admin/email` (admins only; Admin › Email, CRM-121; system-design §5.2a). Nothing returns a credential:
+the Google key shows as its service account email and client ID, SMTP as its host and port.
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/outbound` | `OutboundEmailDto`: `{ provider, enabled, senderEmail, senderName, replyTo, dailyLimit, maxDailyLimit, updatedBy, updatedAt, status: { ready, reason, lastTestAt, lastTestOk, lastTestMessage, sentToday, queued, failed }, gmail: { keyConfigured, serviceAccountEmail, clientId, scope }, smtp: { configured, host, port, from } }` |
+| PUT | `/outbound` | Any of `{ provider: gmail\|smtp, enabled, senderEmail, senderName, replyTo, dailyLimit (1–2000) }` → `OutboundEmailDto`; 400 per field; unknown keys refused; audited `EmailSettings` UPDATE |
+| POST | `/outbound/check` | Gmail: mints a token as the sender with `gmail.send` (sends nothing); SMTP: connects and logs in → `{ ok, message, outbound }` (saved as the last check). Rate limited 10 / min per admin |
+| POST | `/outbound/test` | `{ to }` → `{ ok, message, outbound }`: a short test email through the mail service (`EmailLog.kind` `outbound_test`); 400 while mail is off |
+| GET | `/templates` | `TemplateDto[]`: `{ key, name, description, status: active\|reserved, hasLink, mergeFields[{ key, label, sample }], content, defaults, customised, updatedBy, updatedAt }` |
+| GET | `/templates/:key` | One `TemplateDto`; 404 unknown key |
+| PUT | `/templates/:key` | `{ subject (≤ 200), heading (≤ 200), body, buttonLabel? (≤ 80), afterButton?, footer? }` (long parts unlimited) → `TemplateDto`; 400 for a merge field the template doesn't offer, or no button label on a link template; audited `EmailTemplate` UPDATE |
+| POST | `/templates/:key/reset` | Back to the built-in wording → `TemplateDto`; audited `EmailTemplate` DELETE |
+| POST | `/templates/:key/preview` | Unsaved wording (or `{}` for the saved one) → `{ subject, html, text }` with sample values |
+| POST | `/templates/:key/test` | Sends it with sample values to the admin's own address → `{ ok, message }` |
+| GET | `/queue` | `?status&kind&q&page&limit (≤ 100)` → `{ data: EmailLogDto[], total, page, limit, summary: { counts, sentToday, dailyLimit, kinds } }`; `EmailLogDto.retry` = `send` \| `resend_link` \| null |
+| POST | `/queue/:id/retry` | `send`: sends the kept message now (past the attempt cap); `resend_link`: emails the user a fresh set-password link → `{ ok, message, email }`; 409 when there is nothing to retry or it is being sent |
+
 **Form & dropdown customisation** — `/form-configs` (`GET /` is open to every signed-in user)
 
 | Method | Path | Description |
@@ -673,8 +692,8 @@ admin never sees or types anyone's password.
 `AdminUserDto`: `{ id, username, fullName, firstName, lastName, email, role, roleAccess: admin\|all-records\|own-records\|custom
 (admin panel first, then every action on every record, then own records as the default role gives them, else custom), department, jobTitle, reportsTo: { id, name, isActive } \| null,
 directReportsCount (active), mobile, officePhone, photoUrl, isActive, isGroupUser, onLeave, outOfOffice: { from, to,
-message } \| null, invitePending, invite: { purpose: invite\|reset, sentAt, expiresAt, expired } \| null, lastLoginAt, passwordChangedAt, createdAt, createdBy, deactivatedAt, emailIssue:
-missing\|duplicate\|not_company\|null }` (`invitePending`: added and not yet signed in through their link, shown as **Invited**; `invite`: the newest link not
+message } \| null, invitePending, invite: { purpose: invite\|reset, sentAt, expiresAt, expired } \| null, lastLoginAt, passwordChangedAt, lockedUntil, failedLoginCount, createdAt, createdBy, deactivatedAt, emailIssue:
+missing\|duplicate\|not_company\|null }` (`lockedUntil`: set only while the account is locked after too many wrong passwords, shown as **Locked**) (`invitePending`: added and not yet signed in through their link, shown as **Invited**; `invite`: the newest link not
 used or revoked (an expired one stays, `expired: true`, so the list can say "Invite expired"); `emailIssue` as on the People table, only for active non-group users; `null` for
 the others; `outOfOffice` is set by the user in My Profile, read-only here, `null` when unset or ended).
 
@@ -687,6 +706,7 @@ the others; `outOfOffice` is set by the user in My Profile, read-only here, `nul
 | PATCH | `/:id` | `{ firstName?, lastName?, email?, allowOtherDomain?, role?, department?, jobTitle?, reportsToId?, mobile?, officePhone?, isGroupUser?, onLeave? }` → `AdminUserDto` (keys left out stay; `''` / `null` clears an optional one; no change → no audit entry). `reportsToId`: an existing, active, non-group user, not the user, not anyone below them (chain walked up to 50 levels) → else `400 INVALID_MANAGER` on `reportsToId`; an unchanged manager is kept even if inactive. Taking admin access away: `400 SELF_LOCKOUT` (your own) / `400 LAST_ADMIN` (the only active admin), on `role`. Super Admin users and the Super Admin role are managed only by a Super Admin (`403 SUPER_ADMIN_ONLY`, also on create, deactivate, activate and send-invite). A changed email revokes the user's outstanding set-password links. A changed email (or a group login becoming a normal user) goes through the email rule; the user's calendar sync follows the new address after commit (Calendar P2-2b, as of 2026-11-26: no more `EMAIL_CONNECTED`); activation and deactivation reconcile the user's calendar sync too. A **role change signs the user out** of every tracked session (their token carries the role) and the answer adds `signedOutSessions` (`null` when Redis is down); the acting admin's own sessions are left alone (their new role applies at next sign-in) |
 | POST | `/:id/deactivate` | → `AdminUserDto & { signedOutSessions }`: `isActive = false`, `deactivatedAt` = now, every tracked session revoked (`null` when Redis is down). Records, username and direct reports stay (their `reportsTo.isActive` turns false). `400 SELF_LOCKOUT` (your own account) / `400 LAST_ADMIN`. Already inactive: no change, no audit entry, but the sessions are revoked again (the UI's **Sign out all sessions** for an inactive user, to retry a revocation that failed while Redis was down) |
 | POST | `/:id/activate` | → `AdminUserDto & { signedOutSessions: null }`: `isActive = true`, `deactivatedAt = null`. `409 DUPLICATE_RECORD` on `email` when another active non-group user took the address meanwhile. Already active: no change |
+| POST | `/:id/unlock` | **Unlock account** (row menu, shown while Locked) → `AdminUserDto & { unlocked }`: clears `lockedUntil`, `failedLoginCount` and `lastFailedLoginAt` so the user can sign in at once; audited `ACCOUNT_UNLOCKED` (`{ wasLocked, lockedUntil, failedAttempts }`). Nothing to clear: no change, `unlocked: false`. `403 SUPER_ADMIN_ONLY`; `404` |
 | POST | `/:id/send-invite` | → `{ user: AdminUserDto, purpose: invite\|reset, sentTo, expiresAt }`: emails a new one-time set-password link (72 h) and revokes the older ones. `purpose` is `invite` while the user is Invited (**Resend invite**, also after a link expired), else `reset` (**Send password reset link**: the current password keeps working until the link is used; using it signs the user out everywhere). `400 BAD_REQUEST` for your own account ("Change your own password from My Profile › Security."); `400 USER_INACTIVE` (activate first); `400 NO_EMAIL` on `email`; `502 INVITE_EMAIL_FAILED` / `503 MAIL_DISABLED` "The email to <address> could not be sent: <reason>" (no new link is kept, the older one still works); 20 / 10 min per admin (§3) |
 
 **Calendar connections** — `/calendar-connections` (any signed-in user, own status only, read-only; Calendar Phase 2
@@ -803,7 +823,7 @@ request, without signing anyone out) and drop `cache:lookups:users*`.
 
 `RoleDto`: `{ id, name, description, adminPanel, isSystem, permissions, access: admin\|all-records\|own-records\|custom,
 userCount (active), inactiveUserCount, createdAt, createdBy, updatedAt, updatedBy }`. `permissions` =
-`{ <module>: { <action>: all\|own\|none } }` for leads, contacts, organizations, opportunities, quotations, contracts,
+`{ <module>: { <action>: all\|group\|own\|none } }` for leads, contacts, organizations, opportunities, quotations, contracts,
 tickets, referrals, activities, documents (view and export only), products and partnerCompanies (no owner: `all` /
 `none`); every other module has all six actions view, create, edit, delete, export, import (create / export / import:
 `all` = Yes, `none` = No). Sent permissions are normalized (`roles/permissions.ts`, contract-tested with
@@ -814,18 +834,38 @@ tickets, referrals, activities, documents (view and export only), products and p
 | --- | --- | --- |
 | GET | `/` | `RoleDto[]`, Super Admin first, then by name |
 | GET | `/:id` | `RoleDto`; 404 |
-| POST | `/` | `{ name (≤ 50, required), description? (≤ 500), adminPanel?, permissions }` → `201 RoleDto`. `409 DUPLICATE_RECORD` on `name` when another role has the name by `normalizeRole` |
+| POST | `/` | `{ name (≤ 50, required), description? (long text, no limit), adminPanel?, permissions }` → `201 RoleDto`. `409 DUPLICATE_RECORD` on `name` when another role has the name by `normalizeRole` |
 | PATCH | `/:id` | `{ name?, description?, adminPanel?, permissions? }` → `RoleDto`. A rename renames the role on every user holding it. `400 SYSTEM_ROLE` (Super Admin can't be changed); `400 SELF_LOCKOUT` (turning off the admin panel of your own role) / `400 LAST_ADMIN` (no active user would keep the admin panel), on `adminPanel`; 409 / 404 |
 | DELETE | `/:id` | `?reassignTo=<role id>` → `{ id, movedUsers }`. The role's users (active and inactive) move to `reassignTo` in the same transaction (their sessions are not signed out: the new role applies on their next request). `400 ROLE_IN_USE` when the role has users and no `reassignTo`; `400 VALIDATION_ERROR` on `reassignTo` (unknown, or the role itself); `403 SUPER_ADMIN_ONLY` when someone other than a Super Admin moves users to Super Admin; `400 SELF_LOCKOUT` / `LAST_ADMIN` when the move takes the admin panel from you / everyone; `400 SYSTEM_ROLE`; 404 |
 
 **Enforcement.** Every module route checks the caller's role: `registerCrudRoutes(router, controller, module)` maps
 `GET` → view, `POST` → create, `PUT` / `PATCH` → edit, `DELETE` and `POST /bulk-delete` → delete
 (`requirePermission(module, action)`: `403` "Your role doesn't allow you to <action> <Module>."). At **Own**, lists are
-scoped to records the user is assigned to or created, and a record outside it is `403` (`assertRecordAccess`; also
+scoped to records the user is assigned to or created; at **Group**, to records assigned to or created by anyone in the
+user's security groups (and their sub-groups); a record outside it is `403` (`assertRecordAccess`; also
 for edit and delete); at **None** the route is `403`. Custom routes follow the same actions (lead convert: leads edit
 and opportunities create; organization bulk status: edit; activity calendar: view; calendar retry and send-invites:
 edit). Imports need Import and Create on the target module. Global search hides the categories the role can't view.
 Admin features use `requireAdmin` (the role's admin panel switch) instead of a list of role names.
+
+**Security Groups** — `/admin/security-groups` 🔐 (Admin › Security Groups;
+`backend-crm/src/modules/security-groups/securityGroup.routes.ts`, route header comment = source of truth). Roles with
+the admin panel only. Bodies are strict. Writes are audited (entity `SecurityGroup`, admin-only in the audit log) and
+refresh the role registry at once, so a changed group applies to its members' next request (other API instances
+within 15 s). A role's **Group** level reads these groups.
+
+`SecurityGroupDto`: `{ id, name, description, parentId, parentName, isActive, members: [{ id, username, name, role,
+isActive }], subGroupCount, createdAt, createdBy, updatedAt, updatedBy }`.
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/` | `SecurityGroupDto[]` by name |
+| GET | `/users` | Member picker: every user `{ id, username, name, role, isActive, groups: string[] }`, active first |
+| GET | `/:id` | `SecurityGroupDto`; 404 |
+| POST | `/` | `{ name (≤ 100, required), description? (long text), parentId?, memberIds? }` → `201 SecurityGroupDto`. `409 DUPLICATE_RECORD` on `name` (any case); `400 VALIDATION_ERROR` on `parentId` (unknown) / `memberIds` (unknown user) |
+| PATCH | `/:id` | `{ name?, description?, parentId?, isActive? }` → `SecurityGroupDto`. `isActive: false` archives (keeps members, grants nothing). `400 GROUP_CYCLE` on `parentId` when the parent is the group or one of its sub-groups; 409 / 404 |
+| PUT | `/:id/members` | `{ memberIds }` → `SecurityGroupDto`; replaces the member list (audited as `membersAdded` / `membersRemoved`); 400 / 404 |
+| DELETE | `/:id` | `{ id }`; memberships go with it, records stay with their owners. `400 HAS_SUB_GROUPS` while groups sit under it; 404 |
 
 **Email logging** — `/email-logs` (signed in) and `/admin/email-logging` (roles with the admin panel, `requireAdmin`)
 (Calendar Phase 4, spec §17, as of 2026-11-27 with the review fixes; `backend-crm/src/modules/email-log/emailLog.routes.ts` and
@@ -898,6 +938,8 @@ once it finished, `…-w<bucket>-<ms>`), and a lifecycle event for a channel tha
 | Key | Limit | Scope | On exceed |
 | --- | --- | --- | --- |
 | Failed logins | `LOGIN_RATE_LIMIT_MAX` (10) per `LOGIN_RATE_LIMIT_WINDOW_SECONDS` (900 s) | IP | 429 `RATE_LIMITED` + `Retry-After` |
+| Account lockout (`Users.lockedUntil`, not a Redis key) | 5 wrong passwords within 15 min → locked 15 min | account | 423 `ACCOUNT_LOCKED` |
+| Forgot password (`ratelimit:forgot-password`) | 5 / 15 min (every request); 3 links / hour per account | IP; account (quietly dropped) | 429 `RATE_LIMITED` |
 | Record PDF | 30 / 60 s | user | 429 |
 | Template preview | 20 / 60 s | user | 429 |
 | Change password (`ratelimit:change-password`) | 10 / 15 min (every request) | user | 429 "Too many password attempts. Please wait a few minutes." |
@@ -937,6 +979,7 @@ Limited responses carry `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Res
 | 403 | `ACCOUNT_INACTIVE` / (none) | Deactivated user; role or row-level access denied (Admin › Roles: "Your role doesn't allow you to … ", or the record is outside an Own scope) |
 | 403 | `INVITE_PENDING` | Sign-in with the right password by a user who hasn't set a password from their invite link yet |
 | 404 | `NOT_FOUND` | Missing or soft-deleted record; unknown route |
+| 423 | `ACCOUNT_LOCKED` | Sign-in while the account is locked after too many wrong passwords (the message says for how many more minutes) |
 | 409 | `DUPLICATE_RECORD` | Unique violation (organization name, codes, partner name, a user's username or email …) |
 | 409 | `WRITE_CONFLICT` | Concurrent write after retries were exhausted |
 | 409 | `RELATED_RECORD_CONSTRAINT` | FK violation |

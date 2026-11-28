@@ -5,7 +5,7 @@ import { prisma } from '../../config/prisma.js';
 import { auditService, type AuditEntry } from '../../services/audit.service.js';
 import type { MailInput, MailResult } from '../../services/mail.service.js';
 import { HttpError } from '../../utils/httpError.js';
-import { INVALID_INVITE_MESSAGE, inviteMail, inviteService } from './invite.service.js';
+import { decoyResetHint, INVALID_INVITE_MESSAGE, inviteMail, inviteService, maskEmail } from './invite.service.js';
 import { hashInviteToken } from './invite.token.js';
 
 /** UserInvite / User doubles on the real Prisma client (restored after each test). */
@@ -31,6 +31,11 @@ interface UserRow {
     passwordHash: string;
     passwordChangedAt: Date | null;
     lastLoginAt: Date | null;
+    email?: string | null;
+    isGroupUser?: boolean;
+    failedLoginCount?: number;
+    lastFailedLoginAt?: Date | null;
+    lockedUntil?: Date | null;
 }
 
 type Where = Record<string, unknown>;
@@ -91,9 +96,16 @@ function install() {
             invites = invites.filter((i) => i.id !== where.id);
             return {};
         },
+        count: async ({ where }: { where: Where }) => invites.filter((i) => matches(i as unknown as Record<string, unknown>, where)).length,
     };
     const user = {
-        findUnique: async ({ where, select }: { where: { id: number }; select?: Record<string, unknown> }) => pick(users.find((u) => u.id === where.id) as never, select),
+        findUnique: async ({ where, select }: { where: { id?: number; username?: string }; select?: Record<string, unknown> }) =>
+            pick(users.find((u) => (where.id !== undefined ? u.id === where.id : u.username === where.username)) as never, select),
+        findMany: async ({ where, select, take }: { where: Where; select?: Record<string, unknown>; take?: number }) =>
+            users
+                .filter((u) => matches({ isGroupUser: false, ...u } as unknown as Record<string, unknown>, where))
+                .slice(0, take)
+                .map((u) => pick(u as never, select)),
         update: async ({ where, data, select }: { where: { id: number }; data: Partial<UserRow>; select?: Record<string, unknown> }) => {
             const row = users.find((u) => u.id === where.id)!;
             Object.assign(row, data);
@@ -118,6 +130,7 @@ function install() {
 
 function mailReturns(result: MailResult, configured = true) {
     mock.method(inviteMail, 'isMailConfigured', () => configured);
+    mock.method(inviteMail, 'loadTemplate', async () => null);
     mock.method(inviteMail, 'sendMail', async (input: MailInput) => {
         mails.push(input);
         return result;
@@ -139,8 +152,8 @@ beforeEach(() => {
     mails = [];
     audits = [];
     users = [
-        { id: 1, username: 'admin', firstName: 'Rahul', fullName: 'Rahul Mehta', role: 'Admin', isActive: true, invitePending: false, passwordHash: 'x', passwordChangedAt: null, lastLoginAt: null },
-        { id: 7, username: 'asha.k', firstName: 'Asha', fullName: 'Asha Kapoor', role: 'Sales Executive', isActive: true, invitePending: true, passwordHash: 'x', passwordChangedAt: null, lastLoginAt: null },
+        { id: 1, username: 'admin', firstName: 'Rahul', fullName: 'Rahul Mehta', role: 'Admin', isActive: true, invitePending: false, passwordHash: 'x', passwordChangedAt: null, lastLoginAt: null, email: 'rahul@nandiniinfosys.com' },
+        { id: 7, username: 'asha.k', firstName: 'Asha', fullName: 'Asha Kapoor', role: 'Sales Executive', isActive: true, invitePending: true, passwordHash: 'x', passwordChangedAt: null, lastLoginAt: null, email: 'asha@nandiniinfosys.com' },
     ];
     install();
 });
@@ -194,7 +207,7 @@ describe('inviteService.send', () => {
         mailReturns({ status: 'skipped' }, false);
         const outcome = await inviteService.send(admin, recipient, 'reset');
         assert.equal(outcome.status, 'mail_disabled');
-        assert.match('error' in outcome ? outcome.error : '', /MAIL_ENABLED/);
+        assert.match('error' in outcome ? outcome.error : '', /Outbound Email/);
         assert.equal(invites.length, 0);
         assert.equal(mails.length, 0);
     });
@@ -264,5 +277,112 @@ describe('inviteService.verify / accept', () => {
         const token = await sendLink('reset');
         await assert.rejects(inviteService.accept(token, 'Current2026'), /different from your current password/);
         await inviteService.accept(token, 'Brandnew2026');
+    });
+
+    it('a new password from a link ends a lockout', async () => {
+        Object.assign(users[1], { failedLoginCount: 3, lastFailedLoginAt: new Date(), lockedUntil: new Date(Date.now() + 10 * 60_000) });
+        const token = await sendLink();
+        await inviteService.accept(token, 'Welcome2026');
+        assert.equal(users[1].failedLoginCount, 0);
+        assert.equal(users[1].lastFailedLoginAt, null);
+        assert.equal(users[1].lockedUntil, null);
+    });
+});
+
+describe('inviteService.requestPasswordReset (Forgot password)', () => {
+    const now = new Date('2026-11-27T10:00:00.000Z');
+    beforeEach(() => {
+        users.push({
+            id: 9,
+            username: 'vikram.s',
+            firstName: 'Vikram',
+            fullName: 'Vikram Shah',
+            role: 'Sales Executive',
+            isActive: true,
+            invitePending: false,
+            passwordHash: 'x',
+            passwordChangedAt: null,
+            lastLoginAt: null,
+            email: 'vikram@nandiniinfosys.com',
+        });
+    });
+
+    it('emails a reset link found by username, saying the user asked for it, and audits it as self-service', async () => {
+        mailReturns({ status: 'sent' });
+        assert.equal(await inviteService.requestPasswordReset('vikram.s', { ip: '10.0.0.5' }, now), 'sent');
+        assert.equal(mails.length, 1);
+        assert.equal(mails[0].to, 'vikram@nandiniinfosys.com');
+        assert.equal(mails[0].kind, 'password_reset_link');
+        assert.match(mails[0].text, /We received a request to reset the password/);
+        assert.equal(invites[0].purpose, 'reset');
+        assert.equal(invites[0].createdBy, 'vikram.s');
+        assert.equal(invites[0].expiresAt.toISOString(), '2026-11-30T10:00:00.000Z');
+        const audit = audits.find((a) => a.action === 'INVITE_SENT');
+        assert.equal(audit?.changedBy, 'vikram.s');
+        assert.deepEqual(audit?.changes, { purpose: 'reset', email: 'sent', requestedBy: 'self', ip: '10.0.0.5', expiresAt: '2026-11-30T10:00:00.000Z' });
+    });
+
+    it('finds the account by work email in any case', async () => {
+        mailReturns({ status: 'sent' });
+        assert.equal(await inviteService.requestPasswordReset('  Vikram@NandiniInfosys.com ', {}, now), 'sent');
+        assert.equal(mails[0].to, 'vikram@nandiniinfosys.com');
+    });
+
+    it('sends an Invited user their invite again', async () => {
+        mailReturns({ status: 'sent' });
+        await inviteService.requestPasswordReset('asha.k', {}, now);
+        assert.equal(invites[0].purpose, 'invite');
+    });
+
+    it('sends nothing for an unknown, deactivated or email-less account', async () => {
+        mailReturns({ status: 'sent' });
+        users.push({ id: 10, username: 'gone', firstName: null, fullName: 'Gone', role: 'Sales Executive', isActive: false, invitePending: false, passwordHash: 'x', passwordChangedAt: null, lastLoginAt: null, email: 'gone@nandiniinfosys.com' });
+        users.push({ id: 11, username: 'nomail', firstName: null, fullName: 'No Mail', role: 'Sales Executive', isActive: true, invitePending: false, passwordHash: 'x', passwordChangedAt: null, lastLoginAt: null, email: null });
+        for (const who of ['nobody', 'nobody@nandiniinfosys.com', 'gone', 'gone@nandiniinfosys.com', 'nomail', '   ']) {
+            assert.equal(await inviteService.requestPasswordReset(who, {}, now), 'skipped', who);
+        }
+        assert.equal(mails.length, 0);
+        assert.equal(invites.length, 0);
+    });
+
+    it('sends nothing when an email address is shared by more than one active person', async () => {
+        mailReturns({ status: 'sent' });
+        users.push({ id: 12, username: 'vikram.dup', firstName: null, fullName: 'Dup', role: 'Sales Executive', isActive: true, invitePending: false, passwordHash: 'x', passwordChangedAt: null, lastLoginAt: null, email: 'vikram@nandiniinfosys.com' });
+        assert.equal(await inviteService.requestPasswordReset('vikram@nandiniinfosys.com', {}, now), 'skipped');
+        assert.equal(mails.length, 0);
+    });
+
+    it('stops after 3 self-service links an hour for one account', async () => {
+        mailReturns({ status: 'sent' });
+        for (let i = 0; i < 3; i++) assert.equal(await inviteService.requestPasswordReset('vikram.s', {}, now), 'sent');
+        assert.equal(await inviteService.requestPasswordReset('vikram.s', {}, now), 'skipped');
+        assert.equal(mails.length, 3);
+        // An hour later it works again.
+        assert.equal(await inviteService.requestPasswordReset('vikram.s', {}, new Date(now.getTime() + 61 * 60_000)), 'sent');
+    });
+});
+
+describe('Forgot password: the masked address in the answer', () => {
+    beforeEach(() => {
+        users.push({ id: 9, username: 'vikram.s', firstName: 'Vikram', fullName: 'Vikram Shah', role: 'Sales Executive', isActive: true, invitePending: false, passwordHash: 'x', passwordChangedAt: null, lastLoginAt: null, email: 'vikram@nandiniinfosys.com' });
+        users.push({ id: 10, username: 'gone', firstName: null, fullName: 'Gone', role: 'Sales Executive', isActive: false, invitePending: false, passwordHash: 'x', passwordChangedAt: null, lastLoginAt: null, email: 'zed@nandiniinfosys.com' });
+    });
+
+    it('masks an email to its first character and domain', () => {
+        assert.equal(maskEmail('asha.k@company.com'), 'a***@company.com');
+        assert.equal(maskEmail('nope'), '***');
+    });
+
+    it('shows the account’s real work email, masked', async () => {
+        assert.equal(await inviteService.resetRecipientHint('vikram.s'), 'v***@nandiniinfosys.com');
+        assert.equal(await inviteService.resetRecipientHint(' vikram@nandiniinfosys.com '), 'v***@nandiniinfosys.com');
+    });
+
+    it('shows a stand-in shaped the same way for an unknown or deactivated account', async () => {
+        assert.equal(decoyResetHint('nobody', 'nandiniinfosys.com'), 'n***@nandiniinfosys.com');
+        assert.match(await inviteService.resetRecipientHint('nobody'), /^n\*\*\*@[a-z0-9.-]+$/);
+        // Deactivated: the stand-in from what was typed, not the account's own address (zed@…).
+        assert.match(await inviteService.resetRecipientHint('gone'), /^g\*\*\*@/);
+        assert.equal(await inviteService.resetRecipientHint('who@else.com'), 'w***@else.com');
     });
 });

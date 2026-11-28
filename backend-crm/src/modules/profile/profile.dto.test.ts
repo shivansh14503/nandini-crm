@@ -66,15 +66,20 @@ describe('toProfileDto', () => {
 describe('toAuthMeDto', () => {
     it('adds photoUrl and keeps the names', () => {
         const base = { id: 7, username: 'palak', role: 'Admin', fullName: 'Palak Sharma', firstName: 'Palak', lastName: 'Sharma' };
-        const access = { adminPanel: true, superAdmin: false, permissions: FULL_PERMISSIONS };
+        const access = { adminPanel: true, superAdmin: false, permissions: FULL_PERMISSIONS, teammates: ['palak'] };
         assert.deepEqual(toAuthMeDto({ ...base, photo: { id: 'p1' } }), { ...base, photoUrl: '/api/user-photos/p1', access });
         assert.deepEqual(toAuthMeDto({ ...base, photo: null }), { ...base, photoUrl: null, access });
     });
 
     it('carries what the role allows (Admin › Roles)', () => {
         const base = { id: 8, username: 'ravi', fullName: 'Ravi', firstName: 'Ravi', lastName: null, photo: null };
-        assert.deepEqual(toAuthMeDto({ ...base, role: 'Super Admin' }).access, { adminPanel: true, superAdmin: true, permissions: FULL_PERMISSIONS });
-        assert.deepEqual(toAuthMeDto({ ...base, role: 'Sales Executive' }).access, { adminPanel: false, superAdmin: false, permissions: OWN_RECORDS_PERMISSIONS });
+        assert.deepEqual(toAuthMeDto({ ...base, role: 'Super Admin' }).access, { adminPanel: true, superAdmin: true, permissions: FULL_PERMISSIONS, teammates: ['ravi'] });
+        assert.deepEqual(toAuthMeDto({ ...base, role: 'Sales Executive' }).access, {
+            adminPanel: false,
+            superAdmin: false,
+            permissions: OWN_RECORDS_PERMISSIONS,
+            teammates: ['ravi'],
+        });
     });
 });
 

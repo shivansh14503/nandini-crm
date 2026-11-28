@@ -17,7 +17,7 @@ export interface Permissions {
     level(module: PermissionModule, action: PermissionAction): AccessLevel;
     /** Whether the role allows `action` on `module` at all. */
     can(module: PermissionModule, action: PermissionAction): boolean;
-    /** Whether the role allows `action` on this record (Own: only the user's own or created records). */
+    /** Whether the role allows `action` on this record (Own: the user's own or created records; Group: their teammates' too). */
     canRecord(module: PermissionModule, action: PermissionAction, record: OwnedRecord | null | undefined): boolean;
     /** Opens the admin panel. */
     isAdmin: boolean;
@@ -31,6 +31,7 @@ export function usePermissions(): Permissions {
     const { user } = useAuth();
     const permissions = user?.access?.permissions;
     const username = user?.username ?? '';
+    const teammates = user?.access?.teammates;
     const level = useCallback(
         (module: PermissionModule, action: PermissionAction): AccessLevel => (permissions ? levelOf(permissions, module, action) : 'all'),
         [permissions],
@@ -40,9 +41,9 @@ export function usePermissions(): Permissions {
         () => ({
             level,
             can: (module, action) => level(module, action) !== 'none',
-            canRecord: (module, action, record) => levelAllowsRecord(level(module, action), username, record),
+            canRecord: (module, action, record) => levelAllowsRecord(level(module, action), username, record, teammates),
             isAdmin,
         }),
-        [level, username, isAdmin],
+        [level, username, teammates, isAdmin],
     );
 }

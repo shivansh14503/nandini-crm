@@ -36,7 +36,7 @@
 | Audit log | ✅ ledger table with who / where / how per entry, Admin › Audit Log screen (`/api/admin/audit-logs`), undo / restore, CSV / Excel export, ledger integrity checks; alert rules later (Phase 11 E) |
 | My Profile | ✅ own name, mobile, office phone and photo; change password (signs out other sessions); list and sign out signed-in sessions; notification preferences, default reminder and out of office (2026-11-26) |
 | Users admin | ✅ Admin › Users (`/admin/users`): add, edit, deactivate / activate, reset password with must-change-password at next sign-in; job title and reports to (2026-11-26) |
-| Roles & permissions | ✅ Admin › Roles (`/admin/roles`, 2026-11-27): roles with View / Create / Edit / Delete / Export / Import per module at All, Own or None and an admin panel switch, enforced on every module route, list and record; the app hides what a role can't do. Password policy settings, security groups and security settings are next (Phase 18) |
+| Roles & permissions | ✅ Admin › Roles (`/admin/roles`, 2026-11-27): roles with View / Create / Edit / Delete / Export / Import per module at All, Group, Own or None and an admin panel switch, enforced on every module route, list and record; the app hides what a role can't do. ✅ Admin › Security Groups (2026-11-28): teams / branches with sub-groups and a Group level (records of anyone in the user's groups). Password policy settings and security settings are next (Phase 18) |
 | Dashboard | ❌ static page, no data |
 | Tests | ⚠️ 100 backend unit test files (`node:test`); no API integration, no frontend, no E2E |
 | CI/CD, containers | ❌ none in repo |
@@ -800,10 +800,33 @@ Security Groups and Security Settings missing.
       admin panel switch) replaced the hard-coded admin role list. Admin › Roles page (card grid, editor with the
       permission grid and presets, duplicate, delete with reassign); Admin › Users picks roles from the table only;
       the app hides New, Import, Edit, Export, Convert, Quick Create items and modules the role can't use.
-- [ ] **Password Management** — admin-set password rules (length, character classes, expiry, reuse history), account
-      lockout per user after failed sign-ins, forced change on expiry.
-- [ ] **Security Groups** — groups of users (teams / branches); records shared with a group are visible to its
-      members (a "Group" level alongside All / Own / None), group membership in Admin › Users.
+- [x] **One-click Forgot password** (2026-11-28, CRM-147) — clicking "Forgot password?" on the sign-in page sends the
+      reset link straight to the typed username's company email and says "If this account exists, we’ve emailed a
+      reset link to a***@company.com" (masked; a stand-in address when nothing matches). With no username typed, the
+      link opens the Forgot password page, which now asks for the username only.
+- [x] **Forgot password and account lockout** (2026-11-28) — "Forgot password?" on the sign-in page emails the same
+      single-use 72 h reset link an admin sends (same answer whether or not the account exists; 5 requests / 15 min
+      per IP, 3 links / hour per account). 5 wrong passwords within 15 min lock the account for 15 min (`423
+      ACCOUNT_LOCKED`), cleared by a sign-in, a password reset or Admin › Users **Unlock account**; locks and unlocks
+      audited. Defaults in `auth/accountLockout.ts` (`DEFAULT_LOCKOUT_POLICY`, read through `getLockoutPolicy()`).
+- [x] **Company email: Gmail sender, email queue and templates** (2026-11-28, CRM-121) — Admin › Email: Outbound
+      Email (Gmail API through the Google Workspace service account of API Integrations with domain-wide delegation
+      and `gmail.send`, or the SMTP environment settings; sender, display name, reply-to, daily limit, Check
+      connection, Send test email), Templates (invite, admin reset, Forgot password reset; account locked and morning
+      email reserved; merge fields, preview, reset to default), Email Queue (every email, retry). One mail service with
+      a background queue, retries with backoff and a daily limit (system-design §5.2a). Not yet: the morning email on
+      templates, inbound email, campaigns, the account-locked email itself.
+- [ ] **Password Management** — admin-set password rules (length, character classes, expiry, reuse history), an
+      admin screen for the lockout policy (attempts, window, lock length: today the defaults in `accountLockout.ts`),
+      forced change on expiry.
+- [x] **Security Groups** (2026-11-28, CRM-129) — `SecurityGroups` / `SecurityGroupMembers` (migration
+      `20261230090000_security_groups`), Admin › Security Groups (`/admin/security-groups`: groups as a tree with
+      parent groups, members picker, archive / restore, delete; audited as `SecurityGroup`). A **Group** level next to
+      All / Own / None for View / Edit / Delete on every module with an owner: records assigned to or created by anyone
+      in the user's groups, a parent group also seeing its sub-groups. Enforced through the same `buildAccessScopeWhere`
+      / `canAccessRecord` path as Own (lists, records, exports, scorecards, calendar, product usage, morning summary);
+      the app hides Edit / Delete outside the group (`access.teammates`). No role gets Group until an admin picks it.
+      Not yet: a user's groups shown and edited in Admin › Users; per-record sharing with a group regardless of owner.
 - [ ] **Security Settings** — company switches: inherit the creator's / assignee's groups on new records, who may
       assign to whom, session timeout, sign-in IP allow-list.
 - [x] Export and Import on every module (2026-11-28): every module has View / Create / Edit / Delete / Export / Import

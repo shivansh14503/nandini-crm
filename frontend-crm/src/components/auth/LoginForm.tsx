@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import NextLink from 'next/link';
 import {
     Box,
     TextField,
@@ -10,18 +11,22 @@ import {
     InputAdornment,
     IconButton,
     CircularProgress,
+    Link,
+    Alert,
 } from '@mui/material';
 import {
     PersonOutlined as PersonOutlineIcon,
     LockOutlined as LockOutlinedIcon,
     Visibility as VisibilityIcon,
     VisibilityOff as VisibilityOffIcon,
+    MarkEmailReadOutlined as MarkEmailReadOutlinedIcon,
 } from '@mui/icons-material';
 import { useAuth, SESSION_EXPIRED_KEY } from '../../context/AuthContext';
 import { ROUTES } from '@/config/constants';
 import { ErrorAlert } from '../common/ErrorAlert';
 import { AppToast } from '../common/AppToast';
 import { FIELD_MAX_LENGTH } from '../forms/fieldSizing';
+import { authService } from '@/services/auth.service';
 
 const PASSWORD_MAX_LENGTH = 128;
 
@@ -35,6 +40,8 @@ export function LoginForm() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [sessionExpired, setSessionExpired] = useState(false);
+    const [resetSending, setResetSending] = useState(false);
+    const [resetSent, setResetSent] = useState<string | null>(null);
 
     // Set by AuthContext when a previously signed-in user's session check fails on reload.
     useEffect(() => {
@@ -51,6 +58,29 @@ export function LoginForm() {
 
     const handleTogglePassword = () => {
         setShowPassword((prev) => !prev);
+    };
+
+    /**
+     * "Forgot password?": with a username typed, emails the reset link to that account's company email right here and
+     * shows the API's answer ("If this account exists, we’ve emailed a reset link to a***@company.com"). With the
+     * username empty, the link goes on to the Forgot password page, which asks for it.
+     */
+    const handleForgotPassword = async (e: React.MouseEvent<HTMLAnchorElement>) => {
+        const trimmedUsername = username.trim();
+        if (!trimmedUsername) return;
+        e.preventDefault();
+        if (resetSending) return;
+        setError(null);
+        setResetSent(null);
+        setResetSending(true);
+        try {
+            const message = await authService.requestPasswordReset(trimmedUsername);
+            setResetSent(message || 'If this account exists, we’ve emailed a reset link to its company email.');
+        } catch (err: unknown) {
+            setError(err instanceof Error && err.message ? err.message : 'Could not send the reset link. Please try again.');
+        } finally {
+            setResetSending(false);
+        }
     };
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -89,6 +119,32 @@ export function LoginForm() {
                 onClose={() => setSessionExpired(false)}
             />
             <ErrorAlert id="login-error-alert" error={error} onClose={() => setError(null)} />
+            {resetSent && (
+                <Alert
+                    id="forgot-password-sent"
+                    role="status"
+                    aria-live="polite"
+                    icon={<MarkEmailReadOutlinedIcon fontSize="inherit" />}
+                    onClose={() => setResetSent(null)}
+                    sx={{
+                        mb: 2.5,
+                        borderRadius: '10px',
+                        fontSize: '13px',
+                        lineHeight: 1.6,
+                        overflowWrap: 'anywhere',
+                        backgroundColor: 'var(--mui-palette-primary-soft)',
+                        border: '1px solid var(--mui-palette-primary-softBorder)',
+                        color: 'var(--mui-palette-text-primary)',
+                        '& .MuiAlert-icon': { color: 'var(--crm-text-blue-600)' },
+                        '& .MuiAlert-action .MuiIconButton-root': {
+                            color: 'var(--mui-palette-text-secondary)',
+                            '&:hover': { color: 'var(--crm-text-blue-700)', backgroundColor: 'transparent' },
+                        },
+                    }}
+                >
+                    {resetSent}
+                </Alert>
+            )}
 
             {/* Username Input */}
             <Box sx={{ mb: 2.5 }}>
@@ -108,7 +164,10 @@ export function LoginForm() {
                     fullWidth
                     placeholder="Enter your CRM username"
                     value={username}
-                    onChange={(e) => setUsername(e.target.value)}
+                    onChange={(e) => {
+                        setUsername(e.target.value);
+                        setResetSent(null);
+                    }}
                     autoComplete="username"
                     disabled={loading}
                     slotProps={{
@@ -162,19 +221,29 @@ export function LoginForm() {
                     >
                         Password
                     </Typography>
-                    {/* <Link
-                        href="#"
+                    <Link
+                        id="forgot-password-link"
+                        component={NextLink}
+                        href={ROUTES.FORGOT_PASSWORD}
+                        onClick={handleForgotPassword}
+                        aria-disabled={resetSending || undefined}
                         underline="hover"
                         sx={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 0.75,
                             fontSize: '13px',
                             color: 'var(--crm-text-blue-600)',
                             fontWeight: 500,
                             cursor: 'pointer',
-                            '&:hover': { color: 'primary.dark' },
+                            // A comfortable tap target on phones without moving the label row.
+                            py: 0.5,
+                            '&:hover': { color: 'var(--crm-text-blue-700)' },
                         }}
                     >
-                        Forgot password?
-                    </Link> */}
+                        {resetSending && <CircularProgress size={12} color="inherit" />}
+                        {resetSending ? 'Sending link…' : 'Forgot password?'}
+                    </Link>
                 </Box>
                 <TextField
                     id="password"

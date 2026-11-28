@@ -49,7 +49,7 @@ function DocumentSettings({ meta, onMetaChange, isNew, isCurrentDefault }: { met
                     <TextInput value={meta.name} onChange={(v) => onMetaChange({ name: v })} disabled={disabled} ariaLabel="Template name" maxLength={120} />
                 </Field>
                 <Field label="Description">
-                    <TextInput value={meta.description} onChange={(v) => onMetaChange({ description: v })} disabled={disabled} ariaLabel="Template description" multiline maxLength={500} />
+                    <TextInput value={meta.description} onChange={(v) => onMetaChange({ description: v })} disabled={disabled} ariaLabel="Template description" multiline />
                 </Field>
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--crm-slate-700)' }}>Active</Typography>

@@ -320,12 +320,12 @@ export function CommonMasterView<T = unknown, TFilter extends string = string>({
     const getEditHref =
         editLevel === 'none' || !getEditHrefProp
             ? undefined
-            : editLevel === 'own'
+            : editLevel !== 'all'
               ? (row: T) => (ownsRow('edit', row) ? getEditHrefProp(row) : undefined)
               : getEditHrefProp;
     const onDelete = deleteLevel === 'none' ? undefined : onDeleteProp;
     const canDeleteRow =
-        deleteLevel === 'own' ? (row: T) => ownsRow('delete', row) && (canDeleteRowProp?.(row) ?? true) : canDeleteRowProp;
+        deleteLevel !== 'all' ? (row: T) => ownsRow('delete', row) && (canDeleteRowProp?.(row) ?? true) : canDeleteRowProp;
     const onEmptyAction = masterPermissions.canCreate ? onEmptyActionProp : undefined;
     const searchConfig =
         searchConfigProp && deleteLevel === 'none' && searchConfigProp.onBulkDelete ? { ...searchConfigProp, onBulkDelete: undefined } : searchConfigProp;

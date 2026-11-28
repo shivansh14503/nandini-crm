@@ -21,6 +21,16 @@ export const authService = {
         return res.data;
     },
 
+    /**
+     * Public ("Forgot password?"): asks for a password reset link for a username. The answer ("If this account exists,
+     * we’ve emailed a reset link to a***@company.com") reads the same whether or not an account matched; rejects only on
+     * 429 RATE_LIMITED or a network failure.
+     */
+    requestPasswordReset: async (identifier: string): Promise<string> => {
+        const res = await apiClient.post<ApiResponse<{ message: string }>>('/api/auth/forgot-password', { identifier });
+        return res.data.message;
+    },
+
     /** Public: who an emailed set-password link is for. Rejects with 400 INVALID_INVITE for any link that can't be used. */
     verifySetPasswordLink: async (token: string): Promise<SetPasswordLinkInfo> => {
         const res = await apiClient.post<ApiResponse<SetPasswordLinkInfo>>('/api/auth/invite/verify', { token });

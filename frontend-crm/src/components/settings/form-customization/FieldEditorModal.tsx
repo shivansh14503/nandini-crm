@@ -35,6 +35,7 @@ import { groupSections, isBuiltInCountryField, isNeverRequiredField, moduleField
 import { COUNTRY_OPTIONS, getCountryByCode, type CountryMasterItem } from '@/data/addressMaster';
 import { Badge, errorMessage, inputSx, primaryButtonSx, secondaryButtonSx } from './builderUi';
 import { useCodedFieldDefaults } from '@/context/CodedFieldDefaultsContext';
+import { LongTextInput } from '@/components/forms/LongTextInput';
 
 /**
  * What to store for a field's placeholder / hint: null (= the form's own text) while it's still the form's coded
@@ -499,14 +500,12 @@ export function FieldEditorModal({ open, onClose, module, configs, field, defaul
                                 ))}
                             </TextField>
                         ) : (
-                            <TextField
-                                size="small"
-                                fullWidth
-                                multiline
-                                minRows={4}
+                            <LongTextInput
+                                label="Options"
                                 value={draft.newOptions}
-                                onChange={(e) => set('newOptions', e.target.value)}
+                                onChange={(v) => set('newOptions', v)}
                                 placeholder={'One option per line\ne.g.\nNorth\nSouth'}
+                                crmFieldStyle={false}
                                 sx={inputSx}
                                 helperText="A new dropdown is created for this field; manage it later under Dropdowns."
                             />

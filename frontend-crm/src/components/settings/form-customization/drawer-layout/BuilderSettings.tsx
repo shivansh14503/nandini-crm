@@ -29,6 +29,7 @@ import {
 import type { FieldType } from '@/types/formConfig.types';
 import { BADGE_STYLE_LABELS, SECTION_STYLE_LABELS, defaultDisplayFor, newLayoutId, type AddressDef, type DrawerFieldDef } from '@/components/common/Drawer/layout';
 import { inputSx, primaryButtonSx, secondaryButtonSx } from '../builderUi';
+import { LongTextInput } from '@/components/forms/LongTextInput';
 import { AvatarPicker } from './AvatarPicker';
 import type { CanvasTab } from './BuilderCanvas';
 import { findBadge, findBlock, findSection, insertSection, moveBadge, moveBlock, moveSection, type LayoutEditor, type Selection } from './layoutEditor';
@@ -96,7 +97,7 @@ function Segmented<T extends string | number>({ value, options, onChange, disabl
     );
 }
 
-function TextInput({ label, value, onChange, max, placeholder, multiline, disabled }: { label: string; value: string; onChange: (v: string) => void; max: number; placeholder?: string; multiline?: boolean; disabled?: boolean }) {
+function TextInput({ label, value, onChange, max, placeholder, disabled }: { label: string; value: string; onChange: (v: string) => void; max: number; placeholder?: string; disabled?: boolean }) {
     return (
         <TextField
             size="small"
@@ -105,8 +106,6 @@ function TextInput({ label, value, onChange, max, placeholder, multiline, disabl
             value={value}
             placeholder={placeholder}
             disabled={disabled}
-            multiline={multiline}
-            minRows={multiline ? 3 : undefined}
             onChange={(e) => onChange(e.target.value.slice(0, max))}
             sx={inputSx}
             slotProps={{ inputLabel: { shrink: true }, htmlInput: { maxLength: max } }}
@@ -628,7 +627,7 @@ function BlockSettings({
             )}
             {block.type === 'text' && (
                 <Group title="Static text" hint="The same text on every record, e.g. a note for the team.">
-                    <TextInput label="Text" value={block.text} max={LIMITS.text} multiline disabled={readOnly} onChange={(v) => update({ text: v }, 'text')} />
+                    <LongTextInput label="Text" inputLabel="Text" value={block.text} disabled={readOnly} crmFieldStyle={false} sx={inputSx} onChange={(v) => update({ text: v }, 'text')} />
                 </Group>
             )}
             {block.type === 'address' && (

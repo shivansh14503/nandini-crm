@@ -15,7 +15,7 @@ const name = z
 
 const description = z.preprocess(
     (value) => (value === null ? '' : value),
-    z.string().trim().max(500, { message: 'Description cannot exceed 500 characters.' }).optional(),
+    z.string().trim().optional(), // long text: no character limit (NVARCHAR(MAX))
 );
 
 export const templateCreateSchema = z.object({

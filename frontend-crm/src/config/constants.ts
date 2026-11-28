@@ -15,6 +15,7 @@ export const APP_CONFIG = {
 export const ROUTES = {
     HOME: '/',
     LOGIN: '/login',
+    FORGOT_PASSWORD: '/forgot-password',
     DASHBOARD: '/dashboard',
     ORGANIZATIONS: '/organizations',
     ORGANIZATION_NEW: '/organizations/new',
@@ -87,6 +88,8 @@ export const ROUTES = {
     COMPANY_FORMATS: '/admin/company-formats',
     COMPANY_DETAILS: '/admin/company-details',
     EMAIL_VALIDATION: '/admin/email-validation',
+    /** Admin › Email: Outbound Email, Templates, Email Queue (`?tab=outbound|templates|queue`). */
+    ADMIN_EMAIL: '/admin/email',
     HOLIDAYS: '/admin/holidays',
     /**
      * Admin › API Integrations: Google / Microsoft 365 / Zoom set-up, calendar sync settings, People. `calendar_sync_issue`
@@ -101,6 +104,7 @@ export const ROUTES = {
     PDF_TEMPLATE_NEW: '/admin/pdf-templates/new',
     PDF_TEMPLATE_EDIT: (id: string) => `/admin/pdf-templates/${id}`,
     ADMIN_ROLES: '/admin/roles',
+    ADMIN_SECURITY_GROUPS: '/admin/security-groups',
     ADMIN_USERS: '/admin/users',
 };
 

@@ -160,6 +160,8 @@ const ACTION_LABELS: Record<string, string> = {
     PASSWORD_RESET: 'Password reset',
     INVITE_SENT: 'Set-password link sent',
     PASSWORD_SET: 'Password set from link',
+    ACCOUNT_LOCKED: 'Account locked',
+    ACCOUNT_UNLOCKED: 'Account unlocked',
     SESSION_REVOKE: 'Session signed out',
     ENROL: 'Calendar sync started',
     STOP: 'Calendar sync stopped',
@@ -177,6 +179,7 @@ const MODULE_LABELS: Record<string, string> = {
     'list-scorecards': 'List Scorecards',
     'audit-log': 'Audit Log',
     'admin-integrations': 'API Integrations',
+    'security-groups': 'Security Groups',
 };
 /** `partner-companies` → `Partner Companies`. */
 export const moduleLabel = (key: string) => MODULE_LABELS[key] ?? humanize(key.replace(/-/g, ' '));
@@ -463,10 +466,22 @@ export function summarize(action: string, module: string, changes: unknown, labe
             return `Reset the password${c.generated === true ? ' (temporary password)' : ''}`;
         case 'INVITE_SENT': {
             const what = c.purpose === 'reset' ? 'password reset link' : 'invite link';
+            if (c.requestedBy === 'self') {
+                if (c.email === 'failed') return `Asked for a ${what} with Forgot password (the email could not be sent)`;
+                if (c.email === 'skipped') return `Asked for a ${what} with Forgot password (email is turned off)`;
+                return `Asked for a ${what} with Forgot password`;
+            }
             if (c.email === 'failed') return `Tried to email a ${what} (the email could not be sent)`;
             if (c.email === 'skipped') return `Tried to email a ${what} (email is turned off)`;
             return `Emailed a ${what}`;
         }
+        case 'ACCOUNT_LOCKED': {
+            const attempts = count(c.failedAttempts);
+            const minutes = count(c.lockMinutes);
+            return `Account locked${attempts !== undefined ? ` after ${attempts} wrong passwords` : ''}${minutes !== undefined ? ` for ${minutes} minutes` : ''}`;
+        }
+        case 'ACCOUNT_UNLOCKED':
+            return c.wasLocked === false ? 'Cleared the count of wrong passwords' : 'Unlocked the account';
         case 'PASSWORD_SET':
             return c.purpose === 'reset' ? 'Set a new password from a reset link' : 'Set their password from the invite link';
         case 'SESSION_REVOKE': {

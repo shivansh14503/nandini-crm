@@ -8,6 +8,7 @@ import UploadFileRoundedIcon from '@mui/icons-material/UploadFileRounded';
 import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
 import { ConfirmDeleteDialog, errorMessage, inputSx, panelHeaderSx, primaryButtonSx, secondaryButtonSx, surfaceSx } from '@/components/settings/form-customization/builderUi';
 import { useClearProviderSecret, usePeople, useSaveProvider, useTestProvider } from '@/hooks/queries/useIntegrationsAdmin';
+import { LongTextInput } from '@/components/forms/LongTextInput';
 import { SERVICE_ACCOUNT_KEY_MAX_BYTES, type Person, type ProviderAdmin, type ProviderWebhook, type SaveProviderPayload, type TestConnectionResult } from '@/types/integration.types';
 import { CopyField, PROVIDER_WEBHOOK_LABELS, ProviderMark, StatusChip, fieldErrorsOf, fieldLabelSx, formatDateTime, formatDay, hintSx, webhooksOffSentence, type ChipTone } from './integrationUi';
 
@@ -536,28 +537,22 @@ export function ProviderCard({ provider, keyReady, companyDomains, takenBy, onDi
                                         }}
                                     />
                                 </Box>
-                                <TextField
-                                    label="…or paste the key file’s contents"
-                                    size="small"
-                                    fullWidth
-                                    multiline
-                                    minRows={2}
-                                    maxRows={6}
+                                <LongTextInput
+                                    label="Service account key"
+                                    inputLabel="…or paste the key file’s contents"
                                     value={keyFileName ? '' : form.serviceAccountKey}
                                     placeholder={keyFileName ? `${keyFileName} loaded` : '{ "type": "service_account", … }'}
-                                    onChange={(e) => {
+                                    onChange={(v) => {
                                         setKeyFileName('');
-                                        set('serviceAccountKey', e.target.value);
+                                        set('serviceAccountKey', v);
                                     }}
                                     disabled={busy || !keyReady}
-                                    error={Boolean(errors.serviceAccountKey) || Boolean(keyPreview && 'error' in keyPreview)}
-                                    helperText={
-                                        errors.serviceAccountKey ||
-                                        (keyPreview && 'error' in keyPreview ? keyPreview.error : keyPreview ? `Key for ${keyPreview.clientEmail}. Save to store it encrypted.` : 'Stored encrypted. It is never shown again after you save.')
-                                    }
-                                    autoComplete="off"
+                                    error={errors.serviceAccountKey || (keyPreview && 'error' in keyPreview ? keyPreview.error : undefined)}
+                                    helperText={keyPreview && !('error' in keyPreview) ? `Key for ${keyPreview.clientEmail}. Save to store it encrypted.` : 'Stored encrypted. It is never shown again after you save.'}
+                                    crmFieldStyle={false}
                                     sx={{ ...inputSx, '& textarea': monoSx }}
-                                    slotProps={{ htmlInput: { spellCheck: false, maxLength: SERVICE_ACCOUNT_KEY_MAX_BYTES } }}
+                                    // A key file, not long text: keeps its 10 KB size cap (no counter).
+                                    htmlInputProps={{ spellCheck: false, autoComplete: 'off', maxLength: SERVICE_ACCOUNT_KEY_MAX_BYTES }}
                                 />
                                 {replacingKey && (
                                     <Button

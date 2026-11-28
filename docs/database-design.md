@@ -21,7 +21,7 @@
 
 | Domain | Tables |
 | --- | --- |
-| Identity | `Users` (model `User`), `Roles` (Admin › Roles), `UserPhoto` (profile photos), `UserPreference` (My Profile › Notifications), `UserInvites` (set-password links) |
+| Identity | `Users` (model `User`), `Roles` (Admin › Roles), `SecurityGroups` / `SecurityGroupMembers` (Admin › Security Groups), `UserPhoto` (profile photos), `UserPreference` (My Profile › Notifications), `UserInvites` (set-password links) |
 | CRM core | `Organization`, `Contact`, `Lead`, `Opportunity`, `Quotation`, `Ticket`, `Contract`, `Document`, `Product` |
 | Activities & calendar | `Activity`, `ActivityAttendee`, `ActivityExternalLink` (an activity's copy in a connected calendar + push outbox, P2-3b), `ActivitySeries` (a recurring activity's rule; its occurrences are `Activity` rows, Calendar Phase 4) |
 | Owned children | `EntityEmail`, `OpportunityLineItem`, `QuotationLineItem` |
@@ -164,6 +164,9 @@ Pre-existing table kept for compatibility (columns `Id`, `Username`, `Password`,
 | `jobTitle` | NVARCHAR(100) NULL | Free text set in Admin › Users (read-only on My Profile). Not an access rule |
 | `reportsToId` | INT NULL, FK → `Users.Id` (NO ACTION / NO ACTION), indexed | The user's manager (Admin › Users "Reports to"). The API refuses the user themselves, anyone below them (no cycles; chain walked up to 50 levels, writers serialise on an application lock), an inactive or group login. Kept when the manager is deactivated. NO ACTION: a user with direct reports can't be deleted |
 | `invitePending` | BIT NOT NULL, default 0 | **Invited**: added in Admin › Users and hasn't set a password from the emailed link yet (the stored hash is of a random value nobody knows; sign-in answers `403 INVITE_PENDING`). Cleared when a set-password link is used (`POST /api/auth/invite/accept`). Replaced `mustChangePassword` (2026-11-27) |
+| `failedLoginCount` | INT NOT NULL, default 0 | Account lockout (`auth/accountLockout.ts`): wrong passwords in the current run. Back to 0 on a successful sign-in, a password set from a link, an admin unlock, and when a lock is applied |
+| `lastFailedLoginAt` | DATETIME2 NULL | When the last wrong password was typed; a run older than the policy window (15 min) starts again from 1 |
+| `lockedUntil` | DATETIME2 NULL | Sign-in refused (`423 ACCOUNT_LOCKED`) until then; shown as **Locked** in Admin › Users. NULL or past = not locked. Cleared by "Unlock account" |
 | `createdBy` | NVARCHAR(50) NULL | Username of the admin who added the user in Admin › Users; NULL for older users (seed, SQL) |
 | `deactivatedAt` | DATETIME2 NULL | When an admin last deactivated the user; NULL again on activation |
 | `isActive`, `isGroupUser`, `onLeave`, `lastLoginAt` | | Inactive users can't sign in or be assigned. Set in Admin › Users (`onLeave` is a plain switch). Out-of-office dates live in `UserPreference` (§4.30, set by the user in My Profile); a user is **effectively on leave** when `onLeave` is set or today (business timezone) is in their out-of-office range |
@@ -179,6 +182,10 @@ and the self foreign key `Users_reportsToId_fkey`), `mustChangePassword` (NOT NU
 `deactivatedAt`. Nothing is backfilled: existing users keep `mustChangePassword = 0` and NULL elsewhere. Writes from
 Admin › Users are audited as the acting admin: `CREATE` (a snapshot without any password), `UPDATE` (diff),
 `STATUS_CHANGE` (`isActive`) and `PASSWORD_RESET` (retired with temporary passwords; old entries stay readable).
+
+Migration `20261229090000_account_lockout` (2026-11-28) adds `failedLoginCount` (NOT NULL, default 0, constraint
+`Users_failedLoginCount_df`), `lastFailedLoginAt` and `lockedUntil` (both NULL). No backfill: every account starts
+unlocked. Locks and unlocks are audited (`ACCOUNT_LOCKED`, `ACCOUNT_UNLOCKED`).
 
 Migration `20261217090000_user_invites` (2026-11-27) replaces `mustChangePassword` with `invitePending` (NOT NULL,
 default 0, constraint `Users_invitePending_df`): users who still had `mustChangePassword = 1` (a temporary password
@@ -203,9 +210,9 @@ role a user can hold; `Users.Role` stores the role's `name`.
 | --- | --- | --- |
 | `id` | INT IDENTITY PK | |
 | `name` | NVARCHAR(50) UNIQUE | Shown everywhere a role is shown. Unique also by `normalizeRole` (checked in code: `Sales-Executive` clashes with `Sales Executive`) |
-| `description` | NVARCHAR(500) NULL | Shown on the role card |
+| `description` | NVARCHAR(MAX) NULL | Shown on the role card (2 lines); long text, no limit |
 | `adminPanel` | BIT NOT NULL, default 0 | Opens the admin panel (`requireAdmin`: forms and dropdowns, users, roles, PDF templates, audit log, settings) |
-| `permissionsJson` | NVARCHAR(MAX) NOT NULL | `{ "<module>": { "<action>": "all" \| "own" \| "none" } }` for the 12 modules of `PERMISSION_MODULES` (leads, contacts, organizations, opportunities, quotations, contracts, tickets, referrals, activities, documents, products, partnerCompanies) and the actions each offers (view, create, edit, delete, export, import: every module has all six except documents, which has view and export; as of 2026-11-28 a stored role that predates a module's export / import reads it as `none` until an admin turns it on). Read through `normalizePermissions`: a missing or unknown value is `none`, Create / Export / Import are only `all` or `none`, modules without an owner (products, partner companies) only `all` or `none`, Edit / Delete never exceed View, and a module at View `none` allows nothing |
+| `permissionsJson` | NVARCHAR(MAX) NOT NULL | `{ "<module>": { "<action>": "all" \| "group" \| "own" \| "none" } }` (`group` since migration `20261230090000_security_groups`; offered wherever `own` is) for the 12 modules of `PERMISSION_MODULES` (leads, contacts, organizations, opportunities, quotations, contracts, tickets, referrals, activities, documents, products, partnerCompanies) and the actions each offers (view, create, edit, delete, export, import: every module has all six except documents, which has view and export; as of 2026-11-28 a stored role that predates a module's export / import reads it as `none` until an admin turns it on). Read through `normalizePermissions`: a missing or unknown value is `none`, Create / Export / Import are only `all` or `none`, modules without an owner (products, partner companies) only `all` or `none`, Edit / Delete never exceed View, and a module at View `none` allows nothing |
 | `isSystem` | BIT NOT NULL, default 0 | Super Admin: always full access and the admin panel whatever the row says; can't be edited, renamed or deleted |
 | `createdAt`, `createdBy`, `updatedAt`, `updatedBy` | | |
 
@@ -216,6 +223,34 @@ roles of `GLOBAL_ACCESS_ROLES` (every action on every record, no admin panel) an
 Export and Import yes; referrals stay viewable by all, as before). After that only `Super Admin` and roles that users hold
 but no row matches are added; a role an admin deleted is not brought back. Writes are audited (entity `Role`, module
 `roles`, category CONFIG, admin-only in the audit log).
+
+### 4.1d `SecurityGroups` and `SecurityGroupMembers` (Admin › Security Groups)
+
+Migration `20261230090000_security_groups` (models `SecurityGroup`, `SecurityGroupMember`; new tables only, no
+backfill). Module `backend-crm/src/modules/security-groups`. Teams / branches read by a role's **Group** level
+([system design](system-design.md) › Authorization › Security groups).
+
+`SecurityGroups`
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | INT IDENTITY PK | |
+| `name` | NVARCHAR(100) UNIQUE | Also unique in any case (checked in code) |
+| `description` | NVARCHAR(MAX) NULL | Long text, no limit |
+| `parentId` | INT NULL FK → `SecurityGroups.id` (NO ACTION) | The group this one sits under; never a loop (`400 GROUP_CYCLE`). A group with sub-groups can't be deleted (`400 HAS_SUB_GROUPS`). Index `SecurityGroups_parentId_idx` |
+| `isActive` | BIT NOT NULL, default 1 | 0 = archived: keeps its members, grants nothing, and cuts off its sub-groups |
+| `createdAt`, `createdBy`, `updatedAt`, `updatedBy` | | |
+
+`SecurityGroupMembers`
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `groupId` | INT FK → `SecurityGroups.id` (CASCADE) | PK (`groupId`, `userId`) |
+| `userId` | INT FK → `Users.Id` (CASCADE) | Index `SecurityGroupMembers_userId_idx`. A user can be in several groups |
+| `addedAt`, `addedBy` | DATETIME2, NVARCHAR(50) NULL | |
+
+Writes are audited (entity `SecurityGroup`, module `security-groups`, CONFIG, admin-only). Both tables are read whole
+into the role registry snapshot (a few hundred rows at most), never per request.
 
 ### 4.1b `UserInvites` (set-password links)
 
@@ -508,7 +543,7 @@ out when the layout is read (the builder says so and the next save drops it).
 
 | Table | Purpose |
 | --- | --- |
-| `PdfTemplate` | `name`, `module` (`QUOTATION`), `isSystem` (seeded, read-only except active/default), `isDefault`, `isActive`, `pageSize`, `orientation`, `documentJson` (block document), `version` (optimistic concurrency), audit/soft-delete. Index `(module, isActive, isDeleted)` |
+| `PdfTemplate` | `name`, `module` (`QUOTATION`), `description` (NVARCHAR(MAX), no limit), `isSystem` (seeded, read-only except active/default), `isDefault`, `isActive`, `pageSize`, `orientation`, `documentJson` (block document), `version` (optimistic concurrency), audit/soft-delete. Index `(module, isActive, isDeleted)` |
 | `PdfAsset` | Logos: `key` UNIQUE, `fileName`, `mimeType` (PNG/JPEG/WebP), `sizeBytes` (≤ 1 MB), `data` VARBINARY(MAX) |
 | `RecordFile` | Files uploaded to a record field (an opportunity's Upload Doc, `Document.documentFileId`): `module`, `fileName`, `mimeType` (PDF, PNG/JPEG/WebP, Word, Excel; checked against the content), `sizeBytes` (≤ 10 MB), `data` VARBINARY(MAX), `createdBy`. Uploaded before the record saves, then linked by id |
 | `PdfSavedItem` | Builder library: a saved `section` or `block` (`contentJson`) shared by a module's templates; soft delete |
@@ -820,20 +855,43 @@ like `TableFilter`: **not audited**, hard-deleted by the nightly retention job (
 list, keyset-paged on `createdAt`, `id`), `createdAt` (purge). Inserts read the existing keys first and go in chunks of
 150 rows (SQL Server has no `skipDuplicates` and a 2,100-parameter limit); a P2002 race counts as already sent.
 
-`EmailLog`: one row per outgoing email, the idempotency claim and audit trail of what the CRM mailed whom (the
-morning summary today, quotation emails later). `id` (uuid), `kind` (`morning_summary` | `morning_summary_test` | `user_invite` | `password_reset_link` | …),
-`toUsername` (nullable, when the recipient is a CRM user), `toEmail` (≤ 120), `subject` (≤ 200), `dedupeKey`
-(**UNIQUE**, ≤ 200, e.g. `morning_summary:<YYYY-MM-DD>:<username>`; one-off sends get a unique key), `status`
-(`sending` | `sent` | `failed` | `skipped`, the last when mail was turned off), `error` (≤ 500, the SMTP / connection
-message, never credentials), `messageId` (≤ 250, the id the SMTP server accepted the message under), `attempts`
-(INT, default 0), `createdAt`, `sentAt`. Indexes: `createdAt` (purge), `(kind, createdAt)`. **Claim:** a send inserts
-its row as `sending`; when the key exists (P2002) the send belongs to another run unless that row is `failed` with
-fewer than 3 attempts or `skipped`, which is taken over by a conditional update on the status and attempts read; the
-row then becomes `sent` or `failed`.
+`EmailLog`: one row per outgoing email, the idempotency claim, the email queue and the log of what the CRM mailed
+whom (Admin › Email › Email Queue). `id` (uuid), `kind` (`morning_summary` | `morning_summary_test` | `user_invite` |
+`password_reset_link` | `outbound_test` | `template_test` | …), `templateKey` (≤ 40, nullable: the `EmailTemplate`
+it was rendered from), `toUsername` (nullable, when the recipient is a CRM user), `toEmail` (≤ 120), `fromEmail`
+(≤ 120, nullable: the sender it went out as), `subject` (≤ 200), `dedupeKey` (**UNIQUE**, ≤ 200, e.g.
+`morning_summary:<YYYY-MM-DD>:<username>`; one-off sends get a unique key), `status` (`queued` | `sending` | `sent` |
+`failed` | `skipped`, the last when mail was turned off), `provider` (`gmail` | `smtp`, nullable), `error` (≤ 500, the
+provider / connection message or why it was skipped / held, never credentials), `messageId` (≤ 250), `attempts` (INT,
+default 0), `bodyEnc` (NVARCHAR(MAX), nullable: the message sealed with secretBox, AAD `EmailLog:<dedupeKey>:body`,
+kept until sent so it can be retried; never kept for set-password links), `nextAttemptAt` (nullable: when the queue
+may send or retry it), `lastAttemptAt`, `createdAt`, `sentAt`. Indexes: `createdAt` (purge), `(kind, createdAt)`,
+`(status, nextAttemptAt)` (the queue; migration `20261229100000_outbound_email`). **Claim:** a send inserts its row
+as `sending`; when the key exists (P2002) the send belongs to another run unless that row is `failed` with fewer than
+`MAX_SEND_ATTEMPTS` (5) attempts or `skipped`, which is taken over by a conditional update on the status and attempts
+read; the row then becomes `sent` or `failed` (with `nextAttemptAt` after 1 min, 5 min, 30 min, 2 h when the error may
+pass). The queue claims `queued` / `failed` rows the same way. See system-design §5.2a.
 
 **Retention** (env, read by the nightly job): `Notification` rows that are read and older than
 `NOTIFICATION_RETENTION_DAYS` (default 90), and any row older than twice that; `EmailLog` rows older than
 `EMAIL_LOG_RETENTION_DAYS` (default 180).
+
+### 4.26a `OutboundEmailSetting` and `EmailTemplate` (Admin › Email)
+
+Migration `20261229100000_outbound_email`. Module `backend-crm/src/modules/email`. Admin settings: changes are
+audited (`EmailSettings` / `EmailTemplate`, CONFIG).
+
+`OutboundEmailSetting`: one row (`id` 1). `provider` (`gmail` | `smtp`, default `gmail`), `enabled` (BIT, default 0:
+the company switch), `senderEmail` / `senderName` / `replyTo` (≤ 120, nullable), `dailyLimit` (INT, default 1500,
+1–2000), `lastTestAt` / `lastTestOk` / `lastTestMessage` (≤ 300: the last Check connection / Send test email),
+`updatedBy`, `createdAt`, `updatedAt`. **No credential column**: Gmail uses the Google service account key sealed in
+`IntegrationProvider` (`google`), SMTP the server's `SMTP_*` environment settings. No row = SMTP from the environment.
+
+`EmailTemplate`: an admin's wording of a system email; no row = the built-in wording (`email.templates.ts`). `key`
+(PK, ≤ 40: `user_invite` | `password_reset` | `password_reset_self` | `account_locked` | `morning_summary`),
+`subject` (≤ 200), `heading` (≤ 200), `body`, `afterButton`, `footer` (NVARCHAR(MAX), long text: no limit),
+`buttonLabel` (≤ 80), `updatedBy`, `createdAt`, `updatedAt`. Plain text with `{{mergeField}}` tags, escaped when
+rendered.
 
 ### 4.27 `Holiday` (Admin › Holidays)
 

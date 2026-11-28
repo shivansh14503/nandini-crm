@@ -57,6 +57,7 @@ import { errorHandler, notFoundHandler } from './middlewares/errorHandler.js';
 import integrationRouter from './modules/integrations/integration.routes.js';
 import userAdminRouter from './modules/user-admin/userAdmin.routes.js';
 import roleRouter from './modules/roles/role.routes.js';
+import securityGroupRouter from './modules/security-groups/securityGroup.routes.js';
 import { seedRolesSafely } from './modules/roles/roleSeed.js';
 import { serializeRequestForLog } from './utils/redactUrl.js';
 import { isAppOrigin } from './config/origins.js';
@@ -66,6 +67,8 @@ import bookingLinkRouter from './modules/booking-links/bookingLink.routes.js';
 import publicBookingRouter from './modules/booking-links/bookingLink.public.routes.js';
 import emailLogRouter from './modules/email-log/emailLog.routes.js';
 import emailLogAdminRouter from './modules/email-log/emailLogAdmin.routes.js';
+import emailAdminRouter from './modules/email/email.routes.js';
+import { startMailConfigRefresh, stopMailConfigRefresh } from './modules/email/email.settings.js';
 
 const app: Express = express();
 
@@ -162,10 +165,12 @@ app.use('/api/user-photos', userPhotoRouter);
 app.use('/api/admin/integrations', integrationRouter);
 app.use('/api/admin/users', userAdminRouter);
 app.use('/api/admin/roles', roleRouter);
+app.use('/api/admin/security-groups', securityGroupRouter);
 app.use('/api/calendar-connections', calendarConnectionRouter);
 app.use('/api/booking-links', bookingLinkRouter);
 app.use('/api/email-logs', emailLogRouter);
 app.use('/api/admin/email-logging', emailLogAdminRouter);
+app.use('/api/admin/email', emailAdminRouter);
 
 // ── 404 + global error handler ─────────────────────────────────────────────────
 app.use(notFoundHandler);
@@ -185,6 +190,8 @@ async function start(): Promise<Server> {
     dropUnreadCountsOnRedisReady();
     connectRedis();
     await connectDatabase();
+    // Outbound email settings snapshot (isMailConfigured), refreshed every 30 s.
+    startMailConfigRefresh();
     startDatabaseKeepAlive();
     // Missing dropdown / form-field defaults are inserted without overwriting admin customizations.
     await seedFormConfigsSafely();
@@ -230,6 +237,7 @@ function registerShutdown(server: Server): void {
             stopDatabaseKeepAlive();
             await stopWorkers();
             closeMail();
+            stopMailConfigRefresh();
             await Promise.allSettled([closeQueues(), shutdownPdfRenderer(), prisma.$disconnect(), redis.quit()]);
             process.exit(0);
         });

@@ -10,10 +10,13 @@ import { HttpError } from '../../utils/httpError.js';
 import { AUTH_ME_SELECT, toAuthMeDto } from '../profile/profile.dto.js';
 import { acquireLocks, runInTransaction } from '../shared/transactions.js';
 import { hashPassword, verifyPassword, type LoginResult } from './auth.service.js';
-import { formatExpiry, renderSetPasswordEmail } from './inviteEmail.render.js';
+import { EMAIL_TEMPLATES, renderEmailTemplate, type EmailTemplateKey } from '../email/email.templates.js';
+import { loadTemplateOverride, personVars } from '../email/email.templateStore.js';
+import { formatExpiry } from './inviteEmail.render.js';
 import {
     generateInviteToken,
     hashInviteToken,
+    INVITE_TTL_HOURS,
     INVITE_TTL_MS,
     isInviteUsable,
     isWellFormedToken,
@@ -21,7 +24,10 @@ import {
     tokenMatchesHash,
     type InvitePurpose,
 } from './invite.token.js';
+import { LOCKOUT_CLEARED } from './accountLockout.js';
+import { currentMailConfig, parseFromHeader } from '../email/email.settings.js';
 import { passwordPolicyIssue } from './passwordPolicy.js';
+import { normalizeUserEmail } from '../users/userEmail.service.js';
 import { sessionService, type SessionMetadata } from './session.service.js';
 import { tokenService } from './token.service.js';
 
@@ -36,7 +42,8 @@ import { tokenService } from './token.service.js';
  * limited per IP (auth.routes.ts).
  */
 
-export const INVALID_INVITE_MESSAGE = 'This link is no longer valid. It may have expired or already been used. Ask your administrator to send a new one.';
+export const INVALID_INVITE_MESSAGE =
+    'This link is no longer valid. It may have expired or already been used. Request a new one with “Forgot password?” on the sign-in page, or ask your administrator.';
 
 export const invalidInvite = () => new HttpError(INVALID_INVITE_MESSAGE, StatusCodes.BAD_REQUEST, { code: 'INVALID_INVITE' });
 
@@ -95,7 +102,26 @@ async function findUsable(token: unknown, now: Date) {
 }
 
 /** The mail calls, behind an object so tests can stand in for SMTP. */
-export const inviteMail = { sendMail, isMailConfigured };
+export const inviteMail = { sendMail, isMailConfigured, loadTemplate: loadTemplateOverride };
+
+/** The template of each set-password email (Admin › Email › Templates). */
+export function templateFor(purpose: InvitePurpose, selfService: boolean): EmailTemplateKey {
+    if (purpose === 'invite') return 'user_invite';
+    return selfService ? 'password_reset_self' : 'password_reset';
+}
+
+export interface SendOptions {
+    /**
+     * The user asked for it themselves ("Forgot password?" on the sign-in page): the email says they asked for it
+     * (no admin's name) and the audit entry says `requestedBy: 'self'` with the address it came from.
+     */
+    selfService?: boolean;
+    ip?: string;
+}
+
+/** Self-service links a user may request in this many minutes before further requests are quietly dropped. */
+export const SELF_SERVICE_LIMIT = 3;
+export const SELF_SERVICE_WINDOW_MINUTES = 60;
 
 const purposeOf = (value: string): InvitePurpose => (value === 'reset' ? 'reset' : 'invite');
 
@@ -105,15 +131,18 @@ export const inviteService = {
      * shows the admin the reason). On success the user's older links stop working; on failure the new link is
      * dropped and the older ones are left as they were. Audited as INVITE_SENT (purpose, expiry, email outcome).
      */
-    async send(actor: AuthUser, user: InviteRecipient, purpose: InvitePurpose, now: Date = new Date()): Promise<InviteSendOutcome> {
+    async send(actor: AuthUser, user: InviteRecipient, purpose: InvitePurpose, now: Date = new Date(), options: SendOptions = {}): Promise<InviteSendOutcome> {
         const sentTo = user.email;
+        const selfService = options.selfService === true;
         const auditSend = (email: 'sent' | 'failed' | 'skipped', expiresAt?: Date) =>
             void auditService.enqueue({
                 entityType: 'User',
                 entityId: String(user.id),
                 action: 'INVITE_SENT',
                 changedBy: actor.username,
-                changes: { purpose, email, ...(expiresAt ? { expiresAt: expiresAt.toISOString() } : {}) },
+                // A self-service request has no signed-in request behind it: say who it was for.
+                ...(selfService ? { actor: { id: actor.id, role: actor.role } } : {}),
+                changes: { purpose, email, ...(selfService ? { requestedBy: 'self', ip: options.ip } : {}), ...(expiresAt ? { expiresAt: expiresAt.toISOString() } : {}) },
             });
 
         if (!inviteMail.isMailConfigured()) {
@@ -136,16 +165,18 @@ export const inviteService = {
             return { status: 'failed', purpose, sentTo, error: 'The link could not be saved. Please try again.' };
         }
 
-        const admin = await prisma.user.findUnique({ where: { id: actor.id }, select: { fullName: true } }).catch(() => null);
-        const email = renderSetPasswordEmail({
-            purpose,
-            recipientName: user.firstName?.trim() || user.fullName.trim().split(/\s+/)[0] || user.username,
-            username: user.username,
-            url: setPasswordUrl(ENV.MAIL.APP_PUBLIC_URL, token),
-            expiresLabel: formatExpiry(expiresAt, ENV.BUSINESS_TIMEZONE),
-            sentBy: admin?.fullName?.trim() || null,
+        const admin = selfService ? null : await prisma.user.findUnique({ where: { id: actor.id }, select: { fullName: true } }).catch(() => null);
+        // Admin › Email › Templates: the admin's wording of the template, or the built-in one.
+        const templateKey = templateFor(purpose, selfService);
+        const email = renderEmailTemplate(EMAIL_TEMPLATES[templateKey], (await inviteMail.loadTemplate(templateKey)) ?? EMAIL_TEMPLATES[templateKey].defaults, {
+            ...personVars(user),
+            link: setPasswordUrl(ENV.MAIL.APP_PUBLIC_URL, token),
+            expiresAt: formatExpiry(expiresAt, ENV.BUSINESS_TIMEZONE),
+            linkValidHours: String(INVITE_TTL_HOURS),
+            sentBy: admin?.fullName?.trim() || 'Your administrator',
         });
-        // A one-off send (unique dedupe key): EmailLog keeps the subject and recipient, never the body (or the link).
+        // A one-off send (unique dedupe key): EmailLog keeps the subject and recipient, never the body (the link is a
+        // credential), so a failed link email is not retried in the background: the link is dropped below instead.
         const result = await inviteMail.sendMail({
             to: sentTo,
             toUsername: user.username,
@@ -153,7 +184,10 @@ export const inviteService = {
             html: email.html,
             text: email.text,
             kind: MAIL_KIND[purpose],
+            templateKey,
             dedupeKey: `${MAIL_KIND[purpose]}:${user.id}:${randomUUID()}`,
+            retainBody: false,
+            essential: true,
         });
 
         if (result.status === 'sent') {
@@ -171,6 +205,74 @@ export const inviteService = {
         auditSend(result.status === 'skipped' ? 'skipped' : 'failed');
         if (result.status === 'skipped') return { status: 'mail_disabled', purpose, sentTo, error: MAIL_DISABLED_MESSAGE };
         return { status: 'failed', purpose, sentTo, error: result.error ?? 'The mail server did not accept the email.' };
+    },
+
+    /**
+     * POST /api/auth/forgot-password ("Forgot password?" on the sign-in page). Finds the account by username or work
+     * email and emails it a password reset link (the same single-use, 72 hour link an admin sends; an Invited user gets
+     * their invite again). Answers nothing: the route says the same thing whatever happens, so nobody can learn which
+     * usernames or emails exist. Sent only to an active account that has a work email; an email address must belong to
+     * exactly one active person (a shared group login is reached by its username). At most `SELF_SERVICE_LIMIT`
+     * self-service links per account per `SELF_SERVICE_WINDOW_MINUTES` (counted from UserInvites, so it holds without
+     * Redis); more are dropped quietly. The route limits requests per address too.
+     */
+    async requestPasswordReset(identifier: string, context: { ip?: string } = {}, now: Date = new Date()): Promise<'sent' | 'skipped'> {
+        const value = identifier.trim();
+        if (!value) return 'skipped';
+        const select = { id: true, username: true, email: true, firstName: true, fullName: true, role: true, isActive: true, invitePending: true } as const;
+        let user;
+        if (value.includes('@')) {
+            const email = normalizeUserEmail(value);
+            if (!email) return 'skipped';
+            const found = await prisma.user.findMany({ where: { email, isActive: true, isGroupUser: false }, select, take: 2 });
+            if (found.length !== 1) return 'skipped';
+            user = found[0];
+        } else {
+            user = await prisma.user.findUnique({ where: { username: value }, select });
+        }
+        if (!user || !user.isActive) return 'skipped';
+        const email = normalizeUserEmail(user.email);
+        if (!email) return 'skipped';
+
+        const recent = await prisma.userInvite.count({
+            where: { userId: user.id, createdBy: user.username, createdAt: { gt: new Date(now.getTime() - SELF_SERVICE_WINDOW_MINUTES * 60_000) } },
+        });
+        if (recent >= SELF_SERVICE_LIMIT) {
+            logger.info({ userId: user.id }, 'Forgot password: too many self-service links requested; not sent');
+            return 'skipped';
+        }
+
+        const purpose: InvitePurpose = user.invitePending ? 'invite' : 'reset';
+        const outcome = await inviteService.send({ id: user.id, username: user.username, role: user.role }, { ...user, email }, purpose, now, {
+            selfService: true,
+            ip: context.ip,
+        });
+        if (outcome.status !== 'sent') logger.warn({ userId: user.id, status: outcome.status }, 'Forgot password: the reset email could not be sent');
+        return outcome.status === 'sent' ? 'sent' : 'skipped';
+    },
+
+    /**
+     * The masked address shown after "Forgot password?" (`a***@company.com`). A username of an active account with a
+     * work email shows its real address, masked; anything else (unknown, deactivated, no email, an email that matches
+     * no single person) shows a stand-in built the same way from what was typed and the company's mail domain, so the
+     * answer never says whether the account exists. Same lookup as `requestPasswordReset`.
+     */
+    async resetRecipientHint(identifier: string): Promise<string> {
+        const value = identifier.trim();
+        const decoy = decoyResetHint(value);
+        if (!value) return decoy;
+        const select = { email: true, isActive: true } as const;
+        let user: { email: string | null; isActive: boolean } | null = null;
+        if (value.includes('@')) {
+            const email = normalizeUserEmail(value);
+            if (!email) return decoy;
+            const found = await prisma.user.findMany({ where: { email, isActive: true, isGroupUser: false }, select, take: 2 });
+            user = found.length === 1 ? found[0] : null;
+        } else {
+            user = await prisma.user.findUnique({ where: { username: value }, select });
+        }
+        const email = user?.isActive ? normalizeUserEmail(user.email) : null;
+        return email ? maskEmail(email) : decoy;
     },
 
     /** POST /api/auth/invite/verify: who the link is for, so the page can greet them. 400 INVALID_INVITE otherwise. */
@@ -219,7 +321,8 @@ export const inviteService = {
             const current = await tx.user.findUnique({ where: { id: user.id }, select: { isActive: true } });
             if (!current?.isActive) throw invalidInvite();
             await revokeOutstandingInvites(tx, user.id, { exceptId: row.id, now: passwordChangedAt });
-            await tx.user.update({ where: { id: user.id }, data: { passwordHash, passwordChangedAt, invitePending: false } });
+            // A new password also ends any lockout (the account may have been locked by the guesses that prompted it).
+            await tx.user.update({ where: { id: user.id }, data: { passwordHash, passwordChangedAt, invitePending: false, ...LOCKOUT_CLEARED } });
             await auditService.record(tx, {
                 entityType: 'User',
                 entityId: String(user.id),
@@ -246,3 +349,25 @@ export const inviteService = {
         return { user: toAuthMeDto(me), token: tokenService.generateToken({ id: me.id, username: me.username, role: me.role }, { jti, tracked }) };
     },
 };
+
+/** `asha.k@nandiniinfosys.com` → `a***@nandiniinfosys.com`: the first character and the domain only. */
+export function maskEmail(email: string): string {
+    const at = email.lastIndexOf('@');
+    if (at < 1) return '***';
+    return `${email[0].toLowerCase()}***${email.slice(at).toLowerCase()}`;
+}
+
+/** The company's mail domain (the sender on Admin › Email, else MAIL_FROM), for the stand-in address. */
+export function companyMailDomain(): string {
+    const sender = currentMailConfig().settings.senderEmail || parseFromHeader(ENV.MAIL.FROM).email;
+    const at = sender.lastIndexOf('@');
+    return at >= 0 ? sender.slice(at + 1).toLowerCase() : 'company.com';
+}
+
+/** The stand-in masked address for an identifier that matches no reachable account (see `resetRecipientHint`). */
+export function decoyResetHint(identifier: string, domain: string = companyMailDomain()): string {
+    const value = identifier.trim();
+    if (value.includes('@')) return maskEmail(value);
+    const first = value.match(/[a-z0-9]/i)?.[0]?.toLowerCase() ?? 'u';
+    return `${first}***@${domain}`;
+}

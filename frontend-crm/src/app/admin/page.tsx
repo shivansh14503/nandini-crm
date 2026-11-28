@@ -14,8 +14,10 @@ import ApartmentOutlinedIcon from '@mui/icons-material/ApartmentOutlined';
 import MarkEmailReadOutlinedIcon from '@mui/icons-material/MarkEmailReadOutlined';
 import EventBusyOutlinedIcon from '@mui/icons-material/EventBusyOutlined';
 import HubOutlinedIcon from '@mui/icons-material/HubOutlined';
+import AlternateEmailOutlinedIcon from '@mui/icons-material/AlternateEmailOutlined';
 import ManageAccountsOutlinedIcon from '@mui/icons-material/ManageAccountsOutlined';
 import SecurityOutlinedIcon from '@mui/icons-material/SecurityOutlined';
+import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
 import { useAuth } from '@/context/AuthContext';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
@@ -132,14 +134,34 @@ const ADMIN_MODULES: AdminModule[] = [
         highlights: ['Google', 'Microsoft 365', 'Zoom', 'Who is connected'],
     },
     {
+        key: 'email',
+        title: 'Email',
+        description:
+            'Send company email through Google Workspace (Gmail API) or SMTP, edit the wording of invite and password emails with merge fields, and follow every email in the queue, retrying failed ones.',
+        icon: <AlternateEmailOutlinedIcon />,
+        href: ROUTES.ADMIN_EMAIL,
+        badge: BADGES.available,
+        highlights: ['Outbound Email', 'Templates', 'Email Queue', 'Retry'],
+    },
+    {
         key: 'roles',
         title: 'Roles',
         description:
-            'Create roles and set what each may view, create, edit, delete, export and import in every module, for all records or only their own, and who opens the admin panel.',
+            'Create roles and set what each may view, create, edit, delete, export and import in every module, for all records, their group’s or only their own, and who opens the admin panel.',
         icon: <AccountTreeOutlinedIcon />,
         href: ROUTES.ADMIN_ROLES,
         badge: BADGES.available,
-        highlights: ['Module permissions', 'All or own records', 'Admin panel access'],
+        highlights: ['Module permissions', 'All, group or own records', 'Admin panel access'],
+    },
+    {
+        key: 'security-groups',
+        title: 'Security Groups',
+        description:
+            'Group people into teams and branches, with sub-groups under a parent. Roles set to Group see the records of everyone in their groups.',
+        icon: <GroupsOutlinedIcon />,
+        href: ROUTES.ADMIN_SECURITY_GROUPS,
+        badge: BADGES.available,
+        highlights: ['Teams & branches', 'Sub-groups', 'Members', 'Group record access'],
     },
     {
         key: 'users',

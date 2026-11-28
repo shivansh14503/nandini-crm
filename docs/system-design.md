@@ -190,6 +190,20 @@ SQL Server is the only source of truth; Redis only ever holds derived or disposa
   `INVALID_CREDENTIALS`). A user still **Invited** (`Users.invitePending`: never set a password from their link) gets
   403 `INVITE_PENDING` after a correct password (only a user who still had a temporary password when those were
   retired can have one).
+- **Account lockout** (2026-11-28, `modules/auth/accountLockout.ts`): besides the per-address limit
+  (`ratelimit:login:{ip}`), the account itself is locked after too many wrong passwords in a row, from any address.
+  Defaults in one place, `DEFAULT_LOCKOUT_POLICY`: **5** wrong passwords within **15 minutes** lock it for
+  **15 minutes**; callers read them through `getLockoutPolicy()` (async) so a later Admin › Password rules screen can
+  store them without touching sign-in. State lives on `Users` (`failedLoginCount`, `lastFailedLoginAt`, `lockedUntil`),
+  not Redis, so it survives restarts and admins can see it. A wrong password is counted under the `user:id:<id>` lock
+  (simultaneous guesses all count); the one that reaches the limit sets `lockedUntil`, starts the count again from 0
+  and audits `ACCOUNT_LOCKED` once (WARNING). While locked, sign-in answers `423 ACCOUNT_LOCKED` ("… locked for N more
+  minutes. Try again later, use “Forgot password?” …, or ask your administrator to unlock it.") **without checking the
+  password** (a dummy bcrypt compare keeps the timing), audited as `LOGIN_FAILED` (`reason: Account locked`). A
+  successful sign-in, a password set from an emailed link, and an admin's **Unlock account** (Admin › Users row menu,
+  `POST /api/admin/users/:id/unlock`, audited `ACCOUNT_UNLOCKED`, NOTICE) clear all three columns. A database failure
+  while counting is logged and the sign-in still answers `401` (the per-address limit still applies). The lock message
+  names the account only after five wrong passwords, a deliberate trade-off for a clear message.
 - On success the API signs a **JWT** (HS256, `JWT_SECRET`, expiry = `SESSION_TTL_SECONDS`, default 8 h) with
   `{ id, username, role, tracked, jti }` and sets it as an **httpOnly cookie** named `token`
   (`secure` + `SameSite=None` in production, `Lax` in dev). A `Bearer` header is accepted as a fallback.
@@ -256,6 +270,21 @@ SQL Server is the only source of truth; Redis only ever holds derived or disposa
     conditional update (single use even with two tabs), revokes the user's other links, stores the hash, clears
     `invitePending`, audits `PASSWORD_SET`; after commit it revokes every session of the user, opens a new one (cookie,
     `LOGIN` audited `via: set_password_link`), and the page opens the dashboard.
+  - *Forgot password* (2026-11-28, public `POST /api/auth/forgot-password { identifier }`, the login page's
+    "Forgot password?" link; one click since 2026-11-28, CRM-147): with a username typed, the sign-in page sends it
+    straight away and shows the answer inline; with the username empty, the link opens `app/forgot-password`, which asks
+    for the username only and sends it. `inviteService.requestPasswordReset` finds the account by username, or
+    by work email when the text has an `@` (the address must belong to exactly one active non-group user), and sends
+    the same link through `inviteService.send(…, { selfService: true })`: purpose `reset` (an Invited user gets their
+    invite again), the email says the user asked for it instead of naming an admin, and `INVITE_SENT` carries
+    `requestedBy: 'self'` and the IP. Sent only to an active account with a work email. The answer is always 200 "If this account exists, we’ve emailed a reset link to
+    a***@company.com": `inviteService.resetRecipientHint` masks the account's work email (first character + domain),
+    and for an unknown / deactivated / email-less account shows a stand-in built the same way (first letter typed +
+    the company mail domain from Admin › Email's sender, else `MAIL_FROM`), so the words don't reveal whether an
+    account exists. The answer goes out after that one indexed lookup in every case; the link is created and emailed
+    afterwards. Limits: 5 requests / 15 min per IP (`ratelimit:forgot-password:ip:{ip}`, `429 RATE_LIMITED`, in-process
+    fallback), and at most 3 self-service links per account per hour (counted from `UserInvites` rows the user created,
+    so it holds without Redis; more are dropped quietly). Using the link also clears an account lockout.
   - *Revoked* also by an email change (Admin › Users, People) and a deactivation. A reset link doesn't touch the
     current password until it is used. Sessions still carrying the retired `mcp` claim are refused by `verifyToken`.
   - *Page*: `app/set-password` (public, `noindex`, `Referrer-Policy: no-referrer`) reads the token once and drops it
@@ -292,9 +321,11 @@ A user's role is the name in `Users.role`; what it allows is the matching row of
   config records). It replaced the hard-coded `Admin` / `Administrator` / `Super Admin` list.
 - **Module permissions** (`Roles.permissionsJson`, `roles/permissions.ts`): for each of 12 modules (leads, contacts,
   organizations, opportunities, quotations, contracts, tickets, referrals, activities, documents, products, partner
-  companies) the levels of View, Create, Edit, Delete, Export and Import: **All** (every record), **Own** (records the
-  user is assigned to, `assignedTo`, or created, `createdBy`) or **None**. Create, Export and Import are Yes / No;
-  products and partner companies have no owner, so All or None. Edit / Delete never exceed View, and View None
+  companies) the levels of View, Create, Edit, Delete, Export and Import: **All** (every record), **Group** (records
+  assigned to or created by anyone who shares a security group with the user, see *Security groups* below), **Own**
+  (records the user is assigned to, `assignedTo`, or created, `createdBy`) or **None**. Create, Export and Import are Yes / No;
+  products and partner companies have no owner, so All or None. Edit / Delete never exceed View (All > Group > Own >
+  None), and View None
   allows nothing (the module leaves the menu and its list shows a notice).
 - **Super Admin** (`isSystem`): always full access and the admin panel; it can't be edited or deleted, and only a
   Super Admin can add, edit, deactivate, activate or reset the password of a Super Admin user, give / take the role,
@@ -303,10 +334,10 @@ A user's role is the name in `Users.role`; what it allows is the matching row of
 | Where | Rule |
 | --- | --- |
 | Routes | `requirePermission(module, action)`: 403 unless the role allows the action at some level. `registerCrudRoutes(router, controller, module)` maps GET → view, POST → create, PUT / PATCH → edit, DELETE / bulk-delete → delete; custom routes name their action (lead convert: leads edit + opportunities create; imports: import + create) |
-| Lists | `buildAccessScopeWhere(user, 'assignedTo', module, 'view')`: nothing at All, owner or creator at Own, a filter nobody matches at None (`#no-access#`, which no username can be) |
+| Lists | `buildAccessScopeWhere(user, 'assignedTo', module, 'view')`: nothing at All, owner or creator in the user's teammates at Group (`assignedTo IN (…) OR createdBy IN (…)`), owner or creator at Own, a filter nobody matches at None (`#no-access#`, which no username can be). Exports, scorecards, the calendar, product usage counts (`product.usage.ts`, raw SQL with the same rule), documents and the morning summary all read the same scope |
 | Records | `assertRecordAccess(user, row, module, action)` (403) on reads, edits and deletes; `canAccessRecord` / `hasGlobalAccess` for checks that don't throw |
 | Activities (`modules/activities/activity.access.ts`) | The same rule **plus attendees**: a colleague invited to an activity (`ActivityAttendee.username`) can see it (lists, calendar, record, its audit trail) and reply to it (`POST /api/activities/:id/response`), but changing or deleting needs the role's Activities Edit / Delete. Linking an activity to a record (Related To, and the `link-targets` picker) needs access to that record under its own module's rule (403 otherwise); an unchanged link is kept even if the editor can't see the record. The calendar's lead / opportunity follow-ups and contract renewals follow their modules' rules. Activities are not in global search |
-| Global search | Results are cached unscoped as before; the categories the role can't view are emptied per request (`hideUnviewable`) |
+| Global search | Results are cached unscoped as before; the categories the role can't view are emptied per request (`hideUnviewable`). Not row-scoped at Own or Group (unchanged); opening a result still checks the record |
 | Referrals | Follow the role like every module. Roles seeded from the old names keep Referrals View **All** (they were never scoped; the Referred By pickers read the lookups anyway) |
 | Export | Every CRM list (leads, contacts, organizations, opportunities, quotations, contracts, tickets, referrals, activities, documents, products, partner companies; as of 2026-11-28) has a CSV export built in the browser: the list declares its file name, rows and columns as `exportConfig` (`MasterExportConfig`, passed through `CommonMasterView` to `MasterHeaderActions`, written by `runMasterExport` / `utils/csvExport.ts`; cells in one fixed format via `utils/exportCells.ts`); it writes the selected rows, else every row matching the filters and search (all pages). The Export button shows only with the module's Export permission; there is no export API, so the rows are the ones the role may already view |
 | Inactive organizations | Only roles with the admin panel (`isAdminUser`) can open an Inactive organization for editing; others get the view page. Enforced in the app only (`OrganizationForm`, `OrganizationsMasterView`); the API doesn't check it |
@@ -317,6 +348,28 @@ refreshed every 15 s (`ensureFresh` in `authenticate`) and at once after a role 
 a renamed, changed or deleted role (whose users moved) applies on the next request without signing anyone out; other
 API instances catch up within 15 s. Until the first load succeeds, roles get the access their names gave before
 (`legacyRole`); a role missing from a loaded snapshot gets own-records access and no admin panel.
+
+**Security groups** (Admin › Security Groups; `modules/security-groups`, tables `SecurityGroups` /
+`SecurityGroupMembers`, [database design §4.1d](database-design.md)): teams and branches, the equivalent of SuiteCRM's
+Security Suite groups. A user can be in several groups; a group can sit under a parent group (any depth, never a loop:
+`400 GROUP_CYCLE`). A user's **teammates** are the members of every active group they are in, plus the members of
+those groups' active sub-groups (a regional group sees its branches, a branch doesn't see its region), plus
+themselves (`securityGroup.tree.ts teammatesByUser`). An archived group grants nothing and cuts off its sub-groups.
+A role's **Group** level (offered wherever Own is) covers records whose `assignedTo` or `createdBy` is a teammate; a
+user in no group gets Own. Groups only widen what a role allows: nobody sees anything new until an admin both sets a
+module to Group in Admin › Roles and adds people to groups, so existing roles and data are unchanged on deploy.
+
+- **Where it is read:** the role registry snapshot holds every user's teammates (`teammatesOf(username)`), so the
+  checks stay synchronous; `ownersFor(user, level)` in `accessControl.ts` turns a level into the owners it covers
+  (null = anyone) and both `buildAccessScopeWhere` and `canAccessRecord` use it. `GET /api/auth/me` returns
+  `access.teammates` so the app hides Edit / Delete on records outside the group (`usePermissions().canRecord`).
+- **Performance:** one extra in-memory map, rebuilt with the role snapshot (two small queries). A Group list query is
+  `assignedTo IN (teammates) OR createdBy IN (teammates)` on indexed owner columns, the same plan shape as Own; a
+  single teammate stays a plain equality. SQL Server allows about 2,100 parameters per query, so one person's
+  teammates must stay well under 1,000 (the query uses the list twice); a company-wide group should be All instead.
+- **Writes** (`securityGroup.service.ts`) run one at a time (lock `security-groups`), are audited (entity
+  `SecurityGroup`, module `security-groups`, CONFIG, admin-only; member changes as `membersAdded` /
+  `membersRemoved`), and refresh the snapshot at once (other API instances within 15 s).
 
 **Seeding** (`roles/roleSeed.ts`, at start-up): an empty table is filled with the old role names and every role a
 user holds, each with the access its name gave before (`legacyRole`: `Super Admin` and `Admin` open the admin panel
@@ -562,6 +615,7 @@ commands fail immediately instead of hanging, and reconnects in the background (
 | `ratelimit:set-password-link:ip:{ip}` | counter | 15 min | `POST /api/auth/invite/verify`, `/invite/accept` | 30 requests / 15 min / IP (every request counts; in-process counter while Redis can't count) |
 | `ratelimit:change-password:user:{id}` | counter | 15 min | `POST /api/auth/change-password` | 10 password changes (right or wrong) / 15 min / user |
 | `ratelimit:session-revoke:user:{id}` | counter | 10 min | `DELETE /api/me/sessions[/:id]` | 30 session sign-outs / 10 min / user |
+| `ratelimit:forgot-password:ip:{ip}` | counter | 15 min | `POST /api/auth/forgot-password` | 5 requests / 15 min / IP (every request counts; in-process counter while Redis can't count) |
 | `ratelimit:login:{ip}` | counter | `LOGIN_RATE_LIMIT_WINDOW_SECONDS` (15 min) | failed logins only | Brute-force protection (default 10 failures / window); reset on success |
 | `ratelimit:pdf:{module}:user:{id}` | counter | 60 s | `GET /:id/pdf` | 30 PDF renders / min / user |
 | `ratelimit:pdf-preview:user:{id}` | counter | 60 s | `POST /api/pdf-templates/preview` | 20 previews / min / user |
@@ -880,6 +934,56 @@ off), and then it is taken over by a conditional update on the status and attemp
 (with `messageId`) or `failed`. Logs name the kind, the recipient's username and domain and the outcome, never
 credentials or message bodies. While `MAIL_ENABLED=false` or `SMTP_HOST` is empty nothing is sent and the
 skip is logged once.
+
+### 5.2a Outgoing email: Gmail API, the email queue and templates (Admin › Email, CRM-121)
+
+One mail service sends every email of the CRM (`src/services/mail.service.ts`: `sendMail` sends now, `queueMail`
+hands it to the queue; `modules/email/email.templateStore.ts` `sendTemplatedMail(key, { to, vars, … })` renders a
+template first). Admin › Email has three tabs, modelled on SuiteCRM's Email admin area:
+
+- **Outbound Email** (`OutboundEmailSetting`, one row): how mail is sent, the sender address, display name, reply-to,
+  the daily send limit and the company switch; **Check connection** and **Send test email**. Two ways to send:
+  - **Gmail API (recommended)**: `POST gmail/v1/users/me/messages/send` as the sender mailbox, with an access token
+    minted from the **Google Workspace service account key already uploaded on Admin › API Integrations** (the same
+    key calendar sync and email logging use; sealed in `IntegrationProvider`, never shown again). The token is for
+    `sub = sender` with the one scope `https://www.googleapis.com/auth/gmail.send` and lives only in process memory
+    (the shared token source, `calendar-sync/tokenSource.ts`). Google-side set-up: enable the Gmail API in the service
+    account's Cloud project; in Admin console › Security › API controls › Domain-wide delegation add `gmail.send` to
+    the entry of the service account's client ID (next to the calendar scopes); the sender must be a real licensed
+    mailbox (emails appear in its Sent folder). Check connection mints the token without sending; errors are worded
+    for the admin (`gmail.sender.ts`: missing delegation / scope, unknown sender mailbox, bad key, API disabled).
+  - **SMTP**: the `SMTP_*` environment settings (§9.3), as before. No row saved yet = SMTP from the environment, so
+    deploying this changes nothing until an admin saves the page (the first save keeps SMTP when it was on).
+  No credential is typed into or returned by the page. Every process keeps a 30 s snapshot of the settings
+  (`email.settings.ts`), so `isMailConfigured()` stays synchronous.
+- **Templates** (`EmailTemplate`, a row only when an admin changed the wording): `user_invite`, `password_reset`
+  (sent by an admin), `password_reset_self` (Forgot password), and reserved for later `account_locked` and
+  `morning_summary` (the morning email keeps its built-in layout for now). A template is plain text in parts
+  (subject, heading, message, button label, text below the button, footer) with merge fields such as
+  `{{firstName}}`, `{{username}}`, `{{link}}`, `{{expiresAt}}`, `{{sentBy}}`; unknown merge fields are refused on save.
+  Never admin HTML: the parts are merged, escaped and laid out in the CRM email layout (`email.templates.ts`); only
+  http(s) links become buttons, and link emails always carry the plain link and a fixed "never forward" line. Preview
+  (sandboxed iframe, sample values), Send test to me, Reset to default (deletes the row). Rows are cached 60 s per
+  process; a read error falls back to the built-in wording.
+- **Email Queue** (`EmailLog`): every email, newest first, filter by status / type / search, with **Retry**.
+
+**Queue and retries.** A send claims its `EmailLog` row by dedupe key (as before). The message is kept sealed in
+`EmailLog.bodyEnc` (secretBox, AAD `EmailLog:<dedupeKey>:body`) until it is sent, then cleared. A failed send whose
+error may pass (network, 429, 5xx, SMTP 4xx) gets `nextAttemptAt` after 1 min, 5 min, 30 min, 2 h (`MAX_SEND_ATTEMPTS`
+5); one that won't (missing scope, refused recipient) waits for an admin. The `crm-mail` worker runs `deliver`
+every minute (scheduler `mail-queue`, plus a one-off job when an email is queued; inline every minute while Redis is
+down): it marks rows a stopped process left `sending` for 15 min as failed (not resent: they may have gone out), then
+sends due `queued` / `failed` rows oldest first, claimed by conditional updates. **Set-password links are never
+kept** (`retainBody: false`: the link is a credential); Retry on such a row sends the user a fresh link through
+`inviteService.send`. Retry on other rows sends the kept message at once, past the attempt cap.
+
+**Daily send limit** (`dailyLimit`, default 1,500, at most Google's 2,000 per mailbox per day): counted from the
+`sent` rows since the start of the business day. Past it, non-essential emails are queued for the start of the next
+business day; essential ones (`essential: true`: set-password links, test emails, security notices) still go out.
+
+While mail is off (switched off, no sender, no Google key, no `INTEGRATIONS_ENCRYPTION_KEY`, or SMTP off) nothing is
+sent and nothing throws: rows are `skipped` with the reason in `error`. Logs name the kind, the recipient's username /
+domain and the outcome, never tokens, links or bodies.
 
 ### 5.3 When background jobs wake the database
 
@@ -1658,6 +1762,23 @@ kept its time (`warning`; the API returns that note for 7 days after the calenda
 - **Data:** `services/role.service.ts`, `hooks/queries/useRoles.ts` (key `['roles']`); writes also refresh the users
   queries, the master data and the signed-in user (`refreshUser`), so a change to your own role shows at once.
 - **Admin › Users** picks a role from the roles of this page only (no free text).
+- **Group level:** the grid offers All / Group / Own / None on modules with an owner and a "Group records" preset (Own
+  records widened to the user's security groups); Group shows in emerald, Own in amber.
+
+### 8.7b Admin › Security Groups (`/admin/security-groups`)
+
+- **Page:** `app/admin/security-groups/page.tsx` in `AdminPageShell`, content in `components/settings/security-groups/`;
+  the "Security Groups" card on the admin landing page. Not registered in Form Builder (admin page).
+- **List** (`SecurityGroupsView`): the groups as a tree of cards (sub-groups indented under their parent, less on
+  phones), each with its name, an Archived badge, its parent, description (2 lines) and up to six members ("+N
+  more"; inactive members struck through); actions Edit, Add sub-group, Archive / Restore and Delete (refused while
+  sub-groups sit under it). Cards stack their actions under the text below `md`.
+- **Editor** (`SecurityGroupDialog`, full screen on phones): Group Name, Parent Group (the group itself and its
+  sub-groups are not offered), Description (long text) and Members (a multi-select of active users showing each
+  person's role and current groups; members who were deactivated stay listed until removed). Saving an existing group
+  sends the settings, then the member list if it changed.
+- **Data:** `services/securityGroup.service.ts`, `hooks/queries/useSecurityGroups.ts` (key `['securityGroups']`);
+  writes re-read the signed-in user so the admin's own teammates update at once.
 
 ### 8.8 Display formats (Admin › Company formats, Profile Phase 5)
 
@@ -1759,6 +1880,13 @@ and quotation), inactivity reasons, line item Description / Note, ticket case no
 activity remarks, the booking link note and admin-added Long Text (textarea) fields (an admin's own Max Length rule
 on a custom field still applies). Kept on purpose: street addresses (250, shown with a counter), the public booking
 page's visitor message (1,000, an unauthenticated form) and the Out of office message (200, a one-line status).
+
+Admin text boxes follow the same rule (2026-11-28, migration `20261228090000_admin_long_text_unlimited`): the role
+description (Admin › Roles), the PDF template description and the Drawer Layout builder's Text block have no limit,
+and use `LongTextInput` like the Form Builder's option lists (new field / New Dropdown, one option per line) and the
+integrations' service account key box. The key box keeps its 10 KB size cap (a key file, not long text, no counter);
+the PDF builder's company Address keeps its 1,000 cap with a counter. The drawer's Text block is shown through
+`ClampedText`.
 
 Every long text input is one control, `LongTextInput` (`components/forms/LongTextInput.tsx`), reached through
 `RhfTextField multiline` in React Hook Form forms (so Form Builder-rendered textarea fields, built-in or custom, get it
@@ -1952,6 +2080,10 @@ the credentials it already has.
   can't wake Azure SQL at night); rotating the encryption key invalidates every channel token.
 
 ### 9.3 Outgoing email (Google Workspace SMTP relay)
+
+> Since CRM-121 the recommended way is the **Gmail API** chosen on Admin › Email › Outbound Email (§5.2a), which needs
+> no server IP allow-listing and no SMTP settings. The SMTP set-up below still works and is what the CRM uses until an
+> admin saves that page.
 
 Email is off until `MAIL_ENABLED=true` and `SMTP_HOST` is set; until then the morning summary can still be previewed
 from the bell. The CRM sends from `MAIL_FROM` (default `Nandini CRM <crm@nandiniinfosys.com>`); links in emails use

@@ -31,7 +31,7 @@ const ROW_SCOPED_OWNERS: Partial<Record<AuditEntityType, { module: PermissionMod
 };
 
 /** Admin-area trails (sign-ins carry IP addresses; templates are admin-managed). A user may read their own. */
-const ADMIN_ONLY: ReadonlySet<AuditEntityType> = new Set(['User', 'Role', 'PdfTemplate', 'Scorecard']);
+const ADMIN_ONLY: ReadonlySet<AuditEntityType> = new Set(['User', 'Role', 'SecurityGroup', 'PdfTemplate', 'Scorecard']);
 
 /**
  * Who may read one record's trail. Admins read every trail. Otherwise: row-scoped records need access to the
@@ -129,6 +129,8 @@ const ACTION_TITLES: Record<string, { title: string; tag: string }> = {
     PASSWORD_RESET: { title: 'Password reset by an admin', tag: 'Security' },
     INVITE_SENT: { title: 'Set-password link emailed', tag: 'Security' },
     PASSWORD_SET: { title: 'Password set from an emailed link', tag: 'Security' },
+    ACCOUNT_LOCKED: { title: 'Account locked after wrong passwords', tag: 'Security' },
+    ACCOUNT_UNLOCKED: { title: 'Account unlocked by an admin', tag: 'Security' },
     SESSION_REVOKE: { title: 'Session signed out', tag: 'Security' },
     SEND_INVITES: { title: 'Calendar invitations sent', tag: 'Invitations' },
     PURGE: { title: 'Logged emails deleted', tag: 'Purged' },
